@@ -5,6 +5,8 @@ import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -32,6 +34,8 @@ type InstallmentWithLoan = {
 export default function TodayPage() {
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payDialogId, setPayDialogId] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
 
   const fetchInstallments = async () => {
@@ -55,6 +59,15 @@ export default function TodayPage() {
   }, []);
 
   const handlePay = async (id: string) => {
+    const inst = installments.find((i) => i.id === id);
+    if (!inst) return;
+
+    const paidValue = payAmount ? parseFloat(payAmount) : Number(inst.amount);
+    if (isNaN(paidValue) || paidValue <= 0) {
+      toast.error("Informe um valor válido");
+      return;
+    }
+
     const { error } = await supabase
       .from("installments")
       .update({ status: "paid", paid_at: new Date().toISOString() })
@@ -64,7 +77,17 @@ export default function TodayPage() {
       toast.error("Erro ao registrar pagamento");
       return;
     }
-    toast.success("Pagamento registrado!");
+
+    const diff = Number(inst.amount) - paidValue;
+    if (diff > 0) {
+      toast.info(`Diferença de ${formatCurrency(diff)} no pagamento`);
+    } else if (diff < 0) {
+      toast.info(`Pagamento excedente de ${formatCurrency(Math.abs(diff))}`);
+    }
+
+    toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
+    setPayAmount("");
+    setPayDialogId(null);
     fetchInstallments();
   };
 
@@ -150,10 +173,33 @@ export default function TodayPage() {
                   </Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" className="flex-1 bg-success hover:bg-success/90" onClick={() => handlePay(inst.id)}>
-                    <CheckCircle className="mr-1 h-4 w-4" />
-                    Pagou
-                  </Button>
+                  <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                        <CheckCircle className="mr-1 h-4 w-4" />
+                        Pagou
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Registrar Pagamento</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Parcela {inst.number} — Valor: {formatCurrency(Number(inst.amount))}
+                        </p>
+                        <Input
+                          type="number"
+                          placeholder={`Valor recebido (padrão: ${Number(inst.amount).toFixed(2)})`}
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                        />
+                        <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
+                          Confirmar Pagamento
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                   <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
                     <XCircle className="mr-1 h-4 w-4" />
                     Não Pagou
