@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
+import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +19,8 @@ type InstallmentWithLoan = {
   status: string;
   loan_id: string;
   is_penalty: boolean;
+  paid_amount: number;
+  paid_at: string | null;
   loans: {
     id: string;
     client_id: string;
@@ -62,27 +64,28 @@ export default function TodayPage() {
     const inst = installments.find((i) => i.id === id);
     if (!inst) return;
 
-    const paidValue = payAmount ? parseFloat(payAmount) : Number(inst.amount);
+    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+    const paidValue = payAmount ? parseFloat(payAmount) : instRemaining;
     if (isNaN(paidValue) || paidValue <= 0) {
       toast.error("Informe um valor válido");
       return;
     }
 
+    const newPaidAmount = Number(inst.paid_amount) + paidValue;
+    const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
+
     const { error } = await supabase
       .from("installments")
-      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .update({
+        paid_amount: Math.min(newPaidAmount, Number(inst.amount)),
+        status: fullyPaid ? "paid" : inst.status,
+        paid_at: fullyPaid ? new Date().toISOString() : inst.paid_at,
+      })
       .eq("id", id);
 
     if (error) {
       toast.error("Erro ao registrar pagamento");
       return;
-    }
-
-    const diff = Number(inst.amount) - paidValue;
-    if (diff > 0) {
-      toast.info(`Diferença de ${formatCurrency(diff)} no pagamento`);
-    } else if (diff < 0) {
-      toast.info(`Pagamento excedente de ${formatCurrency(Math.abs(diff))}`);
     }
 
     toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
@@ -168,8 +171,8 @@ export default function TodayPage() {
                       Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
                     </p>
                   </div>
-                  <Badge className={getStatusColor(inst.status)}>
-                    {getStatusLabel(inst.status)}
+                  <Badge className={getStatusColor(getInstallmentDisplayStatus(inst))}>
+                    {getStatusLabel(getInstallmentDisplayStatus(inst))}
                   </Badge>
                 </div>
                 <div className="flex gap-2">

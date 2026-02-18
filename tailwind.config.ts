@@ -59,6 +59,22 @@ export default {
           DEFAULT: "hsl(var(--overdue))",
           foreground: "hsl(var(--overdue-foreground))",
         },
+        partial: {
+          DEFAULT: "hsl(var(--partial))",
+          foreground: "hsl(var(--partial-foreground))",
+        },
+        "due-today": {
+          DEFAULT: "hsl(var(--due-today))",
+          foreground: "hsl(var(--due-today-foreground))",
+        },
+        open: {
+          DEFAULT: "hsl(var(--open))",
+          foreground: "hsl(var(--open-foreground))",
+        },
+        paid: {
+          DEFAULT: "hsl(var(--paid))",
+          foreground: "hsl(var(--paid-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

@@ -7,7 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { formatCurrency, getStatusColor, getStatusLabel, getLoanStatusColor } from "@/lib/loan-utils";
+import {
+  formatCurrency,
+  getStatusColor,
+  getStatusLabel,
+  getLoanStatusColor,
+  getInstallmentDisplayStatus,
+} from "@/lib/loan-utils";
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -35,6 +41,7 @@ type Installment = {
   paid_at: string | null;
   is_penalty: boolean;
   penalty_amount: number;
+  paid_amount: number;
 };
 
 export default function LoanDetailPage() {
@@ -86,30 +93,56 @@ export default function LoanDetailPage() {
   };
 
   const handlePay = async (id: string) => {
-    const inst = installments.find((i) => i.id === id);
-    if (!inst) return;
+    const paidValue = payAmount ? parseFloat(payAmount) : null;
 
-    const paidValue = payAmount ? parseFloat(payAmount) : Number(inst.amount);
-    if (isNaN(paidValue) || paidValue <= 0) {
+    if (payAmount && (isNaN(paidValue!) || paidValue! <= 0)) {
       toast.error("Informe um valor válido");
       return;
     }
 
-    await supabase.from("installments").update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
-    }).eq("id", id);
+    // Get all unpaid installments in order
+    const unpaid = installments
+      .filter((i) => i.status !== "paid")
+      .sort((a, b) => a.number - b.number);
 
-    // If paid less than the installment amount, register the difference info via toast
-    const diff = Number(inst.amount) - paidValue;
-    if (diff > 0) {
-      toast.info(`Diferença de ${formatCurrency(diff)} no pagamento`);
-    } else if (diff < 0) {
-      toast.info(`Pagamento excedente de ${formatCurrency(Math.abs(diff))}`);
+    const currentInst = unpaid.find((i) => i.id === id);
+    if (!currentInst) return;
+
+    // Default to remaining amount of current installment
+    let remaining = paidValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount));
+
+    // Abate in order starting from the clicked installment
+    const toProcess = unpaid.filter((i) => i.number >= currentInst.number);
+
+    for (const inst of toProcess) {
+      if (remaining <= 0) break;
+
+      const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+      const applying = Math.min(remaining, instRemaining);
+
+      const newPaidAmount = Number(inst.paid_amount) + applying;
+      const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01; // tolerance
+
+      await supabase
+        .from("installments")
+        .update({
+          paid_amount: newPaidAmount,
+          status: fullyPaid ? "paid" : inst.status,
+          paid_at: fullyPaid ? new Date().toISOString() : inst.paid_at,
+        })
+        .eq("id", inst.id);
+
+      remaining -= applying;
+    }
+
+    const totalApplied = (paidValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount))) - remaining;
+    toast.success(`Pagamento de ${formatCurrency(totalApplied)} registrado!`);
+
+    if (remaining > 0) {
+      toast.info(`Sobra de ${formatCurrency(remaining)} (sem mais parcelas para abater)`);
     }
 
     await updateLoanStatus();
-    toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
     setPayAmount("");
     setPayDialogId(null);
     fetchData();
@@ -123,7 +156,7 @@ export default function LoanDetailPage() {
   };
 
   const handleUndoPayment = async (id: string) => {
-    await supabase.from("installments").update({ status: "pending", paid_at: null }).eq("id", id);
+    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
     await updateLoanStatus();
     toast.success("Pagamento desfeito!");
     fetchData();
@@ -170,11 +203,16 @@ export default function LoanDetailPage() {
 
   if (!loan) return <p className="p-4 text-center">Carregando...</p>;
 
-  const paidInstallments = installments.filter((i) => i.status === "paid" && !i.is_penalty);
-  const totalInstallments = installments.filter((i) => !i.is_penalty).length;
-  const progressPercent = totalInstallments > 0 ? (paidInstallments.length / totalInstallments) * 100 : 0;
-  const paidTotal = installments.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
-  const remaining = Number(loan.total_amount) - paidTotal + installments.filter((i) => i.is_penalty).reduce((s, i) => s + Number(i.amount), 0) - installments.filter((i) => i.is_penalty && i.status === "paid").reduce((s, i) => s + Number(i.amount), 0);
+  const regularInstallments = installments.filter((i) => !i.is_penalty);
+  const totalPaidAmount = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const installmentValue = regularInstallments.length > 0 ? Number(regularInstallments[0].amount) : 1;
+  const paidInstallmentsProgress = totalPaidAmount / installmentValue;
+  const totalInstallments = regularInstallments.length;
+  const progressPercent = totalInstallments > 0 ? (paidInstallmentsProgress / totalInstallments) * 100 : 0;
+
+  const totalPaid = installments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const totalOwed = installments.reduce((s, i) => s + Number(i.amount), 0);
+  const remaining = totalOwed - totalPaid;
 
   const paymentTypeLabel: Record<string, string> = {
     daily: "Diário",
@@ -228,10 +266,12 @@ export default function LoanDetailPage() {
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="font-medium">Progresso</span>
             <span className="text-muted-foreground">
-              {paidInstallments.length}/{totalInstallments} parcelas pagas
+              {paidInstallmentsProgress % 1 === 0
+                ? `${paidInstallmentsProgress}/${totalInstallments}`
+                : `${paidInstallmentsProgress.toFixed(1)}/${totalInstallments}`} parcelas pagas
             </span>
           </div>
-          <Progress value={progressPercent} className="mb-3" />
+          <Progress value={Math.min(progressPercent, 100)} className="mb-3" />
           <div className="flex items-center justify-between rounded-lg bg-accent p-3">
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-primary" />
@@ -245,95 +285,113 @@ export default function LoanDetailPage() {
       {/* Installments */}
       <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
       <div className="space-y-2">
-        {installments.map((inst) => (
-          <Card key={inst.id} className={inst.is_penalty ? "border-warning/50" : ""}>
-            <CardContent className="p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold">
-                    {inst.is_penalty ? "🔶 Multa" : `Parcela ${inst.number}`}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
-                  </p>
-                  {Number(inst.penalty_amount) > 0 && !inst.is_penalty && (
-                    <p className="text-xs text-destructive">Multa: {formatCurrency(Number(inst.penalty_amount))}</p>
-                  )}
-                </div>
-                <Badge className={getStatusColor(inst.status)}>{getStatusLabel(inst.status)}</Badge>
-              </div>
+        {installments.map((inst) => {
+          const displayStatus = getInstallmentDisplayStatus(inst);
+          const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
 
-              {inst.status === "paid" ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleUndoPayment(inst.id)}
-                >
-                  <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
-                        <CheckCircle className="mr-1 h-3 w-3" /> Pagou
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Registrar Pagamento</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                          {inst.is_penalty ? "Multa" : `Parcela ${inst.number}`} — Valor: {formatCurrency(Number(inst.amount))}
-                        </p>
-                        <Input
-                          type="number"
-                          placeholder={`Valor recebido (padrão: ${Number(inst.amount).toFixed(2)})`}
-                          value={payAmount}
-                          onChange={(e) => setPayAmount(e.target.value)}
-                        />
-                        <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
-                          Confirmar Pagamento
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
-                    <XCircle className="mr-1 h-3 w-3" /> Não Pagou
+          return (
+            <Card key={inst.id} className={inst.is_penalty ? "border-warning/50" : ""}>
+              <CardContent className="p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold">
+                      {inst.is_penalty ? "🔶 Multa" : `Parcela ${inst.number}`}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
+                    </p>
+                    {Number(inst.paid_amount) > 0 && inst.status !== "paid" && (
+                      <p className="text-xs text-partial">
+                        Pago: {formatCurrency(Number(inst.paid_amount))} / Resta: {formatCurrency(instRemaining)}
+                      </p>
+                    )}
+                    {Number(inst.penalty_amount) > 0 && !inst.is_penalty && (
+                      <p className="text-xs text-destructive">Multa: {formatCurrency(Number(inst.penalty_amount))}</p>
+                    )}
+                  </div>
+                  <Badge className={getStatusColor(displayStatus)}>{getStatusLabel(displayStatus)}</Badge>
+                </div>
+
+                {inst.status === "paid" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => handleUndoPayment(inst.id)}
+                  >
+                    <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
                   </Button>
-                  {!inst.is_penalty && (
-                    <Dialog open={penaltyDialogId === inst.id} onOpenChange={(o) => setPenaltyDialogId(o ? inst.id : null)}>
+                ) : (
+                  <div className="flex gap-2">
+                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
                       <DialogTrigger asChild>
-                        <Button size="sm" variant="outline" className="px-2">
-                          <AlertTriangle className="h-3 w-3" />
+                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                          <CheckCircle className="mr-1 h-3 w-3" /> Pagou
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Adicionar Multa</DialogTitle>
+                          <DialogTitle>Registrar Pagamento</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-3">
-                          <p className="text-sm text-muted-foreground">Parcela {inst.number}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {inst.is_penalty ? "Multa" : `Parcela ${inst.number}`} — Valor: {formatCurrency(Number(inst.amount))}
+                          </p>
+                          {Number(inst.paid_amount) > 0 && (
+                            <p className="text-sm text-partial">
+                              Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}
+                            </p>
+                          )}
                           <Input
                             type="number"
-                            placeholder="Valor da multa"
-                            value={penaltyAmount}
-                            onChange={(e) => setPenaltyAmount(e.target.value)}
+                            placeholder={`Valor recebido (padrão: ${instRemaining.toFixed(2)})`}
+                            value={payAmount}
+                            onChange={(e) => setPayAmount(e.target.value)}
                           />
-                          <Button onClick={() => handleAddPenalty(inst.id)} className="w-full">
-                            Adicionar Multa
+                          <p className="text-xs text-muted-foreground">
+                            💡 Se o valor exceder esta parcela, o restante será abatido nas próximas parcelas automaticamente.
+                          </p>
+                          <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
+                            Confirmar Pagamento
                           </Button>
                         </div>
                       </DialogContent>
                     </Dialog>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                    <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+                      <XCircle className="mr-1 h-3 w-3" /> Não Pagou
+                    </Button>
+                    {!inst.is_penalty && (
+                      <Dialog open={penaltyDialogId === inst.id} onOpenChange={(o) => setPenaltyDialogId(o ? inst.id : null)}>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="px-2">
+                            <AlertTriangle className="h-3 w-3" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Adicionar Multa</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">Parcela {inst.number}</p>
+                            <Input
+                              type="number"
+                              placeholder="Valor da multa"
+                              value={penaltyAmount}
+                              onChange={(e) => setPenaltyAmount(e.target.value)}
+                            />
+                            <Button onClick={() => handleAddPenalty(inst.id)} className="w-full">
+                              Adicionar Multa
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
