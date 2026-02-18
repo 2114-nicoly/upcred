@@ -35,9 +35,9 @@ export default function NewLoanPage() {
   }, [numAmount, interestType, numInterest, numInstallments]);
 
   const dueDates = useMemo(() => {
-    if (paymentType === "fixed_dates") return fixedDates.map((d) => new Date(d));
+    if (paymentType === "fixed_dates") return fixedDates.map((d) => new Date(d + "T12:00:00"));
     if (!firstDueDate || numInstallments <= 0) return [];
-    return generateDueDates(new Date(firstDueDate), numInstallments, paymentType);
+    return generateDueDates(new Date(firstDueDate + "T12:00:00"), numInstallments, paymentType);
   }, [firstDueDate, numInstallments, paymentType, fixedDates]);
 
   const handleFixedDateChange = (index: number, value: string) => {
