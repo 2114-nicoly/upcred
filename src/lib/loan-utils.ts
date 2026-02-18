@@ -1,0 +1,83 @@
+import { addDays, addWeeks, addMonths } from "date-fns";
+
+export function calculateLoan(
+  amount: number,
+  interestType: "percentage" | "fixed",
+  interestValue: number,
+  installmentCount: number
+) {
+  const interest = interestType === "percentage" ? amount * (interestValue / 100) : interestValue;
+  const totalAmount = amount + interest;
+  const installmentAmount = totalAmount / installmentCount;
+  return { interest, totalAmount, installmentAmount };
+}
+
+export function generateDueDates(
+  firstDueDate: Date,
+  installmentCount: number,
+  paymentType: "daily" | "weekly" | "biweekly" | "monthly"
+): Date[] {
+  const dates: Date[] = [];
+  for (let i = 0; i < installmentCount; i++) {
+    switch (paymentType) {
+      case "daily":
+        dates.push(addDays(firstDueDate, i));
+        break;
+      case "weekly":
+        dates.push(addWeeks(firstDueDate, i));
+        break;
+      case "biweekly":
+        dates.push(addWeeks(firstDueDate, i * 2));
+        break;
+      case "monthly":
+        dates.push(addMonths(firstDueDate, i));
+        break;
+    }
+  }
+  return dates;
+}
+
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+export function getStatusColor(status: string): string {
+  switch (status) {
+    case "paid":
+      return "bg-success text-success-foreground";
+    case "overdue":
+      return "bg-overdue text-overdue-foreground";
+    case "pending":
+      return "bg-warning text-warning-foreground";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+export function getStatusLabel(status: string): string {
+  switch (status) {
+    case "open":
+      return "Em Aberto";
+    case "overdue":
+      return "Atrasado";
+    case "paid":
+      return "Quitado";
+    case "pending":
+      return "Pendente";
+    default:
+      return status;
+  }
+}
+
+export function getLoanStatusColor(status: string): string {
+  switch (status) {
+    case "paid":
+      return "bg-success text-success-foreground";
+    case "overdue":
+      return "bg-overdue text-overdue-foreground";
+    case "open":
+      return "bg-primary text-primary-foreground";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
