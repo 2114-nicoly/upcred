@@ -10,6 +10,7 @@ import ClientDetailPage from "@/pages/ClientDetailPage";
 import NewLoanPage from "@/pages/NewLoanPage";
 import LoanDetailPage from "@/pages/LoanDetailPage";
 import PaymentHistoryPage from "@/pages/PaymentHistoryPage";
+import ActiveLoansPage from "@/pages/ActiveLoansPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/clients/:clientId" element={<ClientDetailPage />} />
             <Route path="/clients/:clientId/new-loan" element={<NewLoanPage />} />
             <Route path="/loans/:loanId" element={<LoanDetailPage />} />
+            <Route path="/active-loans" element={<ActiveLoansPage />} />
             <Route path="/payment-history" element={<PaymentHistoryPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

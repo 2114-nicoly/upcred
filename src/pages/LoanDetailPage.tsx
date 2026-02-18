@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel, getLoanStatusColor } from "@/lib/loan-utils";
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -44,6 +44,8 @@ export default function LoanDetailPage() {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penaltyAmount, setPenaltyAmount] = useState("");
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
+  const [payDialogId, setPayDialogId] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
 
   const fetchData = async () => {
     const { data: l } = await supabase
@@ -84,9 +86,32 @@ export default function LoanDetailPage() {
   };
 
   const handlePay = async (id: string) => {
-    await supabase.from("installments").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
+    const inst = installments.find((i) => i.id === id);
+    if (!inst) return;
+
+    const paidValue = payAmount ? parseFloat(payAmount) : Number(inst.amount);
+    if (isNaN(paidValue) || paidValue <= 0) {
+      toast.error("Informe um valor válido");
+      return;
+    }
+
+    await supabase.from("installments").update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+    }).eq("id", id);
+
+    // If paid less than the installment amount, register the difference info via toast
+    const diff = Number(inst.amount) - paidValue;
+    if (diff > 0) {
+      toast.info(`Diferença de ${formatCurrency(diff)} no pagamento`);
+    } else if (diff < 0) {
+      toast.info(`Pagamento excedente de ${formatCurrency(Math.abs(diff))}`);
+    }
+
     await updateLoanStatus();
-    toast.success("Pagamento registrado!");
+    toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
+    setPayAmount("");
+    setPayDialogId(null);
     fetchData();
   };
 
@@ -97,6 +122,13 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  const handleUndoPayment = async (id: string) => {
+    await supabase.from("installments").update({ status: "pending", paid_at: null }).eq("id", id);
+    await updateLoanStatus();
+    toast.success("Pagamento desfeito!");
+    fetchData();
+  };
+
   const handleAddPenalty = async (installmentId: string) => {
     const amount = parseFloat(penaltyAmount);
     if (!amount || amount <= 0) {
@@ -104,20 +136,17 @@ export default function LoanDetailPage() {
       return;
     }
 
-    // Add penalty to the installment
     const inst = installments.find((i) => i.id === installmentId);
     if (!inst) return;
 
     const newPenalty = Number(inst.penalty_amount) + amount;
     await supabase.from("installments").update({ penalty_amount: newPenalty }).eq("id", installmentId);
 
-    // Check if penalty installment exists
     const penaltyInst = installments.find((i) => i.is_penalty);
     if (penaltyInst) {
       const newAmount = Number(penaltyInst.amount) + amount;
       await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
     } else {
-      // Create penalty installment
       const maxNumber = Math.max(...installments.map((i) => i.number));
       const lastDueDate = installments
         .filter((i) => !i.is_penalty)
@@ -188,7 +217,7 @@ export default function LoanDetailPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Data:</span>
-            <span>{format(new Date(loan.loan_date), "dd/MM/yyyy")}</span>
+            <span>{format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}</span>
           </div>
         </CardContent>
       </Card>
@@ -225,19 +254,52 @@ export default function LoanDetailPage() {
                     {inst.is_penalty ? "🔶 Multa" : `Parcela ${inst.number}`}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {format(new Date(inst.due_date), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
+                    {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
                   </p>
                   {Number(inst.penalty_amount) > 0 && !inst.is_penalty && (
-                    <p className="text-xs text-overdue">Multa: {formatCurrency(Number(inst.penalty_amount))}</p>
+                    <p className="text-xs text-destructive">Multa: {formatCurrency(Number(inst.penalty_amount))}</p>
                   )}
                 </div>
                 <Badge className={getStatusColor(inst.status)}>{getStatusLabel(inst.status)}</Badge>
               </div>
-              {inst.status !== "paid" && (
+
+              {inst.status === "paid" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleUndoPayment(inst.id)}
+                >
+                  <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
+                </Button>
+              ) : (
                 <div className="flex gap-2">
-                  <Button size="sm" className="flex-1 bg-success hover:bg-success/90" onClick={() => handlePay(inst.id)}>
-                    <CheckCircle className="mr-1 h-3 w-3" /> Pagou
-                  </Button>
+                  <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                        <CheckCircle className="mr-1 h-3 w-3" /> Pagou
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Registrar Pagamento</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {inst.is_penalty ? "Multa" : `Parcela ${inst.number}`} — Valor: {formatCurrency(Number(inst.amount))}
+                        </p>
+                        <Input
+                          type="number"
+                          placeholder={`Valor recebido (padrão: ${Number(inst.amount).toFixed(2)})`}
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                        />
+                        <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
+                          Confirmar Pagamento
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                   <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
                     <XCircle className="mr-1 h-3 w-3" /> Não Pagou
                   </Button>
