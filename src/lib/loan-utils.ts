@@ -58,11 +58,15 @@ export function formatCurrency(value: number): string {
 export function getStatusColor(status: string): string {
   switch (status) {
     case "paid":
-      return "bg-success text-success-foreground";
+      return "bg-paid text-paid-foreground";
+    case "partial":
+      return "bg-partial text-partial-foreground";
     case "overdue":
       return "bg-overdue text-overdue-foreground";
+    case "due_today":
+      return "bg-due-today text-due-today-foreground";
     case "pending":
-      return "bg-warning text-warning-foreground";
+      return "bg-open text-open-foreground";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -70,17 +74,40 @@ export function getStatusColor(status: string): string {
 
 export function getStatusLabel(status: string): string {
   switch (status) {
-    case "open":
+    case "pending":
       return "Em Aberto";
+    case "due_today":
+      return "Vence Hoje";
     case "overdue":
       return "Atrasado";
     case "paid":
-      return "Quitado";
-    case "pending":
+      return "Pago";
+    case "partial":
+      return "Parcial";
+    case "open":
       return "Em Aberto";
     default:
       return status;
   }
+}
+
+// Compute display status based on installment data
+export function getInstallmentDisplayStatus(inst: {
+  status: string;
+  due_date: string;
+  amount: number;
+  paid_amount: number;
+}): string {
+  if (inst.status === "paid") return "paid";
+  if (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) < Number(inst.amount)) return "partial";
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(inst.due_date + "T00:00:00");
+  
+  if (inst.status === "overdue" || due < today) return "overdue";
+  if (due.getTime() === today.getTime()) return "due_today";
+  return "pending";
 }
 
 export function getLoanStatusColor(status: string): string {

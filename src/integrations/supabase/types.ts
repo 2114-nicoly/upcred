@@ -47,6 +47,7 @@ export type Database = {
           is_penalty: boolean
           loan_id: string
           number: number
+          paid_amount: number
           paid_at: string | null
           penalty_amount: number
           status: string
@@ -59,6 +60,7 @@ export type Database = {
           is_penalty?: boolean
           loan_id: string
           number: number
+          paid_amount?: number
           paid_at?: string | null
           penalty_amount?: number
           status?: string
@@ -71,6 +73,7 @@ export type Database = {
           is_penalty?: boolean
           loan_id?: string
           number?: number
+          paid_amount?: number
           paid_at?: string | null
           penalty_amount?: number
           status?: string
