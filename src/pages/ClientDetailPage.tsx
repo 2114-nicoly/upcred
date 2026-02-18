@@ -5,9 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
+import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays, getOverdueDatesList } from "@/lib/loan-utils";
 import { ArrowLeft, Plus, ChevronDown, History, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 type Loan = {
   id: string;
@@ -138,10 +139,40 @@ export default function ClientDetailPage() {
                           {format(new Date(loan.loan_date), "dd/MM/yyyy")}
                         </p>
                         {overdueDays > 0 && (
-                          <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
-                            <Clock className="h-3 w-3" />
-                            {overdueDays} dia{overdueDays > 1 ? "s" : ""} em atraso
-                          </p>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <button
+                                onClick={(e) => e.preventDefault()}
+                                className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive hover:underline"
+                              >
+                                <Clock className="h-3 w-3" />
+                                {overdueDays} dia{overdueDays > 1 ? "s" : ""} em atraso
+                              </button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Dias em Atraso</DialogTitle>
+                              </DialogHeader>
+                              <div className="max-h-60 space-y-1 overflow-y-auto">
+                                {(() => {
+                                  const insts = installmentsByLoan[loan.id] || [];
+                                  const today = new Date();
+                                  today.setHours(12, 0, 0, 0);
+                                  const overdueInsts = insts
+                                    .filter((i) => !i.is_penalty && i.status !== "paid")
+                                    .filter((i) => new Date(i.due_date + "T12:00:00") < today)
+                                    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+                                  if (overdueInsts.length === 0) return null;
+                                  const dates = getOverdueDatesList(overdueInsts[0].due_date, loan.payment_type);
+                                  return dates.map((d, idx) => (
+                                    <div key={idx} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                                      <span>{format(d, "dd/MM/yyyy (EEEE)")}</span>
+                                    </div>
+                                  ));
+                                })()}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         )}
                       </div>
                       <Badge className={getLoanStatusColor(overdueDays > 0 ? "overdue" : loan.status)}>
