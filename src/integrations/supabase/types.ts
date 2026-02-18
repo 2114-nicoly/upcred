@@ -141,6 +141,45 @@ export type Database = {
           },
         ]
       }
+      penalties: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          installment_id: string
+          loan_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          installment_id: string
+          loan_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          installment_id?: string
+          loan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "penalties_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: false
+            referencedRelation: "installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "penalties_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
