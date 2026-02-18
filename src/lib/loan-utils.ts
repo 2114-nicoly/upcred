@@ -77,7 +77,7 @@ export function getStatusLabel(status: string): string {
     case "paid":
       return "Quitado";
     case "pending":
-      return "Pendente";
+      return "Em Aberto";
     default:
       return status;
   }
