@@ -17,20 +17,34 @@ export function generateDueDates(
   installmentCount: number,
   paymentType: "daily" | "weekly" | "biweekly" | "monthly"
 ): Date[] {
-  const dates: Date[] = [];
-  for (let i = 0; i < installmentCount; i++) {
+  const dates: Date[] = [firstDueDate];
+  let current = firstDueDate;
+  for (let i = 1; i < installmentCount; i++) {
     switch (paymentType) {
-      case "daily":
-        dates.push(addDays(firstDueDate, i));
+      case "daily": {
+        let next = addDays(current, 1);
+        // Pula domingos (0 = domingo)
+        while (next.getDay() === 0) {
+          next = addDays(next, 1);
+        }
+        current = next;
+        dates.push(current);
         break;
+      }
       case "weekly":
-        dates.push(addWeeks(firstDueDate, i));
+        // Sempre o mesmo dia da semana
+        current = addWeeks(current, 1);
+        dates.push(current);
         break;
       case "biweekly":
-        dates.push(addWeeks(firstDueDate, i * 2));
+        // 15 dias
+        current = addDays(current, 15);
+        dates.push(current);
         break;
       case "monthly":
-        dates.push(addMonths(firstDueDate, i));
+        // Mesmo dia do próximo mês
+        current = addMonths(firstDueDate, i);
+        dates.push(current);
         break;
     }
   }
