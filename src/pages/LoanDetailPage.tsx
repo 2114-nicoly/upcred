@@ -14,7 +14,7 @@ import {
   getLoanStatusColor,
   getInstallmentDisplayStatus,
 } from "@/lib/loan-utils";
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -44,15 +44,27 @@ type Installment = {
   paid_amount: number;
 };
 
+type Penalty = {
+  id: string;
+  loan_id: string;
+  installment_id: string;
+  amount: number;
+  created_at: string;
+};
+
 export default function LoanDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
   const [loan, setLoan] = useState<Loan | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([]);
+  const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [penaltyAmount, setPenaltyAmount] = useState("");
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
+  const [penaltyDetailOpen, setPenaltyDetailOpen] = useState(false);
+  const [editingPenalty, setEditingPenalty] = useState<string | null>(null);
+  const [editPenaltyValue, setEditPenaltyValue] = useState("");
 
   const fetchData = async () => {
     const { data: l } = await supabase
@@ -68,6 +80,13 @@ export default function LoanDetailPage() {
       .eq("loan_id", loanId!)
       .order("number");
     setInstallments(inst || []);
+
+    const { data: pen } = await supabase
+      .from("penalties")
+      .select("*")
+      .eq("loan_id", loanId!)
+      .order("created_at");
+    setPenalties(pen || []);
   };
 
   useEffect(() => {
@@ -100,7 +119,6 @@ export default function LoanDetailPage() {
       return;
     }
 
-    // Get all unpaid installments in order
     const unpaid = installments
       .filter((i) => i.status !== "paid")
       .sort((a, b) => a.number - b.number);
@@ -108,20 +126,15 @@ export default function LoanDetailPage() {
     const currentInst = unpaid.find((i) => i.id === id);
     if (!currentInst) return;
 
-    // Default to remaining amount of current installment
     let remaining = paidValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount));
-
-    // Abate in order starting from the clicked installment
     const toProcess = unpaid.filter((i) => i.number >= currentInst.number);
 
     for (const inst of toProcess) {
       if (remaining <= 0) break;
-
       const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
       const applying = Math.min(remaining, instRemaining);
-
       const newPaidAmount = Number(inst.paid_amount) + applying;
-      const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01; // tolerance
+      const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
 
       await supabase
         .from("installments")
@@ -172,6 +185,13 @@ export default function LoanDetailPage() {
     const inst = installments.find((i) => i.id === installmentId);
     if (!inst) return;
 
+    // Record individual penalty
+    await supabase.from("penalties").insert({
+      loan_id: loanId!,
+      installment_id: installmentId,
+      amount,
+    });
+
     const newPenalty = Number(inst.penalty_amount) + amount;
     await supabase.from("installments").update({ penalty_amount: newPenalty }).eq("id", installmentId);
 
@@ -201,6 +221,71 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  const handleEditPenalty = async (penaltyId: string) => {
+    const newAmount = parseFloat(editPenaltyValue);
+    if (!newAmount || newAmount <= 0) {
+      toast.error("Informe um valor válido");
+      return;
+    }
+
+    const penalty = penalties.find((p) => p.id === penaltyId);
+    if (!penalty) return;
+
+    const diff = newAmount - Number(penalty.amount);
+
+    await supabase.from("penalties").update({ amount: newAmount }).eq("id", penaltyId);
+
+    // Update penalty_amount on the source installment
+    const srcInst = installments.find((i) => i.id === penalty.installment_id);
+    if (srcInst) {
+      await supabase.from("installments").update({
+        penalty_amount: Number(srcInst.penalty_amount) + diff,
+      }).eq("id", srcInst.id);
+    }
+
+    // Update penalty installment total
+    const penaltyInst = installments.find((i) => i.is_penalty);
+    if (penaltyInst) {
+      await supabase.from("installments").update({
+        amount: Number(penaltyInst.amount) + diff,
+      }).eq("id", penaltyInst.id);
+    }
+
+    toast.success("Multa atualizada!");
+    setEditingPenalty(null);
+    setEditPenaltyValue("");
+    fetchData();
+  };
+
+  const handleDeletePenalty = async (penaltyId: string) => {
+    const penalty = penalties.find((p) => p.id === penaltyId);
+    if (!penalty) return;
+
+    await supabase.from("penalties").delete().eq("id", penaltyId);
+
+    // Subtract from source installment penalty_amount
+    const srcInst = installments.find((i) => i.id === penalty.installment_id);
+    if (srcInst) {
+      await supabase.from("installments").update({
+        penalty_amount: Math.max(0, Number(srcInst.penalty_amount) - Number(penalty.amount)),
+      }).eq("id", srcInst.id);
+    }
+
+    // Subtract from penalty installment
+    const penaltyInst = installments.find((i) => i.is_penalty);
+    if (penaltyInst) {
+      const newAmount = Number(penaltyInst.amount) - Number(penalty.amount);
+      if (newAmount <= 0.01) {
+        await supabase.from("installments").delete().eq("id", penaltyInst.id);
+      } else {
+        await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
+      }
+    }
+
+    toast.success("Multa removida!");
+    fetchData();
+  };
+
   if (!loan) return <p className="p-4 text-center">Carregando...</p>;
 
   const regularInstallments = installments.filter((i) => !i.is_penalty);
@@ -220,6 +305,12 @@ export default function LoanDetailPage() {
     biweekly: "Quinzenal",
     monthly: "Mensal",
     fixed_dates: "Data Fixa",
+  };
+
+  // Find which installment each penalty belongs to
+  const getInstallmentNumber = (installmentId: string) => {
+    const inst = installments.find((i) => i.id === installmentId);
+    return inst ? inst.number : "?";
   };
 
   return (
@@ -295,7 +386,16 @@ export default function LoanDetailPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <p className="font-semibold">
-                      {inst.is_penalty ? "🔶 Multa" : `Parcela ${inst.number}`}
+                      {inst.is_penalty ? (
+                        <button
+                          className="flex items-center gap-1 text-left hover:underline"
+                          onClick={() => setPenaltyDetailOpen(true)}
+                        >
+                          🔶 Multa <span className="text-xs text-muted-foreground">({penalties.length} registro{penalties.length !== 1 ? "s" : ""})</span>
+                        </button>
+                      ) : (
+                        `Parcela ${inst.number}`
+                      )}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
@@ -393,6 +493,64 @@ export default function LoanDetailPage() {
           );
         })}
       </div>
+
+      {/* Penalty Detail Dialog */}
+      <Dialog open={penaltyDetailOpen} onOpenChange={setPenaltyDetailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Detalhes das Multas</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {penalties.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma multa registrada.</p>
+            ) : (
+              penalties.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
+                  {editingPenalty === p.id ? (
+                    <div className="flex flex-1 items-center gap-2">
+                      <Input
+                        type="number"
+                        value={editPenaltyValue}
+                        onChange={(e) => setEditPenaltyValue(e.target.value)}
+                        className="h-8 w-24"
+                      />
+                      <Button size="sm" onClick={() => handleEditPenalty(p.id)}>Salvar</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setEditingPenalty(null); setEditPenaltyValue(""); }}>Cancelar</Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium">{formatCurrency(Number(p.amount))}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Parcela {getInstallmentNumber(p.installment_id)} • {format(new Date(p.created_at), "dd/MM/yyyy HH:mm")}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={() => { setEditingPenalty(p.id); setEditPenaltyValue(String(p.amount)); }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          onClick={() => handleDeletePenalty(p.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
