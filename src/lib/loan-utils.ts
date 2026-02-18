@@ -95,3 +95,30 @@ export function getLoanStatusColor(status: string): string {
       return "bg-muted text-muted-foreground";
   }
 }
+
+export function calculateOverdueDays(
+  overdueDate: string,
+  paymentType: string
+): number {
+  const due = new Date(overdueDate + "T12:00:00");
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  if (today <= due) return 0;
+
+  let days = 0;
+  const current = new Date(due);
+  current.setDate(current.getDate() + 1);
+
+  while (current <= today) {
+    // Para diárias, domingo não conta
+    if (paymentType === "daily" && current.getDay() === 0) {
+      current.setDate(current.getDate() + 1);
+      continue;
+    }
+    days++;
+    current.setDate(current.getDate() + 1);
+  }
+
+  return days;
+}

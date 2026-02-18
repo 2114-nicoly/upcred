@@ -5,8 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatCurrency, getLoanStatusColor, getStatusLabel } from "@/lib/loan-utils";
-import { ArrowLeft, Plus, ChevronDown, History } from "lucide-react";
+import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
+import { ArrowLeft, Plus, ChevronDown, History, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 type Loan = {
@@ -21,6 +21,13 @@ type Loan = {
   interest_value: number;
 };
 
+type Installment = {
+  id: string;
+  due_date: string;
+  status: string;
+  is_penalty: boolean;
+};
+
 type Client = {
   id: string;
   name: string;
@@ -33,17 +40,49 @@ export default function ClientDetailPage() {
   const navigate = useNavigate();
   const [client, setClient] = useState<Client | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [installmentsByLoan, setInstallmentsByLoan] = useState<Record<string, Installment[]>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchData = async () => {
       const { data: c } = await supabase.from("clients").select("*").eq("id", clientId!).single();
       setClient(c);
       const { data: l } = await supabase.from("loans").select("*").eq("client_id", clientId!).order("created_at", { ascending: false });
       setLoans(l || []);
+
+      if (l && l.length > 0) {
+        const loanIds = l.map((loan: Loan) => loan.id);
+        const { data: inst } = await supabase
+          .from("installments")
+          .select("id, due_date, status, is_penalty, loan_id")
+          .in("loan_id", loanIds);
+
+        const grouped: Record<string, Installment[]> = {};
+        (inst || []).forEach((i: any) => {
+          if (!grouped[i.loan_id]) grouped[i.loan_id] = [];
+          grouped[i.loan_id].push(i);
+        });
+        setInstallmentsByLoan(grouped);
+      }
     };
-    fetch();
+    fetchData();
   }, [clientId]);
+
+  const getOverdueDays = (loan: Loan): number => {
+    const insts = installmentsByLoan[loan.id] || [];
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+
+    // Find earliest unpaid installment past due date
+    const overdueInsts = insts
+      .filter((i) => !i.is_penalty && i.status !== "paid")
+      .filter((i) => new Date(i.due_date + "T12:00:00") < today)
+      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+
+    if (overdueInsts.length === 0) return 0;
+
+    return calculateOverdueDays(overdueInsts[0].due_date, loan.payment_type);
+  };
 
   const activeLoans = loans.filter((l) => l.status !== "paid");
   const paidLoans = loans.filter((l) => l.status === "paid");
@@ -83,26 +122,37 @@ export default function ClientDetailPage() {
         <p className="py-4 text-center text-muted-foreground">Nenhum empréstimo ativo</p>
       ) : (
         <div className="space-y-3">
-          {activeLoans.map((loan) => (
-            <Link key={loan.id} to={`/loans/${loan.id}`}>
-              <Card className="cursor-pointer transition-shadow hover:shadow-md">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-lg font-bold">{formatCurrency(Number(loan.total_amount))}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {loan.installment_count}x • {paymentTypeLabel[loan.payment_type]}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(loan.loan_date), "dd/MM/yyyy")}
-                      </p>
+          {activeLoans.map((loan) => {
+            const overdueDays = getOverdueDays(loan);
+            return (
+              <Link key={loan.id} to={`/loans/${loan.id}`}>
+                <Card className="cursor-pointer transition-shadow hover:shadow-md">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-lg font-bold">{formatCurrency(Number(loan.total_amount))}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {loan.installment_count}x • {paymentTypeLabel[loan.payment_type]}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(loan.loan_date), "dd/MM/yyyy")}
+                        </p>
+                        {overdueDays > 0 && (
+                          <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
+                            <Clock className="h-3 w-3" />
+                            {overdueDays} dia{overdueDays > 1 ? "s" : ""} em atraso
+                          </p>
+                        )}
+                      </div>
+                      <Badge className={getLoanStatusColor(overdueDays > 0 ? "overdue" : loan.status)}>
+                        {getStatusLabel(overdueDays > 0 ? "overdue" : loan.status)}
+                      </Badge>
                     </div>
-                    <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
 
