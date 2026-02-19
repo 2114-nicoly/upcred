@@ -11,6 +11,7 @@ import NewLoanPage from "@/pages/NewLoanPage";
 import LoanDetailPage from "@/pages/LoanDetailPage";
 import PaymentHistoryPage from "@/pages/PaymentHistoryPage";
 import ActiveLoansPage from "@/pages/ActiveLoansPage";
+import ReportsPage from "@/pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/loans/:loanId" element={<LoanDetailPage />} />
             <Route path="/active-loans" element={<ActiveLoansPage />} />
             <Route path="/payment-history" element={<PaymentHistoryPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AppLayout>
