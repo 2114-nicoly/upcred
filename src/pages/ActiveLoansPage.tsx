@@ -5,9 +5,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getLoanStatusColor, getStatusLabel } from "@/lib/loan-utils";
-import { Landmark, Filter, Flame } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 type LoanWithClient = {
   id: string;
@@ -26,6 +30,8 @@ type LoanProgress = {
   total: number;
   remaining: number;
   penaltyTotal: number;
+  penaltyPaid: number;
+  nextDueDate: string | null;
 };
 
 export default function ActiveLoansPage() {
@@ -37,58 +43,149 @@ export default function ActiveLoansPage() {
   const [todayLoanIds, setTodayLoanIds] = useState<Set<string>>(new Set());
   const [progressMap, setProgressMap] = useState<Record<string, LoanProgress>>({});
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const { data: loansData } = await supabase
-        .from("loans")
-        .select("*, clients(id, name)")
-        .neq("status", "paid")
-        .order("loan_date", { ascending: false });
+  // Payment dialog state
+  const [payLoanId, setPayLoanId] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
+  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
-      const loansList = (loansData as unknown as LoanWithClient[]) || [];
-      setLoans(loansList);
+  const fetchData = async () => {
+    setLoading(true);
+    const { data: loansData } = await supabase
+      .from("loans")
+      .select("*, clients(id, name)")
+      .neq("status", "paid")
+      .order("loan_date", { ascending: false });
 
-      const today = format(new Date(), "yyyy-MM-dd");
-      const loanIds = loansList.map((l) => l.id);
-      if (loanIds.length > 0) {
-        const { data: todayInst } = await supabase
-          .from("installments")
-          .select("loan_id")
-          .in("loan_id", loanIds)
-          .eq("due_date", today)
-          .neq("status", "paid");
-        setTodayLoanIds(new Set((todayInst || []).map((i) => i.loan_id)));
+    const loansList = (loansData as unknown as LoanWithClient[]) || [];
+    setLoans(loansList);
 
-        const { data: allInst } = await supabase
-          .from("installments")
-          .select("loan_id, amount, paid_amount, is_penalty")
-          .in("loan_id", loanIds);
+    const today = format(new Date(), "yyyy-MM-dd");
+    const loanIds = loansList.map((l) => l.id);
+    if (loanIds.length > 0) {
+      const { data: todayInst } = await supabase
+        .from("installments")
+        .select("loan_id")
+        .in("loan_id", loanIds)
+        .eq("due_date", today)
+        .neq("status", "paid");
+      setTodayLoanIds(new Set((todayInst || []).map((i) => i.loan_id)));
 
-        const pm: Record<string, LoanProgress> = {};
-        for (const lid of loanIds) {
-          const insts = (allInst || []).filter((i: any) => i.loan_id === lid);
-          const regular = insts.filter((i: any) => !i.is_penalty);
-          const penalties = insts.filter((i: any) => i.is_penalty);
-          const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-          const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
-          pm[lid] = {
-            progress: totalPaid / instValue,
-            total: regular.length,
-            remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
-            penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
-          };
-        }
-        setProgressMap(pm);
+      const { data: allInst } = await supabase
+        .from("installments")
+        .select("loan_id, amount, paid_amount, is_penalty, due_date, status")
+        .in("loan_id", loanIds);
+
+      const pm: Record<string, LoanProgress> = {};
+      for (const lid of loanIds) {
+        const insts = (allInst || []).filter((i: any) => i.loan_id === lid);
+        const regular = insts.filter((i: any) => !i.is_penalty);
+        const penalties = insts.filter((i: any) => i.is_penalty);
+        const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
+
+        // Next due date: earliest unpaid regular installment
+        const unpaidRegular = regular
+          .filter((i: any) => i.status !== "paid")
+          .sort((a: any, b: any) => a.due_date.localeCompare(b.due_date));
+        const nextDueDate = unpaidRegular.length > 0 ? unpaidRegular[0].due_date : null;
+
+        pm[lid] = {
+          progress: totalPaid / instValue,
+          total: regular.length,
+          remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
+          penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
+          penaltyPaid: penalties.reduce((s: number, i: any) => s + Number(i.paid_amount), 0),
+          nextDueDate,
+        };
       }
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
+      setProgressMap(pm);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
 
   const handleToggleCravo = async (loanId: string, current: boolean) => {
     await supabase.from("loans").update({ is_cravo: !current }).eq("id", loanId);
     setLoans((prev) => prev.map((l) => l.id === loanId ? { ...l, is_cravo: !current } : l));
+  };
+
+  // --- Payment from list ---
+  const handlePayFromList = async () => {
+    if (!payLoanId) return;
+    const parcValue = payAmount ? parseFloat(payAmount) : null;
+    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+
+    // Fetch installments for this loan
+    const { data: allInst } = await supabase
+      .from("installments")
+      .select("*")
+      .eq("loan_id", payLoanId)
+      .order("number");
+    if (!allInst) return;
+
+    // Handle penalty payment
+    if (multaValue > 0) {
+      const penaltyInst = allInst.find((i: any) => i.is_penalty);
+      if (penaltyInst) {
+        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
+        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
+        await supabase.from("installments").update({
+          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
+          status: fullyPaid ? "paid" : penaltyInst.status,
+          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
+        }).eq("id", penaltyInst.id);
+        toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
+      } else {
+        toast.error("Nenhuma multa registrada para abater");
+      }
+    }
+
+    // Handle regular payment (sequential abatement)
+    if (parcValue !== null && parcValue > 0) {
+      const unpaid = allInst
+        .filter((i: any) => i.status !== "paid" && !i.is_penalty)
+        .sort((a: any, b: any) => a.number - b.number);
+
+      let remaining = parcValue;
+      for (const inst of unpaid) {
+        if (remaining <= 0) break;
+        const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+        const applying = Math.min(remaining, instRemaining);
+        const newPaidAmount = Number(inst.paid_amount) + applying;
+        const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
+        await supabase.from("installments").update({
+          paid_amount: newPaidAmount,
+          status: fullyPaid ? "paid" : inst.status,
+          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
+        }).eq("id", inst.id);
+        remaining -= applying;
+      }
+      const totalApplied = parcValue - remaining;
+      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
+      if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
+    }
+
+    // Update loan status
+    const { data: updatedInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", payLoanId);
+    if (updatedInst) {
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+      const allPaid = updatedInst.every((i: any) => i.status === "paid");
+      const hasOverdue = updatedInst.some((i: any) => i.status === "overdue" && i.due_date < todayStr);
+      let newStatus = "open";
+      if (allPaid) newStatus = "paid";
+      else if (hasOverdue) newStatus = "overdue";
+      await supabase.from("loans").update({ status: newStatus }).eq("id", payLoanId);
+    }
+
+    setPayLoanId(null);
+    setPayAmount("");
+    setPayPenaltyAmount("");
+    setPayDate(format(new Date(), "yyyy-MM-dd"));
+    fetchData();
   };
 
   const paymentTypeLabel: Record<string, string> = {
@@ -146,15 +243,25 @@ export default function ActiveLoansPage() {
                         {loan.is_cravo && <Flame className="h-4 w-4 text-destructive" />}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {formatCurrency(Number(loan.total_amount))} • {paymentTypeLabel[loan.payment_type]}
+                        {formatCurrency(Number(loan.total_amount))} • <span className="font-medium text-primary">{paymentTypeLabel[loan.payment_type]}</span>
                       </p>
                       {lp && (
-                        <p className="text-xs text-primary font-medium">
-                          {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} • Resta: {formatCurrency(Math.max(0, lp.remaining))}
-                        </p>
+                        <>
+                          <p className="text-xs text-primary font-medium">
+                            {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} • Resta: {formatCurrency(Math.max(0, lp.remaining))}
+                          </p>
+                          {lp.nextDueDate && (
+                            <p className="text-xs text-muted-foreground">
+                              Próx. vencimento: <span className="font-medium">{format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM/yyyy")}</span>
+                            </p>
+                          )}
+                        </>
                       )}
                       {lp && lp.penaltyTotal > 0 && (
-                        <p className="text-xs text-destructive">Multa: {formatCurrency(lp.penaltyTotal)}</p>
+                        <p className="text-xs text-destructive">
+                          Multa: {formatCurrency(lp.penaltyTotal)}
+                          {lp.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(lp.penaltyPaid)})</span>}
+                        </p>
                       )}
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}
@@ -162,6 +269,14 @@ export default function ActiveLoansPage() {
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={(e) => { e.stopPropagation(); setPayLoanId(loan.id); }}
+                      >
+                        <DollarSign className="mr-1 h-3 w-3" /> Pagar
+                      </Button>
                       <Button
                         size="sm"
                         variant={loan.is_cravo ? "destructive" : "outline"}
@@ -179,6 +294,49 @@ export default function ActiveLoansPage() {
           })}
         </div>
       )}
+
+      {/* Payment Dialog */}
+      <Dialog open={!!payLoanId} onOpenChange={(o) => { if (!o) { setPayLoanId(null); setPayAmount(""); setPayPenaltyAmount(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Pagamento</DialogTitle>
+          </DialogHeader>
+          {payLoanId && (() => {
+            const loan = loans.find((l) => l.id === payLoanId);
+            const lp = progressMap[payLoanId];
+            return (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{loan?.clients.name}</p>
+                {lp && (
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>Resta (parcelas):</span><span>{formatCurrency(Math.max(0, lp.remaining))}</span></div>
+                    {lp.penaltyTotal > 0 && (
+                      <div className="flex justify-between"><span className="text-destructive">Multa pendente:</span><span className="text-destructive">{formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</span></div>
+                    )}
+                  </div>
+                )}
+                <div>
+                  <Label>Valor recebido (parcelas)</Label>
+                  <Input type="number" placeholder="Valor para abater parcelas" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                </div>
+                {lp && lp.penaltyTotal - lp.penaltyPaid > 0.01 && (
+                  <div className="rounded-lg border border-warning/50 p-3 space-y-2">
+                    <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</p>
+                    <Label>Valor destinado à multa (opcional)</Label>
+                    <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                  </div>
+                )}
+                <div>
+                  <Label>Data do pagamento</Label>
+                  <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes na ordem.</p>
+                <Button onClick={handlePayFromList} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
