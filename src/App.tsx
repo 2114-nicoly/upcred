@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,34 +15,53 @@ import ActiveLoansPage from "@/pages/ActiveLoansPage";
 import ReportsPage from "@/pages/ReportsPage";
 import OverdueLoansPage from "@/pages/OverdueLoansPage";
 import TodaySummaryPage from "@/pages/TodaySummaryPage";
+import LoginPage from "@/pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<TodayPage />} />
-            <Route path="/clients" element={<ClientsPage />} />
-            <Route path="/clients/:clientId" element={<ClientDetailPage />} />
-            <Route path="/clients/:clientId/new-loan" element={<NewLoanPage />} />
-            <Route path="/loans/:loanId" element={<LoanDetailPage />} />
-            <Route path="/active-loans" element={<ActiveLoansPage />} />
-            <Route path="/overdue" element={<OverdueLoansPage />} />
-            <Route path="/today-summary" element={<TodaySummaryPage />} />
-            <Route path="/payment-history" element={<PaymentHistoryPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const [authenticated, setAuthenticated] = useState(
+    () => localStorage.getItem("authenticated") === "true"
+  );
+
+  if (!authenticated) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <LoginPage onLogin={() => setAuthenticated(true)} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<TodayPage />} />
+              <Route path="/clients" element={<ClientsPage />} />
+              <Route path="/clients/:clientId" element={<ClientDetailPage />} />
+              <Route path="/clients/:clientId/new-loan" element={<NewLoanPage />} />
+              <Route path="/loans/:loanId" element={<LoanDetailPage />} />
+              <Route path="/active-loans" element={<ActiveLoansPage />} />
+              <Route path="/overdue" element={<OverdueLoansPage />} />
+              <Route path="/today-summary" element={<TodaySummaryPage />} />
+              <Route path="/payment-history" element={<PaymentHistoryPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AppLayout>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
