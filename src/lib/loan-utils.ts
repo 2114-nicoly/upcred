@@ -107,8 +107,10 @@ export function getInstallmentDisplayStatus(inst: {
   // Today's installments always show "Vence Hoje", never overdue
   if (due.getTime() === today.getTime()) return "due_today";
   
-  if (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) < Number(inst.amount)) return "partial";
+  // Past due date and not fully paid = overdue (even if partial payment was made)
   if (inst.status === "overdue" || due < today) return "overdue";
+  
+  if (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) < Number(inst.amount)) return "partial";
   return "pending";
 }
 
