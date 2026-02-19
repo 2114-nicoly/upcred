@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoute } from "@/contexts/RouteContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
 import { CalendarCheck, ChevronDown, ChevronUp } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 type PaidInstallment = {
@@ -16,26 +15,25 @@ type PaidInstallment = {
   paid_at: string;
   is_penalty: boolean;
   loan_id: string;
-  loans: { id: string; amount: number; clients: { name: string } };
+  loans: {
+    id: string;
+    amount: number;
+    clients: {
+      name: string;
+    };
+  };
 };
 
 export default function PaymentHistoryPage() {
-  const { route } = useRoute();
   const [installmentsByDay, setInstallmentsByDay] = useState<Record<string, PaidInstallment[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!route) return;
-    const fetchData = async () => {
-      const { data: routeLoans } = await supabase.from("loans").select("id").eq("route_id", route.id);
-      const loanIds = (routeLoans || []).map((l: any) => l.id);
-      if (loanIds.length === 0) { setLoading(false); return; }
-
+    const fetch = async () => {
       const { data } = await supabase
         .from("installments")
         .select("*, loans(id, amount, clients(name))")
-        .in("loan_id", loanIds)
         .eq("status", "paid")
         .not("paid_at", "is", null)
         .order("paid_at", { ascending: false });
@@ -46,18 +44,20 @@ export default function PaymentHistoryPage() {
         if (!grouped[day]) grouped[day] = [];
         grouped[day].push(inst);
       });
+
       setInstallmentsByDay(grouped);
       setLoading(false);
     };
-    fetchData();
-  }, [route]);
+    fetch();
+  }, []);
 
   const days = Object.keys(installmentsByDay).sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="mx-auto max-w-lg p-4">
       <h1 className="mb-4 text-2xl font-bold">
-        <CalendarCheck className="mr-2 inline h-6 w-6 text-primary" /> Histórico de Pagamentos
+        <CalendarCheck className="mr-2 inline h-6 w-6 text-primary" />
+        Histórico de Pagamentos
       </h1>
 
       {loading ? (
@@ -70,14 +70,26 @@ export default function PaymentHistoryPage() {
             const insts = installmentsByDay[day];
             const total = insts.reduce((s, i) => s + Number(i.amount), 0);
             const isExpanded = expandedDay === day;
+
             return (
               <Card key={day}>
-                <button className="flex w-full items-center justify-between p-4 text-left" onClick={() => setExpandedDay(isExpanded ? null : day)}>
+                <button
+                  className="flex w-full items-center justify-between p-4 text-left"
+                  onClick={() => setExpandedDay(isExpanded ? null : day)}
+                >
                   <div>
-                    <p className="font-semibold">{format(new Date(day), "EEEE, dd/MM/yyyy", { locale: ptBR })}</p>
-                    <p className="text-sm text-muted-foreground">{insts.length} pagamento(s) • {formatCurrency(total)}</p>
+                    <p className="font-semibold">
+                      {format(new Date(day), "EEEE, dd/MM/yyyy", { locale: ptBR })}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {insts.length} pagamento(s) • {formatCurrency(total)}
+                    </p>
                   </div>
-                  {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                  {isExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
                 </button>
                 {isExpanded && (
                   <CardContent className="space-y-2 border-t pt-3">

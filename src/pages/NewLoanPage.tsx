@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoute } from "@/contexts/RouteContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,14 +10,11 @@ import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-util
 import { ArrowLeft, Calculator } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { useEffect } from "react";
 
 export default function NewLoanPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { route } = useRoute();
 
-  const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
   const [interestType, setInterestType] = useState<"percentage" | "fixed">("percentage");
   const [interestValue, setInterestValue] = useState("");
@@ -28,14 +24,6 @@ export default function NewLoanPage() {
   const [firstDueDate, setFirstDueDate] = useState("");
   const [fixedDates, setFixedDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const fetchClient = async () => {
-      const { data } = await supabase.from("clients").select("name").eq("id", clientId!).single();
-      if (data) setClientName(data.name);
-    };
-    fetchClient();
-  }, [clientId]);
 
   const numAmount = parseFloat(amount) || 0;
   const numInterest = parseFloat(interestValue) || 0;
@@ -58,6 +46,7 @@ export default function NewLoanPage() {
     setFixedDates(newDates);
   };
 
+  // Update fixedDates array when installment count changes for fixed_dates type
   useMemo(() => {
     if (paymentType === "fixed_dates" && numInstallments > 0) {
       setFixedDates((prev) => {
@@ -69,9 +58,20 @@ export default function NewLoanPage() {
   }, [numInstallments, paymentType]);
 
   const handleSave = async () => {
-    if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
-    if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error("Informe a data do primeiro vencimento"); return; }
-    if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
+    if (!calc || numInstallments <= 0) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    if (paymentType !== "fixed_dates" && !firstDueDate) {
+      toast.error("Informe a data do primeiro vencimento");
+      return;
+    }
+
+    if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) {
+      toast.error("Preencha todas as datas de vencimento");
+      return;
+    }
 
     setSaving(true);
 
@@ -79,7 +79,6 @@ export default function NewLoanPage() {
       .from("loans")
       .insert({
         client_id: clientId!,
-        route_id: route!.id,
         amount: numAmount,
         interest_type: interestType,
         interest_value: numInterest,
@@ -92,7 +91,11 @@ export default function NewLoanPage() {
       .select()
       .single();
 
-    if (loanError || !loan) { toast.error("Erro ao criar empréstimo"); setSaving(false); return; }
+    if (loanError || !loan) {
+      toast.error("Erro ao criar empréstimo");
+      setSaving(false);
+      return;
+    }
 
     const installments = dueDates.map((date, i) => ({
       loan_id: loan.id,
@@ -103,7 +106,12 @@ export default function NewLoanPage() {
     }));
 
     const { error: instError } = await supabase.from("installments").insert(installments);
-    if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
+
+    if (instError) {
+      toast.error("Erro ao criar parcelas");
+      setSaving(false);
+      return;
+    }
 
     toast.success("Empréstimo criado com sucesso!");
     navigate(`/loans/${loan.id}`);
@@ -115,8 +123,7 @@ export default function NewLoanPage() {
         <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
       </Button>
 
-      <h1 className="mb-1 text-2xl font-bold">Novo Empréstimo</h1>
-      {clientName && <p className="mb-4 text-sm text-muted-foreground">Cliente: <span className="font-medium text-foreground">{clientName}</span></p>}
+      <h1 className="mb-4 text-2xl font-bold">Novo Empréstimo</h1>
 
       <div className="space-y-4">
         <div>
@@ -141,7 +148,11 @@ export default function NewLoanPage() {
           </div>
         </div>
 
-        {/* Payment Type first, then installment count */}
+        <div>
+          <Label>Quantidade de Parcelas</Label>
+          <Input type="number" value={installmentCount} onChange={(e) => setInstallmentCount(e.target.value)} placeholder="0" />
+        </div>
+
         <div>
           <Label>Tipo de Pagamento</Label>
           <Select value={paymentType} onValueChange={(v) => setPaymentType(v as typeof paymentType)}>
@@ -154,11 +165,6 @@ export default function NewLoanPage() {
               <SelectItem value="fixed_dates">Data Fixa</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-
-        <div>
-          <Label>Quantidade de Parcelas</Label>
-          <Input type="number" value={installmentCount} onChange={(e) => setInstallmentCount(e.target.value)} placeholder="0" />
         </div>
 
         <div>
@@ -185,6 +191,7 @@ export default function NewLoanPage() {
           </div>
         )}
 
+        {/* Preview do cálculo */}
         {calc && (
           <Card className="border-primary/30 bg-accent">
             <CardHeader className="pb-2">
@@ -193,15 +200,29 @@ export default function NewLoanPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1 text-sm">
-              <div className="flex justify-between"><span>Valor emprestado:</span><span className="font-semibold">{formatCurrency(numAmount)}</span></div>
-              <div className="flex justify-between"><span>Juros:</span><span className="font-semibold">{formatCurrency(calc.interest)}</span></div>
-              <div className="flex justify-between border-t pt-1"><span className="font-bold">Valor final:</span><span className="font-bold text-primary">{formatCurrency(calc.totalAmount)}</span></div>
-              <div className="flex justify-between"><span>Valor de cada parcela:</span><span className="font-semibold">{formatCurrency(calc.installmentAmount)}</span></div>
+              <div className="flex justify-between">
+                <span>Valor emprestado:</span>
+                <span className="font-semibold">{formatCurrency(numAmount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Juros:</span>
+                <span className="font-semibold">{formatCurrency(calc.interest)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-1">
+                <span className="font-bold">Valor final:</span>
+                <span className="font-bold text-primary">{formatCurrency(calc.totalAmount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Valor de cada parcela:</span>
+                <span className="font-semibold">{formatCurrency(calc.installmentAmount)}</span>
+              </div>
               {dueDates.length > 0 && (
                 <div className="mt-2 border-t pt-2">
                   <p className="mb-1 font-medium">Vencimentos previstos:</p>
                   {dueDates.map((d, i) => (
-                    <p key={i} className="text-muted-foreground">Parcela {i + 1}: {format(d, "dd/MM/yyyy")}</p>
+                    <p key={i} className="text-muted-foreground">
+                      Parcela {i + 1}: {format(d, "dd/MM/yyyy")}
+                    </p>
                   ))}
                 </div>
               )}
