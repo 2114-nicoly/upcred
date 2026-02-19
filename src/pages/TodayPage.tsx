@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRoute } from "@/contexts/RouteContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle } from "lucide-react";
@@ -26,118 +28,122 @@ type InstallmentWithLoan = {
     client_id: string;
     amount: number;
     total_amount: number;
-    clients: {
-      id: string;
-      name: string;
-    };
+    installment_count: number;
+    clients: { id: string; name: string };
   };
 };
 
+type LoanProgress = {
+  progress: number;
+  total: number;
+  remaining: number;
+  penaltyTotal: number;
+};
+
 export default function TodayPage() {
+  const { route } = useRoute();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
+  const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
 
   const fetchInstallments = async () => {
-    const { data, error } = await supabase
+    if (!route) return;
+
+    // Get loans for this route
+    const { data: routeLoans } = await supabase
+      .from("loans")
+      .select("id")
+      .eq("route_id", route.id);
+    const loanIds = (routeLoans || []).map((l: any) => l.id);
+    if (loanIds.length === 0) { setInstallments([]); setLoading(false); return; }
+
+    const { data } = await supabase
       .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, clients(id, name))")
+      .select("*, loans(id, client_id, amount, total_amount, installment_count, clients(id, name))")
+      .in("loan_id", loanIds)
       .eq("due_date", today)
       .neq("status", "paid")
+      .eq("is_penalty", false)
       .order("number");
 
-    if (error) {
-      toast.error("Erro ao carregar parcelas");
-      return;
-    }
     setInstallments((data as unknown as InstallmentWithLoan[]) || []);
+
+    // Calculate progress for each loan
+    const uniqueLoanIds = [...new Set((data || []).map((d: any) => d.loan_id))];
+    const progressMap: Record<string, LoanProgress> = {};
+
+    for (const lid of uniqueLoanIds) {
+      const { data: allInst } = await supabase
+        .from("installments")
+        .select("amount, paid_amount, is_penalty")
+        .eq("loan_id", lid);
+      if (!allInst) continue;
+      const regular = allInst.filter((i: any) => !i.is_penalty);
+      const penalties = allInst.filter((i: any) => i.is_penalty);
+      const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+      const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
+      progressMap[lid] = {
+        progress: totalPaid / instValue,
+        total: regular.length,
+        remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
+        penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
+      };
+    }
+    setLoanProgressMap(progressMap);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchInstallments();
-  }, []);
+  useEffect(() => { fetchInstallments(); }, [route]);
 
   const handlePay = async (id: string) => {
     const inst = installments.find((i) => i.id === id);
     if (!inst) return;
-
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = payAmount ? parseFloat(payAmount) : instRemaining;
-    if (isNaN(paidValue) || paidValue <= 0) {
-      toast.error("Informe um valor válido");
-      return;
-    }
+    if (isNaN(paidValue) || paidValue <= 0) { toast.error("Informe um valor válido"); return; }
 
     const newPaidAmount = Number(inst.paid_amount) + paidValue;
     const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
 
-    const { error } = await supabase
-      .from("installments")
-      .update({
-        paid_amount: Math.min(newPaidAmount, Number(inst.amount)),
-        status: fullyPaid ? "paid" : inst.status,
-        paid_at: fullyPaid ? new Date().toISOString() : inst.paid_at,
-      })
-      .eq("id", id);
-
-    if (error) {
-      toast.error("Erro ao registrar pagamento");
-      return;
-    }
+    await supabase.from("installments").update({
+      paid_amount: Math.min(newPaidAmount, Number(inst.amount)),
+      status: fullyPaid ? "paid" : inst.status,
+      paid_at: fullyPaid ? new Date().toISOString() : inst.paid_at,
+    }).eq("id", id);
 
     toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
-    setPayAmount("");
-    setPayDialogId(null);
+    setPayAmount(""); setPayDialogId(null);
     fetchInstallments();
   };
 
   const handleNotPaid = async (id: string) => {
-    const { error } = await supabase
-      .from("installments")
-      .update({ status: "overdue" })
-      .eq("id", id);
-
-    if (error) {
-      toast.error("Erro ao marcar como não pago");
-      return;
-    }
+    await supabase.from("installments").update({ status: "overdue" }).eq("id", id);
     toast.info("Parcela marcada como atrasada");
     fetchInstallments();
   };
 
-  const totalToReceive = installments.reduce((sum, i) => sum + Number(i.amount), 0);
-  const paidToday = installments.filter((i) => i.status === "paid");
-  const totalReceived = paidToday.reduce((sum, i) => sum + Number(i.amount), 0);
+  const totalToReceive = installments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
 
   return (
     <div className="mx-auto max-w-lg p-4">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">
-          <CalendarDays className="mr-2 inline h-6 w-6 text-primary" />
-          Hoje
+          <CalendarDays className="mr-2 inline h-6 w-6 text-primary" /> Hoje
         </h1>
         <p className="text-sm text-muted-foreground">
           {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
         </p>
       </div>
 
-      {/* Resumo do dia */}
-      <div className="mb-6 grid grid-cols-3 gap-3">
+      <div className="mb-6 grid grid-cols-2 gap-3">
         <Card className="text-center">
           <CardContent className="p-3">
             <DollarSign className="mx-auto mb-1 h-5 w-5 text-primary" />
             <p className="text-xs text-muted-foreground">A Receber</p>
             <p className="text-sm font-bold">{formatCurrency(totalToReceive)}</p>
-          </CardContent>
-        </Card>
-        <Card className="text-center">
-          <CardContent className="p-3">
-            <CheckCircle className="mx-auto mb-1 h-5 w-5 text-success" />
-            <p className="text-xs text-muted-foreground">Recebido</p>
-            <p className="text-sm font-bold">{formatCurrency(totalReceived)}</p>
           </CardContent>
         </Card>
         <Card className="text-center">
@@ -149,7 +155,6 @@ export default function TodayPage() {
         </Card>
       </div>
 
-      {/* Lista de parcelas */}
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
       ) : installments.length === 0 ? (
@@ -161,56 +166,64 @@ export default function TodayPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {installments.map((inst) => (
-            <Card key={inst.id} className="overflow-hidden">
-              <CardContent className="p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold">{inst.loans.clients.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
-                    </p>
-                  </div>
-                  <Badge className={getStatusColor(getInstallmentDisplayStatus(inst))}>
-                    {getStatusLabel(getInstallmentDisplayStatus(inst))}
-                  </Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
-                        <CheckCircle className="mr-1 h-4 w-4" />
-                        Pagou
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Registrar Pagamento</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                          Parcela {inst.number} — Valor: {formatCurrency(Number(inst.amount))}
+          {installments.map((inst) => {
+            const lp = loanProgressMap[inst.loan_id];
+            const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+            return (
+              <Card key={inst.id} className="overflow-hidden">
+                <CardContent className="p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold">{inst.loans.clients.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
+                      </p>
+                      {lp && (
+                        <p className="text-xs text-primary font-medium">
+                          {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} • Resta: {formatCurrency(Math.max(0, lp.remaining))}
                         </p>
-                        <Input
-                          type="number"
-                          placeholder={`Valor recebido (padrão: ${Number(inst.amount).toFixed(2)})`}
-                          value={payAmount}
-                          onChange={(e) => setPayAmount(e.target.value)}
-                        />
-                        <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
-                          Confirmar Pagamento
+                      )}
+                      {lp && lp.penaltyTotal > 0 && (
+                        <p className="text-xs text-destructive">Multa: {formatCurrency(lp.penaltyTotal)}</p>
+                      )}
+                    </div>
+                    <Badge className={getStatusColor(getInstallmentDisplayStatus(inst))}>
+                      {getStatusLabel(getInstallmentDisplayStatus(inst))}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                          <CheckCircle className="mr-1 h-4 w-4" /> Pagou
                         </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
-                    <XCircle className="mr-1 h-4 w-4" />
-                    Não Pagou
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
+                        <div className="space-y-3">
+                          <p className="text-sm text-muted-foreground">
+                            {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
+                          </p>
+                          <Input
+                            type="number"
+                            placeholder={`Valor recebido (padrão: ${instRemaining.toFixed(2)})`}
+                            value={payAmount}
+                            onChange={(e) => setPayAmount(e.target.value)}
+                          />
+                          <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
+                            Confirmar Pagamento
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+                      <XCircle className="mr-1 h-4 w-4" /> Não Pagou
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

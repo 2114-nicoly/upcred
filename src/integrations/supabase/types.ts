@@ -16,27 +16,41 @@ export type Database = {
     Tables: {
       clients: {
         Row: {
+          client_code: number | null
           created_at: string
           id: string
           name: string
           notes: string | null
           phone: string | null
+          route_id: string | null
         }
         Insert: {
+          client_code?: number | null
           created_at?: string
           id?: string
           name: string
           notes?: string | null
           phone?: string | null
+          route_id?: string | null
         }
         Update: {
+          client_code?: number | null
           created_at?: string
           id?: string
           name?: string
           notes?: string | null
           phone?: string | null
+          route_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "routes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       installments: {
         Row: {
@@ -100,6 +114,7 @@ export type Database = {
           interest_value: number
           loan_date: string
           payment_type: string
+          route_id: string | null
           status: string
           total_amount: number
         }
@@ -114,6 +129,7 @@ export type Database = {
           interest_value: number
           loan_date?: string
           payment_type: string
+          route_id?: string | null
           status?: string
           total_amount: number
         }
@@ -128,6 +144,7 @@ export type Database = {
           interest_value?: number
           loan_date?: string
           payment_type?: string
+          route_id?: string | null
           status?: string
           total_amount?: number
         }
@@ -139,6 +156,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "loans_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "routes"
+            referencedColumns: ["id"]
+          },
         ]
       }
       penalties: {
@@ -148,6 +172,7 @@ export type Database = {
           id: string
           installment_id: string
           loan_id: string
+          observation: string | null
         }
         Insert: {
           amount: number
@@ -155,6 +180,7 @@ export type Database = {
           id?: string
           installment_id: string
           loan_id: string
+          observation?: string | null
         }
         Update: {
           amount?: number
@@ -162,6 +188,7 @@ export type Database = {
           id?: string
           installment_id?: string
           loan_id?: string
+          observation?: string | null
         }
         Relationships: [
           {
@@ -179,6 +206,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      route_requests: {
+        Row: {
+          assigned_route_number: string | null
+          created_at: string
+          id: string
+          status: string
+          worker_name: string
+        }
+        Insert: {
+          assigned_route_number?: string | null
+          created_at?: string
+          id?: string
+          status?: string
+          worker_name: string
+        }
+        Update: {
+          assigned_route_number?: string | null
+          created_at?: string
+          id?: string
+          status?: string
+          worker_name?: string
+        }
+        Relationships: []
+      }
+      routes: {
+        Row: {
+          created_at: string
+          id: string
+          route_number: string
+          status: string
+          worker_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          route_number: string
+          status?: string
+          worker_name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          route_number?: string
+          status?: string
+          worker_name?: string
+        }
+        Relationships: []
       }
     }
     Views: {
