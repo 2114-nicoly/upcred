@@ -112,6 +112,7 @@ export type Database = {
           installment_count: number
           interest_type: string
           interest_value: number
+          is_cravo: boolean
           loan_date: string
           payment_type: string
           route_id: string | null
@@ -127,6 +128,7 @@ export type Database = {
           installment_count: number
           interest_type: string
           interest_value: number
+          is_cravo?: boolean
           loan_date?: string
           payment_type: string
           route_id?: string | null
@@ -142,6 +144,7 @@ export type Database = {
           installment_count?: number
           interest_type?: string
           interest_value?: number
+          is_cravo?: boolean
           loan_date?: string
           payment_type?: string
           route_id?: string | null

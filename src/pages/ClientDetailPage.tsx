@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays, getOverdueDatesList } from "@/lib/loan-utils";
+import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { ArrowLeft, Plus, ChevronDown, History, Clock, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -241,7 +241,6 @@ export default function ClientDetailPage() {
         </Collapsible>
       )}
 
-      {/* Edit Client Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>

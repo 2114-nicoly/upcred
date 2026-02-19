@@ -1,7 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoute } from "@/contexts/RouteContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,12 +10,10 @@ import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-util
 import { ArrowLeft, Calculator } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { useEffect } from "react";
 
 export default function NewLoanPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { route } = useRoute();
 
   const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
@@ -79,7 +76,6 @@ export default function NewLoanPage() {
       .from("loans")
       .insert({
         client_id: clientId!,
-        route_id: route!.id,
         amount: numAmount,
         interest_type: interestType,
         interest_value: numInterest,
@@ -141,7 +137,6 @@ export default function NewLoanPage() {
           </div>
         </div>
 
-        {/* Payment Type first, then installment count */}
         <div>
           <Label>Tipo de Pagamento</Label>
           <Select value={paymentType} onValueChange={(v) => setPaymentType(v as typeof paymentType)}>

@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoute } from "@/contexts/RouteContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle } from "lucide-react";
@@ -41,7 +39,6 @@ type LoanProgress = {
 };
 
 export default function TodayPage() {
-  const { route } = useRoute();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
@@ -50,20 +47,9 @@ export default function TodayPage() {
   const today = format(new Date(), "yyyy-MM-dd");
 
   const fetchInstallments = async () => {
-    if (!route) return;
-
-    // Get loans for this route
-    const { data: routeLoans } = await supabase
-      .from("loans")
-      .select("id")
-      .eq("route_id", route.id);
-    const loanIds = (routeLoans || []).map((l: any) => l.id);
-    if (loanIds.length === 0) { setInstallments([]); setLoading(false); return; }
-
     const { data } = await supabase
       .from("installments")
       .select("*, loans(id, client_id, amount, total_amount, installment_count, clients(id, name))")
-      .in("loan_id", loanIds)
       .eq("due_date", today)
       .neq("status", "paid")
       .eq("is_penalty", false)
@@ -71,7 +57,6 @@ export default function TodayPage() {
 
     setInstallments((data as unknown as InstallmentWithLoan[]) || []);
 
-    // Calculate progress for each loan
     const uniqueLoanIds = [...new Set((data || []).map((d: any) => d.loan_id))];
     const progressMap: Record<string, LoanProgress> = {};
 
@@ -96,7 +81,7 @@ export default function TodayPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchInstallments(); }, [route]);
+  useEffect(() => { fetchInstallments(); }, []);
 
   const handlePay = async (id: string) => {
     const inst = installments.find((i) => i.id === id);

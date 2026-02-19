@@ -1,7 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { CalendarDays, Users, CalendarCheck, Landmark, Menu, LogOut } from "lucide-react";
-import { useRoute } from "@/contexts/RouteContext";
+import { CalendarDays, Users, CalendarCheck, Landmark, Menu } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -26,18 +25,15 @@ type ClientWithLoan = {
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { route, logout } = useRoute();
   const [clients, setClients] = useState<ClientWithLoan[]>([]);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!route) return;
     const fetchClients = async () => {
       const { data: clientsData } = await supabase
         .from("clients")
         .select("id, name, client_code")
-        .eq("route_id", route.id)
         .order("client_code", { ascending: true });
 
       if (!clientsData) return;
@@ -45,7 +41,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       const { data: loans } = await supabase
         .from("loans")
         .select("id, client_id, total_amount, status")
-        .eq("route_id", route.id)
         .neq("status", "paid");
 
       const clientList: ClientWithLoan[] = clientsData.map((c: any) => {
@@ -61,17 +56,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       setClients(clientList);
     };
     fetchClients();
-  }, [route, location.pathname]);
+  }, [location.pathname]);
 
   const filtered = clients.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     String(c.client_code || "").includes(search)
   );
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -121,17 +111,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 )}
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 border-t p-3">
-              <Button variant="ghost" size="sm" className="w-full justify-start text-destructive" onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" /> Sair da Rota
-              </Button>
-            </div>
           </SheetContent>
         </Sheet>
 
-        <span className="text-sm font-medium">
-          Rota <span className="font-mono font-bold text-primary">{route?.route_number}</span>
-        </span>
+        <span className="text-sm font-medium">Sistema de Empréstimos</span>
 
         <Link to="/clients">
           <Button variant="ghost" size="icon">
