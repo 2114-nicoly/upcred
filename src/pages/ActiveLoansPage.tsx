@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getLoanStatusColor, getStatusLabel } from "@/lib/loan-utils";
-import { Landmark, Filter, Flame, Plus, DollarSign } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -109,6 +109,25 @@ export default function ActiveLoansPage() {
   const handleToggleCravo = async (loanId: string, current: boolean) => {
     await supabase.from("loans").update({ is_cravo: !current }).eq("id", loanId);
     setLoans((prev) => prev.map((l) => l.id === loanId ? { ...l, is_cravo: !current } : l));
+  };
+
+  // --- Not Paid from list ---
+  const handleNotPaidFromList = async (loanId: string) => {
+    // Mark the next unpaid installment as overdue
+    const { data: unpaid } = await supabase
+      .from("installments")
+      .select("id")
+      .eq("loan_id", loanId)
+      .neq("status", "paid")
+      .eq("is_penalty", false)
+      .order("number")
+      .limit(1);
+    if (unpaid && unpaid.length > 0) {
+      await supabase.from("installments").update({ status: "overdue" }).eq("id", unpaid[0].id);
+      await supabase.from("loans").update({ status: "overdue" }).eq("id", loanId);
+      toast.info("Parcela marcada como atrasada");
+      fetchData();
+    }
   };
 
   // --- Payment from list ---
@@ -276,6 +295,14 @@ export default function ActiveLoansPage() {
                         onClick={(e) => { e.stopPropagation(); setPayLoanId(loan.id); }}
                       >
                         <DollarSign className="mr-1 h-3 w-3" /> Pagar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs"
+                        onClick={(e) => { e.stopPropagation(); handleNotPaidFromList(loan.id); }}
+                      >
+                        <XCircle className="mr-1 h-3 w-3" /> Não Pagou
                       </Button>
                       <Button
                         size="sm"
