@@ -99,14 +99,16 @@ export function getInstallmentDisplayStatus(inst: {
   paid_amount: number;
 }): string {
   if (inst.status === "paid") return "paid";
-  if (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) < Number(inst.amount)) return "partial";
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(inst.due_date + "T00:00:00");
   
-  if (inst.status === "overdue" || due < today) return "overdue";
+  // Today's installments always show "Vence Hoje", never overdue
   if (due.getTime() === today.getTime()) return "due_today";
+  
+  if (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) < Number(inst.amount)) return "partial";
+  if (inst.status === "overdue" || due < today) return "overdue";
   return "pending";
 }
 
