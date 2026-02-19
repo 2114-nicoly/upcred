@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getLoanStatusColor, getStatusLabel } from "@/lib/loan-utils";
-import { Landmark, Filter, Flame, Plus, DollarSign, XCircle } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -126,6 +126,30 @@ export default function ActiveLoansPage() {
       await supabase.from("installments").update({ status: "overdue" }).eq("id", unpaid[0].id);
       await supabase.from("loans").update({ status: "overdue" }).eq("id", loanId);
       toast.info("Parcela marcada como atrasada");
+      fetchData();
+    }
+  };
+
+  // --- Undo Not Paid (restore last overdue to pending) ---
+  const handleUndoNotPaid = async (loanId: string) => {
+    const { data: overdueInsts } = await supabase
+      .from("installments")
+      .select("id")
+      .eq("loan_id", loanId)
+      .eq("status", "overdue")
+      .eq("is_penalty", false)
+      .order("number", { ascending: false })
+      .limit(1);
+    if (overdueInsts && overdueInsts.length > 0) {
+      await supabase.from("installments").update({ status: "pending" }).eq("id", overdueInsts[0].id);
+      // Update loan status
+      const { data: allInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", loanId);
+      if (allInst) {
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        const hasOverdue = allInst.some((i: any) => i.id !== overdueInsts[0].id && i.status === "overdue" && i.due_date < todayStr);
+        await supabase.from("loans").update({ status: hasOverdue ? "overdue" : "open" }).eq("id", loanId);
+      }
+      toast.success("Status restaurado para pendente!");
       fetchData();
     }
   };
@@ -304,6 +328,16 @@ export default function ActiveLoansPage() {
                       >
                         <XCircle className="mr-1 h-3 w-3" /> Não Pagou
                       </Button>
+                      {loan.status === "overdue" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={(e) => { e.stopPropagation(); handleUndoNotPaid(loan.id); }}
+                        >
+                          <Undo2 className="mr-1 h-3 w-3" /> Desfazer
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant={loan.is_cravo ? "destructive" : "outline"}

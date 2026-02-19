@@ -187,6 +187,13 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  const handleUndoOverdue = async (id: string) => {
+    await supabase.from("installments").update({ status: "pending" }).eq("id", id);
+    await updateLoanStatus();
+    toast.success("Status restaurado para pendente!");
+    fetchData();
+  };
+
   const handleUndoPayment = async (id: string) => {
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
     await updateLoanStatus();
@@ -535,6 +542,11 @@ export default function LoanDetailPage() {
                 </DialogContent>
               </Dialog>
             </div>
+          )}
+          {showActions && inst.status === "overdue" && (
+            <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)}>
+              <Undo2 className="mr-1 h-3 w-3" /> Desfazer "Não Pagou"
+            </Button>
           )}
           {inst.status === "paid" && (
             <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoPayment(inst.id)}>
