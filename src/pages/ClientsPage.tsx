@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoute } from "@/contexts/RouteContext";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ type LoanSummary = {
 };
 
 export default function ClientsPage() {
-  const { route } = useRoute();
   const [clients, setClients] = useState<Client[]>([]);
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
   const [search, setSearch] = useState("");
@@ -40,14 +38,12 @@ export default function ClientsPage() {
   const [notes, setNotes] = useState("");
 
   const fetchClients = async () => {
-    if (!route) return;
-    const { data } = await supabase.from("clients").select("*").eq("route_id", route.id).order("client_code");
+    const { data } = await supabase.from("clients").select("*").order("client_code");
     setClients(data || []);
 
     const { data: loans } = await supabase
       .from("loans")
       .select("client_id, total_amount, status")
-      .eq("route_id", route.id)
       .neq("status", "paid");
 
     const summaries: Record<string, LoanSummary> = {};
@@ -59,20 +55,19 @@ export default function ClientsPage() {
     setLoanSummaries(summaries);
   };
 
-  useEffect(() => { fetchClients(); }, [route]);
+  useEffect(() => { fetchClients(); }, []);
 
   const getNextClientCode = async () => {
     const { data } = await supabase
       .from("clients")
       .select("client_code")
-      .eq("route_id", route!.id)
       .order("client_code", { ascending: false })
       .limit(1);
     return (data && data[0]?.client_code ? Number(data[0].client_code) : 0) + 1;
   };
 
   const handleCreate = async () => {
-    if (!name.trim() || !route) {
+    if (!name.trim()) {
       toast.error("Nome é obrigatório");
       return;
     }
@@ -81,7 +76,6 @@ export default function ClientsPage() {
       name: name.trim(),
       phone: phone || null,
       notes: notes || null,
-      route_id: route.id,
       client_code: nextCode,
     });
     if (error) {
@@ -198,7 +192,6 @@ export default function ClientsPage() {
         )}
       </div>
 
-      {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingClient(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>

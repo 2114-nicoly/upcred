@@ -371,7 +371,7 @@ export default function LoanDetailPage() {
           );
         })}
 
-        {/* Penalty installment - no due date shown */}
+        {/* Penalty installment */}
         {penaltyInst && (
           <Card className="border-warning/50">
             <CardContent className="p-3">
@@ -410,7 +410,7 @@ export default function LoanDetailPage() {
         )}
       </div>
 
-      {/* Paid installments - hidden section */}
+      {/* Paid installments */}
       {paidRegular.length > 0 && (
         <Collapsible open={paidOpen} onOpenChange={setPaidOpen} className="mt-4">
           <CollapsibleTrigger asChild>

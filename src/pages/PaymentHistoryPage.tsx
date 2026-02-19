@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useRoute } from "@/contexts/RouteContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
@@ -20,22 +19,15 @@ type PaidInstallment = {
 };
 
 export default function PaymentHistoryPage() {
-  const { route } = useRoute();
   const [installmentsByDay, setInstallmentsByDay] = useState<Record<string, PaidInstallment[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!route) return;
     const fetchData = async () => {
-      const { data: routeLoans } = await supabase.from("loans").select("id").eq("route_id", route.id);
-      const loanIds = (routeLoans || []).map((l: any) => l.id);
-      if (loanIds.length === 0) { setLoading(false); return; }
-
       const { data } = await supabase
         .from("installments")
         .select("*, loans(id, amount, clients(name))")
-        .in("loan_id", loanIds)
         .eq("status", "paid")
         .not("paid_at", "is", null)
         .order("paid_at", { ascending: false });
@@ -50,7 +42,7 @@ export default function PaymentHistoryPage() {
       setLoading(false);
     };
     fetchData();
-  }, [route]);
+  }, []);
 
   const days = Object.keys(installmentsByDay).sort((a, b) => b.localeCompare(a));
 
