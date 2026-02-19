@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
@@ -45,6 +44,8 @@ type LoanGroup = {
   installments: InstallmentWithLoan[];
   totalOverdue: number;
   overdueDays: number;
+  penaltyTotal: number;
+  penaltyPaid: number;
 };
 
 export default function OverdueLoansPage() {
@@ -54,8 +55,8 @@ export default function OverdueLoansPage() {
   const [expandedLoan, setExpandedLoan] = useState<string | null>(null);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
+  const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [payIsPenalty, setPayIsPenalty] = useState(false);
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
   const [penaltyAmount, setPenaltyAmount] = useState("");
   const [penaltyObservation, setPenaltyObservation] = useState("");
@@ -72,12 +73,26 @@ export default function OverdueLoansPage() {
       .order("due_date");
 
     const insts = (data as unknown as InstallmentWithLoan[]) || [];
-    
+
+    // Fetch penalty info per loan
+    const loanIds = [...new Set(insts.map((i) => i.loan_id))];
+    const penaltyMap: Record<string, { total: number; paid: number }> = {};
+    if (loanIds.length > 0) {
+      const { data: penaltyInsts } = await supabase
+        .from("installments")
+        .select("loan_id, amount, paid_amount")
+        .in("loan_id", loanIds)
+        .eq("is_penalty", true);
+      for (const p of penaltyInsts || []) {
+        penaltyMap[p.loan_id] = { total: Number(p.amount), paid: Number(p.paid_amount) };
+      }
+    }
+
     const grouped: Record<string, LoanGroup> = {};
     for (const inst of insts) {
       if (!grouped[inst.loan_id]) {
-        // Find the oldest overdue date for this loan
         const oldestDueDate = inst.due_date;
+        const pm = penaltyMap[inst.loan_id] || { total: 0, paid: 0 };
         grouped[inst.loan_id] = {
           loanId: inst.loan_id,
           clientName: inst.loans.clients.name,
@@ -86,6 +101,8 @@ export default function OverdueLoansPage() {
           installments: [],
           totalOverdue: 0,
           overdueDays: calculateOverdueDays(oldestDueDate, inst.loans.payment_type),
+          penaltyTotal: pm.total,
+          penaltyPaid: pm.paid,
         };
       }
       grouped[inst.loan_id].installments.push(inst);
@@ -103,41 +120,81 @@ export default function OverdueLoansPage() {
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
 
-    if (payIsPenalty) {
-      // Find penalty installment for this loan
+    const parcValue = payAmount ? parseFloat(payAmount) : null;
+    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+
+    // Handle penalty
+    if (multaValue > 0) {
       const { data: penaltyInsts } = await supabase
         .from("installments")
         .select("*")
         .eq("loan_id", inst.loan_id)
         .eq("is_penalty", true);
       const penaltyInst = penaltyInsts?.[0];
-      if (!penaltyInst) { toast.error("Nenhuma multa registrada"); return; }
-      const instRemaining = Number(penaltyInst.amount) - Number(penaltyInst.paid_amount);
-      const val = payAmount ? parseFloat(payAmount) : instRemaining;
-      if (isNaN(val) || val <= 0) { toast.error("Valor inválido"); return; }
-      const newPaid = Number(penaltyInst.paid_amount) + val;
-      const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-      await supabase.from("installments").update({
-        paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-        status: fullyPaid ? "paid" : penaltyInst.status,
-        paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-      }).eq("id", penaltyInst.id);
-      toast.success(`Pagamento de multa de ${formatCurrency(val)} registrado!`);
-    } else {
-      const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-      const paidValue = payAmount ? parseFloat(payAmount) : instRemaining;
-      if (isNaN(paidValue) || paidValue <= 0) { toast.error("Valor inválido"); return; }
-      const newPaidAmount = Number(inst.paid_amount) + paidValue;
-      const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
-      await supabase.from("installments").update({
-        paid_amount: Math.min(newPaidAmount, Number(inst.amount)),
-        status: fullyPaid ? "paid" : inst.status,
-        paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
-      }).eq("id", id);
-      toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
+      if (penaltyInst) {
+        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
+        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
+        await supabase.from("installments").update({
+          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
+          status: fullyPaid ? "paid" : penaltyInst.status,
+          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
+        }).eq("id", penaltyInst.id);
+        toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
+      } else {
+        toast.error("Nenhuma multa registrada para abater");
+      }
     }
 
-    setPayAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null); setPayIsPenalty(false);
+    // Handle regular payment (sequential)
+    if (parcValue !== null || !payPenaltyAmount) {
+      const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+      const paidValue = parcValue ?? instRemaining;
+      if (paidValue <= 0) {
+        if (multaValue > 0) {
+          setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+          fetchData(); return;
+        }
+        toast.error("Valor inválido"); return;
+      }
+
+      // Sequential abatement
+      const { data: allUnpaid } = await supabase
+        .from("installments")
+        .select("*")
+        .eq("loan_id", inst.loan_id)
+        .neq("status", "paid")
+        .eq("is_penalty", false)
+        .order("number");
+
+      let remaining = paidValue;
+      const toProcess = (allUnpaid || []).filter((i: any) => i.number >= inst.number);
+      for (const i of toProcess) {
+        if (remaining <= 0) break;
+        const iRemaining = Number(i.amount) - Number(i.paid_amount);
+        const applying = Math.min(remaining, iRemaining);
+        const newPaidAmount = Number(i.paid_amount) + applying;
+        const fullyPaid = newPaidAmount >= Number(i.amount) - 0.01;
+        await supabase.from("installments").update({
+          paid_amount: newPaidAmount,
+          status: fullyPaid ? "paid" : i.status,
+          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
+        }).eq("id", i.id);
+        remaining -= applying;
+      }
+      const totalApplied = paidValue - remaining;
+      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
+      if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
+    }
+
+    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+    fetchData();
+  };
+
+  const handleNotPaid = async (id: string) => {
+    await supabase.from("installments").update({ status: "overdue" }).eq("id", id);
+    toast.info("Parcela marcada como atrasada");
     fetchData();
   };
 
@@ -156,7 +213,6 @@ export default function OverdueLoansPage() {
       penalty_amount: Number(inst.penalty_amount) + amount,
     }).eq("id", inst.id);
 
-    // Update or create penalty installment
     const { data: penaltyInsts } = await supabase
       .from("installments")
       .select("*")
@@ -232,6 +288,12 @@ export default function OverdueLoansPage() {
                         <p className="text-xs text-muted-foreground">
                           Total: {formatCurrency(group.totalOverdue)}
                         </p>
+                        {group.penaltyTotal > 0 && (
+                          <p className="text-xs text-destructive">
+                            Multa: {formatCurrency(group.penaltyTotal)}
+                            {group.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(group.penaltyPaid)})</span>}
+                          </p>
+                        )}
                       </div>
                       <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${expandedLoan === group.loanId ? "rotate-180" : ""}`} />
                     </div>
@@ -242,6 +304,7 @@ export default function OverdueLoansPage() {
                 {group.installments.map((inst) => {
                   const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
                   const days = calculateOverdueDays(inst.due_date, group.paymentType);
+                  const penaltyPending = group.penaltyTotal - group.penaltyPaid;
                   return (
                     <Card key={inst.id}>
                       <CardContent className="p-3">
@@ -261,7 +324,7 @@ export default function OverdueLoansPage() {
                           <Badge className={getStatusColor("overdue")}>{getStatusLabel("overdue")}</Badge>
                         </div>
                         <div className="flex gap-2">
-                          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayIsPenalty(false); } }}>
+                          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
                             <DialogTrigger asChild>
                               <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
                                 <Plus className="mr-1 h-3 w-3" /> Pagamento
@@ -273,22 +336,30 @@ export default function OverdueLoansPage() {
                                 <p className="text-sm text-muted-foreground">
                                   {group.clientName} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
                                 </p>
+                                {Number(inst.paid_amount) > 0 && <p className="text-sm text-partial">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
                                 <div>
-                                  <Label>Valor recebido</Label>
+                                  <Label>Valor da parcela recebido</Label>
                                   <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
                                 </div>
+                                {penaltyPending > 0.01 && (
+                                  <div className="rounded-lg border border-warning/50 p-3 space-y-2">
+                                    <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(penaltyPending)}</p>
+                                    <Label>Valor destinado à multa (opcional)</Label>
+                                    <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                                  </div>
+                                )}
                                 <div>
                                   <Label>Data do pagamento</Label>
                                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                                 </div>
-                                <div className="flex items-center justify-between rounded-lg border p-3">
-                                  <Label className="text-sm">Valor de multa?</Label>
-                                  <Switch checked={payIsPenalty} onCheckedChange={setPayIsPenalty} />
-                                </div>
+                                <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
                                 <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
                               </div>
                             </DialogContent>
                           </Dialog>
+                          <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+                            <XCircle className="mr-1 h-3 w-3" /> Não Pagou
+                          </Button>
                           <Dialog open={penaltyDialogId === inst.id} onOpenChange={(o) => { setPenaltyDialogId(o ? inst.id : null); if (!o) { setPenaltyAmount(""); setPenaltyObservation(""); } }}>
                             <DialogTrigger asChild>
                               <Button size="sm" variant="outline" className="px-2">

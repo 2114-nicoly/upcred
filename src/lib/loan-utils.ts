@@ -23,7 +23,7 @@ export function generateDueDates(
     switch (paymentType) {
       case "daily": {
         let next = addDays(current, 1);
-        // Pula domingos (0 = domingo)
+        // Pula domingos (getDay: 0 = domingo)
         while (next.getDay() === 0) {
           next = addDays(next, 1);
         }
