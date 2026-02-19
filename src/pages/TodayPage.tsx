@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
-import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown } from "lucide-react";
+import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -192,6 +192,21 @@ export default function TodayPage() {
     fetchInstallments();
   };
 
+  const handleUndoOverdue = async (id: string) => {
+    await supabase.from("installments").update({ status: "pending" }).eq("id", id);
+    toast.success("Status restaurado para pendente!");
+    fetchInstallments();
+  };
+
+  const handleUndoPayment = async (id: string) => {
+    const allInsts = [...installments, ...overdueInstallments];
+    const inst = allInsts.find((i) => i.id === id);
+    if (!inst) return;
+    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+    toast.success("Pagamento desfeito!");
+    fetchInstallments();
+  };
+
   const totalToReceive = installments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalOverdue = overdueInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
 
@@ -262,6 +277,11 @@ export default function TodayPage() {
               <XCircle className="mr-1 h-4 w-4" /> Não Pagou
             </Button>
           </div>
+          {inst.status === "overdue" && (
+            <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)}>
+              <Undo2 className="mr-1 h-3 w-3" /> Desfazer "Não Pagou"
+            </Button>
+          )}
         </CardContent>
       </Card>
     );

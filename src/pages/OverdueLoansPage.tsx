@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
-import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle } from "lucide-react";
+import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -198,6 +198,18 @@ export default function OverdueLoansPage() {
     fetchData();
   };
 
+  const handleUndoOverdue = async (id: string) => {
+    await supabase.from("installments").update({ status: "pending" }).eq("id", id);
+    toast.success("Status restaurado para pendente!");
+    fetchData();
+  };
+
+  const handleUndoPayment = async (id: string) => {
+    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+    toast.success("Pagamento desfeito!");
+    fetchData();
+  };
+
   const handleAddPenalty = async (inst: InstallmentWithLoan) => {
     const amount = parseFloat(penaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
@@ -361,6 +373,7 @@ export default function OverdueLoansPage() {
                             <XCircle className="mr-1 h-3 w-3" /> Não Pagou
                           </Button>
                           <Dialog open={penaltyDialogId === inst.id} onOpenChange={(o) => { setPenaltyDialogId(o ? inst.id : null); if (!o) { setPenaltyAmount(""); setPenaltyObservation(""); } }}>
+
                             <DialogTrigger asChild>
                               <Button size="sm" variant="outline" className="px-2">
                                 <AlertTriangle className="h-3 w-3" />
@@ -383,6 +396,9 @@ export default function OverdueLoansPage() {
                             </DialogContent>
                           </Dialog>
                         </div>
+                        <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)}>
+                          <Undo2 className="mr-1 h-3 w-3" /> Desfazer "Não Pagou"
+                        </Button>
                       </CardContent>
                     </Card>
                   );
