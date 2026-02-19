@@ -17,8 +17,9 @@ import {
   getStatusLabel,
   getLoanStatusColor,
   getInstallmentDisplayStatus,
+  getOverdueDatesList,
 } from "@/lib/loan-utils";
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -74,6 +75,7 @@ export default function LoanDetailPage() {
   const [penaltyDetailOpen, setPenaltyDetailOpen] = useState(false);
   const [editingPenalty, setEditingPenalty] = useState<string | null>(null);
   const [editPenaltyValue, setEditPenaltyValue] = useState("");
+  const [editPenaltyObs, setEditPenaltyObs] = useState("");
   const [showAllInstallments, setShowAllInstallments] = useState(true);
   const [paidOpen, setPaidOpen] = useState(false);
   const [overdueOpen, setOverdueOpen] = useState(false);
@@ -90,6 +92,12 @@ export default function LoanDetailPage() {
   const [editInstId, setEditInstId] = useState<string | null>(null);
   const [editInstAmount, setEditInstAmount] = useState("");
   const [editInstDueDate, setEditInstDueDate] = useState("");
+  // Overdue dates dialog
+  const [overdueDatesOpen, setOverdueDatesOpen] = useState(false);
+  // Penalty from overdue date
+  const [overduePenaltyDate, setOverduePenaltyDate] = useState<string | null>(null);
+  const [overduePenaltyAmount, setOverduePenaltyAmount] = useState("");
+  const [overduePenaltyObs, setOverduePenaltyObs] = useState("");
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
@@ -114,13 +122,13 @@ export default function LoanDetailPage() {
     await supabase.from("loans").update({ status: newStatus }).eq("id", loanId!);
   };
 
+  // --- Payment ---
   const handlePay = async (id: string) => {
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
-    // Pay penalty portion if provided
     if (multaValue > 0) {
       const penaltyInst = installments.find((i) => i.is_penalty);
       if (penaltyInst) {
@@ -137,17 +145,13 @@ export default function LoanDetailPage() {
       }
     }
 
-    // Pay installment portion
     if (parcValue !== null || !payPenaltyAmount) {
       const unpaid = installments.filter((i) => i.status !== "paid" && !i.is_penalty).sort((a, b) => a.number - b.number);
       const currentInst = unpaid.find((i) => i.id === id);
       if (!currentInst) {
         if (multaValue > 0) {
-          // Only penalty was paid, that's ok
           setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
-          await updateLoanStatus();
-          fetchData();
-          return;
+          await updateLoanStatus(); fetchData(); return;
         }
         return;
       }
@@ -190,31 +194,33 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
-  const handleAddPenalty = async (installmentId: string) => {
-    const amount = parseFloat(penaltyAmount);
-    if (!amount || amount <= 0) { toast.error("Informe um valor válido para a multa"); return; }
+  // --- Penalties ---
+  const handleAddPenalty = async (installmentId: string, amount?: number, observation?: string) => {
+    const penAmount = amount ?? parseFloat(penaltyAmount);
+    const penObs = observation ?? penaltyObservation;
+    if (!penAmount || penAmount <= 0) { toast.error("Informe um valor válido para a multa"); return; }
     const inst = installments.find((i) => i.id === installmentId);
     if (!inst) return;
 
     await supabase.from("penalties").insert({
       loan_id: loanId!,
       installment_id: installmentId,
-      amount,
-      observation: penaltyObservation || null,
+      amount: penAmount,
+      observation: penObs || null,
     });
 
-    const newPenalty = Number(inst.penalty_amount) + amount;
+    const newPenalty = Number(inst.penalty_amount) + penAmount;
     await supabase.from("installments").update({ penalty_amount: newPenalty }).eq("id", installmentId);
 
     const penaltyInst = installments.find((i) => i.is_penalty);
     if (penaltyInst) {
-      await supabase.from("installments").update({ amount: Number(penaltyInst.amount) + amount }).eq("id", penaltyInst.id);
+      await supabase.from("installments").update({ amount: Number(penaltyInst.amount) + penAmount }).eq("id", penaltyInst.id);
     } else {
       const maxNumber = Math.max(...installments.map((i) => i.number));
       await supabase.from("installments").insert({
         loan_id: loanId!,
         number: maxNumber + 1,
-        amount,
+        amount: penAmount,
         due_date: format(new Date(), "yyyy-MM-dd"),
         is_penalty: true,
         status: "pending",
@@ -232,17 +238,22 @@ export default function LoanDetailPage() {
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
     const diff = newAmount - Number(penalty.amount);
-    await supabase.from("penalties").update({ amount: newAmount }).eq("id", penaltyId);
+    await supabase.from("penalties").update({ amount: newAmount, observation: editPenaltyObs || penalty.observation }).eq("id", penaltyId);
     const srcInst = installments.find((i) => i.id === penalty.installment_id);
     if (srcInst) {
-      await supabase.from("installments").update({ penalty_amount: Number(srcInst.penalty_amount) + diff }).eq("id", srcInst.id);
+      await supabase.from("installments").update({ penalty_amount: Math.max(0, Number(srcInst.penalty_amount) + diff) }).eq("id", srcInst.id);
     }
     const penaltyInst = installments.find((i) => i.is_penalty);
     if (penaltyInst) {
-      await supabase.from("installments").update({ amount: Number(penaltyInst.amount) + diff }).eq("id", penaltyInst.id);
+      const newPenaltyTotal = Math.max(0, Number(penaltyInst.amount) + diff);
+      if (newPenaltyTotal <= 0.01) {
+        await supabase.from("installments").delete().eq("id", penaltyInst.id);
+      } else {
+        await supabase.from("installments").update({ amount: newPenaltyTotal }).eq("id", penaltyInst.id);
+      }
     }
     toast.success("Multa atualizada!");
-    setEditingPenalty(null); setEditPenaltyValue("");
+    setEditingPenalty(null); setEditPenaltyValue(""); setEditPenaltyObs("");
     fetchData();
   };
 
@@ -264,6 +275,21 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  // --- Add penalty from overdue date ---
+  const handleAddPenaltyFromDate = async () => {
+    const amount = parseFloat(overduePenaltyAmount);
+    if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
+    // Find the first overdue installment to attach penalty to
+    const overdueInsts = installments.filter((i) => !i.is_penalty && getInstallmentDisplayStatus(i) === "overdue").sort((a, b) => a.number - b.number);
+    const targetInst = overdueInsts[0];
+    if (!targetInst) { toast.error("Nenhuma parcela atrasada encontrada"); return; }
+
+    const obs = overduePenaltyObs ? `${overduePenaltyObs} (Ref: ${overduePenaltyDate})` : `Multa ref. atraso ${overduePenaltyDate}`;
+    await handleAddPenalty(targetInst.id, amount, obs);
+    setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs("");
+  };
+
+  // --- Edit loan ---
   const handleEditLoan = async () => {
     const newAmount = parseFloat(editAmount);
     const newInterest = parseFloat(editInterestValue);
@@ -272,14 +298,9 @@ export default function LoanDetailPage() {
     const interest = editInterestType === "percentage" ? newAmount * (newInterest / 100) : newInterest;
     const totalAmount = newAmount + interest;
     await supabase.from("loans").update({
-      amount: newAmount,
-      interest_type: editInterestType,
-      interest_value: newInterest,
-      total_amount: totalAmount,
-      payment_type: editPaymentType,
-      loan_date: editLoanDate,
-      status: editStatus,
-      is_cravo: editIsCravo,
+      amount: newAmount, interest_type: editInterestType, interest_value: newInterest,
+      total_amount: totalAmount, payment_type: editPaymentType, loan_date: editLoanDate,
+      status: editStatus, is_cravo: editIsCravo,
     }).eq("id", loanId!);
     toast.success("Empréstimo atualizado!");
     setEditLoanOpen(false);
@@ -298,14 +319,12 @@ export default function LoanDetailPage() {
     setEditLoanOpen(true);
   };
 
+  // --- Edit/Delete installment ---
   const handleEditInstallment = async () => {
     if (!editInstId) return;
     const newAmount = parseFloat(editInstAmount);
     if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
-    await supabase.from("installments").update({
-      amount: newAmount,
-      due_date: editInstDueDate,
-    }).eq("id", editInstId);
+    await supabase.from("installments").update({ amount: newAmount, due_date: editInstDueDate }).eq("id", editInstId);
     toast.success("Parcela atualizada!");
     setEditInstId(null);
     fetchData();
@@ -313,8 +332,19 @@ export default function LoanDetailPage() {
 
   const handleDeleteInstallment = async (id: string) => {
     if (!confirm("Excluir esta parcela?")) return;
-    // Delete associated penalties
+    // Delete associated penalties and sync
+    const relatedPenalties = penalties.filter(p => p.installment_id === id);
+    const totalPenaltyRemoved = relatedPenalties.reduce((s, p) => s + Number(p.amount), 0);
     await supabase.from("penalties").delete().eq("installment_id", id);
+    // Update penalty installment
+    if (totalPenaltyRemoved > 0) {
+      const penaltyInst = installments.find((i) => i.is_penalty);
+      if (penaltyInst) {
+        const newAmount = Number(penaltyInst.amount) - totalPenaltyRemoved;
+        if (newAmount <= 0.01) await supabase.from("installments").delete().eq("id", penaltyInst.id);
+        else await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
+      }
+    }
     await supabase.from("installments").delete().eq("id", id);
     toast.success("Parcela excluída!");
     fetchData();
@@ -333,7 +363,7 @@ export default function LoanDetailPage() {
 
   const regularInstallments = installments.filter((i) => !i.is_penalty);
   const penaltyInst = installments.find((i) => i.is_penalty);
-  
+
   const overdueRegular = regularInstallments.filter((i) => getInstallmentDisplayStatus(i) === "overdue");
   const paidRegular = regularInstallments.filter((i) => i.status === "paid");
   const activeRegular = regularInstallments.filter((i) => {
@@ -353,6 +383,15 @@ export default function LoanDetailPage() {
   const penaltyPaid = penaltyInst ? Number(penaltyInst.paid_amount) : 0;
   const remainingLoan = totalLoanAmount - totalPaidAll;
 
+  // Overdue days calculation: from the oldest overdue installment's due_date
+  const oldestOverdue = overdueRegular.length > 0
+    ? overdueRegular.reduce((oldest, i) => i.due_date < oldest.due_date ? i : oldest, overdueRegular[0])
+    : null;
+  const overdueDatesList = oldestOverdue
+    ? getOverdueDatesList(oldestOverdue.due_date, loan.payment_type)
+    : [];
+  const overdueDaysCount = overdueDatesList.length;
+
   const paymentTypeLabel: Record<string, string> = {
     daily: "Diário", weekly: "Semanal", biweekly: "Quinzenal", monthly: "Mensal", fixed_dates: "Data Fixa",
   };
@@ -361,6 +400,50 @@ export default function LoanDetailPage() {
     const inst = installments.find((i) => i.id === installmentId);
     return inst ? inst.number : "?";
   };
+
+  // --- Render penalty list (reused in penalty detail and edit loan dialogs) ---
+  const renderPenaltyList = () => (
+    <div className="space-y-2">
+      {penalties.length === 0 ? (
+        <p className="py-2 text-center text-sm text-muted-foreground">Nenhuma multa registrada.</p>
+      ) : (
+        penalties.map((p) => (
+          <div key={p.id} className="rounded-lg border p-3">
+            {editingPenalty === p.id ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input type="number" value={editPenaltyValue} onChange={(e) => setEditPenaltyValue(e.target.value)} className="h-8 w-24" placeholder="Valor" />
+                </div>
+                <Input value={editPenaltyObs} onChange={(e) => setEditPenaltyObs(e.target.value)} className="h-8" placeholder="Observação (opcional)" />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => handleEditPenalty(p.id)}>Salvar</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setEditingPenalty(null); setEditPenaltyValue(""); setEditPenaltyObs(""); }}>Cancelar</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium">{formatCurrency(Number(p.amount))}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Parcela {getInstallmentNumber(p.installment_id)} • {format(new Date(p.created_at), "dd/MM/yyyy HH:mm")}
+                  </p>
+                  {p.observation && <p className="mt-1 text-xs italic text-muted-foreground">"{p.observation}"</p>}
+                </div>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditingPenalty(p.id); setEditPenaltyValue(String(p.amount)); setEditPenaltyObs(p.observation || ""); }}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => handleDeletePenalty(p.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
 
   const renderInstallmentCard = (inst: Installment, showActions = true) => {
     const displayStatus = getInstallmentDisplayStatus(inst);
@@ -500,6 +583,23 @@ export default function LoanDetailPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
             </div>
           )}
+          {/* Overdue days */}
+          {overdueDaysCount > 0 && (
+            <div className="border-t pt-2">
+              <button
+                className="flex w-full items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-left hover:bg-destructive/10 transition-colors"
+                onClick={() => setOverdueDatesOpen(true)}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-destructive">
+                    {overdueDaysCount} dia{overdueDaysCount !== 1 ? "s" : ""} em atraso
+                  </p>
+                  <p className="text-xs text-muted-foreground">Toque para ver datas e adicionar multas</p>
+                </div>
+                <Calendar className="h-5 w-5 text-destructive" />
+              </button>
+            </div>
+          )}
           <div className="flex justify-between"><span className="text-muted-foreground">Tipo:</span><span>{paymentTypeLabel[loan.payment_type]}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Data:</span><span>{format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}</span></div>
           {loan.is_cravo && <Badge className="bg-warning text-warning-foreground">🔥 Cravo</Badge>}
@@ -623,40 +723,56 @@ export default function LoanDetailPage() {
       <Dialog open={penaltyDetailOpen} onOpenChange={setPenaltyDetailOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Detalhes das Multas</DialogTitle></DialogHeader>
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto">
-            {penalties.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">Nenhuma multa registrada.</p>
-            ) : (
-              penalties.map((p) => (
-                <div key={p.id} className="rounded-lg border p-3">
-                  {editingPenalty === p.id ? (
-                    <div className="flex flex-1 items-center gap-2">
-                      <Input type="number" value={editPenaltyValue} onChange={(e) => setEditPenaltyValue(e.target.value)} className="h-8 w-24" />
-                      <Button size="sm" onClick={() => handleEditPenalty(p.id)}>Salvar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setEditingPenalty(null); setEditPenaltyValue(""); }}>Cancelar</Button>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {penaltyInst && (
+              <div className="mb-3 rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <div className="flex justify-between"><span>Total de Multas:</span><span className="font-semibold text-destructive">{formatCurrency(penaltyTotal)}</span></div>
+                <div className="flex justify-between"><span>Pago:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
+                <div className="flex justify-between"><span>Pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              </div>
+            )}
+            {renderPenaltyList()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Overdue Dates Dialog */}
+      <Dialog open={overdueDatesOpen} onOpenChange={(o) => { setOverdueDatesOpen(o); if (!o) { setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Dias em Atraso ({overdueDaysCount})</DialogTitle></DialogHeader>
+          <div className="max-h-[60vh] space-y-1 overflow-y-auto">
+            {overdueDatesList.map((date, idx) => {
+              const dateStr = format(date, "yyyy-MM-dd");
+              const isAdding = overduePenaltyDate === dateStr;
+              return (
+                <div key={idx} className="rounded-lg border p-2">
+                  {isAdding ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">{format(date, "dd/MM/yyyy")} — Adicionar Multa</p>
+                      <div>
+                        <Label className="text-xs">Valor</Label>
+                        <Input type="number" placeholder="Valor da multa" value={overduePenaltyAmount} onChange={(e) => setOverduePenaltyAmount(e.target.value)} className="h-8" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Observação (opcional)</Label>
+                        <Input placeholder="Motivo..." value={overduePenaltyObs} onChange={(e) => setOverduePenaltyObs(e.target.value)} className="h-8" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleAddPenaltyFromDate}>Adicionar</Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs(""); }}>Cancelar</Button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{formatCurrency(Number(p.amount))}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Parcela {getInstallmentNumber(p.installment_id)} • {format(new Date(p.created_at), "dd/MM/yyyy HH:mm")}
-                        </p>
-                        {p.observation && <p className="mt-1 text-xs italic text-muted-foreground">"{p.observation}"</p>}
-                      </div>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditingPenalty(p.id); setEditPenaltyValue(String(p.amount)); }}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => handleDeletePenalty(p.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm">{format(date, "dd/MM/yyyy")} <span className="text-xs text-muted-foreground">({idx + 1}º dia)</span></p>
+                      <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setOverduePenaltyDate(dateStr)}>
+                        <AlertTriangle className="mr-1 h-3 w-3" /> Multa
+                      </Button>
                     </div>
                   )}
                 </div>
-              ))
-            )}
+              );
+            })}
           </div>
         </DialogContent>
       </Dialog>
@@ -705,6 +821,20 @@ export default function LoanDetailPage() {
               <Label className="text-sm">Marcar como Cravo 🔥</Label>
               <Switch checked={editIsCravo} onCheckedChange={setEditIsCravo} />
             </div>
+
+            {/* Penalty records inside edit loan dialog */}
+            <div className="border-t pt-3">
+              <Label className="text-sm font-semibold">Registros de Multas ({penalties.length})</Label>
+              {penaltyInst && (
+                <div className="mt-1 mb-2 rounded-lg bg-muted/50 p-2 text-xs space-y-1">
+                  <div className="flex justify-between"><span>Total:</span><span className="font-semibold text-destructive">{formatCurrency(penaltyTotal)}</span></div>
+                  <div className="flex justify-between"><span>Pago:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
+                  <div className="flex justify-between"><span>Pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+                </div>
+              )}
+              {renderPenaltyList()}
+            </div>
+
             <Button onClick={handleEditLoan} className="w-full">Salvar Alterações</Button>
           </div>
         </DialogContent>
