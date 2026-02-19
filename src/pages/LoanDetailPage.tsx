@@ -76,6 +76,11 @@ export default function LoanDetailPage() {
   const [showAllInstallments, setShowAllInstallments] = useState(true);
   const [paidOpen, setPaidOpen] = useState(false);
   const [overdueOpen, setOverdueOpen] = useState(false);
+  const [editLoanOpen, setEditLoanOpen] = useState(false);
+  const [editAmount, setEditAmount] = useState("");
+  const [editInterestValue, setEditInterestValue] = useState("");
+  const [editInterestType, setEditInterestType] = useState("percentage");
+  const [editPaymentType, setEditPaymentType] = useState("");
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
@@ -89,10 +94,12 @@ export default function LoanDetailPage() {
   useEffect(() => { fetchData(); }, [loanId]);
 
   const updateLoanStatus = async () => {
-    const { data: inst } = await supabase.from("installments").select("status").eq("loan_id", loanId!);
+    const { data: inst } = await supabase.from("installments").select("status, due_date").eq("loan_id", loanId!);
     if (!inst) return;
-    const allPaid = inst.every((i) => i.status === "paid");
-    const hasOverdue = inst.some((i) => i.status === "overdue");
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const allPaid = inst.every((i: any) => i.status === "paid");
+    // Only count as overdue if status is overdue AND due_date is before today
+    const hasOverdue = inst.some((i: any) => i.status === "overdue" && i.due_date < todayStr);
     let newStatus = "open";
     if (allPaid) newStatus = "paid";
     else if (hasOverdue) newStatus = "overdue";
@@ -236,6 +243,34 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  const handleEditLoan = async () => {
+    const newAmount = parseFloat(editAmount);
+    const newInterest = parseFloat(editInterestValue);
+    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    if (isNaN(newInterest) || newInterest < 0) { toast.error("Juros inválido"); return; }
+    const interest = editInterestType === "percentage" ? newAmount * (newInterest / 100) : newInterest;
+    const totalAmount = newAmount + interest;
+    await supabase.from("loans").update({
+      amount: newAmount,
+      interest_type: editInterestType,
+      interest_value: newInterest,
+      total_amount: totalAmount,
+      payment_type: editPaymentType,
+    }).eq("id", loanId!);
+    toast.success("Empréstimo atualizado!");
+    setEditLoanOpen(false);
+    fetchData();
+  };
+
+  const openEditLoan = () => {
+    if (!loan) return;
+    setEditAmount(String(loan.amount));
+    setEditInterestValue(String(loan.interest_value));
+    setEditInterestType(loan.interest_type);
+    setEditPaymentType(loan.payment_type);
+    setEditLoanOpen(true);
+  };
+
   const handleDeleteLoan = async () => {
     if (!confirm("Excluir este empréstimo e todas as parcelas?")) return;
     await supabase.from("penalties").delete().eq("loan_id", loanId!);
@@ -377,9 +412,14 @@ export default function LoanDetailPage() {
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
         </Button>
-        <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
-          <Trash2 className="mr-1 h-4 w-4" /> Excluir
-        </Button>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={openEditLoan}>
+            <Pencil className="mr-1 h-4 w-4" /> Editar
+          </Button>
+          <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
+            <Trash2 className="mr-1 h-4 w-4" /> Excluir
+          </Button>
+        </div>
       </div>
 
       {/* Loan Info */}
@@ -573,6 +613,39 @@ export default function LoanDetailPage() {
                 </div>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Loan Dialog */}
+      <Dialog open={editLoanOpen} onOpenChange={setEditLoanOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Empréstimo</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Valor emprestado</Label>
+              <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+            </div>
+            <div>
+              <Label>Tipo de juros</Label>
+              <div className="flex gap-2 mt-1">
+                <Button size="sm" variant={editInterestType === "percentage" ? "default" : "outline"} onClick={() => setEditInterestType("percentage")}>Porcentagem</Button>
+                <Button size="sm" variant={editInterestType === "fixed" ? "default" : "outline"} onClick={() => setEditInterestType("fixed")}>Fixo</Button>
+              </div>
+            </div>
+            <div>
+              <Label>Valor do juros {editInterestType === "percentage" ? "(%)" : "(R$)"}</Label>
+              <Input type="number" value={editInterestValue} onChange={(e) => setEditInterestValue(e.target.value)} />
+            </div>
+            <div>
+              <Label>Tipo de pagamento</Label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {[["daily", "Diário"], ["weekly", "Semanal"], ["biweekly", "Quinzenal"], ["monthly", "Mensal"], ["fixed_dates", "Data Fixa"]].map(([val, label]) => (
+                  <Button key={val} size="sm" variant={editPaymentType === val ? "default" : "outline"} onClick={() => setEditPaymentType(val)}>{label}</Button>
+                ))}
+              </div>
+            </div>
+            <Button onClick={handleEditLoan} className="w-full">Salvar Alterações</Button>
           </div>
         </DialogContent>
       </Dialog>
