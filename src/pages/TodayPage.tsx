@@ -7,11 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
-import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ChevronDown } from "lucide-react";
+import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus, calculateOverdueDays } from "@/lib/loan-utils";
+import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 type InstallmentWithLoan = {
@@ -30,6 +29,7 @@ type InstallmentWithLoan = {
     amount: number;
     total_amount: number;
     installment_count: number;
+    payment_type: string;
     clients: { id: string; name: string };
   };
 };
@@ -42,22 +42,22 @@ type LoanProgress = {
 };
 
 export default function TodayPage() {
+  const navigate = useNavigate();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
-  const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
+  const [overdueCount, setOverdueCount] = useState(0);
+  const [totalOverdue, setTotalOverdue] = useState(0);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [payIsPenalty, setPayIsPenalty] = useState(false);
-  const [overdueOpen, setOverdueOpen] = useState(false);
   const today = format(new Date(), "yyyy-MM-dd");
 
   const fetchInstallments = async () => {
     // Today's installments
     const { data } = await supabase
       .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, installment_count, clients(id, name))")
+      .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
       .eq("due_date", today)
       .neq("status", "paid")
       .eq("is_penalty", false)
@@ -66,22 +66,21 @@ export default function TodayPage() {
     const todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
     setInstallments(todayInsts);
 
-    // Overdue installments (before today, not paid)
+    // Overdue count
     const { data: overdueData } = await supabase
       .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, installment_count, clients(id, name))")
+      .select("amount, paid_amount")
       .lt("due_date", today)
       .neq("status", "paid")
-      .eq("is_penalty", false)
-      .order("due_date");
+      .eq("is_penalty", false);
 
-    setOverdueInstallments((overdueData as unknown as InstallmentWithLoan[]) || []);
+    const overdueInsts = overdueData || [];
+    setOverdueCount(overdueInsts.length);
+    setTotalOverdue(overdueInsts.reduce((s: number, i: any) => s + (Number(i.amount) - Number(i.paid_amount)), 0));
 
-    // Progress for all unique loans
-    const allInsts = [...todayInsts, ...(overdueData as unknown as InstallmentWithLoan[] || [])];
-    const uniqueLoanIds = [...new Set(allInsts.map((d) => d.loan_id))];
+    // Progress
+    const uniqueLoanIds = [...new Set(todayInsts.map((d) => d.loan_id))];
     const progressMap: Record<string, LoanProgress> = {};
-
     for (const lid of uniqueLoanIds) {
       const { data: allInst } = await supabase
         .from("installments")
@@ -106,8 +105,7 @@ export default function TodayPage() {
   useEffect(() => { fetchInstallments(); }, []);
 
   const handlePay = async (id: string) => {
-    const allInsts = [...installments, ...overdueInstallments];
-    const inst = allInsts.find((i) => i.id === id);
+    const inst = installments.find((i) => i.id === id);
     if (!inst) return;
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = payAmount ? parseFloat(payAmount) : instRemaining;
@@ -123,7 +121,7 @@ export default function TodayPage() {
     }).eq("id", id);
 
     toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
-    setPayAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null); setPayIsPenalty(false);
+    setPayAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
     fetchInstallments();
   };
 
@@ -134,7 +132,6 @@ export default function TodayPage() {
   };
 
   const totalToReceive = installments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
-  const totalOverdue = overdueInstallments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
 
   const renderInstCard = (inst: InstallmentWithLoan) => {
     const lp = loanProgressMap[inst.loan_id];
@@ -147,9 +144,6 @@ export default function TodayPage() {
               <p className="font-semibold">{inst.loans.clients.name}</p>
               <p className="text-sm text-muted-foreground">
                 Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Venc: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
               </p>
               {lp && (
                 <p className="text-xs text-primary font-medium">
@@ -165,7 +159,7 @@ export default function TodayPage() {
             </Badge>
           </div>
           <div className="flex gap-2">
-            <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayIsPenalty(false); } }}>
+            <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
               <DialogTrigger asChild>
                 <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
                   <Plus className="mr-1 h-4 w-4" /> Pagamento
@@ -211,7 +205,7 @@ export default function TodayPage() {
         </p>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3">
+      <div className="mb-4 grid grid-cols-2 gap-3">
         <Card className="text-center">
           <CardContent className="p-3">
             <DollarSign className="mx-auto mb-1 h-5 w-5 text-primary" />
@@ -219,30 +213,27 @@ export default function TodayPage() {
             <p className="text-sm font-bold">{formatCurrency(totalToReceive)}</p>
           </CardContent>
         </Card>
-        <Card className="text-center">
+        <Card
+          className="cursor-pointer text-center hover:border-destructive/50 transition-colors"
+          onClick={() => navigate("/overdue")}
+        >
           <CardContent className="p-3">
             <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-warning" />
             <p className="text-xs text-muted-foreground">Atrasadas</p>
-            <p className="text-sm font-bold text-destructive">{overdueInstallments.length}</p>
+            <p className="text-sm font-bold text-destructive">{overdueCount}</p>
             {totalOverdue > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdue)}</p>}
           </CardContent>
         </Card>
       </div>
 
-      {/* Overdue section */}
-      {overdueInstallments.length > 0 && (
-        <Collapsible open={overdueOpen} onOpenChange={setOverdueOpen} className="mb-4">
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" className="w-full border-destructive/50 text-destructive">
-              ⚠️ Parcelas Atrasadas ({overdueInstallments.length})
-              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 space-y-3">
-            {overdueInstallments.map((inst) => renderInstCard(inst))}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+      {/* Link to today summary */}
+      <Button
+        variant="outline"
+        className="mb-4 w-full"
+        onClick={() => navigate("/today-summary")}
+      >
+        <ClipboardList className="mr-2 h-4 w-4" /> Resumo do Dia (pagos / não pagos)
+      </Button>
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>

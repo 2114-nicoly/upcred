@@ -12,6 +12,8 @@ import LoanDetailPage from "@/pages/LoanDetailPage";
 import PaymentHistoryPage from "@/pages/PaymentHistoryPage";
 import ActiveLoansPage from "@/pages/ActiveLoansPage";
 import ReportsPage from "@/pages/ReportsPage";
+import OverdueLoansPage from "@/pages/OverdueLoansPage";
+import TodaySummaryPage from "@/pages/TodaySummaryPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +32,8 @@ const App = () => (
             <Route path="/clients/:clientId/new-loan" element={<NewLoanPage />} />
             <Route path="/loans/:loanId" element={<LoanDetailPage />} />
             <Route path="/active-loans" element={<ActiveLoansPage />} />
+            <Route path="/overdue" element={<OverdueLoansPage />} />
+            <Route path="/today-summary" element={<TodaySummaryPage />} />
             <Route path="/payment-history" element={<PaymentHistoryPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFound />} />
