@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Search, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
 
@@ -36,6 +37,8 @@ export default function ClientsPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [sortAlpha, setSortAlpha] = useState(false);
+  const [filterActive, setFilterActive] = useState(false);
 
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").order("client_code");
@@ -67,33 +70,21 @@ export default function ClientsPage() {
   };
 
   const handleCreate = async () => {
-    if (!name.trim()) {
-      toast.error("Nome é obrigatório");
-      return;
-    }
+    if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
     const nextCode = await getNextClientCode();
     const { error } = await supabase.from("clients").insert({
-      name: name.trim(),
-      phone: phone || null,
-      notes: notes || null,
-      client_code: nextCode,
+      name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
     });
-    if (error) {
-      toast.error("Erro ao cadastrar cliente");
-      return;
-    }
+    if (error) { toast.error("Erro ao cadastrar cliente"); return; }
     toast.success(`Cliente #${nextCode} cadastrado!`);
-    setName(""); setPhone(""); setNotes("");
-    setOpen(false);
+    setName(""); setPhone(""); setNotes(""); setOpen(false);
     fetchClients();
   };
 
   const handleEdit = async () => {
     if (!editingClient) return;
     const { error } = await supabase.from("clients").update({
-      name: name.trim(),
-      phone: phone || null,
-      notes: notes || null,
+      name: name.trim(), phone: phone || null, notes: notes || null,
     }).eq("id", editingClient.id);
     if (error) { toast.error("Erro ao editar"); return; }
     toast.success("Cliente atualizado!");
@@ -117,10 +108,18 @@ export default function ClientsPage() {
     setEditOpen(true);
   };
 
-  const filtered = clients.filter((c) =>
+  let filtered = clients.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     String(c.client_code || "").includes(search)
   );
+
+  if (filterActive) {
+    filtered = filtered.filter((c) => loanSummaries[c.id]?.count > 0);
+  }
+
+  if (sortAlpha) {
+    filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -145,9 +144,22 @@ export default function ClientsPage() {
         </Dialog>
       </div>
 
-      <div className="relative mb-4">
+      <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input className="pl-9" placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+
+      <div className="mb-4 flex gap-3">
+        <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2">
+          <ArrowDownAZ className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs">A-Z</span>
+          <Switch checked={sortAlpha} onCheckedChange={setSortAlpha} />
+        </div>
+        <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs">Ativos</span>
+          <Switch checked={filterActive} onCheckedChange={setFilterActive} />
+        </div>
       </div>
 
       <div className="space-y-2">

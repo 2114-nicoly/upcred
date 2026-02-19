@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -17,7 +18,7 @@ import {
   getLoanStatusColor,
   getInstallmentDisplayStatus,
 } from "@/lib/loan-utils";
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -67,10 +68,14 @@ export default function LoanDetailPage() {
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payIsPenalty, setPayIsPenalty] = useState(false);
   const [penaltyDetailOpen, setPenaltyDetailOpen] = useState(false);
   const [editingPenalty, setEditingPenalty] = useState<string | null>(null);
   const [editPenaltyValue, setEditPenaltyValue] = useState("");
+  const [showAllInstallments, setShowAllInstallments] = useState(true);
   const [paidOpen, setPaidOpen] = useState(false);
+  const [overdueOpen, setOverdueOpen] = useState(false);
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
@@ -97,7 +102,27 @@ export default function LoanDetailPage() {
   const handlePay = async (id: string) => {
     const paidValue = payAmount ? parseFloat(payAmount) : null;
     if (payAmount && (isNaN(paidValue!) || paidValue! <= 0)) { toast.error("Informe um valor válido"); return; }
-    const unpaid = installments.filter((i) => i.status !== "paid").sort((a, b) => a.number - b.number);
+
+    // If paying penalty amount, deduct from penalty installment
+    if (payIsPenalty) {
+      const penaltyInst = installments.find((i) => i.is_penalty);
+      if (!penaltyInst) { toast.error("Nenhuma multa registrada"); return; }
+      const val = paidValue ?? (Number(penaltyInst.amount) - Number(penaltyInst.paid_amount));
+      const newPaid = Number(penaltyInst.paid_amount) + val;
+      const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
+      await supabase.from("installments").update({
+        paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
+        status: fullyPaid ? "paid" : penaltyInst.status,
+        paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
+      }).eq("id", penaltyInst.id);
+      toast.success(`Pagamento de multa de ${formatCurrency(val)} registrado!`);
+      setPayAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null); setPayIsPenalty(false);
+      await updateLoanStatus();
+      fetchData();
+      return;
+    }
+
+    const unpaid = installments.filter((i) => i.status !== "paid" && !i.is_penalty).sort((a, b) => a.number - b.number);
     const currentInst = unpaid.find((i) => i.id === id);
     if (!currentInst) return;
     let remaining = paidValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount));
@@ -111,7 +136,7 @@ export default function LoanDetailPage() {
       await supabase.from("installments").update({
         paid_amount: newPaidAmount,
         status: fullyPaid ? "paid" : inst.status,
-        paid_at: fullyPaid ? new Date().toISOString() : inst.paid_at,
+        paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
       }).eq("id", inst.id);
       remaining -= applying;
     }
@@ -119,7 +144,7 @@ export default function LoanDetailPage() {
     toast.success(`Pagamento de ${formatCurrency(totalApplied)} registrado!`);
     if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
     await updateLoanStatus();
-    setPayAmount(""); setPayDialogId(null);
+    setPayAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null); setPayIsPenalty(false);
     fetchData();
   };
 
@@ -224,8 +249,25 @@ export default function LoanDetailPage() {
 
   const regularInstallments = installments.filter((i) => !i.is_penalty);
   const penaltyInst = installments.find((i) => i.is_penalty);
-  const unpaidRegular = regularInstallments.filter((i) => i.status !== "paid");
+  
+  // Categorize installments
+  const overdueRegular = regularInstallments.filter((i) => {
+    const ds = getInstallmentDisplayStatus(i);
+    return ds === "overdue";
+  });
   const paidRegular = regularInstallments.filter((i) => i.status === "paid");
+  const activeRegular = regularInstallments.filter((i) => {
+    const ds = getInstallmentDisplayStatus(i);
+    return ds !== "paid" && ds !== "overdue";
+  });
+
+  // What to show in main section
+  const displayInstallments = showAllInstallments
+    ? regularInstallments.filter((i) => i.status !== "paid")
+    : regularInstallments.filter((i) => {
+        const ds = getInstallmentDisplayStatus(i);
+        return ds !== "paid" && ds !== "overdue";
+      });
 
   const totalPaidAmount = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
   const installmentValue = regularInstallments.length > 0 ? Number(regularInstallments[0].amount) : 1;
@@ -233,9 +275,11 @@ export default function LoanDetailPage() {
   const totalInstallments = regularInstallments.length;
   const progressPercent = totalInstallments > 0 ? (paidInstallmentsProgress / totalInstallments) * 100 : 0;
 
-  const totalPaid = installments.reduce((s, i) => s + Number(i.paid_amount), 0);
-  const totalOwed = installments.reduce((s, i) => s + Number(i.amount), 0);
-  const remaining = totalOwed - totalPaid;
+  const totalLoanAmount = Number(loan.total_amount);
+  const totalPaidAll = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const penaltyTotal = penaltyInst ? Number(penaltyInst.amount) : 0;
+  const penaltyPaid = penaltyInst ? Number(penaltyInst.paid_amount) : 0;
+  const remainingLoan = totalLoanAmount - totalPaidAll;
 
   const paymentTypeLabel: Record<string, string> = {
     daily: "Diário", weekly: "Semanal", biweekly: "Quinzenal", monthly: "Mensal", fixed_dates: "Data Fixa",
@@ -244,6 +288,87 @@ export default function LoanDetailPage() {
   const getInstallmentNumber = (installmentId: string) => {
     const inst = installments.find((i) => i.id === installmentId);
     return inst ? inst.number : "?";
+  };
+
+  const renderInstallmentCard = (inst: Installment) => {
+    const displayStatus = getInstallmentDisplayStatus(inst);
+    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+    return (
+      <Card key={inst.id}>
+        <CardContent className="p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <p className="font-semibold">Parcela {inst.number}</p>
+              <p className="text-sm text-muted-foreground">
+                {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
+              </p>
+              {Number(inst.paid_amount) > 0 && (
+                <p className="text-xs text-partial">Pago: {formatCurrency(Number(inst.paid_amount))} / Resta: {formatCurrency(instRemaining)}</p>
+              )}
+              {Number(inst.penalty_amount) > 0 && (
+                <p className="text-xs text-destructive">Multa: {formatCurrency(Number(inst.penalty_amount))}</p>
+              )}
+            </div>
+            <Badge className={getStatusColor(displayStatus)}>{getStatusLabel(displayStatus)}</Badge>
+          </div>
+          <div className="flex gap-2">
+            <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayIsPenalty(false); } }}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                  <Plus className="mr-1 h-3 w-3" /> Pagamento
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">Parcela {inst.number} — {formatCurrency(Number(inst.amount))}</p>
+                  {Number(inst.paid_amount) > 0 && <p className="text-sm text-partial">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
+                  <div>
+                    <Label>Valor recebido</Label>
+                    <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Data do pagamento</Label>
+                    <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                  </div>
+                  {penaltyInst && Number(penaltyInst.amount) > 0 && (
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <Label className="text-sm">Valor de multa?</Label>
+                      <Switch checked={payIsPenalty} onCheckedChange={setPayIsPenalty} />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
+                  <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+              <XCircle className="mr-1 h-3 w-3" /> Não Pagou
+            </Button>
+            <Dialog open={penaltyDialogId === inst.id} onOpenChange={(o) => { setPenaltyDialogId(o ? inst.id : null); if (!o) { setPenaltyAmount(""); setPenaltyObservation(""); } }}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="px-2"><AlertTriangle className="h-3 w-3" /></Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Adicionar Multa</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">Parcela {inst.number}</p>
+                  <div>
+                    <Label>Valor da multa</Label>
+                    <Input type="number" placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Observação (opcional)</Label>
+                    <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} />
+                  </div>
+                  <Button onClick={() => handleAddPenalty(inst.id)} className="w-full">Adicionar Multa</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -268,7 +393,16 @@ export default function LoanDetailPage() {
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Emprestado:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Juros:</span><span>{formatCurrency(Number(loan.total_amount) - Number(loan.amount))}</span></div>
-          <div className="flex justify-between font-bold"><span>Valor Total:</span><span className="text-primary">{formatCurrency(Number(loan.total_amount))}</span></div>
+          <div className="flex justify-between font-bold"><span>Valor Total do Empréstimo:</span><span className="text-primary">{formatCurrency(totalLoanAmount)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Pago (parcelas):</span><span className="text-success">{formatCurrency(totalPaidAll)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Resta (parcelas):</span><span>{formatCurrency(Math.max(0, remainingLoan))}</span></div>
+          {penaltyTotal > 0 && (
+            <>
+              <div className="border-t pt-2 flex justify-between"><span className="text-destructive">Total de Multas:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Multa paga:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+            </>
+          )}
           <div className="flex justify-between"><span className="text-muted-foreground">Tipo:</span><span>{paymentTypeLabel[loan.payment_type]}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Data:</span><span>{format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}</span></div>
         </CardContent>
@@ -284,92 +418,36 @@ export default function LoanDetailPage() {
             </span>
           </div>
           <Progress value={Math.min(progressPercent, 100)} className="mb-3" />
-          <div className="flex items-center justify-between rounded-lg bg-accent p-3">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">Saldo Restante</span>
-            </div>
-            <span className="text-lg font-bold text-primary">{formatCurrency(Math.max(0, remaining))}</span>
-          </div>
-          {penaltyInst && (
-            <div className="mt-2 flex items-center justify-between rounded-lg bg-destructive/10 p-3">
-              <span className="text-sm font-medium text-destructive">Total de Multas</span>
-              <span className="text-sm font-bold text-destructive">{formatCurrency(Number(penaltyInst.amount))}</span>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Unpaid Installments */}
-      <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
+      {/* Filter toggle */}
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Parcelas</h2>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Todas</span>
+          <Switch checked={showAllInstallments} onCheckedChange={setShowAllInstallments} />
+        </div>
+      </div>
+
+      {/* Overdue installments */}
+      {overdueRegular.length > 0 && (
+        <Collapsible open={overdueOpen} onOpenChange={setOverdueOpen} className="mb-3">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full border-destructive/50 text-destructive">
+              ⚠️ Parcelas Atrasadas ({overdueRegular.length})
+              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-2">
+            {overdueRegular.map((inst) => renderInstallmentCard(inst))}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Active / all unpaid installments */}
       <div className="space-y-2">
-        {unpaidRegular.map((inst) => {
-          const displayStatus = getInstallmentDisplayStatus(inst);
-          const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-          return (
-            <Card key={inst.id}>
-              <CardContent className="p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold">Parcela {inst.number}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}
-                    </p>
-                    {Number(inst.paid_amount) > 0 && (
-                      <p className="text-xs text-partial">Pago: {formatCurrency(Number(inst.paid_amount))} / Resta: {formatCurrency(instRemaining)}</p>
-                    )}
-                    {Number(inst.penalty_amount) > 0 && (
-                      <p className="text-xs text-destructive">Multa: {formatCurrency(Number(inst.penalty_amount))}</p>
-                    )}
-                  </div>
-                  <Badge className={getStatusColor(displayStatus)}>{getStatusLabel(displayStatus)}</Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
-                        <CheckCircle className="mr-1 h-3 w-3" /> Pagou
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">Parcela {inst.number} — {formatCurrency(Number(inst.amount))}</p>
-                        {Number(inst.paid_amount) > 0 && <p className="text-sm text-partial">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
-                        <Input type="number" placeholder={`Valor recebido (padrão: ${instRemaining.toFixed(2)})`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                        <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                        <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">Confirmar</Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
-                    <XCircle className="mr-1 h-3 w-3" /> Não Pagou
-                  </Button>
-                  <Dialog open={penaltyDialogId === inst.id} onOpenChange={(o) => { setPenaltyDialogId(o ? inst.id : null); if (!o) { setPenaltyAmount(""); setPenaltyObservation(""); } }}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" variant="outline" className="px-2"><AlertTriangle className="h-3 w-3" /></Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Adicionar Multa</DialogTitle></DialogHeader>
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">Parcela {inst.number}</p>
-                        <div>
-                          <Label>Valor da multa</Label>
-                          <Input type="number" placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} />
-                        </div>
-                        <div>
-                          <Label>Observação (opcional)</Label>
-                          <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} />
-                        </div>
-                        <Button onClick={() => handleAddPenalty(inst.id)} className="w-full">Adicionar Multa</Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        {(showAllInstallments ? [...overdueOpen ? [] : overdueRegular, ...activeRegular] : activeRegular).map((inst) => renderInstallmentCard(inst))}
 
         {/* Penalty installment */}
         {penaltyInst && (
@@ -380,7 +458,10 @@ export default function LoanDetailPage() {
                   <button className="flex items-center gap-1 text-left font-semibold hover:underline" onClick={() => setPenaltyDetailOpen(true)}>
                     🔶 Multa <span className="text-xs text-muted-foreground">({penalties.length} registro{penalties.length !== 1 ? "s" : ""})</span>
                   </button>
-                  <p className="text-sm text-muted-foreground">{formatCurrency(Number(penaltyInst.amount))}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Total: {formatCurrency(Number(penaltyInst.amount))} 
+                    {Number(penaltyInst.paid_amount) > 0 && <> • Pago: {formatCurrency(Number(penaltyInst.paid_amount))}</>}
+                  </p>
                 </div>
                 <Badge className={getStatusColor(penaltyInst.status)}>{getStatusLabel(penaltyInst.status)}</Badge>
               </div>
@@ -392,14 +473,25 @@ export default function LoanDetailPage() {
                 <div className="flex gap-2">
                   <Dialog open={payDialogId === penaltyInst.id} onOpenChange={(o) => { setPayDialogId(o ? penaltyInst.id : null); if (!o) setPayAmount(""); }}>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90"><CheckCircle className="mr-1 h-3 w-3" /> Pagou</Button>
+                      <Button size="sm" className="flex-1 bg-success hover:bg-success/90"><Plus className="mr-1 h-3 w-3" /> Pagamento</Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader><DialogTitle>Pagar Multa</DialogTitle></DialogHeader>
                       <div className="space-y-3">
                         <p className="text-sm text-muted-foreground">Multa — {formatCurrency(Number(penaltyInst.amount))}</p>
-                        <Input type="number" placeholder={`Valor (padrão: ${Number(penaltyInst.amount).toFixed(2)})`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                        <Button onClick={() => handlePay(penaltyInst.id)} className="w-full bg-success hover:bg-success/90">Confirmar</Button>
+                        {Number(penaltyInst.paid_amount) > 0 && <p className="text-sm text-success">Já pago: {formatCurrency(Number(penaltyInst.paid_amount))}</p>}
+                        <div>
+                          <Label>Valor</Label>
+                          <Input type="number" placeholder={`Padrão: ${(Number(penaltyInst.amount) - Number(penaltyInst.paid_amount)).toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                        </div>
+                        <div>
+                          <Label>Data do pagamento</Label>
+                          <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                        </div>
+                        <Button onClick={() => {
+                          setPayIsPenalty(true);
+                          handlePay(penaltyInst.id);
+                        }} className="w-full bg-success hover:bg-success/90">Confirmar</Button>
                       </div>
                     </DialogContent>
                   </Dialog>
@@ -427,6 +519,7 @@ export default function LoanDetailPage() {
                     <div>
                       <p className="font-semibold">Parcela {inst.number}</p>
                       <p className="text-sm text-muted-foreground">{format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")} • {formatCurrency(Number(inst.amount))}</p>
+                      {inst.paid_at && <p className="text-xs text-success">Pago em: {format(new Date(inst.paid_at), "dd/MM/yyyy")}</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge className={getStatusColor("paid")}>{getStatusLabel("paid")}</Badge>

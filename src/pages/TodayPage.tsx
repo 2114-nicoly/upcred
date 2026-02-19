@@ -6,9 +6,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
-import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle } from "lucide-react";
+import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 type InstallmentWithLoan = {
@@ -40,13 +43,18 @@ type LoanProgress = {
 
 export default function TodayPage() {
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
+  const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payIsPenalty, setPayIsPenalty] = useState(false);
+  const [overdueOpen, setOverdueOpen] = useState(false);
   const today = format(new Date(), "yyyy-MM-dd");
 
   const fetchInstallments = async () => {
+    // Today's installments
     const { data } = await supabase
       .from("installments")
       .select("*, loans(id, client_id, amount, total_amount, installment_count, clients(id, name))")
@@ -55,9 +63,23 @@ export default function TodayPage() {
       .eq("is_penalty", false)
       .order("number");
 
-    setInstallments((data as unknown as InstallmentWithLoan[]) || []);
+    const todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
+    setInstallments(todayInsts);
 
-    const uniqueLoanIds = [...new Set((data || []).map((d: any) => d.loan_id))];
+    // Overdue installments (before today, not paid)
+    const { data: overdueData } = await supabase
+      .from("installments")
+      .select("*, loans(id, client_id, amount, total_amount, installment_count, clients(id, name))")
+      .lt("due_date", today)
+      .neq("status", "paid")
+      .eq("is_penalty", false)
+      .order("due_date");
+
+    setOverdueInstallments((overdueData as unknown as InstallmentWithLoan[]) || []);
+
+    // Progress for all unique loans
+    const allInsts = [...todayInsts, ...(overdueData as unknown as InstallmentWithLoan[] || [])];
+    const uniqueLoanIds = [...new Set(allInsts.map((d) => d.loan_id))];
     const progressMap: Record<string, LoanProgress> = {};
 
     for (const lid of uniqueLoanIds) {
@@ -84,7 +106,8 @@ export default function TodayPage() {
   useEffect(() => { fetchInstallments(); }, []);
 
   const handlePay = async (id: string) => {
-    const inst = installments.find((i) => i.id === id);
+    const allInsts = [...installments, ...overdueInstallments];
+    const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = payAmount ? parseFloat(payAmount) : instRemaining;
@@ -96,11 +119,11 @@ export default function TodayPage() {
     await supabase.from("installments").update({
       paid_amount: Math.min(newPaidAmount, Number(inst.amount)),
       status: fullyPaid ? "paid" : inst.status,
-      paid_at: fullyPaid ? new Date().toISOString() : inst.paid_at,
+      paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
     }).eq("id", id);
 
     toast.success(`Pagamento de ${formatCurrency(paidValue)} registrado!`);
-    setPayAmount(""); setPayDialogId(null);
+    setPayAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null); setPayIsPenalty(false);
     fetchInstallments();
   };
 
@@ -111,6 +134,71 @@ export default function TodayPage() {
   };
 
   const totalToReceive = installments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
+  const totalOverdue = overdueInstallments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
+
+  const renderInstCard = (inst: InstallmentWithLoan) => {
+    const lp = loanProgressMap[inst.loan_id];
+    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+    return (
+      <Card key={inst.id} className="overflow-hidden">
+        <CardContent className="p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <p className="font-semibold">{inst.loans.clients.name}</p>
+              <p className="text-sm text-muted-foreground">
+                Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Venc: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
+              </p>
+              {lp && (
+                <p className="text-xs text-primary font-medium">
+                  {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} • Resta: {formatCurrency(Math.max(0, lp.remaining))}
+                </p>
+              )}
+              {lp && lp.penaltyTotal > 0 && (
+                <p className="text-xs text-destructive">Multa: {formatCurrency(lp.penaltyTotal)}</p>
+              )}
+            </div>
+            <Badge className={getStatusColor(getInstallmentDisplayStatus(inst))}>
+              {getStatusLabel(getInstallmentDisplayStatus(inst))}
+            </Badge>
+          </div>
+          <div className="flex gap-2">
+            <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayIsPenalty(false); } }}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                  <Plus className="mr-1 h-4 w-4" /> Pagamento
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
+                  </p>
+                  <div>
+                    <Label>Valor recebido</Label>
+                    <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Data do pagamento</Label>
+                    <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                  </div>
+                  <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
+                    Confirmar Pagamento
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+              <XCircle className="mr-1 h-4 w-4" /> Não Pagou
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -127,18 +215,34 @@ export default function TodayPage() {
         <Card className="text-center">
           <CardContent className="p-3">
             <DollarSign className="mx-auto mb-1 h-5 w-5 text-primary" />
-            <p className="text-xs text-muted-foreground">A Receber</p>
+            <p className="text-xs text-muted-foreground">A Receber Hoje</p>
             <p className="text-sm font-bold">{formatCurrency(totalToReceive)}</p>
           </CardContent>
         </Card>
         <Card className="text-center">
           <CardContent className="p-3">
             <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-warning" />
-            <p className="text-xs text-muted-foreground">Cobranças</p>
-            <p className="text-sm font-bold">{installments.length}</p>
+            <p className="text-xs text-muted-foreground">Atrasadas</p>
+            <p className="text-sm font-bold text-destructive">{overdueInstallments.length}</p>
+            {totalOverdue > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdue)}</p>}
           </CardContent>
         </Card>
       </div>
+
+      {/* Overdue section */}
+      {overdueInstallments.length > 0 && (
+        <Collapsible open={overdueOpen} onOpenChange={setOverdueOpen} className="mb-4">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full border-destructive/50 text-destructive">
+              ⚠️ Parcelas Atrasadas ({overdueInstallments.length})
+              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-3">
+            {overdueInstallments.map((inst) => renderInstCard(inst))}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
@@ -151,64 +255,7 @@ export default function TodayPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {installments.map((inst) => {
-            const lp = loanProgressMap[inst.loan_id];
-            const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-            return (
-              <Card key={inst.id} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">{inst.loans.clients.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
-                      </p>
-                      {lp && (
-                        <p className="text-xs text-primary font-medium">
-                          {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} • Resta: {formatCurrency(Math.max(0, lp.remaining))}
-                        </p>
-                      )}
-                      {lp && lp.penaltyTotal > 0 && (
-                        <p className="text-xs text-destructive">Multa: {formatCurrency(lp.penaltyTotal)}</p>
-                      )}
-                    </div>
-                    <Badge className={getStatusColor(getInstallmentDisplayStatus(inst))}>
-                      {getStatusLabel(getInstallmentDisplayStatus(inst))}
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2">
-                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) setPayAmount(""); }}>
-                      <DialogTrigger asChild>
-                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
-                          <CheckCircle className="mr-1 h-4 w-4" /> Pagou
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
-                        <div className="space-y-3">
-                          <p className="text-sm text-muted-foreground">
-                            {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
-                          </p>
-                          <Input
-                            type="number"
-                            placeholder={`Valor recebido (padrão: ${instRemaining.toFixed(2)})`}
-                            value={payAmount}
-                            onChange={(e) => setPayAmount(e.target.value)}
-                          />
-                          <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
-                            Confirmar Pagamento
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
-                      <XCircle className="mr-1 h-4 w-4" /> Não Pagou
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {installments.map((inst) => renderInstCard(inst))}
         </div>
       )}
     </div>
