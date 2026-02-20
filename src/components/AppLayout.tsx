@@ -1,12 +1,12 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CalendarDays, Landmark, CalendarCheck, Users, BarChart3 } from "lucide-react";
+import { CalendarDays, Landmark, CalendarCheck, Users, BarChart3, Wallet } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Hoje", icon: CalendarDays },
   { path: "/active-loans", label: "Ativos", icon: Landmark },
+  { path: "/caixa", label: "Caixa", icon: Wallet },
   { path: "/clients", label: "Clientes", icon: Users },
-  { path: "/payment-history", label: "Histórico", icon: CalendarCheck },
   { path: "/reports", label: "Relatório", icon: BarChart3 },
 ];
 
