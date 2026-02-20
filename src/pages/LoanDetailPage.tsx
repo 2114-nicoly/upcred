@@ -640,24 +640,31 @@ export default function LoanDetailPage() {
         </div>
       </div>
 
-      {/* Overdue installments */}
+      {/* Overdue installments - navigate to full page */}
       {overdueRegular.length > 0 && (
-        <Collapsible open={overdueOpen} onOpenChange={setOverdueOpen} className="mb-3">
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" className="w-full border-destructive/50 text-destructive">
-              ⚠️ Parcelas Atrasadas ({overdueRegular.length})
-              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 space-y-2">
-            {overdueRegular.map((inst) => renderInstallmentCard(inst))}
-          </CollapsibleContent>
-        </Collapsible>
+        <Button
+          variant="outline"
+          className="w-full mb-3 border-destructive/50 text-destructive"
+          onClick={() => navigate(`/loans/${loanId}/overdue`)}
+        >
+          ⚠️ Parcelas Atrasadas ({overdueRegular.length})
+        </Button>
       )}
 
-      {/* Active / all unpaid installments */}
+      {/* Unpaid / partial installments - navigate to full page */}
+      {activeRegular.length > 0 && (
+        <Button
+          variant="outline"
+          className="w-full mb-3"
+          onClick={() => navigate(`/loans/${loanId}/unpaid`)}
+        >
+          📋 Parcelas Pendentes ({activeRegular.length})
+        </Button>
+      )}
+
+      {/* Active / all installments */}
       <div className="space-y-2">
-        {(showAllInstallments ? [...(overdueOpen ? [] : overdueRegular), ...activeRegular] : activeRegular).map((inst) => renderInstallmentCard(inst))}
+        {(showAllInstallments ? regularInstallments : activeRegular).map((inst) => renderInstallmentCard(inst))}
 
         {/* Penalty installment */}
         {penaltyInst && (
