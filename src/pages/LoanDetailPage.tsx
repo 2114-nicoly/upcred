@@ -19,6 +19,7 @@ import {
   getInstallmentDisplayStatus,
   getOverdueDatesList,
 } from "@/lib/loan-utils";
+import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -139,6 +140,15 @@ export default function LoanDetailPage() {
           status: fullyPaid ? "paid" : penaltyInst.status,
           paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
         }).eq("id", penaltyInst.id);
+        // Cash: penalty payment
+        await updateCashBalance({ available_cash: multaValue, penalty_receivable: -multaValue });
+        await createCashMovement({
+          type: "recebimento_multa",
+          amount: multaValue,
+          client_id: loan?.client_id,
+          loan_id: loanId!,
+          observation: `Pagamento de multa`,
+        });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
         toast.error("Nenhuma multa registrada para abater");
@@ -171,6 +181,26 @@ export default function LoanDetailPage() {
         remaining -= applying;
       }
       const totalApplied = (parcValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount))) - remaining;
+      // Cash: normal payment - interest first, then principal
+      if (totalApplied > 0) {
+        await updateCashBalance({ available_cash: totalApplied });
+        // Determine how much goes to interest vs principal
+        const loanInterest = loan ? (Number(loan.total_amount) - Number(loan.amount)) : 0;
+        const totalPaidBefore = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+        const toInterest = Math.min(totalApplied, interestRemaining);
+        const toPrincipal = totalApplied - toInterest;
+        if (toInterest > 0) await updateCashBalance({ interest_receivable: -toInterest });
+        if (toPrincipal > 0) await updateCashBalance({ money_lent: -toPrincipal });
+        await createCashMovement({
+          type: "recebimento_normal",
+          amount: totalApplied,
+          client_id: loan?.client_id,
+          loan_id: loanId!,
+          installment_id: currentInst.id,
+          observation: `Parcela ${currentInst.number}`,
+        });
+      }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
       if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
     }
@@ -233,6 +263,9 @@ export default function LoanDetailPage() {
         status: "pending",
       });
     }
+
+    // Update penalty receivable in cash
+    await updateCashBalance({ penalty_receivable: penAmount });
 
     toast.success("Multa adicionada!");
     setPenaltyAmount(""); setPenaltyObservation(""); setPenaltyDialogId(null);

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
+import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -135,6 +136,14 @@ export default function TodayPage() {
           status: fullyPaid ? "paid" : penaltyInst.status,
           paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
         }).eq("id", penaltyInst.id);
+        await updateCashBalance({ available_cash: multaValue, penalty_receivable: -multaValue });
+        await createCashMovement({
+          type: "recebimento_multa",
+          amount: multaValue,
+          client_id: inst.loans.client_id,
+          loan_id: inst.loan_id,
+          observation: `Pagamento de multa - ${inst.loans.clients.name}`,
+        });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
         toast.error("Nenhuma multa registrada para abater");
@@ -178,6 +187,18 @@ export default function TodayPage() {
         remaining -= applying;
       }
       const totalApplied = paidValue - remaining;
+      // Cash movement
+      if (totalApplied > 0) {
+        await updateCashBalance({ available_cash: totalApplied });
+        await createCashMovement({
+          type: "recebimento_normal",
+          amount: totalApplied,
+          client_id: inst.loans.client_id,
+          loan_id: inst.loan_id,
+          installment_id: inst.id,
+          observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+        });
+      }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
       if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
     }

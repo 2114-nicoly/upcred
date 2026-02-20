@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
+import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { ArrowLeft, Calculator } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -100,6 +101,23 @@ export default function NewLoanPage() {
 
     const { error: instError } = await supabase.from("installments").insert(installments);
     if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
+
+    // Update cash balance
+    const interest = calc.totalAmount - numAmount;
+    await updateCashBalance({
+      available_cash: -numAmount,
+      money_lent: numAmount,
+      interest_receivable: interest,
+    });
+
+    // Create cash movement
+    await createCashMovement({
+      type: "emprestimo",
+      amount: -numAmount,
+      client_id: clientId!,
+      loan_id: loan.id,
+      observation: `Empréstimo de ${formatCurrency(numAmount)} para ${clientName}`,
+    });
 
     toast.success("Empréstimo criado com sucesso!");
     navigate(`/loans/${loan.id}`);

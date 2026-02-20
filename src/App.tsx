@@ -20,6 +20,8 @@ import NotFound from "./pages/NotFound";
 import UnpaidInstallmentsPage from "@/pages/UnpaidInstallmentsPage";
 import LoanOverdueDetailPage from "@/pages/LoanOverdueDetailPage";
 import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
+import CaixaPage from "@/pages/CaixaPage";
+import CashHistoryPage from "@/pages/CashHistoryPage";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +62,8 @@ const App = () => {
               <Route path="/overdue" element={<OverdueLoansPage />} />
               <Route path="/today-summary" element={<TodaySummaryPage />} />
               <Route path="/payment-history" element={<PaymentHistoryPage />} />
+              <Route path="/caixa" element={<CaixaPage />} />
+              <Route path="/cash-history" element={<CashHistoryPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

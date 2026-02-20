@@ -14,6 +14,88 @@ export type Database = {
   }
   public: {
     Tables: {
+      cash_balance: {
+        Row: {
+          available_cash: number
+          id: string
+          interest_receivable: number
+          money_lent: number
+          penalty_receivable: number
+          updated_at: string
+        }
+        Insert: {
+          available_cash?: number
+          id?: string
+          interest_receivable?: number
+          money_lent?: number
+          penalty_receivable?: number
+          updated_at?: string
+        }
+        Update: {
+          available_cash?: number
+          id?: string
+          interest_receivable?: number
+          money_lent?: number
+          penalty_receivable?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cash_movements: {
+        Row: {
+          amount: number
+          client_id: string | null
+          created_at: string
+          id: string
+          installment_id: string | null
+          loan_id: string | null
+          observation: string | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          installment_id?: string | null
+          loan_id?: string | null
+          observation?: string | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          installment_id?: string | null
+          loan_id?: string | null
+          observation?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_movements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: false
+            referencedRelation: "installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           client_code: number | null
