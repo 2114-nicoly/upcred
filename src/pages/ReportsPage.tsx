@@ -182,8 +182,7 @@ export default function ReportsPage() {
           <div className="flex justify-between font-bold"><span>Saldo a receber:</span><span className="text-primary">{formatCurrency(totalRemaining)}</span></div>
           {totalPenalties > 0 && (
             <>
-              <div className="border-t pt-2 flex justify-between"><span className="text-destructive">Total de multas:</span><span className="text-destructive">{formatCurrency(totalPenalties)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Multas recolhidas:</span><span className="text-success">{formatCurrency(totalPenaltiesPaid)}</span></div>
+              <div className="border-t pt-2 flex justify-between"><span className="text-muted-foreground">Multas recolhidas:</span><span className="text-success">{formatCurrency(totalPenaltiesPaid)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Multas pendentes:</span><span className="text-destructive">{formatCurrency(totalPenalties - totalPenaltiesPaid)}</span></div>
             </>
           )}
