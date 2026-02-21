@@ -116,8 +116,8 @@ export default function ReportsPage() {
         <Card>
           <CardContent className="p-3 text-center">
             <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-destructive" />
-            <p className="text-xs text-muted-foreground">Total Multas</p>
-            <p className="text-sm font-bold text-destructive">{formatCurrency(totalPenalties)}</p>
+            <p className="text-xs text-muted-foreground">Multas Pendentes</p>
+            <p className="text-sm font-bold text-destructive">{formatCurrency(totalPenalties - totalPenaltiesPaid)}</p>
           </CardContent>
         </Card>
         <Card>
