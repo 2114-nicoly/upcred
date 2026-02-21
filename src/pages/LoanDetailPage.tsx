@@ -82,7 +82,7 @@ export default function LoanDetailPage() {
   const [editingPenalty, setEditingPenalty] = useState<string | null>(null);
   const [editPenaltyValue, setEditPenaltyValue] = useState("");
   const [editPenaltyObs, setEditPenaltyObs] = useState("");
-  const [showAllInstallments, setShowAllInstallments] = useState(true);
+  const [_showAllInstallments, _setShowAllInstallments] = useState(true); // unused, kept for compat
   const [paidOpen, setPaidOpen] = useState(false);
   const [overdueOpen, setOverdueOpen] = useState(false);
   // Edit loan (full renegotiation)
@@ -681,9 +681,10 @@ export default function LoanDetailPage() {
           <div className="flex justify-between"><span className="text-muted-foreground">Resta (parcelas):</span><span>{formatCurrency(Math.max(0, remainingLoan))}</span></div>
           {penaltyTotal > 0 && (
             <div className="border-t pt-2 space-y-1">
-              <div className="flex justify-between"><span className="text-destructive font-medium">Total de Multas:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Multa paga:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              <div className="flex justify-between"><span className="text-destructive font-medium">Total de Multas:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              {penaltyPaid > 0 && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Multa paga:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
+              )}
             </div>
           )}
           {/* Overdue days */}
@@ -722,40 +723,38 @@ export default function LoanDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Filter toggle */}
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Parcelas</h2>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Todas</span>
-          <Switch checked={showAllInstallments} onCheckedChange={setShowAllInstallments} />
-        </div>
-      </div>
+      {/* Section header */}
+      <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
 
-      {/* Overdue installments - navigate to full page */}
+      {/* Paid installments button */}
+      {paidRegular.length > 0 && (
+        <Collapsible open={paidOpen} onOpenChange={setPaidOpen} className="mb-3">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full">
+              ✅ Parcelas Pagas ({paidRegular.length})
+              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${paidOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-2">
+            {paidRegular.map((inst) => renderInstallmentCard(inst, false))}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Overdue installments (marked "Não Pagou") */}
       {overdueRegular.length > 0 && (
         <Button
           variant="outline"
           className="w-full mb-3 border-destructive/50 text-destructive"
           onClick={() => navigate(`/loans/${loanId}/overdue`)}
         >
-          ⚠️ Parcelas Atrasadas ({overdueRegular.length})
+          ⚠️ Parcelas Pendentes ({overdueRegular.length})
         </Button>
       )}
 
-      {/* Unpaid / partial installments - navigate to full page */}
-      {activeRegular.length > 0 && (
-        <Button
-          variant="outline"
-          className="w-full mb-3"
-          onClick={() => navigate(`/loans/${loanId}/unpaid`)}
-        >
-          📋 Parcelas Pendentes ({activeRegular.length})
-        </Button>
-      )}
-
-      {/* Active / all installments */}
+      {/* Active installments (pending / partial only) */}
       <div className="space-y-2">
-        {(showAllInstallments ? regularInstallments : activeRegular).map((inst) => renderInstallmentCard(inst))}
+        {activeRegular.map((inst) => renderInstallmentCard(inst))}
 
         {/* Penalty installment */}
         {penaltyInst && (
@@ -814,20 +813,6 @@ export default function LoanDetailPage() {
         )}
       </div>
 
-      {/* Paid installments */}
-      {paidRegular.length > 0 && (
-        <Collapsible open={paidOpen} onOpenChange={setPaidOpen} className="mt-4">
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" className="w-full">
-              Parcelas Pagas ({paidRegular.length})
-              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${paidOpen ? "rotate-180" : ""}`} />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 space-y-2">
-            {paidRegular.map((inst) => renderInstallmentCard(inst, false))}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
 
       {/* Penalty Detail Dialog */}
       <Dialog open={penaltyDetailOpen} onOpenChange={setPenaltyDetailOpen}>
