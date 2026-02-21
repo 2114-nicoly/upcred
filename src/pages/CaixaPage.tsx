@@ -27,6 +27,7 @@ export default function CaixaPage() {
   const navigate = useNavigate();
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [movements, setMovements] = useState<(CashMovement & { clients?: { name: string } | null })[]>([]);
+  const [penaltyPending, setPenaltyPending] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Manual movement dialog
@@ -49,6 +50,18 @@ export default function CaixaPage() {
       .order("created_at", { ascending: false })
       .limit(10);
     setMovements((movs as any) || []);
+
+    // Calculate penalty pending from installments (same as report)
+    const { data: penaltyInstallments } = await supabase
+      .from("installments")
+      .select("amount, paid_amount")
+      .eq("is_penalty", true);
+    if (penaltyInstallments) {
+      const total = penaltyInstallments.reduce((s, i) => s + Number(i.amount), 0);
+      const paid = penaltyInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+      setPenaltyPending(total - paid);
+    }
+
     setLoading(false);
   };
 
@@ -157,7 +170,7 @@ export default function CaixaPage() {
             <CardContent className="p-3 text-center">
               <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-destructive" />
               <p className="text-xs text-muted-foreground">Multas Pendentes</p>
-              <p className="text-sm font-bold text-destructive">{formatCurrency(Number(balance.penalty_receivable))}</p>
+              <p className="text-sm font-bold text-destructive">{formatCurrency(penaltyPending)}</p>
             </CardContent>
           </Card>
         </div>
