@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -19,9 +20,11 @@ import {
   getInstallmentDisplayStatus,
   getOverdueDatesList,
   getPaymentTypeLabel,
+  calculateLoan,
+  generateDueDates,
 } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -82,13 +85,15 @@ export default function LoanDetailPage() {
   const [showAllInstallments, setShowAllInstallments] = useState(true);
   const [paidOpen, setPaidOpen] = useState(false);
   const [overdueOpen, setOverdueOpen] = useState(false);
-  // Edit loan
+  // Edit loan (full renegotiation)
   const [editLoanOpen, setEditLoanOpen] = useState(false);
   const [editAmount, setEditAmount] = useState("");
   const [editInterestValue, setEditInterestValue] = useState("");
   const [editInterestType, setEditInterestType] = useState("percentage");
   const [editPaymentType, setEditPaymentType] = useState("");
   const [editLoanDate, setEditLoanDate] = useState("");
+  const [editFirstDueDate, setEditFirstDueDate] = useState("");
+  const [editInstallmentCount, setEditInstallmentCount] = useState("");
   const [editStatus, setEditStatus] = useState("");
   const [editIsCravo, setEditIsCravo] = useState(false);
   // Edit installment
@@ -331,20 +336,64 @@ export default function LoanDetailPage() {
     setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs("");
   };
 
-  // --- Edit loan ---
+  // --- Renegotiation calc preview ---
+  const editNumAmount = parseFloat(editAmount) || 0;
+  const editNumInterest = parseFloat(editInterestValue) || 0;
+  const editNumInstallments = parseInt(editInstallmentCount) || 0;
+
+  const editCalc = useMemo(() => {
+    if (editNumAmount <= 0 || editNumInstallments <= 0) return null;
+    return calculateLoan(editNumAmount, editInterestType as "percentage" | "fixed", editNumInterest, editNumInstallments);
+  }, [editNumAmount, editInterestType, editNumInterest, editNumInstallments]);
+
+  const editDueDates = useMemo(() => {
+    if (!editFirstDueDate || editNumInstallments <= 0 || editPaymentType === "fixed_dates") return [];
+    return generateDueDates(new Date(editFirstDueDate + "T12:00:00"), editNumInstallments, editPaymentType as "daily" | "weekly" | "biweekly" | "monthly");
+  }, [editFirstDueDate, editNumInstallments, editPaymentType]);
+
+  // --- Edit loan (full renegotiation) ---
   const handleEditLoan = async () => {
-    const newAmount = parseFloat(editAmount);
-    const newInterest = parseFloat(editInterestValue);
-    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
-    if (isNaN(newInterest) || newInterest < 0) { toast.error("Juros inválido"); return; }
-    const interest = editInterestType === "percentage" ? newAmount * (newInterest / 100) : newInterest;
-    const totalAmount = newAmount + interest;
+    if (!editCalc) { toast.error("Preencha todos os campos corretamente"); return; }
+    if (!editFirstDueDate && editPaymentType !== "fixed_dates") { toast.error("Informe a data do primeiro vencimento"); return; }
+
+    // Update loan record
     await supabase.from("loans").update({
-      amount: newAmount, interest_type: editInterestType, interest_value: newInterest,
-      total_amount: totalAmount, payment_type: editPaymentType, loan_date: editLoanDate,
-      status: editStatus, is_cravo: editIsCravo,
+      amount: editNumAmount,
+      interest_type: editInterestType,
+      interest_value: editNumInterest,
+      total_amount: editCalc.totalAmount,
+      installment_count: editNumInstallments,
+      payment_type: editPaymentType,
+      loan_date: editLoanDate,
+      first_due_date: editFirstDueDate || null,
+      status: editStatus,
+      is_cravo: editIsCravo,
     }).eq("id", loanId!);
-    toast.success("Empréstimo atualizado!");
+
+    // Delete old non-penalty installments and regenerate
+    const nonPenaltyIds = installments.filter(i => !i.is_penalty).map(i => i.id);
+    if (nonPenaltyIds.length > 0) {
+      // Delete penalties linked to these installments
+      for (const instId of nonPenaltyIds) {
+        await supabase.from("penalties").delete().eq("installment_id", instId);
+      }
+      await supabase.from("installments").delete().in("id", nonPenaltyIds);
+    }
+
+    // Generate new installments
+    const dates = editDueDates;
+    if (dates.length > 0) {
+      const newInstallments = dates.map((date, i) => ({
+        loan_id: loanId!,
+        number: i + 1,
+        amount: editCalc.installmentAmount,
+        due_date: format(date, "yyyy-MM-dd"),
+        status: "pending" as const,
+      }));
+      await supabase.from("installments").insert(newInstallments);
+    }
+
+    toast.success("Empréstimo renegociado com sucesso!");
     setEditLoanOpen(false);
     fetchData();
   };
@@ -356,6 +405,8 @@ export default function LoanDetailPage() {
     setEditInterestType(loan.interest_type);
     setEditPaymentType(loan.payment_type);
     setEditLoanDate(loan.loan_date);
+    setEditFirstDueDate(loan.first_due_date || "");
+    setEditInstallmentCount(String(loan.installment_count));
     setEditStatus(loan.status);
     setEditIsCravo(loan.is_cravo);
     setEditLoanOpen(true);
@@ -611,7 +662,14 @@ export default function LoanDetailPage() {
       <Card className="mb-4">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">{loan.clients.name}</CardTitle>
+            <CardTitle className="text-lg">
+              <button
+                className="hover:underline text-primary cursor-pointer"
+                onClick={() => navigate(`/clients/${loan.client_id}`)}
+              >
+                {loan.clients.name}
+              </button>
+            </CardTitle>
             <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
           </div>
         </CardHeader>
@@ -829,52 +887,100 @@ export default function LoanDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Loan Dialog */}
+      {/* Edit Loan Dialog - Full Renegotiation */}
       <Dialog open={editLoanOpen} onOpenChange={setEditLoanOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Empréstimo</DialogTitle></DialogHeader>
-          <div className="max-h-[70vh] space-y-3 overflow-y-auto">
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Renegociar Empréstimo</DialogTitle></DialogHeader>
+          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
             <div>
-              <Label>Valor emprestado</Label>
+              <Label>Valor Emprestado (R$)</Label>
               <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
             </div>
-            <div>
-              <Label>Tipo de juros</Label>
-              <div className="flex gap-2 mt-1">
-                <Button size="sm" variant={editInterestType === "percentage" ? "default" : "outline"} onClick={() => setEditInterestType("percentage")}>Porcentagem</Button>
-                <Button size="sm" variant={editInterestType === "fixed" ? "default" : "outline"} onClick={() => setEditInterestType("fixed")}>Fixo</Button>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Tipo de Juros</Label>
+                <Select value={editInterestType} onValueChange={setEditInterestType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Porcentagem (%)</SelectItem>
+                    <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{editInterestType === "percentage" ? "Juros (%)" : "Juros (R$)"}</Label>
+                <Input type="number" value={editInterestValue} onChange={(e) => setEditInterestValue(e.target.value)} />
               </div>
             </div>
             <div>
-              <Label>Valor do juros {editInterestType === "percentage" ? "(%)" : "(R$)"}</Label>
-              <Input type="number" value={editInterestValue} onChange={(e) => setEditInterestValue(e.target.value)} />
+              <Label>Tipo de Pagamento</Label>
+              <Select value={editPaymentType} onValueChange={setEditPaymentType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Diário</SelectItem>
+                  <SelectItem value="weekly">Semanal</SelectItem>
+                  <SelectItem value="biweekly">Quinzenal</SelectItem>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                  <SelectItem value="fixed_dates">Data Fixa</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <Label>Tipo de pagamento</Label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {[["daily", "Diário"], ["weekly", "Semanal"], ["biweekly", "Quinzenal"], ["monthly", "Mensal"], ["fixed_dates", "Data Fixa"]].map(([val, label]) => (
-                  <Button key={val} size="sm" variant={editPaymentType === val ? "default" : "outline"} onClick={() => setEditPaymentType(val)}>{label}</Button>
-                ))}
-              </div>
+              <Label>Quantidade de Parcelas</Label>
+              <Input type="number" value={editInstallmentCount} onChange={(e) => setEditInstallmentCount(e.target.value)} />
             </div>
             <div>
-              <Label>Data do empréstimo</Label>
+              <Label>Data do Empréstimo</Label>
               <Input type="date" value={editLoanDate} onChange={(e) => setEditLoanDate(e.target.value)} />
             </div>
+            {editPaymentType !== "fixed_dates" && (
+              <div>
+                <Label>Data do Primeiro Vencimento</Label>
+                <Input type="date" value={editFirstDueDate} onChange={(e) => setEditFirstDueDate(e.target.value)} />
+              </div>
+            )}
             <div>
               <Label>Status</Label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {[["open", "Em Aberto"], ["paid", "Pago"], ["overdue", "Atrasado"]].map(([val, label]) => (
-                  <Button key={val} size="sm" variant={editStatus === val ? "default" : "outline"} onClick={() => setEditStatus(val)}>{label}</Button>
-                ))}
-              </div>
+              <Select value={editStatus} onValueChange={setEditStatus}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Em Aberto</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="overdue">Atrasado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <Label className="text-sm">Marcar como Cravo 🔥</Label>
               <Switch checked={editIsCravo} onCheckedChange={setEditIsCravo} />
             </div>
 
-            {/* Penalty records inside edit loan dialog */}
+            {/* Renegotiation preview */}
+            {editCalc && (
+              <Card className="border-primary/30 bg-accent">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center text-base">
+                    <Calculator className="mr-2 h-4 w-4" /> Prévia do Recálculo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <div className="flex justify-between"><span>Valor emprestado:</span><span className="font-semibold">{formatCurrency(editNumAmount)}</span></div>
+                  <div className="flex justify-between"><span>Juros:</span><span className="font-semibold">{formatCurrency(editCalc.interest)}</span></div>
+                  <div className="flex justify-between border-t pt-1"><span className="font-bold">Valor final:</span><span className="font-bold text-primary">{formatCurrency(editCalc.totalAmount)}</span></div>
+                  <div className="flex justify-between"><span>Valor de cada parcela:</span><span className="font-semibold">{formatCurrency(editCalc.installmentAmount)}</span></div>
+                  {editDueDates.length > 0 && (
+                    <div className="mt-2 border-t pt-2">
+                      <p className="mb-1 font-medium">Novos vencimentos:</p>
+                      {editDueDates.map((d, i) => (
+                        <p key={i} className="text-muted-foreground">Parcela {i + 1}: {format(d, "dd/MM/yyyy")}</p>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Penalty records */}
             <div className="border-t pt-3">
               <Label className="text-sm font-semibold">Registros de Multas ({penalties.length})</Label>
               {penaltyInst && (
@@ -887,7 +993,10 @@ export default function LoanDetailPage() {
               {renderPenaltyList()}
             </div>
 
-            <Button onClick={handleEditLoan} className="w-full">Salvar Alterações</Button>
+            <Button onClick={handleEditLoan} className="w-full" size="lg">
+              ⚠️ Renegociar Empréstimo
+            </Button>
+            <p className="text-xs text-center text-muted-foreground">As parcelas existentes serão substituídas pelas novas.</p>
           </div>
         </DialogContent>
       </Dialog>
