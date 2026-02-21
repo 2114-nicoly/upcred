@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
+import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { ArrowLeft, Plus, ChevronDown, History, Clock, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ type Loan = {
   status: string;
   loan_date: string;
   payment_type: string;
+  first_due_date: string | null;
   interest_type: string;
   interest_value: number;
 };
@@ -127,9 +128,7 @@ export default function ClientDetailPage() {
   const activeLoans = loans.filter((l) => l.status !== "paid");
   const paidLoans = loans.filter((l) => l.status === "paid");
 
-  const paymentTypeLabel: Record<string, string> = {
-    daily: "Diário", weekly: "Semanal", biweekly: "Quinzenal", monthly: "Mensal", fixed_dates: "Data Fixa",
-  };
+  // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
   if (!client) return <p className="p-4 text-center">Carregando...</p>;
 
@@ -179,7 +178,7 @@ export default function ClientDetailPage() {
                     <Link to={`/loans/${loan.id}`} className="flex-1">
                       <p className="text-lg font-bold">{formatCurrency(Number(loan.total_amount))}</p>
                       <p className="text-sm text-muted-foreground">
-                        {loan.installment_count}x • {paymentTypeLabel[loan.payment_type]}
+                        {loan.installment_count}x • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
                       </p>
                       <p className="text-xs text-primary font-medium">
                         {progress % 1 === 0 ? progress : progress.toFixed(1)}/{total} • Resta: {formatCurrency(Math.max(0, remaining))}

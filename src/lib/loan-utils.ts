@@ -1,5 +1,21 @@
 import { addDays, addWeeks, addMonths } from "date-fns";
 
+const weekdayNames: Record<number, string> = {
+  0: "Domingo", 1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado",
+};
+
+export function getPaymentTypeLabel(paymentType: string, firstDueDate?: string | null): string {
+  const labels: Record<string, string> = {
+    daily: "Diário", weekly: "Semanal", biweekly: "Quinzenal", monthly: "Mensal", fixed_dates: "Data Fixa",
+  };
+  const base = labels[paymentType] || paymentType;
+  if (paymentType === "weekly" && firstDueDate) {
+    const day = new Date(firstDueDate + "T12:00:00").getDay();
+    return `${base} (${weekdayNames[day]})`;
+  }
+  return base;
+}
+
 export function calculateLoan(
   amount: number,
   interestType: "percentage" | "fixed",
