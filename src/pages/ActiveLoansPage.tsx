@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatCurrency, getLoanStatusColor, getStatusLabel } from "@/lib/loan-utils";
+import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ type LoanWithClient = {
   total_amount: number;
   status: string;
   payment_type: string;
+  first_due_date: string | null;
   loan_date: string;
   installment_count: number;
   is_cravo: boolean;
@@ -231,9 +232,7 @@ export default function ActiveLoansPage() {
     fetchData();
   };
 
-  const paymentTypeLabel: Record<string, string> = {
-    daily: "Diário", weekly: "Semanal", biweekly: "Quinzenal", monthly: "Mensal", fixed_dates: "Data Fixa",
-  };
+  // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
   let displayedLoans = loans;
   if (filterToday) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
@@ -286,7 +285,7 @@ export default function ActiveLoansPage() {
                         {loan.is_cravo && <Flame className="h-4 w-4 text-destructive" />}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {formatCurrency(Number(loan.total_amount))} • <span className="font-medium text-primary">{paymentTypeLabel[loan.payment_type]}</span>
+                        {formatCurrency(Number(loan.total_amount))} • <span className="font-medium text-primary">{getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}</span>
                       </p>
                       {lp && (
                         <>

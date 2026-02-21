@@ -18,6 +18,7 @@ import {
   getLoanStatusColor,
   getInstallmentDisplayStatus,
   getOverdueDatesList,
+  getPaymentTypeLabel,
 } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar } from "lucide-react";
@@ -32,6 +33,7 @@ type Loan = {
   total_amount: number;
   installment_count: number;
   payment_type: string;
+  first_due_date: string | null;
   loan_date: string;
   status: string;
   client_id: string;
@@ -432,9 +434,7 @@ export default function LoanDetailPage() {
     : [];
   const overdueDaysCount = overdueDatesList.length;
 
-  const paymentTypeLabel: Record<string, string> = {
-    daily: "Diário", weekly: "Semanal", biweekly: "Quinzenal", monthly: "Mensal", fixed_dates: "Data Fixa",
-  };
+  // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
   const getInstallmentNumber = (installmentId: string) => {
     const inst = installments.find((i) => i.id === installmentId);
@@ -645,7 +645,7 @@ export default function LoanDetailPage() {
               </button>
             </div>
           )}
-          <div className="flex justify-between"><span className="text-muted-foreground">Tipo:</span><span>{paymentTypeLabel[loan.payment_type]}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Tipo:</span><span>{getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Data:</span><span>{format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}</span></div>
           {loan.is_cravo && <Badge className="bg-warning text-warning-foreground">🔥 Cravo</Badge>}
         </CardContent>
