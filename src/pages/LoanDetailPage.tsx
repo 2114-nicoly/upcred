@@ -723,6 +723,16 @@ export default function LoanDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Penalty Button */}
+      <Button
+        variant="outline"
+        className="w-full mb-4 border-warning/50 text-warning hover:bg-warning/10"
+        onClick={() => setPenaltyDetailOpen(true)}
+      >
+        <AlertTriangle className="mr-2 h-4 w-4" />
+        🔶 Multas {penaltyInst ? `(${formatCurrency(penaltyTotal - penaltyPaid)} pendente)` : ""}
+      </Button>
+
       {/* Section header */}
       <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
 
@@ -815,18 +825,53 @@ export default function LoanDetailPage() {
 
 
       {/* Penalty Detail Dialog */}
-      <Dialog open={penaltyDetailOpen} onOpenChange={setPenaltyDetailOpen}>
+      <Dialog open={penaltyDetailOpen} onOpenChange={(o) => { setPenaltyDetailOpen(o); if (!o) { setPenaltyAmount(""); setPenaltyObservation(""); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Detalhes das Multas</DialogTitle></DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Gerenciar Multas</DialogTitle></DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto space-y-3">
             {penaltyInst && (
-              <div className="mb-3 rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
                 <div className="flex justify-between"><span>Total de Multas:</span><span className="font-semibold text-destructive">{formatCurrency(penaltyTotal)}</span></div>
                 <div className="flex justify-between"><span>Pago:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
                 <div className="flex justify-between"><span>Pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
               </div>
             )}
-            {renderPenaltyList()}
+
+            {/* Add new penalty */}
+            <div className="rounded-lg border border-dashed border-warning/50 p-3 space-y-2">
+              <p className="text-sm font-medium">Adicionar Multa</p>
+              <div>
+                <Label className="text-xs">Valor da multa</Label>
+                <Input type="number" placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} className="h-9" />
+              </div>
+              <div>
+                <Label className="text-xs">Observação (opcional)</Label>
+                <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} className="min-h-[60px]" />
+              </div>
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  // Attach to first pending/overdue regular installment
+                  const target = regularInstallments
+                    .filter((i) => i.status !== "paid")
+                    .sort((a, b) => a.number - b.number)[0];
+                  if (!target) {
+                    toast.error("Nenhuma parcela disponível para vincular a multa");
+                    return;
+                  }
+                  handleAddPenalty(target.id);
+                }}
+              >
+                <Plus className="mr-1 h-3 w-3" /> Adicionar Multa
+              </Button>
+            </div>
+
+            {/* Existing penalties */}
+            <div>
+              <p className="text-sm font-medium mb-2">Histórico de Multas ({penalties.length})</p>
+              {renderPenaltyList()}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
