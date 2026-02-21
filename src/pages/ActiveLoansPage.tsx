@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
-import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2 } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -40,7 +41,9 @@ export default function ActiveLoansPage() {
   const [loans, setLoans] = useState<LoanWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterToday, setFilterToday] = useState(false);
-  const [filterCravos, setFilterCravos] = useState(false);
+  const [filterPaymentType, setFilterPaymentType] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCravos, setShowCravos] = useState(false);
   const [todayLoanIds, setTodayLoanIds] = useState<Set<string>>(new Set());
   const [progressMap, setProgressMap] = useState<Record<string, LoanProgress>>({});
 
@@ -234,32 +237,68 @@ export default function ActiveLoansPage() {
 
   // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
-  let displayedLoans = loans;
-  if (filterToday) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
-  if (filterCravos) displayedLoans = displayedLoans.filter((l) => l.is_cravo);
+  // Filter: exclude cravos from main list, show separately
+  let displayedLoans = showCravos
+    ? loans.filter((l) => l.is_cravo)
+    : loans.filter((l) => !l.is_cravo);
+
+  if (filterToday && !showCravos) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
+  if (filterPaymentType !== "all" && !showCravos) displayedLoans = displayedLoans.filter((l) => l.payment_type === filterPaymentType);
+  if (searchQuery.trim()) displayedLoans = displayedLoans.filter((l) => l.clients.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const cravosCount = loans.filter((l) => l.is_cravo).length;
 
   return (
     <div className="mx-auto max-w-lg p-4">
       <h1 className="mb-4 text-2xl font-bold">
-        <Landmark className="mr-2 inline h-6 w-6 text-primary" /> Empréstimos Ativos
+        <Landmark className="mr-2 inline h-6 w-6 text-primary" /> {showCravos ? "Cravos 🔥" : "Empréstimos Ativos"}
       </h1>
 
-      <div className="mb-4 space-y-2">
-        <div className="flex items-center justify-between rounded-lg bg-accent p-3">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Vencimentos de hoje</span>
-          </div>
-          <Switch checked={filterToday} onCheckedChange={setFilterToday} />
-        </div>
-        <div className="flex items-center justify-between rounded-lg bg-accent p-3">
-          <div className="flex items-center gap-2">
-            <Flame className="h-4 w-4 text-destructive" />
-            <span className="text-sm font-medium">Apenas Cravos</span>
-          </div>
-          <Switch checked={filterCravos} onCheckedChange={setFilterCravos} />
-        </div>
+      {/* Cravos toggle button */}
+      <div className="mb-3 flex gap-2">
+        <Button
+          variant={showCravos ? "destructive" : "outline"}
+          className="flex-1"
+          onClick={() => setShowCravos(!showCravos)}
+        >
+          <Flame className="mr-1 h-4 w-4" />
+          {showCravos ? "Voltar para Ativos" : `Cravos (${cravosCount})`}
+        </Button>
       </div>
+
+      {/* Search */}
+      <div className="relative mb-3">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input className="pl-9" placeholder="Buscar por nome do cliente..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+      </div>
+
+      {/* Filters (only when not showing cravos) */}
+      {!showCravos && (
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between rounded-lg bg-accent p-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Vence hoje</span>
+            </div>
+            <Switch checked={filterToday} onCheckedChange={setFilterToday} />
+          </div>
+          <div className="flex items-center gap-2 rounded-lg bg-accent p-3">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium flex-1">Tipo</span>
+            <Select value={filterPaymentType} onValueChange={setFilterPaymentType}>
+              <SelectTrigger className="w-40 h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="daily">Diário</SelectItem>
+                <SelectItem value="weekly">Semanal</SelectItem>
+                <SelectItem value="biweekly">Quinzenal</SelectItem>
+                <SelectItem value="monthly">Mensal</SelectItem>
+                <SelectItem value="fixed_dates">Data Fixa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
@@ -267,7 +306,7 @@ export default function ActiveLoansPage() {
         <Card>
           <CardContent className="flex flex-col items-center p-8">
             <p className="text-muted-foreground">
-              {filterCravos ? "Nenhum cravo marcado" : filterToday ? "Nenhum empréstimo com vencimento hoje" : "Nenhum empréstimo ativo"}
+              {showCravos ? "Nenhum cravo marcado" : filterToday ? "Nenhum empréstimo com vencimento hoje" : "Nenhum empréstimo ativo"}
             </p>
           </CardContent>
         </Card>
