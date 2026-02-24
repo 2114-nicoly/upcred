@@ -134,6 +134,45 @@ export type Database = {
           },
         ]
       }
+      daily_cash: {
+        Row: {
+          cash_date: string
+          closed_at: string | null
+          created_at: string
+          id: string
+          status: string
+          summary: string | null
+          total_items_treated: number
+          total_not_paid_count: number
+          total_penalty_received: number
+          total_received: number
+        }
+        Insert: {
+          cash_date: string
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          status?: string
+          summary?: string | null
+          total_items_treated?: number
+          total_not_paid_count?: number
+          total_penalty_received?: number
+          total_received?: number
+        }
+        Update: {
+          cash_date?: string
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          status?: string
+          summary?: string | null
+          total_items_treated?: number
+          total_not_paid_count?: number
+          total_penalty_received?: number
+          total_received?: number
+        }
+        Relationships: []
+      }
       installments: {
         Row: {
           amount: number
@@ -246,6 +285,58 @@ export type Database = {
             columns: ["route_id"]
             isOneToOne: false
             referencedRelation: "routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      not_paid_marks: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          installment_id: string
+          loan_id: string
+          mark_date: string
+          observation: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          installment_id: string
+          loan_id: string
+          mark_date: string
+          observation?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          installment_id?: string
+          loan_id?: string
+          mark_date?: string
+          observation?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "not_paid_marks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "not_paid_marks_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: false
+            referencedRelation: "installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "not_paid_marks_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
             referencedColumns: ["id"]
           },
         ]

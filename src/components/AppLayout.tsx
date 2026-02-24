@@ -1,13 +1,13 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CalendarDays, Landmark, CalendarCheck, Users, BarChart3, Wallet } from "lucide-react";
+import { DollarSign, Landmark, CalendarDays, Users, BarChart3, Wallet } from "lucide-react";
 
 const navItems = [
-  { path: "/", label: "Hoje", icon: CalendarDays },
+  { path: "/", label: "Caixa Dia", icon: DollarSign },
+  { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
   { path: "/active-loans", label: "Ativos", icon: Landmark },
   { path: "/caixa", label: "Caixa", icon: Wallet },
   { path: "/clients", label: "Clientes", icon: Users },
-  { path: "/reports", label: "Relatório", icon: BarChart3 },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
