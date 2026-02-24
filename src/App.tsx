@@ -5,7 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
-import TodayPage from "@/pages/TodayPage";
+import DailyCashPage from "@/pages/DailyCashPage";
+import DailyCashHistoryPage from "@/pages/DailyCashHistoryPage";
 import ClientsPage from "@/pages/ClientsPage";
 import ClientDetailPage from "@/pages/ClientDetailPage";
 import NewLoanPage from "@/pages/NewLoanPage";
@@ -50,7 +51,8 @@ const App = () => {
         <BrowserRouter>
           <AppLayout>
             <Routes>
-              <Route path="/" element={<TodayPage />} />
+              <Route path="/" element={<DailyCashPage />} />
+              <Route path="/daily-cash-history" element={<DailyCashHistoryPage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/:clientId" element={<ClientDetailPage />} />
               <Route path="/clients/:clientId/new-loan" element={<NewLoanPage />} />
