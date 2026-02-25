@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInCalendarDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import {
@@ -58,12 +57,17 @@ type LoanProgress = {
   penaltyPaid: number;
 };
 
+type ActiveTab = "pending" | "paid" | "notpaid";
+
 export default function DailyCashPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
   const today = format(new Date(), "yyyy-MM-dd");
+
+  // Tab
+  const [activeTab, setActiveTab] = useState<ActiveTab>("pending");
 
   // Data
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
@@ -81,10 +85,6 @@ export default function DailyCashPage() {
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
 
-  // Section states
-  const [paidOpen, setPaidOpen] = useState(true);
-  const [notPaidOpen, setNotPaidOpen] = useState(true);
-
   useEffect(() => {
     setPayDate(selectedDate);
   }, [selectedDate]);
@@ -99,37 +99,35 @@ export default function DailyCashPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
 
-    // 1) Get daily cash status
-    const { data: dcData } = await supabase
-      .from("daily_cash")
-      .select("*")
-      .eq("cash_date", selectedDate)
-      .maybeSingle();
+    const [
+      { data: dcData },
+      { data: dueTodayData },
+      { data: overdueData },
+      { data: paidData },
+      { data: npData },
+    ] = await Promise.all([
+      supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
+      supabase.from("installments")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
+      supabase.from("installments")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
+      supabase.from("installments")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .eq("is_penalty", false)
+        .gte("paid_at", selectedDate + "T00:00:00")
+        .lt("paid_at", format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd") + "T00:00:00")
+        .order("number"),
+      supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
+    ]);
+
     setDailyCashStatus(dcData?.status || "open");
 
-    // 2) Parcelas que vencem na data selecionada (não pagas)
-    const { data: dueTodayData } = await supabase
-      .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-      .eq("due_date", selectedDate)
-      .neq("status", "paid")
-      .eq("is_penalty", false)
-      .order("number");
-
-    // 3) Parcelas atrasadas: próxima parcela vencida não quitada de cada empréstimo
-    const { data: overdueData } = await supabase
-      .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-      .lt("due_date", selectedDate)
-      .neq("status", "paid")
-      .eq("is_penalty", false)
-      .order("number");
-
-    // Group overdue by loan_id, pick first (lowest number) per loan
+    // Overdue by loan
     const overdueByLoan: Record<string, InstallmentWithLoan> = {};
     const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
     for (const inst of overdueInsts) {
-      // Only include if remaining > 0
       if (Number(inst.amount) - Number(inst.paid_amount) <= 0.01) continue;
       if (!overdueByLoan[inst.loan_id] || inst.number < overdueByLoan[inst.loan_id].number) {
         overdueByLoan[inst.loan_id] = inst;
@@ -137,32 +135,15 @@ export default function DailyCashPage() {
     }
 
     const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
-    
-    // Combine: due today + overdue (1 per loan, exclude loans already in dueToday)
     const dueTodayLoanIds = new Set(dueToday.map(i => i.loan_id));
     const overdueItems = Object.values(overdueByLoan).filter(i => !dueTodayLoanIds.has(i.loan_id));
-    
-    // 4) Parcelas pagas na data selecionada (paid_at matches selected date)
-    const { data: paidData } = await supabase
-      .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-      .eq("is_penalty", false)
-      .gte("paid_at", selectedDate + "T00:00:00")
-      .lt("paid_at", format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd") + "T00:00:00")
-      .order("number");
 
     const paidInsts = (paidData as unknown as InstallmentWithLoan[]) || [];
     setPaidInstallments(paidInsts);
 
-    // 5) Not paid marks for the selected date
-    const { data: npData } = await supabase
-      .from("not_paid_marks")
-      .select("*")
-      .eq("mark_date", selectedDate);
-
     const npMarks = (npData || []) as unknown as NotPaidMark[];
-    
-    // Fetch installment details for not-paid marks
+
+    // Fetch not-paid installment details
     const npInstIds = npMarks.map(m => m.installment_id);
     let npInstMap: Record<string, InstallmentWithLoan> = {};
     if (npInstIds.length > 0) {
@@ -173,44 +154,53 @@ export default function DailyCashPage() {
       const npInsts = (npInstData as unknown as InstallmentWithLoan[]) || [];
       npInstMap = Object.fromEntries(npInsts.map(i => [i.id, i]));
     }
-    
+
     const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
     setNotPaidMarks(enrichedNpMarks);
 
-    // Filter out from pending: items already paid today or marked as not-paid today
     const paidInstIds = new Set(paidInsts.map(i => i.id));
     const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
-    
+
     const allPending = [...dueToday, ...overdueItems].filter(
       i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
     );
     setPendingInstallments(allPending);
 
-    // 6) Progress for all unique loans
-    const allLoanIds = new Set([
-      ...allPending.map(i => i.loan_id),
-      ...paidInsts.map(i => i.loan_id),
-      ...enrichedNpMarks.filter(m => m.installment).map(m => m.loan_id),
-    ]);
-    
+    // Progress - batch all loan installments in one query
+    const allLoanIds = [
+      ...new Set([
+        ...allPending.map(i => i.loan_id),
+        ...paidInsts.map(i => i.loan_id),
+        ...enrichedNpMarks.filter(m => m.installment).map(m => m.loan_id),
+      ])
+    ];
+
     const progressMap: Record<string, LoanProgress> = {};
-    for (const lid of allLoanIds) {
-      const { data: allInst } = await supabase
+    if (allLoanIds.length > 0) {
+      const { data: allInstData } = await supabase
         .from("installments")
-        .select("amount, paid_amount, is_penalty")
-        .eq("loan_id", lid);
-      if (!allInst) continue;
-      const regular = allInst.filter((i: any) => !i.is_penalty);
-      const penalties = allInst.filter((i: any) => i.is_penalty);
-      const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-      const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
-      progressMap[lid] = {
-        progress: totalPaid / instValue,
-        total: regular.length,
-        remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
-        penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
-        penaltyPaid: penalties.reduce((s: number, i: any) => s + Number(i.paid_amount), 0),
-      };
+        .select("loan_id, amount, paid_amount, is_penalty")
+        .in("loan_id", allLoanIds);
+
+      if (allInstData) {
+        const byLoan: Record<string, typeof allInstData> = {};
+        for (const row of allInstData) {
+          (byLoan[row.loan_id] ||= []).push(row);
+        }
+        for (const [lid, insts] of Object.entries(byLoan)) {
+          const regular = insts.filter(i => !i.is_penalty);
+          const penalties = insts.filter(i => i.is_penalty);
+          const totalPaid = regular.reduce((s, i) => s + Number(i.paid_amount), 0);
+          const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
+          progressMap[lid] = {
+            progress: totalPaid / instValue,
+            total: regular.length,
+            remaining: regular.reduce((s, i) => s + Number(i.amount), 0) - totalPaid,
+            penaltyTotal: penalties.reduce((s, i) => s + Number(i.amount), 0),
+            penaltyPaid: penalties.reduce((s, i) => s + Number(i.paid_amount), 0),
+          };
+        }
+      }
     }
     setLoanProgressMap(progressMap);
     setLoading(false);
@@ -218,7 +208,7 @@ export default function DailyCashPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // === Payment handler ===
+  // === Payment handler with optimistic UI ===
   const handlePay = async (id: string) => {
     const allInsts = [...pendingInstallments, ...paidInstallments];
     const inst = allInsts.find(i => i.id === id);
@@ -229,87 +219,84 @@ export default function DailyCashPage() {
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
-    // Handle penalty payment
-    if (multaValue > 0) {
-      const { data: penaltyInsts } = await supabase
-        .from("installments")
-        .select("*")
-        .eq("loan_id", inst.loan_id)
-        .eq("is_penalty", true);
-      const penaltyInst = penaltyInsts?.[0];
-      if (penaltyInst) {
-        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
-        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-          status: fullyPaid ? "paid" : penaltyInst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-        }).eq("id", penaltyInst.id);
-        await updateCashBalance({ available_cash: multaValue, penalty_receivable: -multaValue });
-        await createCashMovement({
-          type: "recebimento_multa",
-          amount: multaValue,
-          client_id: inst.loans.client_id,
-          loan_id: inst.loan_id,
-          observation: `Pagamento de multa - ${inst.loans.clients.name}`,
-        });
-        toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-      } else {
-        toast.error("Nenhuma multa registrada para abater");
-      }
-    }
+    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+    const paidValue = parcValue ?? instRemaining;
 
-    // Handle regular payment (sequential)
-    if (parcValue !== null || !payPenaltyAmount) {
-      const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-      const paidValue = parcValue ?? instRemaining;
-      if (paidValue <= 0) {
-        if (multaValue > 0) {
-          resetPayDialog(); fetchData(); return;
-        }
-        toast.error("Informe um valor válido"); return;
-      }
-
-      const { data: allUnpaid } = await supabase
-        .from("installments")
-        .select("*")
-        .eq("loan_id", inst.loan_id)
-        .neq("status", "paid")
-        .eq("is_penalty", false)
-        .order("number");
-
-      let remaining = paidValue;
-      const toProcess = (allUnpaid || []).filter((i: any) => i.number >= inst.number);
-      for (const i of toProcess) {
-        if (remaining <= 0) break;
-        const iRemaining = Number(i.amount) - Number(i.paid_amount);
-        const applying = Math.min(remaining, iRemaining);
-        const newPaidAmount = Number(i.paid_amount) + applying;
-        const fullyPaid = newPaidAmount >= Number(i.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : i.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
-        }).eq("id", i.id);
-        remaining -= applying;
-      }
-      const totalApplied = paidValue - remaining;
-      if (totalApplied > 0) {
-        await updateCashBalance({ available_cash: totalApplied });
-        await createCashMovement({
-          type: "recebimento_normal",
-          amount: totalApplied,
-          client_id: inst.loans.client_id,
-          loan_id: inst.loan_id,
-          installment_id: inst.id,
-          observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
-        });
-      }
-      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
-      if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
-    }
-
+    // Optimistic: move from pending to paid
+    const optimisticPaid: InstallmentWithLoan = {
+      ...inst,
+      paid_amount: Number(inst.paid_amount) + paidValue,
+      status: paidValue >= instRemaining - 0.01 ? "paid" : inst.status,
+      paid_at: new Date(payDate + "T12:00:00").toISOString(),
+    };
+    setPendingInstallments(prev => prev.filter(i => i.id !== id));
+    setPaidInstallments(prev => [...prev, optimisticPaid]);
     resetPayDialog();
+    toast.success(`Parcela: ${formatCurrency(paidValue)} registrado!`);
+
+    // Background sync
+    try {
+      // Handle penalty payment
+      if (multaValue > 0) {
+        const { data: penaltyInsts } = await supabase
+          .from("installments").select("*").eq("loan_id", inst.loan_id).eq("is_penalty", true);
+        const penaltyInst = penaltyInsts?.[0];
+        if (penaltyInst) {
+          const newPaid = Number(penaltyInst.paid_amount) + multaValue;
+          const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
+          await supabase.from("installments").update({
+            paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
+            status: fullyPaid ? "paid" : penaltyInst.status,
+            paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
+          }).eq("id", penaltyInst.id);
+          await updateCashBalance({ available_cash: multaValue, penalty_receivable: -multaValue });
+          await createCashMovement({
+            type: "recebimento_multa", amount: multaValue,
+            client_id: inst.loans.client_id, loan_id: inst.loan_id,
+            observation: `Pagamento de multa - ${inst.loans.clients.name}`,
+          });
+          toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
+        }
+      }
+
+      // Handle regular payment (sequential)
+      if (parcValue !== null || !payPenaltyAmount) {
+        if (paidValue <= 0 && multaValue > 0) { fetchData(); return; }
+
+        const { data: allUnpaid } = await supabase
+          .from("installments").select("*")
+          .eq("loan_id", inst.loan_id).neq("status", "paid").eq("is_penalty", false).order("number");
+
+        let remaining = paidValue;
+        const toProcess = (allUnpaid || []).filter((i: any) => i.number >= inst.number);
+        for (const i of toProcess) {
+          if (remaining <= 0) break;
+          const iRemaining = Number(i.amount) - Number(i.paid_amount);
+          const applying = Math.min(remaining, iRemaining);
+          const newPaidAmount = Number(i.paid_amount) + applying;
+          const fullyPaid = newPaidAmount >= Number(i.amount) - 0.01;
+          await supabase.from("installments").update({
+            paid_amount: newPaidAmount,
+            status: fullyPaid ? "paid" : i.status,
+            paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
+          }).eq("id", i.id);
+          remaining -= applying;
+        }
+        const totalApplied = paidValue - remaining;
+        if (totalApplied > 0) {
+          await updateCashBalance({ available_cash: totalApplied });
+          await createCashMovement({
+            type: "recebimento_normal", amount: totalApplied,
+            client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
+            observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+          });
+        }
+        if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
+      }
+    } catch {
+      toast.error("Erro ao sincronizar, recarregando...");
+    }
+    // Background refresh to sync real state
     fetchData();
   };
 
@@ -317,67 +304,81 @@ export default function DailyCashPage() {
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
   };
 
-  // === Not Paid handler ===
+  // === Not Paid handler with optimistic UI ===
   const handleNotPaid = async (id: string) => {
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
 
-    await supabase.from("not_paid_marks").insert({
+    // Optimistic: move from pending to notPaid
+    const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
+      id: "temp-" + Date.now(),
       mark_date: selectedDate,
       installment_id: inst.id,
       loan_id: inst.loan_id,
       client_id: inst.loans.client_id,
       observation: notPaidObs || null,
-    });
-
+      created_at: new Date().toISOString(),
+      installment: inst,
+    };
+    setPendingInstallments(prev => prev.filter(i => i.id !== id));
+    setNotPaidMarks(prev => [...prev, optimisticMark]);
     setNotPaidObs("");
     setNotPaidDialogId(null);
     toast.info("Marcado como 'Não Pagou'");
+
+    // Background sync
+    await supabase.from("not_paid_marks").insert({
+      mark_date: selectedDate, installment_id: inst.id,
+      loan_id: inst.loan_id, client_id: inst.loans.client_id,
+      observation: notPaidObs || null,
+    });
     fetchData();
   };
 
-  // === Undo not paid ===
+  // === Undo not paid with optimistic UI ===
   const handleUndoNotPaid = async (markId: string) => {
-    await supabase.from("not_paid_marks").delete().eq("id", markId);
+    const mark = notPaidMarks.find(m => m.id === markId);
+    // Optimistic: remove from notPaid, add back to pending
+    setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
+    if (mark?.installment) {
+      setPendingInstallments(prev => [...prev, mark.installment!]);
+    }
     toast.success("Marcação desfeita!");
+    await supabase.from("not_paid_marks").delete().eq("id", markId);
     fetchData();
   };
 
-  // === Undo payment ===
+  // === Undo payment with optimistic UI ===
   const handleUndoPayment = async (id: string) => {
-    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+    const inst = paidInstallments.find(i => i.id === id);
+    // Optimistic: remove from paid, add back to pending
+    setPaidInstallments(prev => prev.filter(i => i.id !== id));
+    if (inst) {
+      setPendingInstallments(prev => [...prev, { ...inst, status: "pending", paid_at: null, paid_amount: 0 }]);
+    }
     toast.success("Pagamento desfeito!");
+    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
     fetchData();
   };
 
   // === Close daily cash ===
   const handleCloseCash = async () => {
     const totalReceived = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
-    
-    // Calculate penalty received on this date
+
     const { data: penaltyMovements } = await supabase
-      .from("cash_movements")
-      .select("amount")
-      .eq("type", "recebimento_multa")
+      .from("cash_movements").select("amount").eq("type", "recebimento_multa")
       .gte("created_at", selectedDate + "T00:00:00")
       .lt("created_at", format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd") + "T00:00:00");
-    
+
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
     const { data: existing } = await supabase
-      .from("daily_cash")
-      .select("id")
-      .eq("cash_date", selectedDate)
-      .maybeSingle();
+      .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
 
     const payload = {
-      cash_date: selectedDate,
-      status: "closed",
-      total_received: totalReceived,
-      total_penalty_received: totalPenaltyReceived,
-      total_not_paid_count: notPaidMarks.length,
-      total_items_treated: paidInstallments.length + notPaidMarks.length,
-      closed_at: new Date().toISOString(),
+      cash_date: selectedDate, status: "closed", total_received: totalReceived,
+      total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
+      total_items_treated: paidInstallments.length + notPaidMarks.length, closed_at: new Date().toISOString(),
     };
 
     if (existing) {
@@ -451,7 +452,7 @@ export default function DailyCashPage() {
                   <Plus className="mr-1 h-4 w-4" /> Pagamento
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                 <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
@@ -489,7 +490,7 @@ export default function DailyCashPage() {
                   <XCircle className="mr-1 h-4 w-4" /> Não Pagou
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                 <DialogHeader><DialogTitle>Marcar Não Pagou</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
@@ -596,93 +597,101 @@ export default function DailyCashPage() {
         )}
       </div>
 
-      {/* Summary cards */}
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        <Card className="text-center">
-          <CardContent className="p-2">
-            <AlertTriangle className="mx-auto mb-1 h-4 w-4 text-warning" />
-            <p className="text-[10px] text-muted-foreground">Pendentes</p>
-            <p className="text-sm font-bold">{pendingInstallments.length}</p>
-            <p className="text-[10px] text-muted-foreground">{formatCurrency(totalPendingValue)}</p>
-          </CardContent>
-        </Card>
-        <Card className="text-center">
-          <CardContent className="p-2">
-            <CheckCircle className="mx-auto mb-1 h-4 w-4 text-success" />
-            <p className="text-[10px] text-muted-foreground">Pagos</p>
-            <p className="text-sm font-bold text-success">{paidInstallments.length}</p>
-            <p className="text-[10px] text-success">{formatCurrency(totalPaidValue)}</p>
-          </CardContent>
-        </Card>
-        <Card className="text-center">
-          <CardContent className="p-2">
-            <XCircle className="mx-auto mb-1 h-4 w-4 text-destructive" />
-            <p className="text-[10px] text-muted-foreground">Não Pagos</p>
-            <p className="text-sm font-bold text-destructive">{notPaidMarks.length}</p>
-          </CardContent>
-        </Card>
+      {/* Tabs */}
+      <div className="mb-4 grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
+        <button
+          onClick={() => setActiveTab("pending")}
+          className={`flex flex-col items-center rounded-md py-2 px-1 text-xs font-medium transition-colors ${
+            activeTab === "pending" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <AlertTriangle className={`mb-0.5 h-4 w-4 ${activeTab === "pending" ? "text-warning" : ""}`} />
+          <span>Pendentes</span>
+          <span className="text-[10px] font-bold">{pendingInstallments.length}</span>
+          {activeTab === "pending" && totalPendingValue > 0 && (
+            <span className="text-[9px] text-muted-foreground">{formatCurrency(totalPendingValue)}</span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("paid")}
+          className={`flex flex-col items-center rounded-md py-2 px-1 text-xs font-medium transition-colors ${
+            activeTab === "paid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <CheckCircle className={`mb-0.5 h-4 w-4 ${activeTab === "paid" ? "text-success" : ""}`} />
+          <span>Pagos</span>
+          <span className="text-[10px] font-bold text-success">{paidInstallments.length}</span>
+          {activeTab === "paid" && totalPaidValue > 0 && (
+            <span className="text-[9px] text-success">{formatCurrency(totalPaidValue)}</span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("notpaid")}
+          className={`flex flex-col items-center rounded-md py-2 px-1 text-xs font-medium transition-colors ${
+            activeTab === "notpaid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <XCircle className={`mb-0.5 h-4 w-4 ${activeTab === "notpaid" ? "text-destructive" : ""}`} />
+          <span>Não Pagos</span>
+          <span className="text-[10px] font-bold text-destructive">{notPaidMarks.length}</span>
+        </button>
       </div>
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
       ) : (
         <>
-          {/* A) Pendentes */}
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-warning" /> Pendentes ({pendingInstallments.length})
-            </h2>
-            {pendingInstallments.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center p-6">
-                  <CheckCircle className="mb-2 h-10 w-10 text-success" />
-                  <p className="text-sm font-medium">Tudo tratado!</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {pendingInstallments.map(renderPendingCard)}
-              </div>
-            )}
-          </div>
-
-          {/* B) Pagos */}
-          {paidInstallments.length > 0 && (
-            <Collapsible open={paidOpen} onOpenChange={setPaidOpen} className="mb-4">
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full border-success/50 text-success">
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Pagos do Dia ({paidInstallments.length}) — {formatCurrency(totalPaidValue)}
-                  <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${paidOpen ? "rotate-180" : ""}`} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 space-y-3">
-                {paidInstallments.map(renderPaidCard)}
-              </CollapsibleContent>
-            </Collapsible>
+          {/* Tab content */}
+          {activeTab === "pending" && (
+            <div className="space-y-3">
+              {pendingInstallments.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center p-6">
+                    <CheckCircle className="mb-2 h-10 w-10 text-success" />
+                    <p className="text-sm font-medium">Tudo tratado!</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                pendingInstallments.map(renderPendingCard)
+              )}
+            </div>
           )}
 
-          {/* C) Não Pagos */}
-          {notPaidMarks.length > 0 && (
-            <Collapsible open={notPaidOpen} onOpenChange={setNotPaidOpen} className="mb-4">
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full border-destructive/50 text-destructive">
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Não Pagos ({notPaidMarks.length})
-                  <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${notPaidOpen ? "rotate-180" : ""}`} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 space-y-3">
-                {notPaidMarks.map(renderNotPaidCard)}
-              </CollapsibleContent>
-            </Collapsible>
+          {activeTab === "paid" && (
+            <div className="space-y-3">
+              {paidInstallments.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center p-6">
+                    <DollarSign className="mb-2 h-10 w-10 text-muted-foreground" />
+                    <p className="text-sm font-medium text-muted-foreground">Nenhum pagamento registrado</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                paidInstallments.map(renderPaidCard)
+              )}
+            </div>
+          )}
+
+          {activeTab === "notpaid" && (
+            <div className="space-y-3">
+              {notPaidMarks.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center p-6">
+                    <CheckCircle className="mb-2 h-10 w-10 text-muted-foreground" />
+                    <p className="text-sm font-medium text-muted-foreground">Nenhuma marcação</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                notPaidMarks.map(renderNotPaidCard)
+              )}
+            </div>
           )}
 
           {/* Close cash button */}
           {dailyCashStatus !== "closed" && (
             <Button
               onClick={handleCloseCash}
-              className="w-full mt-2"
+              className="w-full mt-4"
               variant="default"
             >
               <Lock className="mr-2 h-4 w-4" /> Fechar Caixa do Dia
