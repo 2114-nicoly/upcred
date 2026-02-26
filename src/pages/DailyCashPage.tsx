@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
   Plus, ChevronDown, Undo2, Lock, ChevronLeft, ChevronRight, Clock
@@ -84,6 +85,9 @@ export default function DailyCashPage() {
   const [payDate, setPayDate] = useState(selectedDate);
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
+  const [selectedForNotPaid, setSelectedForNotPaid] = useState<Set<string>>(new Set());
+  const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
+  const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
 
   useEffect(() => {
     setPayDate(selectedDate);
@@ -153,9 +157,20 @@ export default function DailyCashPage() {
     const paidInstIds = new Set(paidInsts.map(i => i.id));
     const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
-    // Combine ALL candidates, filter out paid/not-paid, THEN deduplicate
+    // CRITICAL: Track loans that already have ANY action for this day
+    // These loans must NOT show another installment in pending
+    const paidLoanIds = new Set(paidInsts.map(i => i.loan_id));
+    const npMarkLoanIds = new Set(npMarks.map(m => m.loan_id));
+    const actionedLoanIds = new Set([...paidLoanIds, ...npMarkLoanIds]);
+
+    // Combine ALL candidates, filter out:
+    // 1. Installments already paid or marked not-paid
+    // 2. Installments from loans that already have ANY action today
+    // 3. Installments with no remaining balance
     const allCandidates = [...validOverdue, ...dueToday].filter(
-      i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id) && Number(i.amount) - Number(i.paid_amount) > 0.01
+      i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id) 
+        && !actionedLoanIds.has(i.loan_id)
+        && Number(i.amount) - Number(i.paid_amount) > 0.01
     );
 
     // Deduplicate: one installment per loan, oldest number wins
@@ -168,6 +183,7 @@ export default function DailyCashPage() {
       }
     }
     setPendingInstallments(dedupedPending);
+    setSelectedForNotPaid(new Set());
 
     // Progress - batch all loan installments in one query
     const allLoanIds = [
@@ -325,6 +341,7 @@ export default function DailyCashPage() {
     };
     setPendingInstallments(prev => prev.filter(i => i.id !== id));
     setNotPaidMarks(prev => [...prev, optimisticMark]);
+    setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
     setNotPaidObs("");
     setNotPaidDialogId(null);
     toast.info("Marcado como 'Não Pagou'");
@@ -336,6 +353,58 @@ export default function DailyCashPage() {
       observation: notPaidObs || null,
     });
     fetchData();
+  };
+
+  // === Batch Not Paid handler ===
+  const handleBatchNotPaid = async () => {
+    const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
+    if (selectedInsts.length === 0) return;
+
+    // Optimistic: move all selected from pending to notPaid
+    const optimisticMarks = selectedInsts.map(inst => ({
+      id: "temp-" + Date.now() + "-" + inst.id,
+      mark_date: selectedDate,
+      installment_id: inst.id,
+      loan_id: inst.loan_id,
+      client_id: inst.loans.client_id,
+      observation: batchNotPaidObs || null,
+      created_at: new Date().toISOString(),
+      installment: inst,
+    }));
+
+    setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id)));
+    setNotPaidMarks(prev => [...prev, ...optimisticMarks]);
+    setSelectedForNotPaid(new Set());
+    setBatchNotPaidDialogOpen(false);
+    setBatchNotPaidObs("");
+    toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
+
+    // Background sync
+    const inserts = selectedInsts.map(inst => ({
+      mark_date: selectedDate,
+      installment_id: inst.id,
+      loan_id: inst.loan_id,
+      client_id: inst.loans.client_id,
+      observation: batchNotPaidObs || null,
+    }));
+    await supabase.from("not_paid_marks").insert(inserts);
+    fetchData();
+  };
+
+  const toggleSelectForNotPaid = (id: string) => {
+    setSelectedForNotPaid(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedForNotPaid.size === pendingInstallments.length) {
+      setSelectedForNotPaid(new Set());
+    } else {
+      setSelectedForNotPaid(new Set(pendingInstallments.map(i => i.id)));
+    }
   };
 
   // === Undo not paid with optimistic UI ===
@@ -417,10 +486,16 @@ export default function DailyCashPage() {
     const penaltyPending = lp ? lp.penaltyTotal - lp.penaltyPaid : 0;
 
     return (
-      <Card key={inst.id} className={`overflow-hidden ${isOverdue ? "border-destructive/50" : ""}`}>
+      <Card key={inst.id} className={`overflow-hidden ${isOverdue ? "border-destructive/50" : ""} ${selectedForNotPaid.has(inst.id) ? "ring-2 ring-destructive/50" : ""}`}>
         <CardContent className="p-4">
           <div className="mb-2 flex items-center justify-between">
-            <div className="flex-1">
+            <div className="flex items-start gap-2 flex-1">
+              <Checkbox
+                checked={selectedForNotPaid.has(inst.id)}
+                onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
+                className="mt-1"
+              />
+              <div className="flex-1">
               <p className="font-semibold">{inst.loans.clients.name}</p>
               <p className="text-sm text-muted-foreground">
                 Parcela {inst.number}/{inst.loans.installment_count} • {formatCurrency(Number(inst.amount))}
@@ -442,6 +517,7 @@ export default function DailyCashPage() {
               {penaltyPending > 0.01 && (
                 <p className="text-xs text-destructive">Multa pendente: {formatCurrency(penaltyPending)}</p>
               )}
+              </div>
             </div>
             <Badge className={isOverdue ? "bg-overdue text-overdue-foreground" : "bg-open text-open-foreground"}>
               {isOverdue ? "Atrasado" : "Em Dia"}
@@ -664,7 +740,43 @@ export default function DailyCashPage() {
                   </CardContent>
                 </Card>
               ) : (
-                pendingInstallments.map(renderPendingCard)
+                <>
+                  {/* Select all + batch action bar */}
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={selectedForNotPaid.size === pendingInstallments.length && pendingInstallments.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                      Selecionar todos
+                    </label>
+                    {selectedForNotPaid.size > 0 && (
+                      <Dialog open={batchNotPaidDialogOpen} onOpenChange={setBatchNotPaidDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="destructive">
+                            <XCircle className="mr-1 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                          <DialogHeader><DialogTitle>Marcar {selectedForNotPaid.size} como Não Pagou</DialogTitle></DialogHeader>
+                          <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                              {selectedForNotPaid.size} parcela(s) selecionada(s) serão marcadas como "Não Pagou".
+                            </p>
+                            <div>
+                              <Label>Observação (opcional)</Label>
+                              <Textarea placeholder="Ex: Dia de chuva..." value={batchNotPaidObs} onChange={(e) => setBatchNotPaidObs(e.target.value)} />
+                            </div>
+                            <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full">
+                              Confirmar Não Pagou ({selectedForNotPaid.size})
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </div>
+                  {pendingInstallments.map(renderPendingCard)}
+                </>
               )}
             </div>
           )}
