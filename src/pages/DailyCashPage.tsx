@@ -14,7 +14,7 @@ import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
-  Plus, ChevronDown, Undo2, Lock, ChevronLeft, ChevronRight, Clock
+  Plus, ChevronDown, Undo2, Lock, ChevronLeft, ChevronRight, Clock, LockOpen
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -100,39 +100,33 @@ export default function DailyCashPage() {
     setSearchParams({ date: newDate });
   };
 
+  const isClosed = dailyCashStatus === "closed";
+
   const fetchData = useCallback(async () => {
     setLoading(true);
 
+    // 1. First check daily_cash status
+    const { data: dcData } = await supabase
+      .from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle();
+
+    const status = dcData?.status || "open";
+    setDailyCashStatus(status);
+
+    // 2. Always fetch paid and not-paid marks for display
+    const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
+
     const [
-      { data: dcData },
-      { data: dueTodayData },
-      { data: overdueData },
       { data: paidData },
       { data: npData },
     ] = await Promise.all([
-      supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
-      supabase.from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-      supabase.from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
       supabase.from("installments")
         .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
         .eq("is_penalty", false)
         .gte("paid_at", selectedDate + "T00:00:00")
-        .lt("paid_at", format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd") + "T00:00:00")
+        .lt("paid_at", nextDay + "T00:00:00")
         .order("number"),
       supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
     ]);
-
-    setDailyCashStatus(dcData?.status || "open");
-
-    // All overdue installments (not just one per loan yet)
-    const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
-    const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
-
-    const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
 
     const paidInsts = (paidData as unknown as InstallmentWithLoan[]) || [];
     setPaidInstallments(paidInsts);
@@ -154,21 +148,45 @@ export default function DailyCashPage() {
     const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
     setNotPaidMarks(enrichedNpMarks);
 
+    // 3. If CLOSED → frozen: no pending recalculation, just show paid + notpaid
+    if (status === "closed") {
+      setPendingInstallments([]);
+      setSelectedForNotPaid(new Set());
+      // Still compute progress for paid/notpaid display
+      await computeProgress(paidInsts, enrichedNpMarks, []);
+      setLoading(false);
+      return;
+    }
+
+    // 4. OPEN day: compute pending installments
+    const [
+      { data: dueTodayData },
+      { data: overdueData },
+    ] = await Promise.all([
+      supabase.from("installments")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
+      supabase.from("installments")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
+    ]);
+
+    const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
+    const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
+    const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
+
     const paidInstIds = new Set(paidInsts.map(i => i.id));
     const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
     // CRITICAL: Track loans that already have ANY action for this day
-    // These loans must NOT show another installment in pending
-    const paidLoanIds = new Set(paidInsts.map(i => i.loan_id));
-    const npMarkLoanIds = new Set(npMarks.map(m => m.loan_id));
-    const actionedLoanIds = new Set([...paidLoanIds, ...npMarkLoanIds]);
+    const actionedLoanIds = new Set([
+      ...paidInsts.map(i => i.loan_id),
+      ...npMarks.map(m => m.loan_id),
+    ]);
 
-    // Combine ALL candidates, filter out:
-    // 1. Installments already paid or marked not-paid
-    // 2. Installments from loans that already have ANY action today
-    // 3. Installments with no remaining balance
+    // Combine ALL candidates, filter out actioned
     const allCandidates = [...validOverdue, ...dueToday].filter(
-      i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id) 
+      i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
         && !actionedLoanIds.has(i.loan_id)
         && Number(i.amount) - Number(i.paid_amount) > 0.01
     );
@@ -185,10 +203,18 @@ export default function DailyCashPage() {
     setPendingInstallments(dedupedPending);
     setSelectedForNotPaid(new Set());
 
-    // Progress - batch all loan installments in one query
+    await computeProgress(paidInsts, enrichedNpMarks, dedupedPending);
+    setLoading(false);
+  }, [selectedDate]);
+
+  const computeProgress = async (
+    paidInsts: InstallmentWithLoan[],
+    enrichedNpMarks: (NotPaidMark & { installment?: InstallmentWithLoan })[],
+    pending: InstallmentWithLoan[]
+  ) => {
     const allLoanIds = [
       ...new Set([
-        ...dedupedPending.map(i => i.loan_id),
+        ...pending.map(i => i.loan_id),
         ...paidInsts.map(i => i.loan_id),
         ...enrichedNpMarks.filter(m => m.installment).map(m => m.loan_id),
       ])
@@ -222,13 +248,14 @@ export default function DailyCashPage() {
       }
     }
     setLoanProgressMap(progressMap);
-    setLoading(false);
-  }, [selectedDate]);
+  };
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // === Payment handler with optimistic UI ===
   const handlePay = async (id: string) => {
+    if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+
     const allInsts = [...pendingInstallments, ...paidInstallments];
     const inst = allInsts.find(i => i.id === id);
     if (!inst) return;
@@ -315,7 +342,6 @@ export default function DailyCashPage() {
     } catch {
       toast.error("Erro ao sincronizar, recarregando...");
     }
-    // Background refresh to sync real state
     fetchData();
   };
 
@@ -325,10 +351,11 @@ export default function DailyCashPage() {
 
   // === Not Paid handler with optimistic UI ===
   const handleNotPaid = async (id: string) => {
+    if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
 
-    // Optimistic: move from pending to notPaid
     const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
       id: "temp-" + Date.now(),
       mark_date: selectedDate,
@@ -346,7 +373,6 @@ export default function DailyCashPage() {
     setNotPaidDialogId(null);
     toast.info("Marcado como 'Não Pagou'");
 
-    // Background sync
     await supabase.from("not_paid_marks").insert({
       mark_date: selectedDate, installment_id: inst.id,
       loan_id: inst.loan_id, client_id: inst.loans.client_id,
@@ -357,10 +383,11 @@ export default function DailyCashPage() {
 
   // === Batch Not Paid handler ===
   const handleBatchNotPaid = async () => {
+    if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
     if (selectedInsts.length === 0) return;
 
-    // Optimistic: move all selected from pending to notPaid
     const optimisticMarks = selectedInsts.map(inst => ({
       id: "temp-" + Date.now() + "-" + inst.id,
       mark_date: selectedDate,
@@ -379,7 +406,6 @@ export default function DailyCashPage() {
     setBatchNotPaidObs("");
     toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
 
-    // Background sync
     const inserts = selectedInsts.map(inst => ({
       mark_date: selectedDate,
       installment_id: inst.id,
@@ -409,8 +435,9 @@ export default function DailyCashPage() {
 
   // === Undo not paid with optimistic UI ===
   const handleUndoNotPaid = async (markId: string) => {
+    if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+
     const mark = notPaidMarks.find(m => m.id === markId);
-    // Optimistic: remove from notPaid, add back to pending
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
     if (mark?.installment) {
       setPendingInstallments(prev => [...prev, mark.installment!]);
@@ -422,8 +449,9 @@ export default function DailyCashPage() {
 
   // === Undo payment with optimistic UI ===
   const handleUndoPayment = async (id: string) => {
+    if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+
     const inst = paidInstallments.find(i => i.id === id);
-    // Optimistic: remove from paid, add back to pending
     setPaidInstallments(prev => prev.filter(i => i.id !== id));
     if (inst) {
       setPendingInstallments(prev => [...prev, { ...inst, status: "pending", paid_at: null, paid_amount: 0 }]);
@@ -437,10 +465,11 @@ export default function DailyCashPage() {
   const handleCloseCash = async () => {
     const totalReceived = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
 
+    const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
     const { data: penaltyMovements } = await supabase
       .from("cash_movements").select("amount").eq("type", "recebimento_multa")
       .gte("created_at", selectedDate + "T00:00:00")
-      .lt("created_at", format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd") + "T00:00:00");
+      .lt("created_at", nextDay + "T00:00:00");
 
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
@@ -461,6 +490,21 @@ export default function DailyCashPage() {
 
     toast.success("Caixa do dia fechado!");
     setDailyCashStatus("closed");
+    setPendingInstallments([]);
+  };
+
+  // === Reopen daily cash ===
+  const handleReopenCash = async () => {
+    const { data: existing } = await supabase
+      .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
+
+    if (existing) {
+      await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
+    }
+
+    toast.success("Caixa reaberto!");
+    setDailyCashStatus("open");
+    fetchData();
   };
 
   // === Computed values ===
@@ -620,9 +664,11 @@ export default function DailyCashPage() {
               {isPartial ? "Parcial" : "Pago"}
             </Badge>
           </div>
-          <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoPayment(inst.id)}>
-            <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
-          </Button>
+          {!isClosed && (
+            <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoPayment(inst.id)}>
+              <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -643,9 +689,11 @@ export default function DailyCashPage() {
             </div>
             <Badge className="bg-destructive text-destructive-foreground">Não Pagou</Badge>
           </div>
-          <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoNotPaid(mark.id)}>
-            <Undo2 className="mr-1 h-3 w-3" /> Desfazer
-          </Button>
+          {!isClosed && (
+            <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoNotPaid(mark.id)}>
+              <Undo2 className="mr-1 h-3 w-3" /> Desfazer
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -676,7 +724,7 @@ export default function DailyCashPage() {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        {dailyCashStatus === "closed" && (
+        {isClosed && (
           <div className="mt-2 rounded-lg bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-sm font-medium text-success flex items-center justify-center gap-1">
               <Lock className="h-4 w-4" /> Caixa Fechado
@@ -732,7 +780,14 @@ export default function DailyCashPage() {
           {/* Tab content */}
           {activeTab === "pending" && (
             <div className="space-y-3">
-              {pendingInstallments.length === 0 ? (
+              {isClosed ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center p-6">
+                    <Lock className="mb-2 h-10 w-10 text-muted-foreground" />
+                    <p className="text-sm font-medium text-muted-foreground">Caixa fechado — sem pendentes</p>
+                  </CardContent>
+                </Card>
+              ) : pendingInstallments.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center p-6">
                     <CheckCircle className="mb-2 h-10 w-10 text-success" />
@@ -811,8 +866,16 @@ export default function DailyCashPage() {
             </div>
           )}
 
-          {/* Close cash button */}
-          {dailyCashStatus !== "closed" && (
+          {/* Close / Reopen cash button */}
+          {isClosed ? (
+            <Button
+              onClick={handleReopenCash}
+              className="w-full mt-4"
+              variant="outline"
+            >
+              <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
+            </Button>
+          ) : (
             <Button
               onClick={handleCloseCash}
               className="w-full mt-4"
