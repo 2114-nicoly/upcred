@@ -526,23 +526,32 @@ export default function DailyCashPage() {
 
   const renderPaidCard = (inst: InstallmentWithLoan) => {
     const lp = loanProgressMap[inst.loan_id];
+    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+    const isPartial = instRemaining > 0.01;
     return (
-      <Card key={inst.id} className="overflow-hidden border-success/30">
+      <Card key={inst.id} className={`overflow-hidden ${isPartial ? "border-warning/30" : "border-success/30"}`}>
         <CardContent className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="font-semibold">{inst.loans.clients.name}</p>
               <p className="text-sm text-muted-foreground">
-                Parcela {inst.number}/{inst.loans.installment_count}
+                Parcela {inst.number}/{inst.loans.installment_count} • {formatCurrency(Number(inst.amount))}
               </p>
-              <p className="text-sm text-success font-medium">Pago: {formatCurrency(Number(inst.paid_amount))}</p>
+              <p className={`text-sm font-medium ${isPartial ? "text-warning" : "text-success"}`}>
+                Pago: {formatCurrency(Number(inst.paid_amount))}
+              </p>
+              {isPartial && (
+                <p className="text-xs text-destructive font-medium">Resta: {formatCurrency(instRemaining)}</p>
+              )}
               {lp && (
                 <p className="text-xs text-muted-foreground">
                   {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} pagas • Resta: {formatCurrency(Math.max(0, lp.remaining))}
                 </p>
               )}
             </div>
-            <Badge className="bg-paid text-paid-foreground">Pago</Badge>
+            <Badge className={isPartial ? "bg-warning text-warning-foreground" : "bg-paid text-paid-foreground"}>
+              {isPartial ? "Parcial" : "Pago"}
+            </Badge>
           </div>
           <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoPayment(inst.id)}>
             <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
