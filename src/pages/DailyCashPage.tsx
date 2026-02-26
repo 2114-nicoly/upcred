@@ -135,8 +135,11 @@ export default function DailyCashPage() {
     }
 
     const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
-    const dueTodayLoanIds = new Set(dueToday.map(i => i.loan_id));
-    const overdueItems = Object.values(overdueByLoan).filter(i => !dueTodayLoanIds.has(i.loan_id));
+    // One installment per loan: overdue takes priority over due-today
+    const overdueLoanIds = new Set(Object.keys(overdueByLoan));
+    const overdueItems = Object.values(overdueByLoan);
+    // Only show due-today if the loan has NO overdue installments
+    const dueTodayFiltered = dueToday.filter(i => !overdueLoanIds.has(i.loan_id));
 
     const paidInsts = (paidData as unknown as InstallmentWithLoan[]) || [];
     setPaidInstallments(paidInsts);
@@ -161,10 +164,19 @@ export default function DailyCashPage() {
     const paidInstIds = new Set(paidInsts.map(i => i.id));
     const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
-    const allPending = [...dueToday, ...overdueItems].filter(
+    const allPending = [...dueTodayFiltered, ...overdueItems].filter(
       i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
     );
-    setPendingInstallments(allPending);
+    // Deduplicate: ensure only one installment per loan (oldest wins)
+    const seenLoans = new Set<string>();
+    const dedupedPending: InstallmentWithLoan[] = [];
+    for (const inst of allPending.sort((a, b) => a.number - b.number)) {
+      if (!seenLoans.has(inst.loan_id)) {
+        seenLoans.add(inst.loan_id);
+        dedupedPending.push(inst);
+      }
+    }
+    setPendingInstallments(dedupedPending);
 
     // Progress - batch all loan installments in one query
     const allLoanIds = [
