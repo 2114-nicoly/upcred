@@ -232,6 +232,25 @@ export default function LoanDetailPage() {
   };
 
   const handleUndoPayment = async (id: string) => {
+    const inst = installments.find(i => i.id === id);
+    const paidAmt = inst ? Number(inst.paid_amount) : 0;
+
+    if (paidAmt > 0 && loan) {
+      const loanInterest = Number(loan.total_amount) - Number(loan.amount);
+      const regInsts = installments.filter(i => !i.is_penalty);
+      const totalPaidNow = regInsts.reduce((s, i) => s + Number(i.paid_amount), 0);
+      const totalPaidAfterUndo = totalPaidNow - paidAmt;
+      const interestBefore = Math.min(loanInterest, totalPaidNow);
+      const interestAfter = Math.min(loanInterest, totalPaidAfterUndo);
+      const interestReversed = interestBefore - interestAfter;
+      const principalReversed = paidAmt - interestReversed;
+
+      await updateCashBalance({ available_cash: -paidAmt });
+      if (interestReversed > 0) await updateCashBalance({ interest_receivable: interestReversed });
+      if (principalReversed > 0) await updateCashBalance({ money_lent: principalReversed });
+    }
+    // Delete associated cash movement
+    await supabase.from("cash_movements").delete().eq("installment_id", id).eq("type", "recebimento_normal");
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
     await updateLoanStatus();
     toast.success("Pagamento desfeito!");
@@ -318,6 +337,8 @@ export default function LoanDetailPage() {
       if (newAmount <= 0.01) await supabase.from("installments").delete().eq("id", penaltyInst.id);
       else await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
     }
+    // Reverse penalty_receivable
+    await updateCashBalance({ penalty_receivable: -Number(penalty.amount) });
     toast.success("Multa removida!");
     fetchData();
   };

@@ -331,6 +331,18 @@ export default function DailyCashPage() {
         const totalApplied = paidValue - remaining;
         if (totalApplied > 0) {
           await updateCashBalance({ available_cash: totalApplied });
+          // Split between interest and principal
+          const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
+          const { data: allLoanInsts } = await supabase
+            .from("installments").select("paid_amount")
+            .eq("loan_id", inst.loan_id).eq("is_penalty", false);
+          const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+          const totalPaidBefore = totalPaidNow - totalApplied;
+          const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+          const toInterest = Math.min(totalApplied, interestRemaining);
+          const toPrincipal = totalApplied - toInterest;
+          if (toInterest > 0) await updateCashBalance({ interest_receivable: -toInterest });
+          if (toPrincipal > 0) await updateCashBalance({ money_lent: -toPrincipal });
           await createCashMovement({
             type: "recebimento_normal", amount: totalApplied,
             client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
@@ -457,6 +469,27 @@ export default function DailyCashPage() {
       setPendingInstallments(prev => [...prev, { ...inst, status: "pending", paid_at: null, paid_amount: 0 }]);
     }
     toast.success("Pagamento desfeito!");
+
+    // Reverse cash effects
+    const paidAmt = inst ? Number(inst.paid_amount) : 0;
+    if (paidAmt > 0 && inst) {
+      const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
+      const { data: allLoanInsts } = await supabase
+        .from("installments").select("paid_amount")
+        .eq("loan_id", inst.loan_id).eq("is_penalty", false);
+      const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+      const totalPaidAfterUndo = totalPaidNow - paidAmt;
+      const interestBefore = Math.min(loanInterest, totalPaidNow);
+      const interestAfter = Math.min(loanInterest, totalPaidAfterUndo);
+      const interestReversed = interestBefore - interestAfter;
+      const principalReversed = paidAmt - interestReversed;
+
+      await updateCashBalance({ available_cash: -paidAmt });
+      if (interestReversed > 0) await updateCashBalance({ interest_receivable: interestReversed });
+      if (principalReversed > 0) await updateCashBalance({ money_lent: principalReversed });
+    }
+    // Delete associated cash movement
+    await supabase.from("cash_movements").delete().eq("installment_id", id).eq("type", "recebimento_normal");
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
     fetchData();
   };
