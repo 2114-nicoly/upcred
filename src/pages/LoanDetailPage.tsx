@@ -445,6 +445,8 @@ export default function LoanDetailPage() {
 
   const handleDeleteLoan = async () => {
     if (!confirm("Excluir este empréstimo e todas as parcelas?")) return;
+    await supabase.from("not_paid_marks").delete().eq("loan_id", loanId!);
+    await supabase.from("cash_movements").delete().eq("loan_id", loanId!);
     await supabase.from("penalties").delete().eq("loan_id", loanId!);
     await supabase.from("installments").delete().eq("loan_id", loanId!);
     await supabase.from("loans").delete().eq("id", loanId!);
