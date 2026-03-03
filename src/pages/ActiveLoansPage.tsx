@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
-import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -47,11 +48,45 @@ export default function ActiveLoansPage() {
   const [todayLoanIds, setTodayLoanIds] = useState<Set<string>>(new Set());
   const [progressMap, setProgressMap] = useState<Record<string, LoanProgress>>({});
 
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+
   // Payment dialog state
   const [payLoanId, setPayLoanId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (deletePassword !== "0000") {
+      toast.error("Senha incorreta!");
+      return;
+    }
+    for (const loanId of selectedIds) {
+      await supabase.from("not_paid_marks").delete().eq("loan_id", loanId);
+      await supabase.from("cash_movements").delete().eq("loan_id", loanId);
+      await supabase.from("penalties").delete().eq("loan_id", loanId);
+      await supabase.from("installments").delete().eq("loan_id", loanId);
+      await supabase.from("loans").delete().eq("id", loanId);
+    }
+    toast.success(`${selectedIds.size} empréstimo(s) excluído(s)!`);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    setShowDeleteDialog(false);
+    setDeletePassword("");
+    fetchData();
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -254,8 +289,20 @@ export default function ActiveLoansPage() {
         <Landmark className="mr-2 inline h-6 w-6 text-primary" /> {showCravos ? "Cravos 🔥" : "Empréstimos Ativos"}
       </h1>
 
-      {/* Cravos toggle button */}
+      {/* Select mode + Cravos toggle */}
       <div className="mb-3 flex gap-2">
+        <Button
+          variant={selectMode ? "secondary" : "outline"}
+          className="flex-1"
+          onClick={() => { setSelectMode(!selectMode); setSelectedIds(new Set()); }}
+        >
+          {selectMode ? "Cancelar Seleção" : "Selecionar"}
+        </Button>
+        {selectMode && selectedIds.size > 0 && (
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+            <Trash2 className="mr-1 h-4 w-4" /> Excluir ({selectedIds.size})
+          </Button>
+        )}
         <Button
           variant={showCravos ? "destructive" : "outline"}
           className="flex-1"
@@ -315,9 +362,14 @@ export default function ActiveLoansPage() {
           {displayedLoans.map((loan) => {
             const lp = progressMap[loan.id];
             return (
-              <Card key={loan.id} className={`overflow-hidden transition-colors hover:bg-accent/50 ${loan.is_cravo ? "border-destructive/50" : ""}`}>
+              <Card key={loan.id} className={`overflow-hidden transition-colors hover:bg-accent/50 ${loan.is_cravo ? "border-destructive/50" : ""} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
+                    {selectMode && (
+                      <div className="mr-3 flex items-center">
+                        <Checkbox checked={selectedIds.has(loan.id)} onCheckedChange={() => toggleSelect(loan.id)} />
+                      </div>
+                    )}
                     <div className="flex-1 cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
                       <div className="flex items-center gap-2">
                         <p className="font-semibold">{loan.clients.name}</p>
@@ -434,6 +486,27 @@ export default function ActiveLoansPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Password Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={(o) => { if (!o) { setShowDeleteDialog(false); setDeletePassword(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão em Massa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Você está prestes a excluir <span className="font-bold text-destructive">{selectedIds.size}</span> empréstimo(s) e todos os registros associados. Esta ação não pode ser desfeita.
+            </p>
+            <div>
+              <Label>Digite a senha para confirmar:</Label>
+              <Input type="password" placeholder="Senha" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} />
+            </div>
+            <Button variant="destructive" className="w-full" onClick={handleBulkDelete}>
+              <Trash2 className="mr-1 h-4 w-4" /> Excluir {selectedIds.size} empréstimo(s)
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
