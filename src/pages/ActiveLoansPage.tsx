@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2 } from "lucide-react";
+import { recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -80,6 +81,8 @@ export default function ActiveLoansPage() {
       await supabase.from("installments").delete().eq("loan_id", loanId);
       await supabase.from("loans").delete().eq("id", loanId);
     }
+    // Recalculate cash balance after bulk deletion
+    await recalculateCashBalanceFromLedger();
     toast.success(`${selectedIds.size} empréstimo(s) excluído(s)!`);
     setSelectedIds(new Set());
     setSelectMode(false);

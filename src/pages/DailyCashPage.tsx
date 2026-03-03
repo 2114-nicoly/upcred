@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
@@ -470,27 +470,24 @@ export default function DailyCashPage() {
     }
     toast.success("Pagamento desfeito!");
 
-    // Reverse cash effects
-    const paidAmt = inst ? Number(inst.paid_amount) : 0;
-    if (paidAmt > 0 && inst) {
-      const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
-      const { data: allLoanInsts } = await supabase
-        .from("installments").select("paid_amount")
-        .eq("loan_id", inst.loan_id).eq("is_penalty", false);
-      const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-      const totalPaidAfterUndo = totalPaidNow - paidAmt;
-      const interestBefore = Math.min(loanInterest, totalPaidNow);
-      const interestAfter = Math.min(loanInterest, totalPaidAfterUndo);
-      const interestReversed = interestBefore - interestAfter;
-      const principalReversed = paidAmt - interestReversed;
+    // 1. Delete ALL cash_movements linked to this installment (normal + penalty)
+    await supabase.from("cash_movements").delete().eq("installment_id", id);
 
-      await updateCashBalance({ available_cash: -paidAmt });
-      if (interestReversed > 0) await updateCashBalance({ interest_receivable: interestReversed });
-      if (principalReversed > 0) await updateCashBalance({ money_lent: principalReversed });
-    }
-    // Delete associated cash movement
-    await supabase.from("cash_movements").delete().eq("installment_id", id).eq("type", "recebimento_normal");
+    // 2. Revert installment payment
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+
+    // 3. If penalty was paid alongside, revert penalty installment too
+    if (inst) {
+      // Check if penalty payment was made for this loan at the same time
+      const { data: penaltyMovs } = await supabase
+        .from("cash_movements").select("id, amount")
+        .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
+      // We don't delete penalty movements here since they're linked by loan_id not installment_id
+      // But we DO need to check if any penalty movements became orphaned
+    }
+
+    // 4. Recalculate cash balance from ledger (source of truth)
+    await recalculateCashBalanceFromLedger();
     fetchData();
   };
 

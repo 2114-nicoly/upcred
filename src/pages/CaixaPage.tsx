@@ -15,6 +15,7 @@ import {
   deleteCashMovement,
   getMovementTypeLabel,
   getMovementTypeColor,
+  recalculateCashBalanceFromLedger,
   CashBalance,
   CashMovement,
 } from "@/lib/cash-utils";
@@ -88,22 +89,12 @@ export default function CaixaPage() {
   };
 
   const handleDeleteMovement = async (mov: CashMovement & { clients?: { name: string } | null }) => {
-    if (!confirm("Excluir esta movimentação? O saldo será revertido.")) return;
+    if (!confirm("Excluir esta movimentação? O saldo será recalculado.")) return;
 
-    // Reverse the cash effect
-    const reverseMap: Record<string, Partial<Record<string, number>>> = {
-      emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
-      recebimento_normal: { available_cash: -Number(mov.amount) },
-      recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
-      entrada_manual: { available_cash: -Number(mov.amount) },
-      saida_manual: { available_cash: -Number(mov.amount) }, // amount is already negative
-      ajuste_manual: { available_cash: -Number(mov.amount) },
-    };
-
-    const reverse = reverseMap[mov.type] || {};
-    await updateCashBalance(reverse as any);
     await deleteCashMovement(mov.id);
-    toast.success("Movimentação excluída e saldo revertido!");
+    // Recalculate from ledger instead of manual reverse
+    await recalculateCashBalanceFromLedger();
+    toast.success("Movimentação excluída e saldo recalculado!");
     fetchData();
   };
 
@@ -115,20 +106,18 @@ export default function CaixaPage() {
     const mov = movements.find(m => m.id === editId);
     if (!mov) return;
 
-    const diff = newAmount - Number(mov.amount);
-
-    // Adjust cash balance by the difference
-    if (mov.type === "emprestimo") {
-      await updateCashBalance({ available_cash: -diff, money_lent: diff });
-    } else if (mov.type === "recebimento_multa") {
-      await updateCashBalance({ available_cash: diff, penalty_receivable: -diff });
-    } else {
-      await updateCashBalance({ available_cash: diff });
-    }
-
-    await supabase.from("cash_movements").update({ amount: newAmount, observation: editObs || mov.observation }).eq("id", editId);
+    // Update the movement amount, then recalculate
+    const finalAmount = ["saida_manual"].includes(mov.type) ? -Math.abs(newAmount) : newAmount;
+    await supabase.from("cash_movements").update({ amount: finalAmount, observation: editObs || mov.observation }).eq("id", editId);
+    await recalculateCashBalanceFromLedger();
     toast.success("Movimentação atualizada!");
     setEditId(null);
+    fetchData();
+  };
+
+  const handleRecalculate = async () => {
+    await recalculateCashBalanceFromLedger();
+    toast.success("Caixa recalculado com sucesso!");
     fetchData();
   };
 
@@ -189,9 +178,14 @@ export default function CaixaPage() {
         </Button>
       </div>
 
-      <Button variant="outline" className="mb-4 w-full" onClick={() => navigate("/cash-history")}>
-        <History className="mr-2 h-4 w-4" /> Histórico Completo
-      </Button>
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <Button variant="outline" className="w-full" onClick={() => navigate("/cash-history")}>
+          <History className="mr-2 h-4 w-4" /> Histórico Completo
+        </Button>
+        <Button variant="outline" className="w-full" onClick={handleRecalculate}>
+          <Settings className="mr-2 h-4 w-4" /> Recalcular Caixa
+        </Button>
+      </div>
 
       {/* Manual movement dialog */}
       <Dialog open={manualType !== null} onOpenChange={(o) => { if (!o) setManualType(null); }}>
