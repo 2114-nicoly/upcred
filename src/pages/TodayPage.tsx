@@ -236,7 +236,12 @@ export default function TodayPage() {
     const allInsts = [...installments, ...overdueInstallments];
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
+    // Delete cash movements linked to this installment
+    await supabase.from("cash_movements").delete().eq("installment_id", id);
+    // Revert installment
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+    // Recalculate cash balance from ledger
+    await recalculateCashBalanceFromLedger();
     toast.success("Pagamento desfeito!");
     fetchInstallments();
   };
