@@ -579,50 +579,73 @@ export default function DailyCashPage() {
     const paidCount = lp ? Math.floor(lp.progress) : 0;
     const totalCount = lp ? lp.total : inst.loans.installment_count;
     const isSelected = selectedForNotPaid.has(inst.id);
+    const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
 
     return (
       <div
         key={inst.id}
-        className={`flex items-center gap-2 rounded-lg border bg-card p-2.5 transition-all ${isOverdue ? "border-destructive/30" : "border-border"} ${isSelected ? "ring-2 ring-primary/40 bg-accent/30" : ""}`}
+        className={`rounded-lg border bg-card overflow-hidden transition-all ${isOverdue ? "border-destructive/30" : "border-border"} ${isSelected ? "ring-2 ring-primary/40 bg-accent/30" : ""}`}
       >
-        {/* Checkbox */}
-        <Checkbox
-          checked={isSelected}
-          onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
-          className="shrink-0"
-        />
-
-        {/* Main content - tappable area */}
-        <div className="flex-1 min-w-0">
-          {/* Row 1: Name + amount */}
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-sm truncate">{inst.loans.clients.name}</span>
-            <span className="font-bold text-sm shrink-0 text-foreground">{formatCurrency(instRemaining)}</span>
+        {/* Top row: checkbox + info + menu */}
+        <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
+            className="shrink-0 h-4 w-4"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-[13px] truncate">{inst.loans.clients.name}</span>
+              <span className="font-bold text-[15px] shrink-0 tabular-nums">{formatCurrency(instRemaining)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                Parcela {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+              </span>
+              <Badge
+                variant="outline"
+                className={`text-[9px] px-1.5 py-0 h-4 leading-none font-medium ${isOverdue ? "border-destructive/50 text-destructive bg-destructive/5" : "border-primary/40 text-primary bg-primary/5"}`}
+              >
+                {isOverdue ? `⚠ ${overdueDays}d atraso` : "Hoje"}
+              </Badge>
+            </div>
           </div>
-          {/* Row 2: Context */}
-          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-            <span className="text-[11px] text-muted-foreground">
-              {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
-            </span>
-            <Badge
-              variant="outline"
-              className={`text-[9px] px-1 py-0 h-3.5 leading-none ${isOverdue ? "border-destructive/50 text-destructive" : "border-primary/40 text-primary"}`}
-            >
-              {isOverdue ? `${overdueDays}d atraso` : "Hoje"}
-            </Badge>
-            <span className="text-[11px] font-medium text-primary ml-auto">
-              Pago {paidCount}/{totalCount}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 -mr-1 rounded-md hover:bg-muted shrink-0">
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
+                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}`)}>
+                <History className="mr-2 h-4 w-4" /> Histórico do cliente
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Progress bar */}
+        <div className="px-3 pb-1.5">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+            </div>
+            <span className="text-[10px] font-semibold text-primary tabular-nums shrink-0">
+              {paidCount}/{totalCount}
             </span>
           </div>
         </div>
 
-        {/* Actions: compact buttons + menu */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Action buttons */}
+        <div className="flex border-t border-border">
           <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
             <DialogTrigger asChild>
-              <Button size="icon" className="h-8 w-8 bg-success hover:bg-success/90 rounded-md">
-                <CheckCircle className="h-4 w-4" />
-              </Button>
+              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
+                <CheckCircle className="h-3.5 w-3.5" /> PAGOU
+              </button>
             </DialogTrigger>
             <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
               <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
@@ -658,9 +681,9 @@ export default function DailyCashPage() {
 
           <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
             <DialogTrigger asChild>
-              <Button size="icon" variant="destructive" className="h-8 w-8 rounded-md">
-                <XCircle className="h-4 w-4" />
-              </Button>
+              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
+                <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
+              </button>
             </DialogTrigger>
             <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
               <DialogHeader><DialogTitle>Marcar Não Pagou</DialogTitle></DialogHeader>
@@ -684,22 +707,6 @@ export default function DailyCashPage() {
               </div>
             </DialogContent>
           </Dialog>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="p-1 rounded-md hover:bg-muted shrink-0">
-                <MoreVertical className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
-                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}`)}>
-                <History className="mr-2 h-4 w-4" /> Histórico do cliente
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
     );
