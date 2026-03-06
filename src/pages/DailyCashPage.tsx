@@ -344,7 +344,6 @@ export default function DailyCashPage() {
         }
         const totalApplied = paidValue - remaining;
         if (totalApplied > 0) {
-          await updateCashBalance({ available_cash: totalApplied });
           const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
           const { data: allLoanInsts } = await supabase
             .from("installments").select("paid_amount")
@@ -354,8 +353,11 @@ export default function DailyCashPage() {
           const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
           const toInterest = Math.min(totalApplied, interestRemaining);
           const toPrincipal = totalApplied - toInterest;
-          if (toInterest > 0) await updateCashBalance({ interest_receivable: -toInterest });
-          if (toPrincipal > 0) await updateCashBalance({ money_lent: -toPrincipal });
+          await updateCashBalance({
+            available_cash: totalApplied,
+            interest_receivable: -toInterest,
+            money_lent: -toPrincipal,
+          });
           await createCashMovement({
             type: "recebimento_normal", amount: totalApplied,
             client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,

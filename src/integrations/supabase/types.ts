@@ -436,7 +436,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_cash_balance_atomic: {
+        Args: {
+          p_available_cash?: number
+          p_interest_receivable?: number
+          p_money_lent?: number
+          p_penalty_receivable?: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
