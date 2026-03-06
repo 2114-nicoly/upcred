@@ -39,20 +39,12 @@ export async function updateCashBalance(changes: {
   interest_receivable?: number;
   penalty_receivable?: number;
 }) {
-  const current = await getCashBalance();
-  if (!current) return;
-
-  const updated: Record<string, number> = {};
-  if (changes.available_cash !== undefined)
-    updated.available_cash = Number(current.available_cash) + changes.available_cash;
-  if (changes.money_lent !== undefined)
-    updated.money_lent = Number(current.money_lent) + changes.money_lent;
-  if (changes.interest_receivable !== undefined)
-    updated.interest_receivable = Number(current.interest_receivable) + changes.interest_receivable;
-  if (changes.penalty_receivable !== undefined)
-    updated.penalty_receivable = Number(current.penalty_receivable) + changes.penalty_receivable;
-
-  await supabase.from("cash_balance").update({ ...updated, updated_at: new Date().toISOString() }).eq("id", current.id);
+  await supabase.rpc("update_cash_balance_atomic", {
+    p_available_cash: changes.available_cash ?? 0,
+    p_money_lent: changes.money_lent ?? 0,
+    p_interest_receivable: changes.interest_receivable ?? 0,
+    p_penalty_receivable: changes.penalty_receivable ?? 0,
+  });
 }
 
 export async function createCashMovement(movement: {

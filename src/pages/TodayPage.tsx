@@ -187,9 +187,22 @@ export default function TodayPage() {
         remaining -= applying;
       }
       const totalApplied = paidValue - remaining;
-      // Cash movement
+      // Cash movement with interest/principal split
       if (totalApplied > 0) {
-        await updateCashBalance({ available_cash: totalApplied });
+        const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
+        const { data: allLoanInsts } = await supabase
+          .from("installments").select("paid_amount")
+          .eq("loan_id", inst.loan_id).eq("is_penalty", false);
+        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const totalPaidBefore = totalPaidNow - totalApplied;
+        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+        const toInterest = Math.min(totalApplied, interestRemaining);
+        const toPrincipal = totalApplied - toInterest;
+        await updateCashBalance({
+          available_cash: totalApplied,
+          interest_receivable: -toInterest,
+          money_lent: -toPrincipal,
+        });
         await createCashMovement({
           type: "recebimento_normal",
           amount: totalApplied,

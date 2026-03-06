@@ -190,15 +190,16 @@ export default function LoanDetailPage() {
       const totalApplied = (parcValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount))) - remaining;
       // Cash: normal payment - interest first, then principal
       if (totalApplied > 0) {
-        await updateCashBalance({ available_cash: totalApplied });
-        // Determine how much goes to interest vs principal
         const loanInterest = loan ? (Number(loan.total_amount) - Number(loan.amount)) : 0;
         const totalPaidBefore = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
         const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
         const toInterest = Math.min(totalApplied, interestRemaining);
         const toPrincipal = totalApplied - toInterest;
-        if (toInterest > 0) await updateCashBalance({ interest_receivable: -toInterest });
-        if (toPrincipal > 0) await updateCashBalance({ money_lent: -toPrincipal });
+        await updateCashBalance({
+          available_cash: totalApplied,
+          interest_receivable: -toInterest,
+          money_lent: -toPrincipal,
+        });
         await createCashMovement({
           type: "recebimento_normal",
           amount: totalApplied,
