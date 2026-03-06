@@ -71,15 +71,29 @@ export default function CaixaPage() {
   const handleManualMovement = async () => {
     if (!manualType) return;
     const amount = parseFloat(manualAmount);
-    if (!amount || amount <= 0) { toast.error("Informe um valor válido"); return; }
+    if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
+    if (manualType !== "ajuste_manual" && amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
 
-    const cashChange = manualType === "saida_manual" ? -amount : amount;
-    await updateCashBalance({ available_cash: cashChange });
-    await createCashMovement({
-      type: manualType,
-      amount: manualType === "saida_manual" ? -amount : amount,
-      observation: manualObs || null,
-    });
+    if (manualType === "ajuste_manual") {
+      // Ajuste manual SETS the available_cash to the given value
+      const current = await getCashBalance();
+      if (!current) { toast.error("Erro ao obter saldo"); return; }
+      const diff = amount - Number(current.available_cash);
+      await updateCashBalance({ available_cash: diff });
+      await createCashMovement({
+        type: "ajuste_manual",
+        amount: diff,
+        observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
+      });
+    } else {
+      const cashChange = manualType === "saida_manual" ? -amount : amount;
+      await updateCashBalance({ available_cash: cashChange });
+      await createCashMovement({
+        type: manualType,
+        amount: manualType === "saida_manual" ? -amount : amount,
+        observation: manualObs || null,
+      });
+    }
 
     toast.success(getMovementTypeLabel(manualType) + " registrada!");
     setManualType(null);
