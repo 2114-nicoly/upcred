@@ -191,7 +191,12 @@ export default function LoanDetailPage() {
       // Cash: normal payment - interest first, then principal
       if (totalApplied > 0) {
         const loanInterest = loan ? (Number(loan.total_amount) - Number(loan.amount)) : 0;
-        const totalPaidBefore = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+        // Fetch fresh paid amounts from DB (not stale render-time state)
+        const { data: freshInsts } = await supabase
+          .from("installments").select("paid_amount")
+          .eq("loan_id", loanId!).eq("is_penalty", false);
+        const totalPaidNow = (freshInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const totalPaidBefore = totalPaidNow - totalApplied;
         const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
         const toInterest = Math.min(totalApplied, interestRemaining);
         const toPrincipal = totalApplied - toInterest;
@@ -308,6 +313,8 @@ export default function LoanDetailPage() {
         await supabase.from("installments").update({ amount: newPenaltyTotal }).eq("id", penaltyInst.id);
       }
     }
+    // Update penalty_receivable for the diff
+    await updateCashBalance({ penalty_receivable: diff });
     toast.success("Multa atualizada!");
     setEditingPenalty(null); setEditPenaltyValue(""); setEditPenaltyObs("");
     fetchData();
@@ -404,6 +411,8 @@ export default function LoanDetailPage() {
       await supabase.from("installments").insert(newInstallments);
     }
 
+    // Recalculate cash balance after renegotiation
+    await recalculateCashBalanceFromLedger();
     toast.success("Empréstimo renegociado com sucesso!");
     setEditLoanOpen(false);
     fetchData();

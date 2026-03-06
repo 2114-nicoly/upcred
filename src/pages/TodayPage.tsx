@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -236,7 +236,12 @@ export default function TodayPage() {
     const allInsts = [...installments, ...overdueInstallments];
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
+    // Delete cash movements linked to this installment
+    await supabase.from("cash_movements").delete().eq("installment_id", id);
+    // Revert installment
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+    // Recalculate cash balance from ledger
+    await recalculateCashBalanceFromLedger();
     toast.success("Pagamento desfeito!");
     fetchInstallments();
   };
