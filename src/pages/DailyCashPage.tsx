@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInCalendarDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { formatCurrency, calculateOverdueDays } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
-  Plus, ChevronDown, Undo2, Lock, ChevronLeft, ChevronRight, Clock, LockOpen
+  Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -85,9 +86,11 @@ export default function DailyCashPage() {
   const [payDate, setPayDate] = useState(selectedDate);
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
+  const [showNotPaidObs, setShowNotPaidObs] = useState(false);
   const [selectedForNotPaid, setSelectedForNotPaid] = useState<Set<string>>(new Set());
   const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
+  const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
 
   useEffect(() => {
     setPayDate(selectedDate);
@@ -105,14 +108,12 @@ export default function DailyCashPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
 
-    // 1. First check daily_cash status
     const { data: dcData } = await supabase
       .from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle();
 
     const status = dcData?.status || "open";
     setDailyCashStatus(status);
 
-    // 2. Always fetch paid and not-paid marks for display
     const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
 
     const [
@@ -133,9 +134,8 @@ export default function DailyCashPage() {
 
     const npMarks = (npData || []) as unknown as NotPaidMark[];
 
-    // Fetch not-paid installment details
-    const npInstIds = npMarks.map(m => m.installment_id);
     let npInstMap: Record<string, InstallmentWithLoan> = {};
+    const npInstIds = npMarks.map(m => m.installment_id);
     if (npInstIds.length > 0) {
       const { data: npInstData } = await supabase
         .from("installments")
@@ -148,17 +148,14 @@ export default function DailyCashPage() {
     const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
     setNotPaidMarks(enrichedNpMarks);
 
-    // 3. If CLOSED → frozen: no pending recalculation, just show paid + notpaid
     if (status === "closed") {
       setPendingInstallments([]);
       setSelectedForNotPaid(new Set());
-      // Still compute progress for paid/notpaid display
       await computeProgress(paidInsts, enrichedNpMarks, []);
       setLoading(false);
       return;
     }
 
-    // 4. OPEN day: compute pending installments
     const [
       { data: dueTodayData },
       { data: overdueData },
@@ -178,20 +175,17 @@ export default function DailyCashPage() {
     const paidInstIds = new Set(paidInsts.map(i => i.id));
     const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
-    // CRITICAL: Track loans that already have ANY action for this day
     const actionedLoanIds = new Set([
       ...paidInsts.map(i => i.loan_id),
       ...npMarks.map(m => m.loan_id),
     ]);
 
-    // Combine ALL candidates, filter out actioned
     const allCandidates = [...validOverdue, ...dueToday].filter(
       i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
         && !actionedLoanIds.has(i.loan_id)
         && Number(i.amount) - Number(i.paid_amount) > 0.01
     );
 
-    // Deduplicate: one installment per loan, oldest number wins
     const seenLoans = new Set<string>();
     const dedupedPending: InstallmentWithLoan[] = [];
     for (const inst of allCandidates.sort((a, b) => a.number - b.number)) {
@@ -282,7 +276,6 @@ export default function DailyCashPage() {
 
     // Background sync
     try {
-      // Handle penalty payment
       if (multaValue > 0) {
         const { data: penaltyInsts } = await supabase
           .from("installments").select("*").eq("loan_id", inst.loan_id).eq("is_penalty", true);
@@ -305,7 +298,6 @@ export default function DailyCashPage() {
         }
       }
 
-      // Handle regular payment (sequential)
       if (parcValue !== null || !payPenaltyAmount) {
         if (paidValue <= 0 && multaValue > 0) { fetchData(); return; }
 
@@ -331,7 +323,6 @@ export default function DailyCashPage() {
         const totalApplied = paidValue - remaining;
         if (totalApplied > 0) {
           await updateCashBalance({ available_cash: totalApplied });
-          // Split between interest and principal
           const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
           const { data: allLoanInsts } = await supabase
             .from("installments").select("paid_amount")
@@ -368,13 +359,14 @@ export default function DailyCashPage() {
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
 
+    const obs = notPaidObs;
     const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
       id: "temp-" + Date.now(),
       mark_date: selectedDate,
       installment_id: inst.id,
       loan_id: inst.loan_id,
       client_id: inst.loans.client_id,
-      observation: notPaidObs || null,
+      observation: obs || null,
       created_at: new Date().toISOString(),
       installment: inst,
     };
@@ -382,13 +374,14 @@ export default function DailyCashPage() {
     setNotPaidMarks(prev => [...prev, optimisticMark]);
     setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
     setNotPaidObs("");
+    setShowNotPaidObs(false);
     setNotPaidDialogId(null);
     toast.info("Marcado como 'Não Pagou'");
 
     await supabase.from("not_paid_marks").insert({
       mark_date: selectedDate, installment_id: inst.id,
       loan_id: inst.loan_id, client_id: inst.loans.client_id,
-      observation: notPaidObs || null,
+      observation: obs || null,
     });
     fetchData();
   };
@@ -400,13 +393,14 @@ export default function DailyCashPage() {
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
     if (selectedInsts.length === 0) return;
 
+    const obs = batchNotPaidObs;
     const optimisticMarks = selectedInsts.map(inst => ({
       id: "temp-" + Date.now() + "-" + inst.id,
       mark_date: selectedDate,
       installment_id: inst.id,
       loan_id: inst.loan_id,
       client_id: inst.loans.client_id,
-      observation: batchNotPaidObs || null,
+      observation: obs || null,
       created_at: new Date().toISOString(),
       installment: inst,
     }));
@@ -416,6 +410,7 @@ export default function DailyCashPage() {
     setSelectedForNotPaid(new Set());
     setBatchNotPaidDialogOpen(false);
     setBatchNotPaidObs("");
+    setShowBatchNotPaidObs(false);
     toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
 
     const inserts = selectedInsts.map(inst => ({
@@ -423,7 +418,7 @@ export default function DailyCashPage() {
       installment_id: inst.id,
       loan_id: inst.loan_id,
       client_id: inst.loans.client_id,
-      observation: batchNotPaidObs || null,
+      observation: obs || null,
     }));
     await supabase.from("not_paid_marks").insert(inserts);
     fetchData();
@@ -470,23 +465,15 @@ export default function DailyCashPage() {
     }
     toast.success("Pagamento desfeito!");
 
-    // 1. Delete ALL cash_movements linked to this installment (normal + penalty)
     await supabase.from("cash_movements").delete().eq("installment_id", id);
-
-    // 2. Revert installment payment
     await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
 
-    // 3. If penalty was paid alongside, revert penalty installment too
     if (inst) {
-      // Check if penalty payment was made for this loan at the same time
       const { data: penaltyMovs } = await supabase
         .from("cash_movements").select("id, amount")
         .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
-      // We don't delete penalty movements here since they're linked by loan_id not installment_id
-      // But we DO need to check if any penalty movements became orphaned
     }
 
-    // 4. Recalculate cash balance from ledger (source of truth)
     await recalculateCashBalanceFromLedger();
     fetchData();
   };
@@ -551,58 +538,88 @@ export default function DailyCashPage() {
     return differenceInCalendarDays(sel, due);
   };
 
-  // === Render installment card ===
+  // === Render pending card (simplified) ===
   const renderPendingCard = (inst: InstallmentWithLoan) => {
     const lp = loanProgressMap[inst.loan_id];
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const overdueDays = getOverdueDays(inst);
     const isOverdue = overdueDays > 0;
     const penaltyPending = lp ? lp.penaltyTotal - lp.penaltyPaid : 0;
+    const paidCount = lp ? Math.floor(lp.progress) : 0;
+    const totalCount = lp ? lp.total : inst.loans.installment_count;
 
     return (
-      <Card key={inst.id} className={`overflow-hidden ${isOverdue ? "border-destructive/50" : ""} ${selectedForNotPaid.has(inst.id) ? "ring-2 ring-destructive/50" : ""}`}>
-        <CardContent className="p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-start gap-2 flex-1">
-              <Checkbox
-                checked={selectedForNotPaid.has(inst.id)}
-                onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
-                className="mt-1"
-              />
-              <div className="flex-1">
-              <p className="font-semibold">{inst.loans.clients.name}</p>
-              <p className="text-sm text-muted-foreground">
-                Parcela {inst.number}/{inst.loans.installment_count} • {formatCurrency(Number(inst.amount))}
-              </p>
-              {isOverdue && (
-                <p className="text-xs text-destructive font-medium flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Vencida {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")} • {overdueDays} dias de atraso
-                </p>
-              )}
-              {Number(inst.paid_amount) > 0 && (
-                <p className="text-xs text-primary">Já pago: {formatCurrency(Number(inst.paid_amount))} • Resta: {formatCurrency(instRemaining)}</p>
-              )}
-              {lp && (
-                <p className="text-xs text-muted-foreground">
-                  {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} pagas • Resta: {formatCurrency(Math.max(0, lp.remaining))}
-                </p>
-              )}
-              {penaltyPending > 0.01 && (
-                <p className="text-xs text-destructive">Multa pendente: {formatCurrency(penaltyPending)}</p>
-              )}
+      <Card key={inst.id} className={`overflow-hidden transition-all ${isOverdue ? "border-destructive/40" : ""} ${selectedForNotPaid.has(inst.id) ? "ring-2 ring-destructive/50" : ""}`}>
+        <CardContent className="p-3">
+          <div className="flex items-start gap-2">
+            <Checkbox
+              checked={selectedForNotPaid.has(inst.id)}
+              onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
+              className="mt-1.5 shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              {/* Row 1: Client name + ⋮ menu */}
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-bold text-base truncate">{inst.loans.clients.name}</p>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-1 rounded-md hover:bg-muted shrink-0">
+                      <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
+                      <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}`)}>
+                      <History className="mr-2 h-4 w-4" /> Histórico do cliente
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
+
+              {/* Row 2: Value due */}
+              <p className="text-lg font-semibold text-foreground">
+                {formatCurrency(instRemaining)}
+              </p>
+
+              {/* Row 3: Context line */}
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>Parcela {inst.number}/{totalCount}</span>
+                <span>•</span>
+                <span>vence {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}</span>
+                <Badge variant="outline" className={`ml-1 text-[10px] px-1.5 py-0 h-4 ${isOverdue ? "border-destructive/50 text-destructive" : "border-primary/50 text-primary"}`}>
+                  {isOverdue ? "Atrasado" : "Hoje"}
+                </Badge>
+              </div>
+
+              {/* Row 4: Progress */}
+              <p className="text-xs font-medium text-primary mt-0.5">
+                Pago {paidCount}/{totalCount}
+              </p>
+
+              {/* Row 5: Overdue warning */}
+              {isOverdue && (
+                <p className="text-xs text-destructive flex items-center gap-1 mt-0.5">
+                  <AlertTriangle className="h-3 w-3" /> {overdueDays} dias em atraso
+                </p>
+              )}
+
+              {/* Partial payment info */}
+              {Number(inst.paid_amount) > 0 && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Já pago: {formatCurrency(Number(inst.paid_amount))}
+                </p>
+              )}
             </div>
-            <Badge className={isOverdue ? "bg-overdue text-overdue-foreground" : "bg-open text-open-foreground"}>
-              {isOverdue ? "Atrasado" : "Em Dia"}
-            </Badge>
           </div>
-          <div className="flex gap-2">
-            {/* Pay button */}
+
+          {/* Action buttons: PAGOU + NÃO PAGOU */}
+          <div className="flex gap-2 mt-3">
             <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
               <DialogTrigger asChild>
-                <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
-                  <Plus className="mr-1 h-4 w-4" /> Pagamento
+                <Button size="sm" className="flex-1 bg-success hover:bg-success/90 h-10 text-sm font-semibold">
+                  <CheckCircle className="mr-1.5 h-4 w-4" /> PAGOU
                 </Button>
               </DialogTrigger>
               <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -636,11 +653,11 @@ export default function DailyCashPage() {
                 </div>
               </DialogContent>
             </Dialog>
-            {/* Not paid button */}
-            <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) setNotPaidObs(""); }}>
+
+            <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="destructive" className="flex-1">
-                  <XCircle className="mr-1 h-4 w-4" /> Não Pagou
+                <Button size="sm" variant="destructive" className="flex-1 h-10 text-sm font-semibold">
+                  <XCircle className="mr-1.5 h-4 w-4" /> NÃO PAGOU
                 </Button>
               </DialogTrigger>
               <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -649,10 +666,20 @@ export default function DailyCashPage() {
                   <p className="text-sm text-muted-foreground">
                     {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
                   </p>
-                  <div>
-                    <Label>Observação (opcional)</Label>
-                    <Textarea placeholder="Ex: Cliente não atendeu..." value={notPaidObs} onChange={(e) => setNotPaidObs(e.target.value)} />
-                  </div>
+                  {showNotPaidObs ? (
+                    <div>
+                      <Label>Observação</Label>
+                      <Textarea placeholder="Ex: Cliente não atendeu..." value={notPaidObs} onChange={(e) => setNotPaidObs(e.target.value)} />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-sm text-primary hover:underline"
+                      onClick={() => setShowNotPaidObs(true)}
+                    >
+                      + adicionar observação
+                    </button>
+                  )}
                   <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full">
                     Confirmar Não Pagou
                   </Button>
@@ -669,36 +696,55 @@ export default function DailyCashPage() {
     const lp = loanProgressMap[inst.loan_id];
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const isPartial = instRemaining > 0.01;
+    const paidCount = lp ? Math.floor(lp.progress) : 0;
+    const totalCount = lp ? lp.total : inst.loans.installment_count;
+
     return (
       <Card key={inst.id} className={`overflow-hidden ${isPartial ? "border-warning/30" : "border-success/30"}`}>
-        <CardContent className="p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <div>
-              <p className="font-semibold">{inst.loans.clients.name}</p>
-              <p className="text-sm text-muted-foreground">
-                Parcela {inst.number}/{inst.loans.installment_count} • {formatCurrency(Number(inst.amount))}
-              </p>
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">{inst.loans.clients.name}</p>
               <p className={`text-sm font-medium ${isPartial ? "text-warning" : "text-success"}`}>
-                Pago: {formatCurrency(Number(inst.paid_amount))}
+                {formatCurrency(Number(inst.paid_amount))}
               </p>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>Parcela {inst.number}/{totalCount}</span>
+                <span>•</span>
+                <span>Pago {paidCount}/{totalCount}</span>
+              </div>
               {isPartial && (
-                <p className="text-xs text-destructive font-medium">Resta: {formatCurrency(instRemaining)}</p>
+                <p className="text-xs text-destructive">Resta: {formatCurrency(instRemaining)}</p>
               )}
-              {lp && (
-                <p className="text-xs text-muted-foreground">
-                  {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} pagas • Resta: {formatCurrency(Math.max(0, lp.remaining))}
+              {inst.paid_at && (
+                <p className="text-[10px] text-muted-foreground">
+                  {format(new Date(inst.paid_at), "dd/MM HH:mm")}
                 </p>
               )}
             </div>
-            <Badge className={isPartial ? "bg-warning text-warning-foreground" : "bg-paid text-paid-foreground"}>
-              {isPartial ? "Parcial" : "Pago"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className={isPartial ? "bg-warning text-warning-foreground" : "bg-paid text-paid-foreground"}>
+                {isPartial ? "Parcial" : "Pago"}
+              </Badge>
+              {!isClosed && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-1 rounded-md hover:bg-muted">
+                      <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
+                      Desfazer Pagamento
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
+                      <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
-          {!isClosed && (
-            <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoPayment(inst.id)}>
-              <Undo2 className="mr-1 h-3 w-3" /> Desfazer Pagamento
-            </Button>
-          )}
         </CardContent>
       </Card>
     );
@@ -706,24 +752,48 @@ export default function DailyCashPage() {
 
   const renderNotPaidCard = (mark: NotPaidMark & { installment?: InstallmentWithLoan }) => {
     const inst = mark.installment;
+    const lp = inst ? loanProgressMap[inst.loan_id] : null;
+    const paidCount = lp ? Math.floor(lp.progress) : 0;
+    const totalCount = lp ? lp.total : (inst?.loans.installment_count || 0);
+
     return (
       <Card key={mark.id} className="overflow-hidden border-destructive/30">
-        <CardContent className="p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <div>
-              <p className="font-semibold">{inst?.loans.clients.name || "Cliente"}</p>
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">{inst?.loans.clients.name || "Cliente"}</p>
               <p className="text-sm text-muted-foreground">
-                {inst ? `Parcela ${inst.number}/${inst.loans.installment_count} • ${formatCurrency(Number(inst.amount))}` : "—"}
+                {inst ? `Parcela ${inst.number}/${totalCount} • ${formatCurrency(Number(inst.amount))}` : "—"}
               </p>
-              {mark.observation && <p className="text-xs text-muted-foreground italic">"{mark.observation}"</p>}
+              {inst && <p className="text-xs text-primary">Pago {paidCount}/{totalCount}</p>}
+              {mark.observation && <p className="text-xs text-muted-foreground italic mt-0.5">"{mark.observation}"</p>}
+              <p className="text-[10px] text-muted-foreground">
+                {format(new Date(mark.created_at), "dd/MM HH:mm")}
+              </p>
             </div>
-            <Badge className="bg-destructive text-destructive-foreground">Não Pagou</Badge>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-destructive text-destructive-foreground">Não Pagou</Badge>
+              {!isClosed && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-1 rounded-md hover:bg-muted">
+                      <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleUndoNotPaid(mark.id)} className="text-destructive">
+                      Desfazer
+                    </DropdownMenuItem>
+                    {inst && (
+                      <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
+                        <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
-          {!isClosed && (
-            <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoNotPaid(mark.id)}>
-              <Undo2 className="mr-1 h-3 w-3" /> Desfazer
-            </Button>
-          )}
         </CardContent>
       </Card>
     );
@@ -763,50 +833,56 @@ export default function DailyCashPage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="mb-4 grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
-        <button
-          onClick={() => setActiveTab("pending")}
-          className={`flex flex-col items-center rounded-md py-2 px-1 text-xs font-medium transition-colors ${
-            activeTab === "pending" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <AlertTriangle className={`mb-0.5 h-4 w-4 ${activeTab === "pending" ? "text-warning" : ""}`} />
-          <span>Pendentes</span>
-          <span className="text-[10px] font-bold">{pendingInstallments.length}</span>
-          {activeTab === "pending" && totalPendingValue > 0 && (
-            <span className="text-[9px] text-muted-foreground">{formatCurrency(totalPendingValue)}</span>
-          )}
-        </button>
-        <button
+      {/* Summary counters + navigation to Pagos/Não Pagos */}
+      <div className="mb-4 grid grid-cols-3 gap-2">
+        <Card className="text-center">
+          <CardContent className="p-2">
+            <AlertTriangle className="mx-auto mb-0.5 h-4 w-4 text-warning" />
+            <p className="text-[10px] text-muted-foreground">Pendentes</p>
+            <p className="text-sm font-bold">{pendingInstallments.length}</p>
+            {totalPendingValue > 0 && <p className="text-[10px] text-muted-foreground">{formatCurrency(totalPendingValue)}</p>}
+          </CardContent>
+        </Card>
+        <Card
+          className="text-center cursor-pointer hover:border-success/50 transition-colors"
           onClick={() => setActiveTab("paid")}
-          className={`flex flex-col items-center rounded-md py-2 px-1 text-xs font-medium transition-colors ${
-            activeTab === "paid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-          }`}
         >
-          <CheckCircle className={`mb-0.5 h-4 w-4 ${activeTab === "paid" ? "text-success" : ""}`} />
-          <span>Pagos</span>
-          <span className="text-[10px] font-bold text-success">{paidInstallments.length}</span>
-          {activeTab === "paid" && totalPaidValue > 0 && (
-            <span className="text-[9px] text-success">{formatCurrency(totalPaidValue)}</span>
-          )}
-        </button>
-        <button
+          <CardContent className="p-2">
+            <CheckCircle className="mx-auto mb-0.5 h-4 w-4 text-success" />
+            <p className="text-[10px] text-muted-foreground">Pagos</p>
+            <p className="text-sm font-bold text-success">{paidInstallments.length}</p>
+            {totalPaidValue > 0 && <p className="text-[10px] text-success">{formatCurrency(totalPaidValue)}</p>}
+          </CardContent>
+        </Card>
+        <Card
+          className="text-center cursor-pointer hover:border-destructive/50 transition-colors"
           onClick={() => setActiveTab("notpaid")}
-          className={`flex flex-col items-center rounded-md py-2 px-1 text-xs font-medium transition-colors ${
-            activeTab === "notpaid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-          }`}
         >
-          <XCircle className={`mb-0.5 h-4 w-4 ${activeTab === "notpaid" ? "text-destructive" : ""}`} />
-          <span>Não Pagos</span>
-          <span className="text-[10px] font-bold text-destructive">{notPaidMarks.length}</span>
-        </button>
+          <CardContent className="p-2">
+            <XCircle className="mx-auto mb-0.5 h-4 w-4 text-destructive" />
+            <p className="text-[10px] text-muted-foreground">Não Pagos</p>
+            <p className="text-sm font-bold text-destructive">{notPaidMarks.length}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
       ) : (
         <>
+          {/* Tab switcher (minimal) */}
+          {activeTab !== "pending" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mb-3"
+              onClick={() => setActiveTab("pending")}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Voltar para Pendentes
+            </Button>
+          )}
+
           {/* Tab content */}
           {activeTab === "pending" && (
             <div className="space-y-3">
@@ -836,7 +912,7 @@ export default function DailyCashPage() {
                       Selecionar todos
                     </label>
                     {selectedForNotPaid.size > 0 && (
-                      <Dialog open={batchNotPaidDialogOpen} onOpenChange={setBatchNotPaidDialogOpen}>
+                      <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); } }}>
                         <DialogTrigger asChild>
                           <Button size="sm" variant="destructive">
                             <XCircle className="mr-1 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
@@ -848,10 +924,20 @@ export default function DailyCashPage() {
                             <p className="text-sm text-muted-foreground">
                               {selectedForNotPaid.size} parcela(s) selecionada(s) serão marcadas como "Não Pagou".
                             </p>
-                            <div>
-                              <Label>Observação (opcional)</Label>
-                              <Textarea placeholder="Ex: Dia de chuva..." value={batchNotPaidObs} onChange={(e) => setBatchNotPaidObs(e.target.value)} />
-                            </div>
+                            {showBatchNotPaidObs ? (
+                              <div>
+                                <Label>Observação</Label>
+                                <Textarea placeholder="Ex: Dia de chuva..." value={batchNotPaidObs} onChange={(e) => setBatchNotPaidObs(e.target.value)} />
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-sm text-primary hover:underline"
+                                onClick={() => setShowBatchNotPaidObs(true)}
+                              >
+                                + adicionar observação
+                              </button>
+                            )}
                             <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full">
                               Confirmar Não Pagou ({selectedForNotPaid.size})
                             </Button>
@@ -868,6 +954,9 @@ export default function DailyCashPage() {
 
           {activeTab === "paid" && (
             <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-success flex items-center gap-1">
+                <CheckCircle className="h-4 w-4" /> Pagos do Dia
+              </h2>
               {paidInstallments.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center p-6">
@@ -883,6 +972,9 @@ export default function DailyCashPage() {
 
           {activeTab === "notpaid" && (
             <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-destructive flex items-center gap-1">
+                <XCircle className="h-4 w-4" /> Não Pagos do Dia
+              </h2>
               {notPaidMarks.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center p-6">
@@ -898,19 +990,11 @@ export default function DailyCashPage() {
 
           {/* Close / Reopen cash button */}
           {isClosed ? (
-            <Button
-              onClick={handleReopenCash}
-              className="w-full mt-4"
-              variant="outline"
-            >
+            <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline">
               <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
             </Button>
           ) : (
-            <Button
-              onClick={handleCloseCash}
-              className="w-full mt-4"
-              variant="default"
-            >
+            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default">
               <Lock className="mr-2 h-4 w-4" /> Fechar Caixa do Dia
             </Button>
           )}
