@@ -1002,7 +1002,100 @@ export default function DailyCashPage() {
                   <p className="text-sm text-muted-foreground">Nenhum pagamento registrado</p>
                 </div>
               ) : (
-                paidInstallments.map(renderPaidRow)
+                (() => {
+                  // Group paid installments by client
+                  const grouped = new Map<string, { clientName: string; clientId: string; installments: InstallmentWithLoan[]; totalPaid: number }>();
+                  for (const inst of paidInstallments) {
+                    const cid = inst.loans.client_id;
+                    if (!grouped.has(cid)) {
+                      grouped.set(cid, { clientName: inst.loans.clients.name, clientId: cid, installments: [], totalPaid: 0 });
+                    }
+                    const g = grouped.get(cid)!;
+                    g.installments.push(inst);
+                    g.totalPaid += Number(inst.paid_amount);
+                  }
+                  return Array.from(grouped.values()).map(group => {
+                    const lp = loanProgressMap[group.installments[0].loan_id];
+                    const paidCount = lp ? Math.floor(lp.progress) : 0;
+                    const totalCount = lp ? lp.total : group.installments[0].loans.installment_count;
+                    const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
+
+                    if (group.installments.length === 1) {
+                      return renderPaidRow(group.installments[0]);
+                    }
+
+                    return (
+                      <Collapsible key={group.clientId}>
+                        <div className="rounded-lg border border-success/30 bg-card overflow-hidden">
+                          <CollapsibleTrigger className="w-full">
+                            <div className="flex items-center gap-2 p-2.5">
+                              <div className="flex-1 min-w-0 text-left">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="font-semibold text-sm truncate">{group.clientName}</span>
+                                  <span className="font-bold text-sm shrink-0 text-success">
+                                    {formatCurrency(group.totalPaid)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {group.installments.length} parcela{group.installments.length > 1 ? "s" : ""} pagas • Progresso {paidCount}/{totalCount}
+                                  </span>
+                                  <Badge className="ml-auto bg-paid text-paid-foreground text-[9px] px-1.5 py-0 h-3.5">
+                                    Pago
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                                    <div className="h-full rounded-full bg-success transition-all" style={{ width: `${progressPct}%` }} />
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-success tabular-nums shrink-0">
+                                    {paidCount}/{totalCount}
+                                  </span>
+                                </div>
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="border-t border-border px-2.5 pb-2 pt-1 space-y-1.5">
+                              {group.installments.map(inst => {
+                                const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+                                const isPartial = instRemaining > 0.01;
+                                return (
+                                  <div key={inst.id} className="flex items-center justify-between text-xs py-1">
+                                    <div>
+                                      <span className="text-muted-foreground">Parcela {inst.number}</span>
+                                      {isPartial && <span className="text-destructive ml-1">Resta {formatCurrency(instRemaining)}</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className={isPartial ? "text-warning font-medium" : "text-success font-medium"}>
+                                        {formatCurrency(Number(inst.paid_amount))}
+                                      </span>
+                                      {!isClosed && (
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button className="p-0.5 rounded hover:bg-muted">
+                                              <MoreVertical className="h-3 w-3 text-muted-foreground" />
+                                            </button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
+                                              Desfazer Pagamento
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CollapsibleContent>
+                        </div>
+                      </Collapsible>
+                    );
+                  });
+                })()
               )}
             </div>
           )}
