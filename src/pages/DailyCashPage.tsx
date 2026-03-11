@@ -274,7 +274,9 @@ export default function DailyCashPage() {
 
   // === Payment handler with optimistic UI ===
   const handlePay = async (id: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    setIsSubmitting(true);
 
     const allInsts = [...pendingInstallments, ...paidInstallments];
     const inst = allInsts.find(i => i.id === id);
