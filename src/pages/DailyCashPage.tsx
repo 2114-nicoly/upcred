@@ -406,7 +406,8 @@ export default function DailyCashPage() {
       created_at: new Date().toISOString(),
       installment: inst,
     };
-    setPendingInstallments(prev => prev.filter(i => i.id !== id));
+    localActionedLoanIds.current.add(inst.loan_id);
+    setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setNotPaidMarks(prev => [...prev, optimisticMark]);
     setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
     setNotPaidObs("");
