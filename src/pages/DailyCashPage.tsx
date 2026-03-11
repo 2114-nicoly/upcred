@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInCalendarDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -92,8 +92,9 @@ export default function DailyCashPage() {
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const localActionedLoanIds = useRef<Set<string>>(new Set());
 
-  useEffect(() => { setPayDate(selectedDate); }, [selectedDate]);
+  useEffect(() => { setPayDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
@@ -204,6 +205,7 @@ export default function DailyCashPage() {
     const actionedLoanIds = new Set([
       ...paidInsts.map(i => i.loan_id),
       ...npMarks.map(m => m.loan_id),
+      ...localActionedLoanIds.current,
     ]);
 
     const allCandidates = [...validOverdue, ...dueToday].filter(
@@ -296,7 +298,8 @@ export default function DailyCashPage() {
       status: paidValue >= instRemaining - 0.01 ? "paid" : inst.status,
       paid_at: new Date(payDate + "T12:00:00").toISOString(),
     };
-    setPendingInstallments(prev => prev.filter(i => i.id !== id));
+    localActionedLoanIds.current.add(inst.loan_id);
+    setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setPaidInstallments(prev => [...prev, optimisticPaid]);
     resetPayDialog();
     toast.success(`Parcela: ${formatCurrency(paidValue)} registrado!`);
@@ -403,7 +406,8 @@ export default function DailyCashPage() {
       created_at: new Date().toISOString(),
       installment: inst,
     };
-    setPendingInstallments(prev => prev.filter(i => i.id !== id));
+    localActionedLoanIds.current.add(inst.loan_id);
+    setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setNotPaidMarks(prev => [...prev, optimisticMark]);
     setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
     setNotPaidObs("");
@@ -437,7 +441,9 @@ export default function DailyCashPage() {
       installment: inst,
     }));
 
-    setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id)));
+    const batchLoanIds = new Set(selectedInsts.map(i => i.loan_id));
+    batchLoanIds.forEach(lid => localActionedLoanIds.current.add(lid));
+    setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id) && !batchLoanIds.has(i.loan_id)));
     setNotPaidMarks(prev => [...prev, ...optimisticMarks]);
     setSelectedForNotPaid(new Set());
     setBatchNotPaidDialogOpen(false);
