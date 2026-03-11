@@ -333,18 +333,22 @@ export default function DailyCashPage() {
 
         let remaining = paidValue;
         const toProcess = (allUnpaid || []).filter((i: any) => i.number >= inst.number);
+        let isFirst = true;
         for (const i of toProcess) {
           if (remaining <= 0) break;
           const iRemaining = Number(i.amount) - Number(i.paid_amount);
           const applying = Math.min(remaining, iRemaining);
           const newPaidAmount = Number(i.paid_amount) + applying;
           const fullyPaid = newPaidAmount >= Number(i.amount) - 0.01;
+          // Always set paid_at on the clicked installment (even partial), so it moves to "Pagos"
+          const shouldSetPaidAt = fullyPaid || isFirst;
           await supabase.from("installments").update({
             paid_amount: newPaidAmount,
-            status: fullyPaid ? "paid" : i.status,
-            paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
+            status: fullyPaid ? "paid" : (isFirst ? "partial" : i.status),
+            paid_at: shouldSetPaidAt ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
           }).eq("id", i.id);
           remaining -= applying;
+          isFirst = false;
         }
         const totalApplied = paidValue - remaining;
         if (totalApplied > 0) {
