@@ -205,6 +205,7 @@ export default function DailyCashPage() {
     const actionedLoanIds = new Set([
       ...paidInsts.map(i => i.loan_id),
       ...npMarks.map(m => m.loan_id),
+      ...localActionedLoanIds.current,
     ]);
 
     const allCandidates = [...validOverdue, ...dueToday].filter(
