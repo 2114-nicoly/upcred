@@ -94,7 +94,7 @@ export default function DailyCashPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
 
-  useEffect(() => { setPayDate(selectedDate); }, [selectedDate]);
+  useEffect(() => { setPayDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
