@@ -680,8 +680,8 @@ export default function DailyCashPage() {
                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                 </div>
                 <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
-                  Confirmar Pagamento
+                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                  {isSubmitting ? "Processando..." : "Confirmar Pagamento"}
                 </Button>
               </div>
             </DialogContent>
