@@ -298,7 +298,8 @@ export default function DailyCashPage() {
       status: paidValue >= instRemaining - 0.01 ? "paid" : inst.status,
       paid_at: new Date(payDate + "T12:00:00").toISOString(),
     };
-    setPendingInstallments(prev => prev.filter(i => i.id !== id));
+    localActionedLoanIds.current.add(inst.loan_id);
+    setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setPaidInstallments(prev => [...prev, optimisticPaid]);
     resetPayDialog();
     toast.success(`Parcela: ${formatCurrency(paidValue)} registrado!`);
