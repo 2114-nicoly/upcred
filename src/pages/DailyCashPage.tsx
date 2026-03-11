@@ -91,6 +91,7 @@ export default function DailyCashPage() {
   const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => { setPayDate(selectedDate); }, [selectedDate]);
 
