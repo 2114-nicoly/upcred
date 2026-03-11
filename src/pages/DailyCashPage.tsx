@@ -372,6 +372,8 @@ export default function DailyCashPage() {
       }
     } catch {
       toast.error("Erro ao sincronizar, recarregando...");
+    } finally {
+      setIsSubmitting(false);
     }
     fetchData();
   };
