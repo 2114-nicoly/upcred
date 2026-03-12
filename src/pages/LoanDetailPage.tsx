@@ -106,6 +106,7 @@ export default function LoanDetailPage() {
   const [overduePenaltyDate, setOverduePenaltyDate] = useState<string | null>(null);
   const [overduePenaltyAmount, setOverduePenaltyAmount] = useState("");
   const [overduePenaltyObs, setOverduePenaltyObs] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
