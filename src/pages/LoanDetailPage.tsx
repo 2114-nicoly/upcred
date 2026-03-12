@@ -245,6 +245,8 @@ export default function LoanDetailPage() {
   };
 
   const handleUndoPayment = async (id: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     // 1. Delete ALL cash_movements linked to this installment
     await supabase.from("cash_movements").delete().eq("installment_id", id);
 
