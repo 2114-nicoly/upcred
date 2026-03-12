@@ -527,7 +527,9 @@ export default function DailyCashPage() {
   };
 
   const handleUndoPayment = async (id: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    setIsSubmitting(true);
 
     const inst = paidInstallments.find(i => i.id === id);
     setPaidInstallments(prev => prev.filter(i => i.id !== id));
