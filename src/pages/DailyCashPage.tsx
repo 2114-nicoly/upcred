@@ -286,8 +286,8 @@ export default function DailyCashPage() {
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); setIsSubmitting(false); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); setIsSubmitting(false); return; }
 
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = parcValue ?? instRemaining;
@@ -295,7 +295,7 @@ export default function DailyCashPage() {
     const optimisticPaid: InstallmentWithLoan = {
       ...inst,
       paid_amount: Number(inst.paid_amount) + paidValue,
-      status: paidValue >= instRemaining - 0.01 ? "paid" : inst.status,
+      status: paidValue >= instRemaining - 0.01 ? "paid" : "partial",
       paid_at: new Date(payDate + "T12:00:00").toISOString(),
     };
     localActionedLoanIds.current.add(inst.loan_id);
@@ -390,7 +390,9 @@ export default function DailyCashPage() {
   };
 
   const handleNotPaid = async (id: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
@@ -420,11 +422,14 @@ export default function DailyCashPage() {
       loan_id: inst.loan_id, client_id: inst.loans.client_id,
       observation: obs || null,
     });
+    setIsSubmitting(false);
     fetchData();
   };
 
   const handleBatchNotPaid = async () => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    setIsSubmitting(true);
 
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
     if (selectedInsts.length === 0) return;
@@ -459,6 +464,7 @@ export default function DailyCashPage() {
       observation: obs || null,
     }));
     await supabase.from("not_paid_marks").insert(inserts);
+    setIsSubmitting(false);
     fetchData();
   };
 
@@ -505,7 +511,9 @@ export default function DailyCashPage() {
   };
 
   const handleUndoNotPaid = async (markId: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    setIsSubmitting(true);
 
     const mark = notPaidMarks.find(m => m.id === markId);
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
@@ -514,11 +522,14 @@ export default function DailyCashPage() {
     }
     toast.success("Marcação desfeita!");
     await supabase.from("not_paid_marks").delete().eq("id", markId);
+    setIsSubmitting(false);
     fetchData();
   };
 
   const handleUndoPayment = async (id: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    setIsSubmitting(true);
 
     const inst = paidInstallments.find(i => i.id === id);
     setPaidInstallments(prev => prev.filter(i => i.id !== id));
@@ -719,8 +730,8 @@ export default function DailyCashPage() {
                     + adicionar observação
                   </button>
                 )}
-                <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full">
-                  Confirmar Não Pagou
+                <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Processando..." : "Confirmar Não Pagou"}
                 </Button>
               </div>
             </DialogContent>

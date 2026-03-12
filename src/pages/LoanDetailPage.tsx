@@ -106,6 +106,7 @@ export default function LoanDetailPage() {
   const [overduePenaltyDate, setOverduePenaltyDate] = useState<string | null>(null);
   const [overduePenaltyAmount, setOverduePenaltyAmount] = useState("");
   const [overduePenaltyObs, setOverduePenaltyObs] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
@@ -132,10 +133,12 @@ export default function LoanDetailPage() {
 
   // --- Payment ---
   const handlePay = async (id: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); setIsSubmitting(false); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); setIsSubmitting(false); return; }
 
     if (multaValue > 0) {
       const penaltyInst = installments.find((i) => i.is_penalty);
@@ -223,6 +226,7 @@ export default function LoanDetailPage() {
 
     await updateLoanStatus();
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+    setIsSubmitting(false);
     fetchData();
   };
 
@@ -241,6 +245,8 @@ export default function LoanDetailPage() {
   };
 
   const handleUndoPayment = async (id: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     // 1. Delete ALL cash_movements linked to this installment
     await supabase.from("cash_movements").delete().eq("installment_id", id);
 
@@ -252,6 +258,7 @@ export default function LoanDetailPage() {
 
     await updateLoanStatus();
     toast.success("Pagamento desfeito!");
+    setIsSubmitting(false);
     fetchData();
   };
 
@@ -625,7 +632,7 @@ export default function LoanDetailPage() {
                       <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                     </div>
                     <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                    <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
+                    <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>{isSubmitting ? "Processando..." : "Confirmar Pagamento"}</Button>
                   </div>
                 </DialogContent>
               </Dialog>
