@@ -258,6 +258,7 @@ export default function LoanDetailPage() {
 
     await updateLoanStatus();
     toast.success("Pagamento desfeito!");
+    setIsSubmitting(false);
     fetchData();
   };
 
