@@ -390,7 +390,9 @@ export default function DailyCashPage() {
   };
 
   const handleNotPaid = async (id: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
