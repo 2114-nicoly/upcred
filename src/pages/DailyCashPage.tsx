@@ -511,7 +511,9 @@ export default function DailyCashPage() {
   };
 
   const handleUndoNotPaid = async (markId: string) => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    setIsSubmitting(true);
 
     const mark = notPaidMarks.find(m => m.id === markId);
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
