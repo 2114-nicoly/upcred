@@ -730,8 +730,8 @@ export default function DailyCashPage() {
                     + adicionar observação
                   </button>
                 )}
-                <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full">
-                  Confirmar Não Pagou
+                <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Processando..." : "Confirmar Não Pagou"}
                 </Button>
               </div>
             </DialogContent>
