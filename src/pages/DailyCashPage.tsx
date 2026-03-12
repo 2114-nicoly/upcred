@@ -464,6 +464,7 @@ export default function DailyCashPage() {
       observation: obs || null,
     }));
     await supabase.from("not_paid_marks").insert(inserts);
+    setIsSubmitting(false);
     fetchData();
   };
 
