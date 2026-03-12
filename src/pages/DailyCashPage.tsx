@@ -286,8 +286,8 @@ export default function DailyCashPage() {
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); setIsSubmitting(false); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); setIsSubmitting(false); return; }
 
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = parcValue ?? instRemaining;
