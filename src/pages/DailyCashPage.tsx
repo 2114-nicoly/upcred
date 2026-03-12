@@ -427,7 +427,9 @@ export default function DailyCashPage() {
   };
 
   const handleBatchNotPaid = async () => {
+    if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    setIsSubmitting(true);
 
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
     if (selectedInsts.length === 0) return;
