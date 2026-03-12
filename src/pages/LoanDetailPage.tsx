@@ -226,6 +226,7 @@ export default function LoanDetailPage() {
 
     await updateLoanStatus();
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+    setIsSubmitting(false);
     fetchData();
   };
 
