@@ -522,6 +522,7 @@ export default function DailyCashPage() {
     }
     toast.success("Marcação desfeita!");
     await supabase.from("not_paid_marks").delete().eq("id", markId);
+    setIsSubmitting(false);
     fetchData();
   };
 
