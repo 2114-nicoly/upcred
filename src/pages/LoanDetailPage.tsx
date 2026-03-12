@@ -174,18 +174,21 @@ export default function LoanDetailPage() {
       }
       let remaining = parcValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount));
       const toProcess = unpaid.filter((i) => i.number >= currentInst.number);
+      let isFirst = true;
       for (const inst of toProcess) {
         if (remaining <= 0) break;
         const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
         const applying = Math.min(remaining, instRemaining);
         const newPaidAmount = Number(inst.paid_amount) + applying;
         const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
+        const shouldSetPaidAt = fullyPaid || isFirst;
         await supabase.from("installments").update({
           paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : inst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
+          status: fullyPaid ? "paid" : (isFirst ? "partial" : inst.status),
+          paid_at: shouldSetPaidAt ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
         }).eq("id", inst.id);
         remaining -= applying;
+        isFirst = false;
       }
       const totalApplied = (parcValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount))) - remaining;
       // Cash: normal payment - interest first, then principal
