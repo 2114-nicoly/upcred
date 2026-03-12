@@ -422,6 +422,7 @@ export default function DailyCashPage() {
       loan_id: inst.loan_id, client_id: inst.loans.client_id,
       observation: obs || null,
     });
+    setIsSubmitting(false);
     fetchData();
   };
 
