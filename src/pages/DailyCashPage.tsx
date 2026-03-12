@@ -295,7 +295,7 @@ export default function DailyCashPage() {
     const optimisticPaid: InstallmentWithLoan = {
       ...inst,
       paid_amount: Number(inst.paid_amount) + paidValue,
-      status: paidValue >= instRemaining - 0.01 ? "paid" : inst.status,
+      status: paidValue >= instRemaining - 0.01 ? "paid" : "partial",
       paid_at: new Date(payDate + "T12:00:00").toISOString(),
     };
     localActionedLoanIds.current.add(inst.loan_id);
