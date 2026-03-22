@@ -92,6 +92,7 @@ export default function DailyCashPage() {
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
 
   useEffect(() => { setPayDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
@@ -134,6 +135,7 @@ export default function DailyCashPage() {
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!silent) setLoading(true);
+    if (silent) setIsRefreshing(true);
 
     try {
       const { data: dcData } = await supabase
@@ -265,6 +267,7 @@ export default function DailyCashPage() {
       await computeProgress(paidInsts, enrichedNpMarks, dedupedPending);
     } finally {
       if (!silent) setLoading(false);
+      if (silent) setIsRefreshing(false);
     }
   }, [selectedDate]);
 
@@ -1002,10 +1005,15 @@ export default function DailyCashPage() {
         </button>
       </div>
 
-      {loading ? (
+      {loading && pendingInstallments.length === 0 && paidInstallments.length === 0 && notPaidMarks.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground py-8">Carregando...</p>
       ) : (
         <>
+          {isRefreshing && (
+            <div className="mb-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-center text-xs text-muted-foreground">
+              Atualizando...
+            </div>
+          )}
           {activeTab !== "pending" && (
             <Button variant="ghost" size="sm" className="mb-2 h-7 text-xs" onClick={() => setActiveTab("pending")}>
               <ChevronLeft className="mr-1 h-3 w-3" /> Voltar para Pendentes
