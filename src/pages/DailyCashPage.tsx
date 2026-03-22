@@ -1221,7 +1221,7 @@ export default function DailyCashPage() {
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
             <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); } }}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="destructive" className="flex-1">
+                <Button type="button" size="sm" variant="destructive" className="flex-1">
                   <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
                 </Button>
               </DialogTrigger>
