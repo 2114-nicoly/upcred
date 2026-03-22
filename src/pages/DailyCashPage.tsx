@@ -132,138 +132,140 @@ export default function DailyCashPage() {
     return pendingInstallments;
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true);
 
-    const { data: dcData } = await supabase
-      .from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle();
+    try {
+      const { data: dcData } = await supabase
+        .from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle();
 
-    const status = dcData?.status || "open";
-    setDailyCashStatus(status);
+      const status = dcData?.status || "open";
+      setDailyCashStatus(status);
 
-    const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
+      const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
 
-    const [
-      { data: paidData },
-      { data: paymentMovementData },
-      { data: npData },
-    ] = await Promise.all([
-      supabase.from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .eq("is_penalty", false)
-        .gte("paid_at", selectedDate + "T00:00:00")
-        .lt("paid_at", nextDay + "T00:00:00")
-        .order("number"),
-      supabase.from("cash_movements")
-        .select("installment_id, created_at")
-        .eq("type", "recebimento_normal")
-        .gte("created_at", selectedDate + "T00:00:00")
-        .lt("created_at", nextDay + "T00:00:00")
-        .not("installment_id", "is", null),
-      supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
-    ]);
+      const [
+        { data: paidData },
+        { data: paymentMovementData },
+        { data: npData },
+      ] = await Promise.all([
+        supabase.from("installments")
+          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .eq("is_penalty", false)
+          .gte("paid_at", selectedDate + "T00:00:00")
+          .lt("paid_at", nextDay + "T00:00:00")
+          .order("number"),
+        supabase.from("cash_movements")
+          .select("installment_id, created_at")
+          .eq("type", "recebimento_normal")
+          .gte("created_at", selectedDate + "T00:00:00")
+          .lt("created_at", nextDay + "T00:00:00")
+          .not("installment_id", "is", null),
+        supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
+      ]);
 
-    const paidInstMap = new Map<string, InstallmentWithLoan>(
-      (((paidData as unknown as InstallmentWithLoan[]) || []).map((inst) => [inst.id, inst]))
-    );
+      const paidInstMap = new Map<string, InstallmentWithLoan>(
+        (((paidData as unknown as InstallmentWithLoan[]) || []).map((inst) => [inst.id, inst]))
+      );
 
-    const paymentTimesByInstallment = new Map<string, string>();
-    for (const movement of paymentMovementData || []) {
-      if (!movement.installment_id) continue;
-      const prev = paymentTimesByInstallment.get(movement.installment_id);
-      if (!prev || new Date(movement.created_at).getTime() > new Date(prev).getTime()) {
-        paymentTimesByInstallment.set(movement.installment_id, movement.created_at);
+      const paymentTimesByInstallment = new Map<string, string>();
+      for (const movement of paymentMovementData || []) {
+        if (!movement.installment_id) continue;
+        const prev = paymentTimesByInstallment.get(movement.installment_id);
+        if (!prev || new Date(movement.created_at).getTime() > new Date(prev).getTime()) {
+          paymentTimesByInstallment.set(movement.installment_id, movement.created_at);
+        }
       }
-    }
 
-    const missingPaidIds = [...paymentTimesByInstallment.keys()].filter((id) => !paidInstMap.has(id));
-    if (missingPaidIds.length > 0) {
-      const { data: paidFromMovements } = await supabase
-        .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .in("id", missingPaidIds)
-        .eq("is_penalty", false);
+      const missingPaidIds = [...paymentTimesByInstallment.keys()].filter((id) => !paidInstMap.has(id));
+      if (missingPaidIds.length > 0) {
+        const { data: paidFromMovements } = await supabase
+          .from("installments")
+          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .in("id", missingPaidIds)
+          .eq("is_penalty", false);
 
-      for (const inst of ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])) {
-        if (Number(inst.paid_amount) <= 0) continue;
-        paidInstMap.set(inst.id, {
-          ...inst,
-          paid_at: inst.paid_at || paymentTimesByInstallment.get(inst.id) || null,
-        });
+        for (const inst of ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])) {
+          if (Number(inst.paid_amount) <= 0) continue;
+          paidInstMap.set(inst.id, {
+            ...inst,
+            paid_at: inst.paid_at || paymentTimesByInstallment.get(inst.id) || null,
+          });
+        }
       }
-    }
 
-    const paidInsts = Array.from(paidInstMap.values()).sort((a, b) => a.number - b.number);
-    setPaidInstallments(paidInsts);
+      const paidInsts = Array.from(paidInstMap.values()).sort((a, b) => a.number - b.number);
+      setPaidInstallments(paidInsts);
 
-    const npMarks = (npData || []) as unknown as NotPaidMark[];
+      const npMarks = (npData || []) as unknown as NotPaidMark[];
 
-    let npInstMap: Record<string, InstallmentWithLoan> = {};
-    const npInstIds = npMarks.map(m => m.installment_id);
-    if (npInstIds.length > 0) {
-      const { data: npInstData } = await supabase
-        .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .in("id", npInstIds);
-      const npInsts = (npInstData as unknown as InstallmentWithLoan[]) || [];
-      npInstMap = Object.fromEntries(npInsts.map(i => [i.id, i]));
-    }
+      let npInstMap: Record<string, InstallmentWithLoan> = {};
+      const npInstIds = npMarks.map(m => m.installment_id);
+      if (npInstIds.length > 0) {
+        const { data: npInstData } = await supabase
+          .from("installments")
+          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .in("id", npInstIds);
+        const npInsts = (npInstData as unknown as InstallmentWithLoan[]) || [];
+        npInstMap = Object.fromEntries(npInsts.map(i => [i.id, i]));
+      }
 
-    const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
-    setNotPaidMarks(enrichedNpMarks);
+      const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
+      setNotPaidMarks(enrichedNpMarks);
 
-    if (status === "closed") {
-      setPendingInstallments([]);
+      if (status === "closed") {
+        setPendingInstallments([]);
+        setSelectedForNotPaid(new Set());
+        await computeProgress(paidInsts, enrichedNpMarks, []);
+        return;
+      }
+
+      const [
+        { data: dueTodayData },
+        { data: overdueData },
+      ] = await Promise.all([
+        supabase.from("installments")
+          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
+        supabase.from("installments")
+          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
+      ]);
+
+      const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
+      const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
+      const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
+
+      const paidInstIds = new Set(paidInsts.map(i => i.id));
+      const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
+
+      const actionedLoanIds = new Set([
+        ...paidInsts.map(i => i.loan_id),
+        ...npMarks.map(m => m.loan_id),
+        ...localActionedLoanIds.current,
+      ]);
+
+      const allCandidates = [...validOverdue, ...dueToday].filter(
+        i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
+          && !actionedLoanIds.has(i.loan_id)
+          && Number(i.amount) - Number(i.paid_amount) > 0.01
+      );
+
+      const seenLoans = new Set<string>();
+      const dedupedPending: InstallmentWithLoan[] = [];
+      for (const inst of allCandidates.sort((a, b) => a.number - b.number)) {
+        if (!seenLoans.has(inst.loan_id)) {
+          seenLoans.add(inst.loan_id);
+          dedupedPending.push(inst);
+        }
+      }
+      setPendingInstallments(dedupedPending);
       setSelectedForNotPaid(new Set());
-      await computeProgress(paidInsts, enrichedNpMarks, []);
-      setLoading(false);
-      return;
+
+      await computeProgress(paidInsts, enrichedNpMarks, dedupedPending);
+    } finally {
+      if (!silent) setLoading(false);
     }
-
-    const [
-      { data: dueTodayData },
-      { data: overdueData },
-    ] = await Promise.all([
-      supabase.from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-      supabase.from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-        .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-    ]);
-
-    const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
-    const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
-    const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
-
-    const paidInstIds = new Set(paidInsts.map(i => i.id));
-    const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
-
-    const actionedLoanIds = new Set([
-      ...paidInsts.map(i => i.loan_id),
-      ...npMarks.map(m => m.loan_id),
-      ...localActionedLoanIds.current,
-    ]);
-
-    const allCandidates = [...validOverdue, ...dueToday].filter(
-      i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
-        && !actionedLoanIds.has(i.loan_id)
-        && Number(i.amount) - Number(i.paid_amount) > 0.01
-    );
-
-    const seenLoans = new Set<string>();
-    const dedupedPending: InstallmentWithLoan[] = [];
-    for (const inst of allCandidates.sort((a, b) => a.number - b.number)) {
-      if (!seenLoans.has(inst.loan_id)) {
-        seenLoans.add(inst.loan_id);
-        dedupedPending.push(inst);
-      }
-    }
-    setPendingInstallments(dedupedPending);
-    setSelectedForNotPaid(new Set());
-
-    await computeProgress(paidInsts, enrichedNpMarks, dedupedPending);
-    setLoading(false);
   }, [selectedDate]);
 
   const computeProgress = async (
@@ -311,6 +313,10 @@ export default function DailyCashPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const refreshDataInBackground = useCallback(() => {
+    void fetchData({ silent: true });
+  }, [fetchData]);
+
   // === Payment handler with optimistic UI ===
   const handlePay = async (id: string) => {
     if (isSubmitting) return;
@@ -319,7 +325,7 @@ export default function DailyCashPage() {
 
     const allInsts = [...pendingInstallments, ...paidInstallments];
     const inst = allInsts.find(i => i.id === id);
-    if (!inst) return;
+    if (!inst) { setIsSubmitting(false); return; }
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
@@ -365,7 +371,7 @@ export default function DailyCashPage() {
       }
 
       if (parcValue !== null || !payPenaltyAmount) {
-        if (paidValue <= 0 && multaValue > 0) { fetchData(); return; }
+        if (paidValue <= 0 && multaValue > 0) return;
 
         const { data: allUnpaid } = await supabase
           .from("installments").select("*")
@@ -418,8 +424,8 @@ export default function DailyCashPage() {
       toast.error("Erro ao sincronizar, recarregando...");
     } finally {
       setIsSubmitting(false);
+      refreshDataInBackground();
     }
-    fetchData();
   };
 
   const resetPayDialog = () => {
@@ -432,7 +438,7 @@ export default function DailyCashPage() {
     setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
-    if (!inst) return;
+    if (!inst) { setIsSubmitting(false); return; }
 
     const obs = notPaidObs;
     const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
@@ -454,13 +460,16 @@ export default function DailyCashPage() {
     setNotPaidDialogId(null);
     toast.info("Marcado como 'Não Pagou'");
 
-    await supabase.from("not_paid_marks").insert({
-      mark_date: selectedDate, installment_id: inst.id,
-      loan_id: inst.loan_id, client_id: inst.loans.client_id,
-      observation: obs || null,
-    });
-    setIsSubmitting(false);
-    fetchData();
+    try {
+      await supabase.from("not_paid_marks").insert({
+        mark_date: selectedDate, installment_id: inst.id,
+        loan_id: inst.loan_id, client_id: inst.loans.client_id,
+        observation: obs || null,
+      });
+    } finally {
+      setIsSubmitting(false);
+      refreshDataInBackground();
+    }
   };
 
   const handleBatchNotPaid = async () => {
@@ -469,7 +478,7 @@ export default function DailyCashPage() {
     setIsSubmitting(true);
 
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
-    if (selectedInsts.length === 0) return;
+    if (selectedInsts.length === 0) { setIsSubmitting(false); return; }
 
     const obs = batchNotPaidObs;
     const optimisticMarks = selectedInsts.map(inst => ({
@@ -500,9 +509,12 @@ export default function DailyCashPage() {
       client_id: inst.loans.client_id,
       observation: obs || null,
     }));
-    await supabase.from("not_paid_marks").insert(inserts);
-    setIsSubmitting(false);
-    fetchData();
+    try {
+      await supabase.from("not_paid_marks").insert(inserts);
+    } finally {
+      setIsSubmitting(false);
+      refreshDataInBackground();
+    }
   };
 
   const toggleSelectForNotPaid = (id: string) => {
@@ -558,9 +570,12 @@ export default function DailyCashPage() {
       setPendingInstallments(prev => [...prev, mark.installment!]);
     }
     toast.success("Marcação desfeita!");
-    await supabase.from("not_paid_marks").delete().eq("id", markId);
-    setIsSubmitting(false);
-    fetchData();
+    try {
+      await supabase.from("not_paid_marks").delete().eq("id", markId);
+    } finally {
+      setIsSubmitting(false);
+      refreshDataInBackground();
+    }
   };
 
   const handleUndoPayment = async (id: string) => {
@@ -575,17 +590,21 @@ export default function DailyCashPage() {
     }
     toast.success("Pagamento desfeito!");
 
-    await supabase.from("cash_movements").delete().eq("installment_id", id);
-    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+    try {
+      await supabase.from("cash_movements").delete().eq("installment_id", id);
+      await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
 
-    if (inst) {
-      const { data: penaltyMovs } = await supabase
-        .from("cash_movements").select("id, amount")
-        .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
+      if (inst) {
+        await supabase
+          .from("cash_movements").select("id, amount")
+          .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
+      }
+
+      await recalculateCashBalanceFromLedger();
+    } finally {
+      setIsSubmitting(false);
+      refreshDataInBackground();
     }
-
-    await recalculateCashBalanceFromLedger();
-    fetchData();
   };
 
   const handleCloseCash = async () => {
@@ -629,7 +648,7 @@ export default function DailyCashPage() {
 
     toast.success("Caixa reaberto!");
     setDailyCashStatus("open");
-    fetchData();
+    refreshDataInBackground();
   };
 
   const totalPendingValue = pendingInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
