@@ -92,6 +92,7 @@ export default function DailyCashPage() {
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
 
   useEffect(() => { setPayDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
@@ -134,6 +135,7 @@ export default function DailyCashPage() {
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!silent) setLoading(true);
+    if (silent) setIsRefreshing(true);
 
     try {
       const { data: dcData } = await supabase
@@ -265,6 +267,7 @@ export default function DailyCashPage() {
       await computeProgress(paidInsts, enrichedNpMarks, dedupedPending);
     } finally {
       if (!silent) setLoading(false);
+      if (silent) setIsRefreshing(false);
     }
   }, [selectedDate]);
 
@@ -726,9 +729,9 @@ export default function DailyCashPage() {
 
         {/* Action buttons */}
         <div className="flex border-t border-border">
-          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
-            <DialogTrigger asChild>
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
+            <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
+              <DialogTrigger asChild>
+                <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
                 <CheckCircle className="h-3.5 w-3.5" /> PAGOU
               </button>
             </DialogTrigger>
@@ -764,9 +767,9 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
-            <DialogTrigger asChild>
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
+            <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
+              <DialogTrigger asChild>
+                <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
                 <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
               </button>
             </DialogTrigger>
@@ -1002,10 +1005,15 @@ export default function DailyCashPage() {
         </button>
       </div>
 
-      {loading ? (
+      {loading && pendingInstallments.length === 0 && paidInstallments.length === 0 && notPaidMarks.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground py-8">Carregando...</p>
       ) : (
         <>
+          {isRefreshing && (
+            <div className="mb-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-center text-xs text-muted-foreground">
+              Atualizando...
+            </div>
+          )}
           {activeTab !== "pending" && (
             <Button variant="ghost" size="sm" className="mb-2 h-7 text-xs" onClick={() => setActiveTab("pending")}>
               <ChevronLeft className="mr-1 h-3 w-3" /> Voltar para Pendentes
@@ -1213,7 +1221,7 @@ export default function DailyCashPage() {
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
             <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); } }}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="destructive" className="flex-1">
+                <Button type="button" size="sm" variant="destructive" className="flex-1">
                   <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
                 </Button>
               </DialogTrigger>
