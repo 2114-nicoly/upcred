@@ -898,6 +898,31 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {/* Quitar Dialog */}
+        <Dialog open={quitarDialogId === inst.id} onOpenChange={(o) => { if (!o) { setQuitarDialogId(null); setQuitarDate(selectedDate); } }}>
+          <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+            <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm font-medium">{inst.loans.clients.name}</p>
+              <div className="rounded-lg border p-3 space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{lp ? lp.total - Math.floor(lp.progress) : "..."}/{lp?.total ?? inst.loans.installment_count}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(lp?.remaining ?? 0)}</span></div>
+                {(lp && lp.penaltyTotal - lp.penaltyPaid > 0.01) && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</span></div>
+                )}
+                <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + (lp ? Math.max(0, lp.penaltyTotal - lp.penaltyPaid) : 0))}</span></div>
+              </div>
+              <div>
+                <Label>Data do pagamento</Label>
+                <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+              </div>
+              <Button onClick={() => handleQuitarEmprestimo(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                {isSubmitting ? "Processando..." : "Confirmar Quitação"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };
