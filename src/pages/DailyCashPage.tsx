@@ -93,9 +93,11 @@ export default function DailyCashPage() {
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
+  const [quitarDate, setQuitarDate] = useState(selectedDate);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
 
-  useEffect(() => { setPayDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
+  useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
@@ -654,6 +656,103 @@ export default function DailyCashPage() {
     refreshDataInBackground();
   };
 
+  const handleQuitarEmprestimo = async (instId: string) => {
+    if (isSubmitting) return;
+    if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    setIsSubmitting(true);
+
+    const inst = pendingInstallments.find(i => i.id === instId);
+    if (!inst) { setIsSubmitting(false); return; }
+
+    // Optimistic: remove from pending, add to paid
+    localActionedLoanIds.current.add(inst.loan_id);
+    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
+    setPaidInstallments(prev => [...prev, { ...inst, status: "paid", paid_amount: Number(inst.amount), paid_at: new Date(quitarDate + "T12:00:00").toISOString() }]);
+    setQuitarDialogId(null);
+    toast.success("Empréstimo quitado!");
+
+    try {
+      // Fetch ALL unpaid installments for this loan (regular + penalty)
+      const { data: allUnpaid } = await supabase
+        .from("installments").select("*")
+        .eq("loan_id", inst.loan_id).neq("status", "paid").order("number");
+
+      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); refreshDataInBackground(); return; }
+
+      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
+      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
+
+      let totalRegularPaying = 0;
+      let totalPenaltyPaying = 0;
+
+      // Pay all regular installments
+      for (const i of regularUnpaid) {
+        const remaining = Number(i.amount) - Number(i.paid_amount);
+        if (remaining <= 0.01) continue;
+        totalRegularPaying += remaining;
+        await supabase.from("installments").update({
+          paid_amount: Number(i.amount),
+          status: "paid",
+          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
+        }).eq("id", i.id);
+      }
+
+      // Pay all penalty installments
+      for (const i of penaltyUnpaid) {
+        const remaining = Number(i.amount) - Number(i.paid_amount);
+        if (remaining <= 0.01) continue;
+        totalPenaltyPaying += remaining;
+        await supabase.from("installments").update({
+          paid_amount: Number(i.amount),
+          status: "paid",
+          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
+        }).eq("id", i.id);
+      }
+
+      // Update loan status
+      await supabase.from("loans").update({ status: "paid" }).eq("id", inst.loan_id);
+
+      // Update cash balance - regular payments
+      if (totalRegularPaying > 0) {
+        const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
+        const { data: allLoanInsts } = await supabase
+          .from("installments").select("paid_amount")
+          .eq("loan_id", inst.loan_id).eq("is_penalty", false);
+        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const totalPaidBefore = totalPaidNow - totalRegularPaying;
+        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+        const toInterest = Math.min(totalRegularPaying, interestRemaining);
+        const toPrincipal = totalRegularPaying - toInterest;
+
+        await updateCashBalance({
+          available_cash: totalRegularPaying,
+          interest_receivable: -toInterest,
+          money_lent: -toPrincipal,
+        });
+        await createCashMovement({
+          type: "recebimento_normal", amount: totalRegularPaying,
+          client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
+          observation: `Quitação empréstimo - ${inst.loans.clients.name}`,
+        });
+      }
+
+      // Update cash balance - penalty payments
+      if (totalPenaltyPaying > 0) {
+        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
+        await createCashMovement({
+          type: "recebimento_multa", amount: totalPenaltyPaying,
+          client_id: inst.loans.client_id, loan_id: inst.loan_id,
+          observation: `Quitação multa - ${inst.loans.clients.name}`,
+        });
+      }
+    } catch {
+      toast.error("Erro ao quitar, recarregando...");
+    } finally {
+      setIsSubmitting(false);
+      refreshDataInBackground();
+    }
+  };
+
   const totalPendingValue = pendingInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalPaidValue = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
 
@@ -705,6 +804,9 @@ export default function DailyCashPage() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setQuitarDialogId(inst.id)}>
+                <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalhes
               </DropdownMenuItem>
@@ -796,6 +898,31 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {/* Quitar Dialog */}
+        <Dialog open={quitarDialogId === inst.id} onOpenChange={(o) => { if (!o) { setQuitarDialogId(null); setQuitarDate(selectedDate); } }}>
+          <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+            <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm font-medium">{inst.loans.clients.name}</p>
+              <div className="rounded-lg border p-3 space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{lp ? lp.total - Math.floor(lp.progress) : "..."}/{lp?.total ?? inst.loans.installment_count}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(lp?.remaining ?? 0)}</span></div>
+                {(lp && lp.penaltyTotal - lp.penaltyPaid > 0.01) && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</span></div>
+                )}
+                <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + (lp ? Math.max(0, lp.penaltyTotal - lp.penaltyPaid) : 0))}</span></div>
+              </div>
+              <div>
+                <Label>Data do pagamento</Label>
+                <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+              </div>
+              <Button onClick={() => handleQuitarEmprestimo(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                {isSubmitting ? "Processando..." : "Confirmar Quitação"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };
