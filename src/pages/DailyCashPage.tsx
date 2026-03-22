@@ -93,6 +93,8 @@ export default function DailyCashPage() {
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
+  const [quitarDate, setQuitarDate] = useState(selectedDate);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
 
   useEffect(() => { setPayDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
