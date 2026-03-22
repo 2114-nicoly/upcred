@@ -729,9 +729,9 @@ export default function DailyCashPage() {
 
         {/* Action buttons */}
         <div className="flex border-t border-border">
-          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
-            <DialogTrigger asChild>
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
+            <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
+              <DialogTrigger asChild>
+                <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
                 <CheckCircle className="h-3.5 w-3.5" /> PAGOU
               </button>
             </DialogTrigger>
@@ -767,9 +767,9 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
-            <DialogTrigger asChild>
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
+            <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
+              <DialogTrigger asChild>
+                <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
                 <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
               </button>
             </DialogTrigger>
