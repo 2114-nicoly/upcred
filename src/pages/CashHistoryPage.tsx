@@ -17,14 +17,29 @@ import {
   CashMovement,
 } from "@/lib/cash-utils";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+
+function getDayLabel(dateStr: string): string {
+  const date = new Date(dateStr + "T12:00:00");
+  if (isToday(date)) return "Hoje";
+  if (isYesterday(date)) return "Ontem";
+  return format(date, "EEEE, dd/MM/yyyy", { locale: ptBR });
+}
+
+type MovementWithClient = CashMovement & { clients?: { name: string } | null };
+
+type GroupedDay = {
+  date: string;
+  label: string;
+  movements: MovementWithClient[];
+};
 
 export default function CashHistoryPage() {
   const navigate = useNavigate();
-  const [movements, setMovements] = useState<(CashMovement & { clients?: { name: string } | null })[]>([]);
+  const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterPeriod, setFilterPeriod] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterClient, setFilterClient] = useState("");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
@@ -38,20 +53,11 @@ export default function CashHistoryPage() {
     let query = supabase
       .from("cash_movements")
       .select("*, clients(name)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
 
     if (filterType !== "all") query = query.eq("type", filterType);
-    if (filterClient) query = query.eq("client_id", filterClient);
-
-    const today = new Date();
-    if (filterPeriod === "today") {
-      const todayStr = format(today, "yyyy-MM-dd");
-      query = query.gte("created_at", todayStr + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
-    } else if (filterPeriod === "week") {
-      query = query.gte("created_at", startOfWeek(today, { weekStartsOn: 1 }).toISOString()).lte("created_at", endOfWeek(today, { weekStartsOn: 1 }).toISOString());
-    } else if (filterPeriod === "month") {
-      query = query.gte("created_at", startOfMonth(today).toISOString()).lte("created_at", endOfMonth(today).toISOString());
-    }
+    if (filterClient && filterClient !== "all") query = query.eq("client_id", filterClient);
 
     const { data } = await query;
     setMovements((data as any) || []);
@@ -62,9 +68,25 @@ export default function CashHistoryPage() {
     supabase.from("clients").select("id, name").order("name").then(({ data }) => setClients(data || []));
   }, []);
 
-  useEffect(() => { fetchData(); }, [filterPeriod, filterType, filterClient]);
+  useEffect(() => { fetchData(); }, [filterType, filterClient]);
 
-  const handleDelete = async (mov: CashMovement & { clients?: { name: string } | null }) => {
+  const groupedDays: GroupedDay[] = (() => {
+    const grouped: Record<string, MovementWithClient[]> = {};
+    for (const mov of movements) {
+      const day = format(new Date(mov.created_at), "yyyy-MM-dd");
+      if (!grouped[day]) grouped[day] = [];
+      grouped[day].push(mov);
+    }
+    return Object.entries(grouped)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, movs]) => ({
+        date,
+        label: getDayLabel(date),
+        movements: movs,
+      }));
+  })();
+
+  const handleDelete = async (mov: MovementWithClient) => {
     if (!confirm("Excluir movimentação e reverter saldo?")) return;
     const reverseMap: Record<string, any> = {
       emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
@@ -111,18 +133,6 @@ export default function CashHistoryPage() {
       <div className="mb-4 space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="text-xs">Período</Label>
-            <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="week">Esta Semana</SelectItem>
-                <SelectItem value="month">Este Mês</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
             <Label className="text-xs">Tipo</Label>
             <Select value={filterType} onValueChange={setFilterType}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -137,16 +147,16 @@ export default function CashHistoryPage() {
               </SelectContent>
             </Select>
           </div>
-        </div>
-        <div>
-          <Label className="text-xs">Cliente</Label>
-          <Select value={filterClient} onValueChange={setFilterClient}>
-            <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div>
+            <Label className="text-xs">Cliente</Label>
+            <Select value={filterClient} onValueChange={setFilterClient}>
+              <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -170,38 +180,45 @@ export default function CashHistoryPage() {
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
-      ) : movements.length === 0 ? (
+      ) : groupedDays.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">Nenhuma movimentação encontrada</p>
       ) : (
-        <div className="space-y-2">
-          {movements.map((mov) => (
-            <Card key={mov.id}>
-              <CardContent className="p-3 flex items-center justify-between">
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${getMovementTypeColor(mov.type)}`}>
-                    {getMovementTypeLabel(mov.type)}
-                  </p>
-                  {mov.clients?.name && <p className="text-xs text-muted-foreground">{mov.clients.name}</p>}
-                  {mov.observation && <p className="text-xs text-muted-foreground">{mov.observation}</p>}
-                  <p className="text-xs text-muted-foreground">{format(new Date(mov.created_at), "dd/MM/yyyy HH:mm")}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className={`text-sm font-bold ${Number(mov.amount) >= 0 ? "text-success" : "text-destructive"}`}>
-                    {Number(mov.amount) >= 0 ? "+" : ""}{formatCurrency(Number(mov.amount))}
-                  </span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                    setEditId(mov.id);
-                    setEditAmount(String(Math.abs(Number(mov.amount))));
-                    setEditObs(mov.observation || "");
-                  }}>
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(mov)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="space-y-4">
+          {groupedDays.map((group) => (
+            <div key={group.date}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-1 capitalize">{group.label}</p>
+              <div className="space-y-2">
+                {group.movements.map((mov) => (
+                  <Card key={mov.id}>
+                    <CardContent className="p-3 flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className={`text-sm font-medium ${getMovementTypeColor(mov.type)}`}>
+                          {getMovementTypeLabel(mov.type)}
+                        </p>
+                        {mov.clients?.name && <p className="text-xs text-muted-foreground">{mov.clients.name}</p>}
+                        {mov.observation && <p className="text-xs text-muted-foreground">{mov.observation}</p>}
+                        <p className="text-xs text-muted-foreground">{format(new Date(mov.created_at), "HH:mm")}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-sm font-bold ${Number(mov.amount) >= 0 ? "text-success" : "text-destructive"}`}>
+                          {Number(mov.amount) >= 0 ? "+" : ""}{formatCurrency(Number(mov.amount))}
+                        </span>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                          setEditId(mov.id);
+                          setEditAmount(String(Math.abs(Number(mov.amount))));
+                          setEditObs(mov.observation || "");
+                        }}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(mov)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}

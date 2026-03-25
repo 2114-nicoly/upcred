@@ -1,72 +1,70 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subDays, eachDayOfInterval } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
-import { CalendarDays, Lock, Unlock, ChevronRight } from "lucide-react";
+import { getMovementTypeLabel, getMovementTypeColor } from "@/lib/cash-utils";
+import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-type DailyCash = {
-  id: string;
-  cash_date: string;
-  status: string;
-  total_received: number;
-  total_penalty_received: number;
-  total_not_paid_count: number;
-  total_items_treated: number;
-  closed_at: string | null;
+type MovementDay = {
+  date: string;
+  totalIn: number;
+  totalOut: number;
+  count: number;
+  movements: {
+    id: string;
+    type: string;
+    amount: number;
+    observation: string | null;
+    created_at: string;
+    clients?: { name: string } | null;
+  }[];
 };
+
+function getDayLabel(dateStr: string): string {
+  const date = new Date(dateStr + "T12:00:00");
+  if (isToday(date)) return "Hoje";
+  if (isYesterday(date)) return "Ontem";
+  return format(date, "EEEE, dd/MM/yyyy", { locale: ptBR });
+}
 
 export default function DailyCashHistoryPage() {
   const navigate = useNavigate();
-  const [records, setRecords] = useState<DailyCash[]>([]);
+  const [days, setDays] = useState<MovementDay[]>([]);
   const [loading, setLoading] = useState(true);
-  const today = format(new Date(), "yyyy-MM-dd");
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      // Get last 30 days
-      const startDate = format(subDays(new Date(), 30), "yyyy-MM-dd");
-
+    const fetch = async () => {
       const { data } = await supabase
-        .from("daily_cash")
-        .select("*")
-        .gte("cash_date", startDate)
-        .order("cash_date", { ascending: false });
+        .from("cash_movements")
+        .select("*, clients(name)")
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-      const closedMap = new Map<string, DailyCash>();
-      for (const d of (data || []) as unknown as DailyCash[]) {
-        closedMap.set(d.cash_date, d);
+      if (!data) { setLoading(false); return; }
+
+      const grouped: Record<string, MovementDay> = {};
+      for (const mov of data as any[]) {
+        const day = format(new Date(mov.created_at), "yyyy-MM-dd");
+        if (!grouped[day]) {
+          grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [] };
+        }
+        const amount = Number(mov.amount);
+        if (amount >= 0) grouped[day].totalIn += amount;
+        else grouped[day].totalOut += Math.abs(amount);
+        grouped[day].count++;
+        grouped[day].movements.push(mov);
       }
 
-      // Generate list of last 30 days
-      const days = eachDayOfInterval({
-        start: subDays(new Date(), 30),
-        end: new Date(),
-      }).reverse();
-
-      const allRecords: DailyCash[] = days.map(day => {
-        const dateStr = format(day, "yyyy-MM-dd");
-        const existing = closedMap.get(dateStr);
-        if (existing) return existing;
-        return {
-          id: dateStr,
-          cash_date: dateStr,
-          status: dateStr === today ? "open" : "open",
-          total_received: 0,
-          total_penalty_received: 0,
-          total_not_paid_count: 0,
-          total_items_treated: 0,
-          closed_at: null,
-        };
-      });
-
-      setRecords(allRecords);
+      const sorted = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
+      setDays(sorted);
       setLoading(false);
     };
-    fetchHistory();
+    fetch();
   }, []);
 
   return (
@@ -75,49 +73,60 @@ export default function DailyCashHistoryPage() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <CalendarDays className="h-6 w-6 text-primary" /> Histórico de Caixas
         </h1>
-        <p className="text-sm text-muted-foreground">Últimos 30 dias</p>
+        <p className="text-sm text-muted-foreground">Dias com movimentações registradas</p>
       </div>
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
+      ) : days.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">Nenhuma movimentação registrada</p>
       ) : (
         <div className="space-y-2">
-          {records.map(record => {
-            const isClosed = record.status === "closed";
-            const isToday = record.cash_date === today;
+          {days.map(day => {
+            const isExpanded = expandedDay === day.date;
             return (
-              <Card
-                key={record.cash_date}
-                className={`cursor-pointer hover:border-primary/50 transition-colors ${isToday ? "border-primary/30" : ""}`}
-                onClick={() => navigate(`/?date=${record.cash_date}`)}
-              >
-                <CardContent className="p-3 flex items-center justify-between">
+              <Card key={day.date}>
+                <button
+                  className="flex w-full items-center justify-between p-4 text-left"
+                  onClick={() => setExpandedDay(isExpanded ? null : day.date)}
+                >
                   <div>
-                    <p className="font-medium text-sm">
-                      {format(new Date(record.cash_date + "T12:00:00"), "EEEE, dd/MM", { locale: ptBR })}
-                      {isToday && <span className="text-primary ml-1 text-xs">(hoje)</span>}
-                    </p>
-                    {isClosed && (
-                      <div className="flex gap-3 text-xs text-muted-foreground mt-1">
-                        <span className="text-success">Recebido: {formatCurrency(Number(record.total_received))}</span>
-                        {Number(record.total_penalty_received) > 0 && (
-                          <span className="text-warning">Multas: {formatCurrency(Number(record.total_penalty_received))}</span>
-                        )}
-                        <span>Tratados: {record.total_items_treated}</span>
-                      </div>
-                    )}
+                    <p className="font-semibold capitalize">{getDayLabel(day.date)}</p>
+                    <div className="flex gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span className="text-success">+{formatCurrency(day.totalIn)}</span>
+                      {day.totalOut > 0 && <span className="text-destructive">-{formatCurrency(day.totalOut)}</span>}
+                      <span>{day.count} mov.</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className={isClosed
-                      ? "bg-success/10 text-success border-success/30"
-                      : "bg-warning/10 text-warning border-warning/30"
-                    }>
-                      {isClosed ? <Lock className="h-3 w-3 mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
-                      {isClosed ? "Fechado" : "Aberto"}
+                    <Badge
+                      variant="outline"
+                      className="cursor-pointer text-xs"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/?date=${day.date}`); }}
+                    >
+                      Ver caixa <ChevronRight className="h-3 w-3 ml-1" />
                     </Badge>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                   </div>
-                </CardContent>
+                </button>
+                {isExpanded && (
+                  <CardContent className="space-y-1 border-t pt-3 pb-3">
+                    {day.movements.map(mov => (
+                      <div key={mov.id} className="flex items-center justify-between rounded-lg bg-accent px-3 py-2">
+                        <div>
+                          <p className={`text-xs font-medium ${getMovementTypeColor(mov.type)}`}>
+                            {getMovementTypeLabel(mov.type)}
+                          </p>
+                          {mov.clients?.name && <p className="text-xs text-muted-foreground">{mov.clients.name}</p>}
+                          {mov.observation && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{mov.observation}</p>}
+                        </div>
+                        <span className={`text-sm font-bold ${Number(mov.amount) >= 0 ? "text-success" : "text-destructive"}`}>
+                          {Number(mov.amount) >= 0 ? "+" : ""}{formatCurrency(Number(mov.amount))}
+                        </span>
+                      </div>
+                    ))}
+                  </CardContent>
+                )}
               </Card>
             );
           })}
