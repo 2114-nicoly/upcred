@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
 import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
@@ -24,11 +24,17 @@ type PaidInstallment = {
   loans: { id: string; amount: number; clients: { name: string } };
 };
 
+function getDayLabel(dateStr: string): string {
+  const date = new Date(dateStr + "T12:00:00");
+  if (isToday(date)) return "Hoje";
+  if (isYesterday(date)) return "Ontem";
+  return format(date, "EEEE, dd/MM/yyyy", { locale: ptBR });
+}
+
 export default function PaymentHistoryPage() {
   const [installmentsByDay, setInstallmentsByDay] = useState<Record<string, PaidInstallment[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Edit dialog
   const [editInst, setEditInst] = useState<PaidInstallment | null>(null);
   const [editPaidAmount, setEditPaidAmount] = useState("");
   const [editPaidDate, setEditPaidDate] = useState("");
@@ -61,7 +67,6 @@ export default function PaymentHistoryPage() {
       paid_amount: 0,
     }).eq("id", inst.id);
 
-    // Update loan status
     const { data: allInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", inst.loan_id);
     if (allInst) {
       const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -89,7 +94,6 @@ export default function PaymentHistoryPage() {
       paid_at: fullyPaid ? new Date(editPaidDate + "T12:00:00").toISOString() : null,
     }).eq("id", editInst.id);
 
-    // Update loan status
     const { data: allInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", editInst.loan_id);
     if (allInst) {
       const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -128,7 +132,7 @@ export default function PaymentHistoryPage() {
               <Card key={day}>
                 <button className="flex w-full items-center justify-between p-4 text-left" onClick={() => setExpandedDay(isExpanded ? null : day)}>
                   <div>
-                    <p className="font-semibold">{format(new Date(day), "EEEE, dd/MM/yyyy", { locale: ptBR })}</p>
+                    <p className="font-semibold capitalize">{getDayLabel(day)}</p>
                     <p className="text-sm text-muted-foreground">{insts.length} pagamento(s) • {formatCurrency(total)}</p>
                   </div>
                   {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
@@ -176,7 +180,6 @@ export default function PaymentHistoryPage() {
         </div>
       )}
 
-      {/* Edit Payment Dialog */}
       <Dialog open={!!editInst} onOpenChange={(o) => { if (!o) setEditInst(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Pagamento</DialogTitle></DialogHeader>
