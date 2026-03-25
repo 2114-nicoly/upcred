@@ -927,55 +927,68 @@ export default function DailyCashPage() {
     );
   };
 
-  // === Compact paid row ===
-  const renderPaidRow = (inst: InstallmentWithLoan) => {
-    const lp = loanProgressMap[inst.loan_id];
-    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-    const isPartial = instRemaining > 0.01;
+  // === Grouped paid card per client ===
+  const renderPaidGroupCard = (group: { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }) => {
+    const lp = loanProgressMap[group.loanId];
     const paidCount = lp ? Math.floor(lp.progress) : 0;
-    const totalCount = lp ? lp.total : inst.loans.installment_count;
+    const totalCount = lp ? lp.total : group.installments[0].loans.installment_count;
+    const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
+    const remaining = lp ? Math.max(0, lp.remaining) : 0;
+    const allFullyPaid = group.installments.every(i => Number(i.amount) - Number(i.paid_amount) < 0.01);
 
     return (
-      <div key={inst.id} className={`flex items-center gap-2 rounded-lg border bg-card p-2.5 ${isPartial ? "border-warning/30" : "border-success/30"}`}>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-sm truncate">{inst.loans.clients.name}</span>
-            <span className={`font-bold text-sm shrink-0 ${isPartial ? "text-warning" : "text-success"}`}>
-              {formatCurrency(Number(inst.paid_amount))}
-            </span>
+      <div key={`${group.clientId}-${group.loanId}`} className={`rounded-lg border bg-card overflow-hidden ${allFullyPaid ? "border-success/30" : "border-warning/30"}`}>
+        <div className="flex items-center gap-2 p-2.5">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-semibold text-sm truncate">{group.clientName}</span>
+              <span className={`font-bold text-sm shrink-0 ${allFullyPaid ? "text-success" : "text-warning"}`}>
+                {formatCurrency(group.totalPaid)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {group.installments.length > 1
+                  ? `${group.installments.length} parcelas pagas`
+                  : `Parcela ${group.installments[0].number}`}
+              </span>
+              {remaining > 0.01 && (
+                <span className="text-[11px] text-destructive">• Resta {formatCurrency(remaining)}</span>
+              )}
+              <Badge className={`ml-auto text-[9px] px-1.5 py-0 h-3.5 ${allFullyPaid ? "bg-paid text-paid-foreground" : "bg-warning text-warning-foreground"}`}>
+                {remaining <= 0.01 ? "Quitado" : allFullyPaid ? "Pago" : "Parcial"}
+              </Badge>
+            </div>
+            {/* Progress bar */}
+            <div className="flex items-center gap-2 mt-1">
+              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${progressPct}%` }} />
+              </div>
+              <span className="text-[10px] font-semibold text-success tabular-nums shrink-0">
+                {paidCount}/{totalCount}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-[11px] text-muted-foreground">
-              {inst.number}/{totalCount} • Pago {paidCount}/{totalCount}
-            </span>
-            {isPartial && <span className="text-[11px] text-destructive ml-1">Resta {formatCurrency(instRemaining)}</span>}
-            <Badge className={`ml-auto text-[9px] px-1.5 py-0 h-3.5 ${isPartial ? "bg-warning text-warning-foreground" : "bg-paid text-paid-foreground"}`}>
-              {isPartial ? "Parcial" : "Pago"}
-            </Badge>
-          </div>
-          {inst.paid_at && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {format(new Date(inst.paid_at), "dd/MM HH:mm")}
-            </p>
+          {!isClosed && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-1 rounded-md hover:bg-muted shrink-0">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {group.installments.map(inst => (
+                  <DropdownMenuItem key={inst.id} onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
+                    Desfazer Parcela {inst.number}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
+                  <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
-        {!isClosed && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="p-1 rounded-md hover:bg-muted shrink-0">
-                <MoreVertical className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
-                Desfazer Pagamento
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
-                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
       </div>
     );
   };
@@ -1215,98 +1228,18 @@ export default function DailyCashPage() {
                 </div>
               ) : (
                 (() => {
-                  // Group paid installments by client
-                  const grouped = new Map<string, { clientName: string; clientId: string; installments: InstallmentWithLoan[]; totalPaid: number }>();
+                  // Group paid installments by client+loan
+                  const grouped = new Map<string, { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }>();
                   for (const inst of paidInstallments) {
-                    const cid = inst.loans.client_id;
-                    if (!grouped.has(cid)) {
-                      grouped.set(cid, { clientName: inst.loans.clients.name, clientId: cid, installments: [], totalPaid: 0 });
+                    const key = `${inst.loans.client_id}-${inst.loan_id}`;
+                    if (!grouped.has(key)) {
+                      grouped.set(key, { clientName: inst.loans.clients.name, clientId: inst.loans.client_id, loanId: inst.loan_id, installments: [], totalPaid: 0 });
                     }
-                    const g = grouped.get(cid)!;
+                    const g = grouped.get(key)!;
                     g.installments.push(inst);
                     g.totalPaid += Number(inst.paid_amount);
                   }
-                  return Array.from(grouped.values()).map(group => {
-                    const lp = loanProgressMap[group.installments[0].loan_id];
-                    const paidCount = lp ? Math.floor(lp.progress) : 0;
-                    const totalCount = lp ? lp.total : group.installments[0].loans.installment_count;
-                    const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
-
-                    if (group.installments.length === 1) {
-                      return renderPaidRow(group.installments[0]);
-                    }
-
-                    return (
-                      <Collapsible key={group.clientId}>
-                        <div className="rounded-lg border border-success/30 bg-card overflow-hidden">
-                          <CollapsibleTrigger className="w-full">
-                            <div className="flex items-center gap-2 p-2.5">
-                              <div className="flex-1 min-w-0 text-left">
-                                <div className="flex items-baseline justify-between gap-2">
-                                  <span className="font-semibold text-sm truncate">{group.clientName}</span>
-                                  <span className="font-bold text-sm shrink-0 text-success">
-                                    {formatCurrency(group.totalPaid)}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1 mt-0.5">
-                                  <span className="text-[11px] text-muted-foreground">
-                                    {group.installments.length} parcela{group.installments.length > 1 ? "s" : ""} pagas • Progresso {paidCount}/{totalCount}
-                                  </span>
-                                  <Badge className="ml-auto bg-paid text-paid-foreground text-[9px] px-1.5 py-0 h-3.5">
-                                    Pago
-                                  </Badge>
-                                </div>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                                    <div className="h-full rounded-full bg-success transition-all" style={{ width: `${progressPct}%` }} />
-                                  </div>
-                                  <span className="text-[10px] font-semibold text-success tabular-nums shrink-0">
-                                    {paidCount}/{totalCount}
-                                  </span>
-                                </div>
-                              </div>
-                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
-                            </div>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <div className="border-t border-border px-2.5 pb-2 pt-1 space-y-1.5">
-                              {group.installments.map(inst => {
-                                const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-                                const isPartial = instRemaining > 0.01;
-                                return (
-                                  <div key={inst.id} className="flex items-center justify-between text-xs py-1">
-                                    <div>
-                                      <span className="text-muted-foreground">Parcela {inst.number}</span>
-                                      {isPartial && <span className="text-destructive ml-1">Resta {formatCurrency(instRemaining)}</span>}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={isPartial ? "text-warning font-medium" : "text-success font-medium"}>
-                                        {formatCurrency(Number(inst.paid_amount))}
-                                      </span>
-                                      {!isClosed && (
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <button className="p-0.5 rounded hover:bg-muted">
-                                              <MoreVertical className="h-3 w-3 text-muted-foreground" />
-                                            </button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
-                                              Desfazer Pagamento
-                                            </DropdownMenuItem>
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </CollapsibleContent>
-                        </div>
-                      </Collapsible>
-                    );
-                  });
+                  return Array.from(grouped.values()).map(group => renderPaidGroupCard(group));
                 })()
               )}
             </div>
