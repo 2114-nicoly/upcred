@@ -1320,7 +1320,7 @@ export default function DailyCashPage() {
         className="fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
         aria-label="Novo Empréstimo"
       >
-        <Plus className="h-7 w-7" />
+        <Plus className="h-6 w-6" />
       </button>
     </div>
   );

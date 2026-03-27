@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { DollarSign, Landmark, CalendarDays, Users, BarChart3, Wallet } from "lucide-react";
 
 const navItems = [
-  { path: "/", label: "Caixa Dia", icon: DollarSign },
+  { path: "/", label: "Hoje", icon: DollarSign },
   { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
   { path: "/active-loans", label: "Ativos", icon: Landmark },
   { path: "/caixa", label: "Caixa", icon: Wallet },
