@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2 } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye } from "lucide-react";
 import { recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -361,89 +362,71 @@ export default function ActiveLoansPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           {displayedLoans.map((loan) => {
             const lp = progressMap[loan.id];
+            const progressPct = lp && lp.total > 0 ? (Math.floor(lp.progress) / lp.total) * 100 : 0;
             return (
-              <Card key={loan.id} className={`overflow-hidden transition-colors hover:bg-accent/50 ${loan.is_cravo ? "border-destructive/50" : ""} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    {selectMode && (
-                      <div className="mr-3 flex items-center">
-                        <Checkbox checked={selectedIds.has(loan.id)} onCheckedChange={() => toggleSelect(loan.id)} />
+              <div
+                key={loan.id}
+                className={`rounded-lg border bg-card overflow-hidden transition-colors ${loan.is_cravo ? "border-destructive/30" : "border-border"} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}
+              >
+                <div className="flex items-center gap-2 px-3 py-2">
+                  {selectMode && (
+                    <Checkbox checked={selectedIds.has(loan.id)} onCheckedChange={() => toggleSelect(loan.id)} className="shrink-0 h-4 w-4" />
+                  )}
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-semibold text-[13px] truncate">{loan.clients.name}</span>
+                        {loan.is_cravo && <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                      </div>
+                      <Badge className={`${getLoanStatusColor(loan.status)} text-[9px] px-1.5 py-0 h-4 shrink-0`}>{getStatusLabel(loan.status)}</Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[11px] text-muted-foreground tabular-nums">
+                        {formatCurrency(Number(loan.total_amount))} • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+                      </span>
+                    </div>
+                    {lp && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+                        </div>
+                        <span className="text-[10px] font-semibold text-primary tabular-nums shrink-0">
+                          {Math.floor(lp.progress)}/{lp.total} • {formatCurrency(Math.max(0, lp.remaining))}
+                        </span>
                       </div>
                     )}
-                    <div className="flex-1 cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold">{loan.clients.name}</p>
-                        {loan.is_cravo && <Flame className="h-4 w-4 text-destructive" />}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(Number(loan.total_amount))} • <span className="font-medium text-primary">{getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}</span>
-                      </p>
-                      {lp && (
-                        <>
-                          <p className="text-xs text-primary font-medium">
-                            {lp.progress % 1 === 0 ? lp.progress : lp.progress.toFixed(1)}/{lp.total} • Resta: {formatCurrency(Math.max(0, lp.remaining))}
-                          </p>
-                          {lp.nextDueDate && (
-                            <p className="text-xs text-muted-foreground">
-                              Próx. vencimento: <span className="font-medium">{format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM/yyyy")}</span>
-                            </p>
-                          )}
-                        </>
-                      )}
-                      {lp && lp.penaltyTotal > 0 && (
-                        <p className="text-xs text-destructive">
-                          Multa: {formatCurrency(lp.penaltyTotal)}
-                          {lp.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(lp.penaltyPaid)})</span>}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={(e) => { e.stopPropagation(); setPayLoanId(loan.id); }}
-                      >
-                        <DollarSign className="mr-1 h-3 w-3" /> Pagar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 text-xs"
-                        onClick={(e) => { e.stopPropagation(); handleNotPaidFromList(loan.id); }}
-                      >
-                        <XCircle className="mr-1 h-3 w-3" /> Não Pagou
-                      </Button>
-                      {loan.status === "overdue" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={(e) => { e.stopPropagation(); handleUndoNotPaid(loan.id); }}
-                        >
-                          <Undo2 className="mr-1 h-3 w-3" /> Desfazer
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant={loan.is_cravo ? "destructive" : "outline"}
-                        className="h-7 text-xs"
-                        onClick={() => handleToggleCravo(loan.id, loan.is_cravo)}
-                      >
-                        <Flame className="mr-1 h-3 w-3" />
-                        {loan.is_cravo ? "Cravo" : "Marcar"}
-                      </Button>
-                    </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1.5 -mr-1 rounded-md hover:bg-muted shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate(`/loans/${loan.id}`)}>
+                        <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setPayLoanId(loan.id)}>
+                        <DollarSign className="mr-2 h-4 w-4" /> Pagar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
+                        <XCircle className="mr-2 h-4 w-4" /> Não Pagou
+                      </DropdownMenuItem>
+                      {loan.status === "overdue" && (
+                        <DropdownMenuItem onClick={() => handleUndoNotPaid(loan.id)}>
+                          <Undo2 className="mr-2 h-4 w-4" /> Desfazer Atraso
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => handleToggleCravo(loan.id, loan.is_cravo)}>
+                        <Flame className="mr-2 h-4 w-4" /> {loan.is_cravo ? "Desmarcar Cravo" : "Marcar Cravo"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
             );
           })}
         </div>

@@ -1089,7 +1089,7 @@ export default function DailyCashPage() {
       {/* Header */}
       <div className="mb-3">
         <h1 className="text-xl font-bold flex items-center gap-2">
-          <DollarSign className="h-5 w-5 text-primary" /> Caixa do Dia
+          <DollarSign className="h-5 w-5 text-primary" /> Hoje
         </h1>
         <div className="mt-1.5 flex items-center gap-2">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(-1)}>
@@ -1122,26 +1122,26 @@ export default function DailyCashPage() {
       <div className="mb-3 grid grid-cols-3 gap-1.5">
         <button
           onClick={() => setActiveTab("pending")}
-          className={`rounded-lg border p-2 text-center transition-colors ${activeTab === "pending" ? "border-primary/50 bg-accent/50" : "bg-card"}`}
+          className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "pending" ? "border-primary/50 bg-accent/50" : "bg-card"}`}
         >
           <p className="text-[10px] text-muted-foreground">Pendentes</p>
-          <p className="text-lg font-bold">{pendingInstallments.length}</p>
+          <p className="text-base font-bold">{pendingInstallments.length}</p>
           {totalPendingValue > 0 && <p className="text-[10px] text-muted-foreground">{formatCurrency(totalPendingValue)}</p>}
         </button>
         <button
           onClick={() => setActiveTab("paid")}
-          className={`rounded-lg border p-2 text-center transition-colors ${activeTab === "paid" ? "border-success/50 bg-success/5" : "bg-card"}`}
+          className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "paid" ? "border-success/50 bg-success/5" : "bg-card"}`}
         >
           <p className="text-[10px] text-muted-foreground">Pagos</p>
-          <p className="text-lg font-bold text-success">{paidInstallments.length}</p>
+          <p className="text-base font-bold text-success">{paidInstallments.length}</p>
           {totalPaidValue > 0 && <p className="text-[10px] text-success">{formatCurrency(totalPaidValue)}</p>}
         </button>
         <button
           onClick={() => setActiveTab("notpaid")}
-          className={`rounded-lg border p-2 text-center transition-colors ${activeTab === "notpaid" ? "border-destructive/50 bg-destructive/5" : "bg-card"}`}
+          className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "notpaid" ? "border-destructive/50 bg-destructive/5" : "bg-card"}`}
         >
           <p className="text-[10px] text-muted-foreground">Não Pagos</p>
-          <p className="text-lg font-bold text-destructive">{notPaidMarks.length}</p>
+          <p className="text-base font-bold text-destructive">{notPaidMarks.length}</p>
         </button>
       </div>
 
@@ -1317,10 +1317,10 @@ export default function DailyCashPage() {
       {/* FAB */}
       <button
         onClick={() => navigate("/new-loan")}
-        className="fixed bottom-24 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+        className="fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
         aria-label="Novo Empréstimo"
       >
-        <Plus className="h-7 w-7" />
+        <Plus className="h-6 w-6" />
       </button>
     </div>
   );
