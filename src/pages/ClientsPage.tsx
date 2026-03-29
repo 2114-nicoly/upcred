@@ -45,6 +45,7 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").order("client_code");
     setClients(data || []);
+    setLoading(false);
 
     const { data: loans } = await supabase
       .from("loans")
