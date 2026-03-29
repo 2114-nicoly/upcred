@@ -30,6 +30,7 @@ type LoanSummary = {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
