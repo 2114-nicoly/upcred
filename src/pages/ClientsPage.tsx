@@ -166,7 +166,7 @@ export default function ClientsPage() {
       </div>
 
       <div className="space-y-2">
-        {!clients.length && !search ? (
+        {loading ? (
           <ListSkeleton count={5} />
         ) : filtered.length === 0 ? (
           <EmptyState
