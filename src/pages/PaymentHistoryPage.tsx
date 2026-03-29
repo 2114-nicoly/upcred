@@ -119,9 +119,9 @@ export default function PaymentHistoryPage() {
       </h1>
 
       {loading ? (
-        <p className="text-center text-muted-foreground">Carregando...</p>
+        <ListSkeleton count={4} />
       ) : days.length === 0 ? (
-        <p className="py-8 text-center text-muted-foreground">Nenhum pagamento registrado</p>
+        <EmptyState icon={CalendarCheck} message="Nenhum pagamento registrado" />
       ) : (
         <div className="space-y-2">
           {days.map((day) => {
