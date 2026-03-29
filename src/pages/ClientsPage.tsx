@@ -163,8 +163,15 @@ export default function ClientsPage() {
       </div>
 
       <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <p className="py-8 text-center text-muted-foreground">Nenhum cliente encontrado</p>
+        {!clients.length && !search ? (
+          <ListSkeleton count={5} />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            message={search ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+            actionLabel={!search ? "Cadastrar cliente" : undefined}
+            onAction={!search ? () => setOpen(true) : undefined}
+          />
         ) : (
           filtered.map((client) => {
             const summary = loanSummaries[client.id];
