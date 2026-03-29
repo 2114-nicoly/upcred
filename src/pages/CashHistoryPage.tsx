@@ -179,9 +179,9 @@ export default function CashHistoryPage() {
       </Dialog>
 
       {loading ? (
-        <p className="text-center text-muted-foreground">Carregando...</p>
+        <ListSkeleton count={4} />
       ) : groupedDays.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">Nenhuma movimentação encontrada</p>
+        <EmptyState message="Nenhuma movimentação encontrada" />
       ) : (
         <div className="space-y-4">
           {groupedDays.map((group) => (
