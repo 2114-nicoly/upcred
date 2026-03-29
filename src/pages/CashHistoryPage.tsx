@@ -17,6 +17,7 @@ import {
   CashMovement,
 } from "@/lib/cash-utils";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";

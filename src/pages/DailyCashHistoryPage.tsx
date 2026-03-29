@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getMovementTypeLabel, getMovementTypeColor } from "@/lib/cash-utils";
 import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
 
 type MovementDay = {

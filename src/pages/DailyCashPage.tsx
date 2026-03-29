@@ -19,6 +19,7 @@ import {
   Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History, Filter, ChevronDown
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 
 type InstallmentWithLoan = {
