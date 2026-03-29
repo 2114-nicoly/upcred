@@ -352,15 +352,14 @@ export default function ActiveLoansPage() {
       )}
 
       {loading ? (
-        <p className="text-center text-muted-foreground">Carregando...</p>
+        <CardSkeleton count={5} />
       ) : displayedLoans.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center p-8">
-            <p className="text-muted-foreground">
-              {showCravos ? "Nenhum cravo marcado" : filterToday ? "Nenhum empréstimo com vencimento hoje" : "Nenhum empréstimo ativo"}
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={showCravos ? Flame : Landmark}
+          message={showCravos ? "Nenhum cravo marcado" : filterToday ? "Nenhum empréstimo com vencimento hoje" : "Nenhum empréstimo ativo"}
+          actionLabel={!showCravos && !filterToday ? "Criar empréstimo" : undefined}
+          onAction={!showCravos && !filterToday ? () => navigate("/new-loan") : undefined}
+        />
       ) : (
         <div className="space-y-1.5">
           {displayedLoans.map((loan) => {
