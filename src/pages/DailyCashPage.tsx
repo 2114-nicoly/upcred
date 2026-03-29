@@ -1146,7 +1146,10 @@ export default function DailyCashPage() {
       </div>
 
       {loading && pendingInstallments.length === 0 && paidInstallments.length === 0 && notPaidMarks.length === 0 ? (
-        <p className="text-center text-sm text-muted-foreground py-8">Carregando...</p>
+        <>
+          <SummarySkeleton />
+          <CardSkeleton count={5} />
+        </>
       ) : (
         <>
           {isRefreshing && (
