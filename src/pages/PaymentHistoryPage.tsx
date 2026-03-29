@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
 import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
+import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -119,9 +120,9 @@ export default function PaymentHistoryPage() {
       </h1>
 
       {loading ? (
-        <p className="text-center text-muted-foreground">Carregando...</p>
+        <ListSkeleton count={4} />
       ) : days.length === 0 ? (
-        <p className="py-8 text-center text-muted-foreground">Nenhum pagamento registrado</p>
+        <EmptyState icon={CalendarCheck} message="Nenhum pagamento registrado" />
       ) : (
         <div className="space-y-2">
           {days.map((day) => {

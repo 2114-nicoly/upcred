@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getMovementTypeLabel, getMovementTypeColor } from "@/lib/cash-utils";
 import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
 
 type MovementDay = {
@@ -77,9 +78,9 @@ export default function DailyCashHistoryPage() {
       </div>
 
       {loading ? (
-        <p className="text-center text-muted-foreground">Carregando...</p>
+        <ListSkeleton count={4} />
       ) : days.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">Nenhuma movimentação registrada</p>
+        <EmptyState icon={CalendarDays} message="Nenhuma movimentação registrada" />
       ) : (
         <div className="space-y-2">
           {days.map(day => {

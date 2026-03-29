@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye } from "lucide-react";
+import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -352,15 +353,14 @@ export default function ActiveLoansPage() {
       )}
 
       {loading ? (
-        <p className="text-center text-muted-foreground">Carregando...</p>
+        <CardSkeleton count={5} />
       ) : displayedLoans.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center p-8">
-            <p className="text-muted-foreground">
-              {showCravos ? "Nenhum cravo marcado" : filterToday ? "Nenhum empréstimo com vencimento hoje" : "Nenhum empréstimo ativo"}
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={showCravos ? Flame : Landmark}
+          message={showCravos ? "Nenhum cravo marcado" : filterToday ? "Nenhum empréstimo com vencimento hoje" : "Nenhum empréstimo ativo"}
+          actionLabel={!showCravos && !filterToday ? "Criar empréstimo" : undefined}
+          onAction={!showCravos && !filterToday ? () => navigate("/new-loan") : undefined}
+        />
       ) : (
         <div className="space-y-1.5">
           {displayedLoans.map((loan) => {

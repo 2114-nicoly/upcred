@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter } from "lucide-react";
+import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
 
@@ -29,6 +30,7 @@ type LoanSummary = {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -43,6 +45,7 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").order("client_code");
     setClients(data || []);
+    setLoading(false);
 
     const { data: loans } = await supabase
       .from("loans")
@@ -163,8 +166,15 @@ export default function ClientsPage() {
       </div>
 
       <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <p className="py-8 text-center text-muted-foreground">Nenhum cliente encontrado</p>
+        {loading ? (
+          <ListSkeleton count={5} />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            message={search ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+            actionLabel={!search ? "Cadastrar cliente" : undefined}
+            onAction={!search ? () => setOpen(true) : undefined}
+          />
         ) : (
           filtered.map((client) => {
             const summary = loanSummaries[client.id];

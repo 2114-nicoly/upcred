@@ -19,6 +19,7 @@ import {
   Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History, Filter, ChevronDown
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 
 type InstallmentWithLoan = {
@@ -1146,7 +1147,10 @@ export default function DailyCashPage() {
       </div>
 
       {loading && pendingInstallments.length === 0 && paidInstallments.length === 0 && notPaidMarks.length === 0 ? (
-        <p className="text-center text-sm text-muted-foreground py-8">Carregando...</p>
+        <>
+          <SummarySkeleton />
+          <CardSkeleton count={5} />
+        </>
       ) : (
         <>
           {isRefreshing && (
