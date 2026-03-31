@@ -120,7 +120,7 @@ export default function NewLoanPage() {
     });
 
     toast.success("Empréstimo criado com sucesso!");
-    navigate(`/loans/${loan.id}`);
+    navigate("/");
   };
 
   return (
