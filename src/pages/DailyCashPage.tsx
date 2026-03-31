@@ -1337,7 +1337,6 @@ export default function DailyCashPage() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      </button>
     </div>
   );
 }
