@@ -164,12 +164,6 @@ export default function UnpaidInstallmentsPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-4 flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-        </Button>
-        <h1 className="text-xl font-bold">Parcelas Pendentes</h1>
-      </div>
 
       {loan && (
         <p className="mb-4 text-sm text-muted-foreground">

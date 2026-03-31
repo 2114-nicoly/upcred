@@ -260,14 +260,6 @@ export default function OverdueLoansPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-4 flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-        </Button>
-        <h1 className="text-xl font-bold text-destructive">
-          <AlertTriangle className="mr-1 inline h-5 w-5" /> Parcelas Atrasadas
-        </h1>
-      </div>
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
