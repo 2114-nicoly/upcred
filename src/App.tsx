@@ -23,6 +23,7 @@ import LoanOverdueDetailPage from "@/pages/LoanOverdueDetailPage";
 import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
 import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
+import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const App = () => {
               <Route path="/caixa" element={<CaixaPage />} />
               <Route path="/cash-history" element={<CashHistoryPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
