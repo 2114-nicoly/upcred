@@ -423,7 +423,6 @@ export default function TodayPage() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      </button>
     </div>
   );
 }
