@@ -18,18 +18,44 @@ const sidebarItems = [
   { path: "/admin", label: "Administrador", icon: Shield },
 ];
 
+// Extended route labels for header (includes sub-pages)
+const routeLabels: Record<string, string> = {
+  "/": "Rota",
+  "/caixa": "Caixa",
+  "/clients": "Clientes",
+  "/active-loans": "Empréstimos Ativos",
+  "/daily-cash-history": "Histórico",
+  "/reports": "Relatórios",
+  "/admin": "Administrador",
+  "/overdue": "Parcelas Atrasadas",
+  "/today-summary": "Resumo do Dia",
+  "/payment-history": "Histórico de Pagamentos",
+  "/cash-history": "Histórico de Movimentações",
+  "/new-loan": "Novo Empréstimo",
+};
+
+function getRouteLabel(pathname: string): string {
+  if (routeLabels[pathname]) return routeLabels[pathname];
+  if (pathname.startsWith("/clients/") && pathname.includes("/new-loan")) return "Novo Empréstimo";
+  if (pathname.startsWith("/clients/")) return "Detalhes do Cliente";
+  if (pathname.startsWith("/loans/") && pathname.includes("/unpaid")) return "Parcelas Pendentes";
+  if (pathname.startsWith("/loans/") && pathname.includes("/overdue")) return "Parcelas Atrasadas";
+  if (pathname.startsWith("/loans/")) return "Detalhes do Empréstimo";
+  return "";
+}
+
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Top header with sidebar trigger */}
-      <header className="sticky top-0 z-40 flex h-12 items-center border-b bg-card px-3 shadow-sm">
+      {/* Top header */}
+      <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-card px-4 shadow-sm">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <button className="mr-3 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-              <Menu className="h-5 w-5" />
+            <button className="mr-4 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+              <Menu className="h-6 w-6" />
             </button>
           </SheetTrigger>
           <SheetContent side="left" className="w-64 p-0">
@@ -60,14 +86,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </SheetContent>
         </Sheet>
-        <span className="text-sm font-semibold text-foreground">
-          {sidebarItems.find((i) => i.path === location.pathname)?.label ?? ""}
+        <span className="text-base font-bold text-foreground">
+          {getRouteLabel(location.pathname)}
         </span>
       </header>
 
       <main className="flex-1 overflow-auto pb-20">{children}</main>
 
-      {/* Bottom nav — only Rota and Caixa */}
+      {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card shadow-lg">
         <div className="mx-auto flex max-w-lg items-center justify-around">
           {bottomNavItems.map((item) => {

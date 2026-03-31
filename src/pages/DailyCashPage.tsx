@@ -1087,11 +1087,8 @@ export default function DailyCashPage() {
 
   return (
     <div className="mx-auto max-w-lg p-3 pb-36">
-      {/* Header */}
+      {/* Date navigation */}
       <div className="mb-3">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <DollarSign className="h-5 w-5 text-primary" /> Hoje
-        </h1>
         <div className="mt-1.5 flex items-center gap-2">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(-1)}>
             <ChevronLeft className="h-4 w-4" />

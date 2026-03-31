@@ -115,9 +115,6 @@ export default function PaymentHistoryPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <h1 className="mb-4 text-2xl font-bold">
-        <CalendarCheck className="mr-2 inline h-6 w-6 text-primary" /> Histórico de Pagamentos
-      </h1>
 
       {loading ? (
         <ListSkeleton count={4} />

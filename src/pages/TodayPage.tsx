@@ -329,14 +329,9 @@ export default function TodayPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">
-          <CalendarDays className="mr-2 inline h-6 w-6 text-primary" /> Hoje
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-        </p>
-      </div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+      </p>
 
       <div className="mb-4 grid grid-cols-2 gap-3">
         <Card className="text-center">

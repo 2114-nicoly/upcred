@@ -138,10 +138,7 @@ export default function CaixaPage() {
   if (loading) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
   return (
-    <div className="mx-auto max-w-lg p-4">
-      <h1 className="mb-4 text-2xl font-bold">
-        <Wallet className="mr-2 inline h-6 w-6 text-primary" /> Caixa
-      </h1>
+    <div className="mx-auto max-w-lg p-4 space-y-4">
 
       {/* Balance cards */}
       {balance && (

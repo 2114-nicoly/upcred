@@ -290,9 +290,9 @@ export default function ActiveLoansPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <h1 className="mb-4 text-2xl font-bold">
-        <Landmark className="mr-2 inline h-6 w-6 text-primary" /> {showCravos ? "Cravos 🔥" : "Empréstimos Ativos"}
-      </h1>
+      {showCravos && (
+        <p className="mb-3 text-sm font-semibold text-destructive">🔥 Modo Cravos</p>
+      )}
 
       {/* Select mode + Cravos toggle */}
       <div className="mb-3 flex gap-2">

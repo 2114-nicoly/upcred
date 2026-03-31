@@ -90,10 +90,7 @@ export default function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <h1 className="mb-4 text-2xl font-bold">
-        <BarChart3 className="mr-2 inline h-6 w-6 text-primary" /> Relatório
-      </h1>
-      <p className="mb-6 text-sm text-muted-foreground">
+      <p className="mb-4 text-sm text-muted-foreground">
         {format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
       </p>
 

@@ -125,10 +125,6 @@ export default function CashHistoryPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="mb-2">
-        <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-      </Button>
-      <h1 className="mb-4 text-2xl font-bold">Histórico de Movimentações</h1>
 
       {/* Filters */}
       <div className="mb-4 space-y-2">
