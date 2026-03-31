@@ -678,10 +678,7 @@ export default function LoanDetailPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-        </Button>
+      <div className="mb-2 flex items-center justify-end">
         <div className="flex gap-1">
           <Button variant="ghost" size="sm" onClick={openEditLoan}>
             <Pencil className="mr-1 h-4 w-4" /> Editar
