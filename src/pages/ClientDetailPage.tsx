@@ -136,9 +136,6 @@ export default function ClientDetailPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="mb-2">
-        <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-      </Button>
 
       <div className="mb-4 flex items-start justify-between">
         <div>

@@ -125,11 +125,6 @@ export default function NewLoanPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="mb-2">
-        <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-      </Button>
-
-      <h1 className="mb-1 text-2xl font-bold">Novo Empréstimo</h1>
       {clientName && <p className="mb-4 text-sm text-muted-foreground">Cliente: <span className="font-medium text-foreground">{clientName}</span></p>}
 
       <div className="space-y-4">
