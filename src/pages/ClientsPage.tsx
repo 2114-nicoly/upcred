@@ -126,11 +126,7 @@ export default function ClientsPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          <Users className="mr-2 inline h-6 w-6 text-primary" />
-          Clientes
-        </h1>
+      <div className="mb-4 flex items-center justify-end">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>

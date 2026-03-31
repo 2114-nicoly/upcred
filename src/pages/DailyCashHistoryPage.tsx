@@ -70,12 +70,7 @@ export default function DailyCashHistoryPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <CalendarDays className="h-6 w-6 text-primary" /> Histórico de Caixas
-        </h1>
-        <p className="text-sm text-muted-foreground">Dias com movimentações registradas</p>
-      </div>
+      <p className="mb-4 text-sm text-muted-foreground">Dias com movimentações registradas</p>
 
       {loading ? (
         <ListSkeleton count={4} />

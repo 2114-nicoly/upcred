@@ -181,15 +181,6 @@ export default function AdminPage() {
 
   return (
     <div className="p-4 space-y-4 max-w-lg mx-auto">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-bold">Administrador</h1>
-        </div>
-      </div>
 
       <Card>
         <CardHeader className="p-4 pb-2">
