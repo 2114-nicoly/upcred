@@ -23,6 +23,7 @@ import LoanOverdueDetailPage from "@/pages/LoanOverdueDetailPage";
 import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
 import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
+import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient();
 

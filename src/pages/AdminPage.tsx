@@ -174,8 +174,8 @@ export default function AdminPage() {
 
   const statusIcon = (status: TaskStatus) => {
     if (status === "running") return <Loader2 className="h-4 w-4 animate-spin" />;
-    if (status === "done") return <span className="text-xs text-green-600">✓</span>;
-    if (status === "error") return <span className="text-xs text-red-600">✗</span>;
+    if (status === "done") return <span className="text-xs text-primary">✓</span>;
+    if (status === "error") return <span className="text-xs text-destructive">✗</span>;
     return null;
   };
 
