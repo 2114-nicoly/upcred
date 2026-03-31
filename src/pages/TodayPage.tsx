@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2 } from "lucide-react";
@@ -403,14 +404,25 @@ export default function TodayPage() {
         </>
       )}
 
-      {/* FAB - Novo Empréstimo */}
-      <button
-        onClick={() => navigate("/new-loan")}
-        className="fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
-        aria-label="Novo Empréstimo"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* FAB with options */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+            aria-label="Novo Empréstimo"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="mb-2">
+          <DropdownMenuItem onClick={() => navigate("/new-loan")}>
+            Cliente existente
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/new-loan?new_client=true")}>
+            Cadastrar novo cliente
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

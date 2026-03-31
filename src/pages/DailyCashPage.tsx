@@ -1318,14 +1318,25 @@ export default function DailyCashPage() {
         </div>
       )}
 
-      {/* FAB */}
-      <button
-        onClick={() => navigate("/new-loan")}
-        className="fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
-        aria-label="Novo Empréstimo"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* FAB with options */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="fixed bottom-20 right-3 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+            aria-label="Novo Empréstimo"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="mb-2">
+          <DropdownMenuItem onClick={() => navigate("/new-loan")}>
+            Cliente existente
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/new-loan?new_client=true")}>
+            Cadastrar novo cliente
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

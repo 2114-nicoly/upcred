@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Search, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
 
 type Client = {
   id: string;
@@ -15,8 +18,18 @@ type Client = {
 
 export default function NewLoanSelectClientPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const showNewClient = searchParams.get("new_client") === "true";
+
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
+
+  // New client form
+  const [newClientMode, setNewClientMode] = useState(showNewClient);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -31,16 +44,63 @@ export default function NewLoanSelectClientPage() {
     String(c.client_code || "").includes(search)
   );
 
+  const handleCreateClient = async () => {
+    if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
+    setSaving(true);
+    const { data: maxCode } = await supabase
+      .from("clients")
+      .select("client_code")
+      .order("client_code", { ascending: false })
+      .limit(1);
+    const nextCode = (maxCode && maxCode[0]?.client_code ? Number(maxCode[0].client_code) : 0) + 1;
+
+    const { data, error } = await supabase.from("clients").insert({
+      name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
+    }).select().single();
+
+    setSaving(false);
+    if (error || !data) { toast.error("Erro ao cadastrar cliente"); return; }
+    toast.success(`Cliente #${nextCode} cadastrado!`);
+    navigate(`/clients/${data.id}/new-loan`);
+  };
+
+  if (newClientMode) {
+    return (
+      <div className="mx-auto max-w-lg p-4">
+        <div className="mb-4 flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setNewClientMode(false)}>
+            <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+          </Button>
+          <h1 className="text-xl font-bold">Novo Cliente</h1>
+        </div>
+        <div className="space-y-4">
+          <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
+          <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
+          <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações..." /></div>
+          <Button onClick={handleCreateClient} disabled={saving} className="w-full">
+            {saving ? "Salvando..." : "Cadastrar e Criar Empréstimo"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-lg p-4">
       <div className="mb-4 flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
           <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
         </Button>
         <h1 className="text-xl font-bold">Novo Empréstimo</h1>
       </div>
 
-      <p className="mb-3 text-sm text-muted-foreground">Selecione o cliente:</p>
+      <div className="mb-3 flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={() => setNewClientMode(true)}>
+          Cadastrar novo cliente
+        </Button>
+      </div>
+
+      <p className="mb-3 text-sm text-muted-foreground">Ou selecione um cliente existente:</p>
 
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

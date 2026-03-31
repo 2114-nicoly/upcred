@@ -120,12 +120,12 @@ export default function NewLoanPage() {
     });
 
     toast.success("Empréstimo criado com sucesso!");
-    navigate(`/loans/${loan.id}`);
+    navigate("/");
   };
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="mb-2">
+      <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="mb-2">
         <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
       </Button>
 
