@@ -67,12 +67,6 @@ export default function NewLoanSelectClientPage() {
   if (newClientMode) {
     return (
       <div className="mx-auto max-w-lg p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setNewClientMode(false)}>
-            <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
-          </Button>
-          <h1 className="text-xl font-bold">Novo Cliente</h1>
-        </div>
         <div className="space-y-4">
           <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
           <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
