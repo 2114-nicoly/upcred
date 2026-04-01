@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const bottomNavItems = [
