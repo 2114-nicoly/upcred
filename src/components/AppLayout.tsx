@@ -99,34 +99,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <ArrowLeft className="h-6 w-6" />
           </button>
         )}
-          <SheetContent side="left" className="w-64 p-0">
-            <div className="flex h-full flex-col">
-              <div className="border-b px-4 py-4">
-                <h2 className="text-lg font-semibold text-foreground">Menu</h2>
-              </div>
-              <nav className="flex-1 space-y-1 px-2 py-3">
-                {sidebarItems.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path + item.label}
-                      to={item.path}
-                      onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                        active
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      <item.icon className="h-5 w-5" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-          </SheetContent>
-        </Sheet>
         <span className="text-base font-bold text-foreground">
           {getRouteLabel(location.pathname)}
         </span>
