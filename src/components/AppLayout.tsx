@@ -46,18 +46,59 @@ function getRouteLabel(pathname: string): string {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+
+  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin"];
+  const isMainPage = mainPages.includes(location.pathname);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Top header */}
       <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-card px-4 shadow-sm">
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button className="mr-4 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-              <Menu className="h-6 w-6" />
-            </button>
-          </SheetTrigger>
+        {isMainPage ? (
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <button className="mr-4 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                <Menu className="h-6 w-6" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <div className="flex h-full flex-col">
+                <div className="border-b px-4 py-4">
+                  <h2 className="text-lg font-semibold text-foreground">Menu</h2>
+                </div>
+                <nav className="flex-1 space-y-1 px-2 py-3">
+                  {sidebarItems.map((item) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path + item.label}
+                        to={item.path}
+                        onClick={() => setOpen(false)}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
+            </SheetContent>
+          </Sheet>
+        ) : (
+          <button
+            onClick={() => navigate(-1)}
+            className="mr-4 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+        )}
           <SheetContent side="left" className="w-64 p-0">
             <div className="flex h-full flex-col">
               <div className="border-b px-4 py-4">
