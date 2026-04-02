@@ -1120,7 +1120,32 @@ export default function DailyCashPage() {
         )}
       </div>
 
-      {/* Summary counters */}
+      {/* Top summary: a receber, atrasado, progresso */}
+      {!loading && (
+        <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">A receber hoje</span>
+            <span className="text-sm font-bold tabular-nums">{formatCurrency(totalTodayValue)}</span>
+          </div>
+          {totalOverdueValue > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-destructive">Total atrasado</span>
+              <span className="text-sm font-bold text-destructive tabular-nums">{formatCurrency(totalOverdueValue)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Progresso</span>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${totalAll > 0 ? (totalTreated / totalAll) * 100 : 0}%` }} />
+              </div>
+              <span className="text-xs font-bold tabular-nums">{totalTreated}/{totalAll}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab counters */}
       <div className="mb-3 grid grid-cols-3 gap-1.5">
         <button
           onClick={() => setActiveTab("pending")}
@@ -1128,7 +1153,6 @@ export default function DailyCashPage() {
         >
           <p className="text-[10px] text-muted-foreground">Pendentes</p>
           <p className="text-base font-bold">{pendingInstallments.length}</p>
-          {totalPendingValue > 0 && <p className="text-[10px] text-muted-foreground">{formatCurrency(totalPendingValue)}</p>}
         </button>
         <button
           onClick={() => setActiveTab("paid")}
@@ -1136,7 +1160,6 @@ export default function DailyCashPage() {
         >
           <p className="text-[10px] text-muted-foreground">Pagos</p>
           <p className="text-base font-bold text-success">{paidInstallments.length}</p>
-          {totalPaidValue > 0 && <p className="text-[10px] text-success">{formatCurrency(totalPaidValue)}</p>}
         </button>
         <button
           onClick={() => setActiveTab("notpaid")}
