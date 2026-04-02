@@ -447,7 +447,7 @@ export default function ActiveLoansPage() {
           onClick={() => setShowCravos(!showCravos)}
         >
           <Flame className="mr-1 h-4 w-4" />
-          {showCravos ? "Voltar para Ativos" : `Cravos (${cravosCount})`}
+          {showCravos ? "Voltar para Ativos" : `Cravos (${loans.filter((l) => l.is_cravo).length})`}
         </Button>
       </div>
 
