@@ -385,10 +385,13 @@ export default function ActiveLoansPage() {
           {displayedLoans.map((loan) => {
             const lp = progressMap[loan.id];
             const progressPct = lp && lp.total > 0 ? (Math.floor(lp.progress) / lp.total) * 100 : 0;
-            return (
+          const isDueToday = lp?.nextDueDate === todayStr;
+          const isOverdue = !isDueToday && (loan.status === "overdue" || (lp?.nextDueDate && lp.nextDueDate < todayStr));
+          const cardBg = isDueToday ? "bg-card-due-today-bg" : isOverdue ? "bg-card-overdue-bg" : "bg-card";
+          return (
               <div
                 key={loan.id}
-                className={`rounded-lg border bg-card overflow-hidden transition-colors ${loan.is_cravo ? "border-destructive/30" : "border-border"} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}
+                className={`rounded-lg border overflow-hidden transition-colors ${cardBg} ${loan.is_cravo ? "border-destructive/30" : "border-border"} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}
               >
                 <div className="flex items-center gap-2 px-3 py-2">
                   {selectMode && (
