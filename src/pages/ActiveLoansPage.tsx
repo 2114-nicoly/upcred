@@ -288,22 +288,34 @@ export default function ActiveLoansPage() {
   if (filterPaymentType !== "all" && !showCravos) displayedLoans = displayedLoans.filter((l) => l.payment_type === filterPaymentType);
   if (searchQuery.trim()) displayedLoans = displayedLoans.filter((l) => l.clients.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  // Compute priority for sorting: 1=due today, 2=overdue, 3=rest
-  const getLoanPriority = (loan: LoanWithClient) => {
-    const ndd = progressMap[loan.id]?.nextDueDate;
-    if (ndd === todayStr) return 1;
-    if (loan.status === "overdue" || (ndd && ndd < todayStr)) return 2;
-    return 3;
-  };
+  // Separate loans into sections
+  const dueTodayLoans: LoanWithClient[] = [];
+  const overdueLoans: LoanWithClient[] = [];
+  const otherLoans: LoanWithClient[] = [];
 
-  displayedLoans = [...displayedLoans].sort((a, b) => {
-    const pa = getLoanPriority(a);
-    const pb = getLoanPriority(b);
-    if (pa !== pb) return pa - pb;
+  for (const loan of displayedLoans) {
+    const ndd = progressMap[loan.id]?.nextDueDate;
+    if (ndd === todayStr) dueTodayLoans.push(loan);
+    else if (loan.status === "overdue" || (ndd && ndd < todayStr)) overdueLoans.push(loan);
+    else otherLoans.push(loan);
+  }
+
+  // Sort each group by next due date
+  const sortByNdd = (a: LoanWithClient, b: LoanWithClient) => {
     const nddA = progressMap[a.id]?.nextDueDate || "9999";
     const nddB = progressMap[b.id]?.nextDueDate || "9999";
     return nddA.localeCompare(nddB);
-  });
+  };
+  dueTodayLoans.sort(sortByNdd);
+  overdueLoans.sort(sortByNdd);
+  otherLoans.sort(sortByNdd);
+
+  // Compute overdue days for a loan
+  const getLoanOverdueDays = (loan: LoanWithClient) => {
+    const ndd = progressMap[loan.id]?.nextDueDate;
+    if (!ndd || ndd >= todayStr) return 0;
+    return calculateOverdueDays(ndd, loan.payment_type);
+  };
 
   const cravosCount = loans.filter((l) => l.is_cravo).length;
 
