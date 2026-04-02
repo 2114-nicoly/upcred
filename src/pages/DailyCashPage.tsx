@@ -792,7 +792,7 @@ export default function DailyCashPage() {
             {/* Row 2: Remaining value (main highlight) */}
             <div className="flex items-center justify-between gap-2 mt-1">
               <span className="text-sm font-extrabold tabular-nums text-foreground">
-                Restante: {formatCurrency(instRemaining)}
+                Pagar: {formatCurrency(instRemaining)}
               </span>
               {isOverdue && (
                 <Badge
