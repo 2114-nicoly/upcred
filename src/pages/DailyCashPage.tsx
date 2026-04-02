@@ -787,19 +787,21 @@ export default function DailyCashPage() {
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-[13px] truncate">{inst.loans.clients.name}</span>
-              <span className="font-bold text-[15px] shrink-0 tabular-nums">{formatCurrency(instRemaining)}</span>
+              <span className="font-bold text-sm truncate">{inst.loans.clients.name}</span>
+              <span className="font-extrabold text-base shrink-0 tabular-nums">{formatCurrency(instRemaining)}</span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                Parcela {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+                {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
               </span>
-              <Badge
-                variant="outline"
-                className={`text-[9px] px-1.5 py-0 h-4 leading-none font-medium ${isOverdue ? "border-destructive/50 text-destructive bg-destructive/5" : "border-primary/40 text-primary bg-primary/5"}`}
-              >
-                {isOverdue ? `⚠ ${overdueDays}d atraso` : "Hoje"}
-              </Badge>
+              {isOverdue && (
+                <Badge
+                  variant="outline"
+                  className="text-[9px] px-1.5 py-0 h-4 leading-none font-medium border-destructive/50 text-destructive bg-destructive/5"
+                >
+                  Atraso de {overdueDays} dia{overdueDays > 1 ? "s" : ""}
+                </Badge>
+              )}
             </div>
           </div>
           <DropdownMenu>
