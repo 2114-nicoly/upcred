@@ -408,6 +408,7 @@ export default function ActiveLoansPage() {
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-[11px] text-muted-foreground tabular-nums">
                         {formatCurrency(Number(loan.total_amount))} • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+                        {lp?.nextDueDate && ` • Próx: ${format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM")}`}
                       </span>
                     </div>
                     {lp && (
