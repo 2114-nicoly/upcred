@@ -53,6 +53,9 @@
     --input: 220 15% 88%;
     --ring: 250 80% 60%;
 
+    --card-overdue-bg: 0 80% 96%;
+    --card-due-today-bg: 145 60% 95%;
+
     --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
@@ -110,6 +113,9 @@
 
     --paid: 145 55% 25%;
     --paid-foreground: 0 0% 100%;
+
+    --card-overdue-bg: 0 60% 15%;
+    --card-due-today-bg: 145 40% 15%;
 
     --border: 220 20% 20%;
     --input: 220 20% 20%;

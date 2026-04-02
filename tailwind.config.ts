@@ -75,6 +75,8 @@ export default {
           DEFAULT: "hsl(var(--paid))",
           foreground: "hsl(var(--paid-foreground))",
         },
+        "card-overdue-bg": "hsl(var(--card-overdue-bg))",
+        "card-due-today-bg": "hsl(var(--card-due-today-bg))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

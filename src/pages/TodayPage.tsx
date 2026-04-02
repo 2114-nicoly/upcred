@@ -256,7 +256,7 @@ export default function TodayPage() {
     const displayStatus = getInstallmentDisplayStatus(inst);
     const penaltyPending = lp ? lp.penaltyTotal - lp.penaltyPaid : 0;
     return (
-      <Card key={inst.id} className="overflow-hidden">
+      <Card key={inst.id} className={`overflow-hidden ${displayStatus === "overdue" ? "bg-card-overdue-bg" : displayStatus === "due_today" ? "bg-card-due-today-bg" : ""}`}>
         <CardContent className="p-4">
           <div className="mb-2 flex items-center justify-between">
             <div>

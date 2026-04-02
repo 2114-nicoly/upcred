@@ -277,6 +277,8 @@ export default function ActiveLoansPage() {
 
   // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
   // Filter: exclude cravos from main list, show separately
   let displayedLoans = showCravos
     ? loans.filter((l) => l.is_cravo)
@@ -285,6 +287,23 @@ export default function ActiveLoansPage() {
   if (filterToday && !showCravos) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
   if (filterPaymentType !== "all" && !showCravos) displayedLoans = displayedLoans.filter((l) => l.payment_type === filterPaymentType);
   if (searchQuery.trim()) displayedLoans = displayedLoans.filter((l) => l.clients.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  // Compute priority for sorting: 1=due today, 2=overdue, 3=rest
+  const getLoanPriority = (loan: LoanWithClient) => {
+    const ndd = progressMap[loan.id]?.nextDueDate;
+    if (ndd === todayStr) return 1;
+    if (loan.status === "overdue" || (ndd && ndd < todayStr)) return 2;
+    return 3;
+  };
+
+  displayedLoans = [...displayedLoans].sort((a, b) => {
+    const pa = getLoanPriority(a);
+    const pb = getLoanPriority(b);
+    if (pa !== pb) return pa - pb;
+    const nddA = progressMap[a.id]?.nextDueDate || "9999";
+    const nddB = progressMap[b.id]?.nextDueDate || "9999";
+    return nddA.localeCompare(nddB);
+  });
 
   const cravosCount = loans.filter((l) => l.is_cravo).length;
 
@@ -366,10 +385,13 @@ export default function ActiveLoansPage() {
           {displayedLoans.map((loan) => {
             const lp = progressMap[loan.id];
             const progressPct = lp && lp.total > 0 ? (Math.floor(lp.progress) / lp.total) * 100 : 0;
-            return (
+          const isDueToday = lp?.nextDueDate === todayStr;
+          const isOverdue = !isDueToday && (loan.status === "overdue" || (lp?.nextDueDate && lp.nextDueDate < todayStr));
+          const cardBg = isDueToday ? "bg-card-due-today-bg" : isOverdue ? "bg-card-overdue-bg" : "bg-card";
+          return (
               <div
                 key={loan.id}
-                className={`rounded-lg border bg-card overflow-hidden transition-colors ${loan.is_cravo ? "border-destructive/30" : "border-border"} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}
+                className={`rounded-lg border overflow-hidden transition-colors ${cardBg} ${loan.is_cravo ? "border-destructive/30" : "border-border"} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}
               >
                 <div className="flex items-center gap-2 px-3 py-2">
                   {selectMode && (
@@ -386,6 +408,7 @@ export default function ActiveLoansPage() {
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-[11px] text-muted-foreground tabular-nums">
                         {formatCurrency(Number(loan.total_amount))} • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+                        {lp?.nextDueDate && ` • Próx: ${format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM")}`}
                       </span>
                     </div>
                     {lp && (
