@@ -277,6 +277,8 @@ export default function ActiveLoansPage() {
 
   // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
   // Filter: exclude cravos from main list, show separately
   let displayedLoans = showCravos
     ? loans.filter((l) => l.is_cravo)
@@ -285,6 +287,23 @@ export default function ActiveLoansPage() {
   if (filterToday && !showCravos) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
   if (filterPaymentType !== "all" && !showCravos) displayedLoans = displayedLoans.filter((l) => l.payment_type === filterPaymentType);
   if (searchQuery.trim()) displayedLoans = displayedLoans.filter((l) => l.clients.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  // Compute priority for sorting: 1=due today, 2=overdue, 3=rest
+  const getLoanPriority = (loan: LoanWithClient) => {
+    const ndd = progressMap[loan.id]?.nextDueDate;
+    if (ndd === todayStr) return 1;
+    if (loan.status === "overdue" || (ndd && ndd < todayStr)) return 2;
+    return 3;
+  };
+
+  displayedLoans = [...displayedLoans].sort((a, b) => {
+    const pa = getLoanPriority(a);
+    const pb = getLoanPriority(b);
+    if (pa !== pb) return pa - pb;
+    const nddA = progressMap[a.id]?.nextDueDate || "9999";
+    const nddB = progressMap[b.id]?.nextDueDate || "9999";
+    return nddA.localeCompare(nddB);
+  });
 
   const cravosCount = loans.filter((l) => l.is_cravo).length;
 
