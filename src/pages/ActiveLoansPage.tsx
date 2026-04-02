@@ -317,10 +317,112 @@ export default function ActiveLoansPage() {
     return calculateOverdueDays(ndd, loan.payment_type);
   };
 
-  const cravosCount = loans.filter((l) => l.is_cravo).length;
+  // Summary totals
+  const totalDueTodayValue = dueTodayLoans.reduce((s, l) => s + Math.max(0, progressMap[l.id]?.remaining ?? 0), 0);
+  const totalOverdueValue = overdueLoans.reduce((s, l) => s + Math.max(0, progressMap[l.id]?.remaining ?? 0), 0);
+
+  const renderLoanCard = (loan: LoanWithClient) => {
+    const lp = progressMap[loan.id];
+    const progressPct = lp && lp.total > 0 ? (Math.floor(lp.progress) / lp.total) * 100 : 0;
+    const isDueToday = lp?.nextDueDate === todayStr;
+    const isOverdue = !isDueToday && (loan.status === "overdue" || (lp?.nextDueDate && lp.nextDueDate < todayStr));
+    const cardBg = isDueToday ? "bg-card-due-today-bg" : isOverdue ? "bg-card-overdue-bg" : "bg-card";
+    const overdueDays = getLoanOverdueDays(loan);
+
+    return (
+      <div
+        key={loan.id}
+        className={`rounded-lg border overflow-hidden transition-colors ${cardBg} ${loan.is_cravo ? "border-destructive/30" : "border-border"} ${selectedIds.has(loan.id) ? "ring-2 ring-primary" : ""}`}
+      >
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          {selectMode && (
+            <Checkbox checked={selectedIds.has(loan.id)} onCheckedChange={() => toggleSelect(loan.id)} className="shrink-0 h-4 w-4" />
+          )}
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-bold text-sm truncate">{loan.clients.name}</span>
+                {loan.is_cravo && <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />}
+              </div>
+              <span className="font-extrabold text-base shrink-0 tabular-nums">{formatCurrency(Math.max(0, lp?.remaining ?? Number(loan.total_amount)))}</span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+                {lp?.nextDueDate && ` • Próx: ${format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM")}`}
+              </span>
+              {overdueDays > 0 && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 leading-none font-medium border-destructive/50 text-destructive bg-destructive/5">
+                  Atraso de {overdueDays} dia{overdueDays > 1 ? "s" : ""}
+                </Badge>
+              )}
+            </div>
+            {lp && (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+                </div>
+                <span className="text-[10px] font-semibold text-primary tabular-nums shrink-0">
+                  {Math.floor(lp.progress)}/{lp.total}
+                </span>
+              </div>
+            )}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 -mr-1 rounded-md hover:bg-muted shrink-0" onClick={(e) => e.stopPropagation()}>
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => navigate(`/loans/${loan.id}`)}>
+                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPayLoanId(loan.id)}>
+                <DollarSign className="mr-2 h-4 w-4" /> Pagar
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
+                <XCircle className="mr-2 h-4 w-4" /> Não Pagou
+              </DropdownMenuItem>
+              {loan.status === "overdue" && (
+                <DropdownMenuItem onClick={() => handleUndoNotPaid(loan.id)}>
+                  <Undo2 className="mr-2 h-4 w-4" /> Desfazer Atraso
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => handleToggleCravo(loan.id, loan.is_cravo)}>
+                <Flame className="mr-2 h-4 w-4" /> {loan.is_cravo ? "Desmarcar Cravo" : "Marcar Cravo"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-lg p-4">
+
+      {/* Summary card */}
+      {!loading && !showCravos && displayedLoans.length > 0 && (
+        <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          {totalDueTodayValue > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Vence hoje ({dueTodayLoans.length})</span>
+              <span className="text-sm font-bold tabular-nums">{formatCurrency(totalDueTodayValue)}</span>
+            </div>
+          )}
+          {totalOverdueValue > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-destructive">Total atrasado ({overdueLoans.length})</span>
+              <span className="text-sm font-bold text-destructive tabular-nums">{formatCurrency(totalOverdueValue)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Empréstimos ativos</span>
+            <span className="text-sm font-bold tabular-nums">{displayedLoans.length}</span>
+          </div>
+        </div>
+      )}
       {showCravos && (
         <p className="mb-3 text-sm font-semibold text-destructive">🔥 Modo Cravos</p>
       )}
