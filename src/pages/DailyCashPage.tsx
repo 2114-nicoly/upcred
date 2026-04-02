@@ -756,6 +756,10 @@ export default function DailyCashPage() {
 
   const totalPendingValue = pendingInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalPaidValue = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const totalTodayValue = todayItems.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
+  const totalOverdueValue = overdueItems.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
+  const totalTreated = paidInstallments.length + notPaidMarks.length;
+  const totalAll = totalTreated + pendingInstallments.length;
 
   // === Compact pending row ===
   const renderPendingRow = (inst: InstallmentWithLoan) => {
@@ -783,19 +787,21 @@ export default function DailyCashPage() {
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-[13px] truncate">{inst.loans.clients.name}</span>
-              <span className="font-bold text-[15px] shrink-0 tabular-nums">{formatCurrency(instRemaining)}</span>
+              <span className="font-bold text-sm truncate">{inst.loans.clients.name}</span>
+              <span className="font-extrabold text-base shrink-0 tabular-nums">{formatCurrency(instRemaining)}</span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                Parcela {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+                {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
               </span>
-              <Badge
-                variant="outline"
-                className={`text-[9px] px-1.5 py-0 h-4 leading-none font-medium ${isOverdue ? "border-destructive/50 text-destructive bg-destructive/5" : "border-primary/40 text-primary bg-primary/5"}`}
-              >
-                {isOverdue ? `⚠ ${overdueDays}d atraso` : "Hoje"}
-              </Badge>
+              {isOverdue && (
+                <Badge
+                  variant="outline"
+                  className="text-[9px] px-1.5 py-0 h-4 leading-none font-medium border-destructive/50 text-destructive bg-destructive/5"
+                >
+                  Atraso de {overdueDays} dia{overdueDays > 1 ? "s" : ""}
+                </Badge>
+              )}
             </div>
           </div>
           <DropdownMenu>
@@ -1049,9 +1055,9 @@ export default function DailyCashPage() {
         <>
           {todayItems.length > 0 && (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> Vencem Hoje ({todayItems.length})
+              <div className="flex items-center justify-between border-b border-primary/20 pb-1.5 mb-1">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" /> HOJE ({todayItems.length})
                 </h3>
                 <button
                   className="text-[10px] text-primary hover:underline"
@@ -1064,10 +1070,10 @@ export default function DailyCashPage() {
             </div>
           )}
           {overdueItems.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-destructive uppercase tracking-wider flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" /> Atrasados ({overdueItems.length})
+            <div className="space-y-1.5 mt-3">
+              <div className="flex items-center justify-between border-b border-destructive/20 pb-1.5 mb-1">
+                <h3 className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" /> ATRASADOS ({overdueItems.length})
                 </h3>
                 <button
                   className="text-[10px] text-primary hover:underline"
@@ -1116,7 +1122,32 @@ export default function DailyCashPage() {
         )}
       </div>
 
-      {/* Summary counters */}
+      {/* Top summary: a receber, atrasado, progresso */}
+      {!loading && (
+        <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">A receber hoje</span>
+            <span className="text-sm font-bold tabular-nums">{formatCurrency(totalTodayValue)}</span>
+          </div>
+          {totalOverdueValue > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-destructive">Total atrasado</span>
+              <span className="text-sm font-bold text-destructive tabular-nums">{formatCurrency(totalOverdueValue)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Progresso</span>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${totalAll > 0 ? (totalTreated / totalAll) * 100 : 0}%` }} />
+              </div>
+              <span className="text-xs font-bold tabular-nums">{totalTreated}/{totalAll}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab counters */}
       <div className="mb-3 grid grid-cols-3 gap-1.5">
         <button
           onClick={() => setActiveTab("pending")}
@@ -1124,7 +1155,6 @@ export default function DailyCashPage() {
         >
           <p className="text-[10px] text-muted-foreground">Pendentes</p>
           <p className="text-base font-bold">{pendingInstallments.length}</p>
-          {totalPendingValue > 0 && <p className="text-[10px] text-muted-foreground">{formatCurrency(totalPendingValue)}</p>}
         </button>
         <button
           onClick={() => setActiveTab("paid")}
@@ -1132,7 +1162,6 @@ export default function DailyCashPage() {
         >
           <p className="text-[10px] text-muted-foreground">Pagos</p>
           <p className="text-base font-bold text-success">{paidInstallments.length}</p>
-          {totalPaidValue > 0 && <p className="text-[10px] text-success">{formatCurrency(totalPaidValue)}</p>}
         </button>
         <button
           onClick={() => setActiveTab("notpaid")}
