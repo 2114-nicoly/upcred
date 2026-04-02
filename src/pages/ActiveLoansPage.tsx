@@ -328,6 +328,9 @@ export default function ActiveLoansPage() {
     const isOverdue = !isDueToday && (loan.status === "overdue" || (lp?.nextDueDate && lp.nextDueDate < todayStr));
     const cardBg = isDueToday ? "bg-card-due-today-bg" : isOverdue ? "bg-card-overdue-bg" : "bg-card";
     const overdueDays = getLoanOverdueDays(loan);
+    const remaining = Math.max(0, lp?.remaining ?? Number(loan.total_amount));
+    const paidCount = lp ? Math.floor(lp.progress) : 0;
+    const totalCount = lp?.total ?? loan.installment_count;
 
     return (
       <div
@@ -339,31 +342,47 @@ export default function ActiveLoansPage() {
             <Checkbox checked={selectedIds.has(loan.id)} onCheckedChange={() => toggleSelect(loan.id)} className="shrink-0 h-4 w-4" />
           )}
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-bold text-sm truncate">{loan.clients.name}</span>
-                {loan.is_cravo && <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />}
-              </div>
-              <span className="font-extrabold text-base shrink-0 tabular-nums">{formatCurrency(Math.max(0, lp?.remaining ?? Number(loan.total_amount)))}</span>
+            {/* Row 1: Client name + cravo icon */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-bold text-base truncate">{loan.clients.name}</span>
+              {loan.is_cravo && <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />}
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
-                {lp?.nextDueDate && ` • Próx: ${format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM")}`}
+
+            {/* Row 2: Remaining value (main highlight) */}
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <span className="text-sm font-extrabold tabular-nums text-foreground">
+                Restante: {formatCurrency(remaining)}
               </span>
               {overdueDays > 0 && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 leading-none font-medium border-destructive/50 text-destructive bg-destructive/5">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 leading-none font-semibold border-destructive/50 text-destructive bg-destructive/10">
                   Atraso de {overdueDays} dia{overdueDays > 1 ? "s" : ""}
                 </Badge>
               )}
             </div>
+
+            {/* Row 3: Secondary info */}
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {paidCount}/{totalCount} parcelas • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+              </span>
+              {lp?.nextDueDate && (
+                <span className={`text-[11px] font-medium tabular-nums ${isDueToday ? "text-primary" : isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
+                  Vence em: {format(new Date(lp.nextDueDate + "T12:00:00"), "dd/MM")}
+                </span>
+              )}
+            </div>
+
+            {/* Progress bar */}
             {lp && (
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1.5">
                 <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+                  <div
+                    className={`h-full rounded-full transition-all ${isOverdue ? "bg-destructive" : "bg-primary"}`}
+                    style={{ width: `${progressPct}%` }}
+                  />
                 </div>
-                <span className="text-[10px] font-semibold text-primary tabular-nums shrink-0">
-                  {Math.floor(lp.progress)}/{lp.total}
+                <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${isOverdue ? "text-destructive" : "text-primary"}`}>
+                  {paidCount}/{totalCount}
                 </span>
               </div>
             )}

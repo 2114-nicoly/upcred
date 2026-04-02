@@ -786,22 +786,32 @@ export default function DailyCashPage() {
             className="shrink-0 h-4 w-4"
           />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-bold text-sm truncate">{inst.loans.clients.name}</span>
-              <span className="font-extrabold text-base shrink-0 tabular-nums">{formatCurrency(instRemaining)}</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {inst.number}/{totalCount} • {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+            {/* Row 1: Client name */}
+            <span className="font-bold text-base truncate block">{inst.loans.clients.name}</span>
+
+            {/* Row 2: Remaining value (main highlight) */}
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <span className="text-sm font-extrabold tabular-nums text-foreground">
+                Restante: {formatCurrency(instRemaining)}
               </span>
               {isOverdue && (
                 <Badge
                   variant="outline"
-                  className="text-[9px] px-1.5 py-0 h-4 leading-none font-medium border-destructive/50 text-destructive bg-destructive/5"
+                  className="text-[10px] px-1.5 py-0 h-4 leading-none font-semibold border-destructive/50 text-destructive bg-destructive/10"
                 >
                   Atraso de {overdueDays} dia{overdueDays > 1 ? "s" : ""}
                 </Badge>
               )}
+            </div>
+
+            {/* Row 3: Secondary info */}
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {paidCount}/{totalCount} parcelas
+              </span>
+              <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
+                Vence em: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+              </span>
             </div>
           </div>
           <DropdownMenu>
@@ -828,9 +838,12 @@ export default function DailyCashPage() {
         <div className="px-3 pb-1.5">
           <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+              <div
+                className={`h-full rounded-full transition-all ${isOverdue ? "bg-destructive" : "bg-primary"}`}
+                style={{ width: `${progressPct}%` }}
+              />
             </div>
-            <span className="text-[10px] font-semibold text-primary tabular-nums shrink-0">
+            <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${isOverdue ? "text-destructive" : "text-primary"}`}>
               {paidCount}/{totalCount}
             </span>
           </div>
