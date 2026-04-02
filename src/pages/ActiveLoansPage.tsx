@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
