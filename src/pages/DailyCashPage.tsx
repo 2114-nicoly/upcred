@@ -1055,9 +1055,9 @@ export default function DailyCashPage() {
         <>
           {todayItems.length > 0 && (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> Vencem Hoje ({todayItems.length})
+              <div className="flex items-center justify-between border-b border-primary/20 pb-1.5 mb-1">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" /> HOJE ({todayItems.length})
                 </h3>
                 <button
                   className="text-[10px] text-primary hover:underline"
@@ -1070,10 +1070,10 @@ export default function DailyCashPage() {
             </div>
           )}
           {overdueItems.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-destructive uppercase tracking-wider flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" /> Atrasados ({overdueItems.length})
+            <div className="space-y-1.5 mt-3">
+              <div className="flex items-center justify-between border-b border-destructive/20 pb-1.5 mb-1">
+                <h3 className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" /> ATRASADOS ({overdueItems.length})
                 </h3>
                 <button
                   className="text-[10px] text-primary hover:underline"
