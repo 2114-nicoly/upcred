@@ -772,7 +772,7 @@ export default function DailyCashPage() {
     return (
       <div
         key={inst.id}
-        className={`rounded-lg border bg-card overflow-hidden transition-all ${isOverdue ? "border-destructive/30" : "border-border"} ${isSelected ? "ring-2 ring-primary/40 bg-accent/30" : ""}`}
+        className={`rounded-lg border overflow-hidden transition-all ${isOverdue ? "bg-card-overdue-bg border-destructive/30" : "bg-card-due-today-bg border-border"} ${isSelected ? "ring-2 ring-primary/40" : ""}`}
       >
         {/* Top row: checkbox + info + menu */}
         <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
