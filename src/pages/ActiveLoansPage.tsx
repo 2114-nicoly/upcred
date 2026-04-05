@@ -63,6 +63,11 @@ export default function ActiveLoansPage() {
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
+  // Quitar dialog state
+  const [quitarLoanId, setQuitarLoanId] = useState<string | null>(null);
+  const [quitarDate, setQuitarDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
