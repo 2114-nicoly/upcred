@@ -493,6 +493,9 @@ export default function ActiveLoansPage() {
               <DropdownMenuItem onClick={() => setPayLoanId(loan.id)}>
                 <DollarSign className="mr-2 h-4 w-4" /> Pagar
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
+                <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
                 <XCircle className="mr-2 h-4 w-4" /> Não Pagou
               </DropdownMenuItem>
