@@ -766,8 +766,13 @@ export default function LoanDetailPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <div className="mb-2 flex items-center justify-end">
-        <div className="flex gap-1">
+      <div className="mb-2 flex items-center justify-between">
+        {loan.status !== "paid" && (
+          <Button size="sm" className="bg-success hover:bg-success/90" onClick={() => setQuitarOpen(true)}>
+            <DollarSign className="mr-1 h-4 w-4" /> Quitar
+          </Button>
+        )}
+        <div className="flex gap-1 ml-auto">
           <Button variant="ghost" size="sm" onClick={openEditLoan}>
             <Pencil className="mr-1 h-4 w-4" /> Editar
           </Button>
