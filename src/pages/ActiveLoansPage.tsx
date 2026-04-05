@@ -709,6 +709,40 @@ export default function ActiveLoansPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Quitar Dialog */}
+      <Dialog open={!!quitarLoanId} onOpenChange={(o) => { if (!o) { setQuitarLoanId(null); setQuitarDate(format(new Date(), "yyyy-MM-dd")); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Quitar Empréstimo</DialogTitle>
+          </DialogHeader>
+          {quitarLoanId && (() => {
+            const loan = loans.find((l) => l.id === quitarLoanId);
+            const lp = progressMap[quitarLoanId];
+            const penaltyPending = lp ? Math.max(0, lp.penaltyTotal - lp.penaltyPaid) : 0;
+            return (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{loan?.clients.name}</p>
+                <div className="rounded-lg border p-3 space-y-1 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{lp ? lp.total - Math.floor(lp.progress) : "..."}/{lp?.total ?? loan?.installment_count}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(lp?.remaining ?? 0)}</span></div>
+                  {penaltyPending > 0.01 && (
+                    <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(penaltyPending)}</span></div>
+                  )}
+                  <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + penaltyPending)}</span></div>
+                </div>
+                <div>
+                  <Label>Data do pagamento</Label>
+                  <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+                </div>
+                <Button onClick={handleQuitarFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                  {isSubmitting ? "Processando..." : "Confirmar Quitação"}
+                </Button>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
