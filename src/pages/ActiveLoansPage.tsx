@@ -14,7 +14,7 @@ import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel
 import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
-import { recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
