@@ -14,7 +14,7 @@ import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel
 import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
-import { recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -62,6 +62,11 @@ export default function ActiveLoansPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  // Quitar dialog state
+  const [quitarLoanId, setQuitarLoanId] = useState<string | null>(null);
+  const [quitarDate, setQuitarDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -275,6 +280,94 @@ export default function ActiveLoansPage() {
     fetchData();
   };
 
+  // --- Quitar Empréstimo from list ---
+  const handleQuitarFromList = async () => {
+    if (!quitarLoanId || isSubmitting) return;
+    setIsSubmitting(true);
+
+    const loan = loans.find((l) => l.id === quitarLoanId);
+    if (!loan) { setIsSubmitting(false); return; }
+
+    try {
+      const { data: allUnpaid } = await supabase
+        .from("installments").select("*")
+        .eq("loan_id", quitarLoanId).neq("status", "paid").order("number");
+
+      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); setQuitarLoanId(null); fetchData(); return; }
+
+      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
+      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
+
+      let totalRegularPaying = 0;
+      let totalPenaltyPaying = 0;
+
+      for (const i of regularUnpaid) {
+        const remaining = Number(i.amount) - Number(i.paid_amount);
+        if (remaining <= 0.01) continue;
+        totalRegularPaying += remaining;
+        await supabase.from("installments").update({
+          paid_amount: Number(i.amount),
+          status: "paid",
+          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
+        }).eq("id", i.id);
+      }
+
+      for (const i of penaltyUnpaid) {
+        const remaining = Number(i.amount) - Number(i.paid_amount);
+        if (remaining <= 0.01) continue;
+        totalPenaltyPaying += remaining;
+        await supabase.from("installments").update({
+          paid_amount: Number(i.amount),
+          status: "paid",
+          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
+        }).eq("id", i.id);
+      }
+
+      await supabase.from("loans").update({ status: "paid" }).eq("id", quitarLoanId);
+
+      if (totalRegularPaying > 0) {
+        const loanInterest = Number(loan.total_amount) - Number(loan.amount);
+        const { data: allLoanInsts } = await supabase
+          .from("installments").select("paid_amount")
+          .eq("loan_id", quitarLoanId).eq("is_penalty", false);
+        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const totalPaidBefore = totalPaidNow - totalRegularPaying;
+        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+        const toInterest = Math.min(totalRegularPaying, interestRemaining);
+        const toPrincipal = totalRegularPaying - toInterest;
+
+        await updateCashBalance({
+          available_cash: totalRegularPaying,
+          interest_receivable: -toInterest,
+          money_lent: -toPrincipal,
+        });
+        await createCashMovement({
+          type: "recebimento_normal", amount: totalRegularPaying,
+          client_id: loan.clients.id, loan_id: quitarLoanId,
+          observation: `Quitação empréstimo - ${loan.clients.name}`,
+        });
+      }
+
+      if (totalPenaltyPaying > 0) {
+        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
+        await createCashMovement({
+          type: "recebimento_multa", amount: totalPenaltyPaying,
+          client_id: loan.clients.id, loan_id: quitarLoanId,
+          observation: `Quitação multa - ${loan.clients.name}`,
+        });
+      }
+
+      toast.success("Empréstimo quitado!");
+    } catch {
+      toast.error("Erro ao quitar, recarregando...");
+    } finally {
+      setIsSubmitting(false);
+      setQuitarLoanId(null);
+      setQuitarDate(format(new Date(), "yyyy-MM-dd"));
+      fetchData();
+    }
+  };
+
   // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -399,6 +492,9 @@ export default function ActiveLoansPage() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setPayLoanId(loan.id)}>
                 <DollarSign className="mr-2 h-4 w-4" /> Pagar
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
+                <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
                 <XCircle className="mr-2 h-4 w-4" /> Não Pagou
@@ -611,6 +707,40 @@ export default function ActiveLoansPage() {
               <Trash2 className="mr-1 h-4 w-4" /> Excluir {selectedIds.size} empréstimo(s)
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quitar Dialog */}
+      <Dialog open={!!quitarLoanId} onOpenChange={(o) => { if (!o) { setQuitarLoanId(null); setQuitarDate(format(new Date(), "yyyy-MM-dd")); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Quitar Empréstimo</DialogTitle>
+          </DialogHeader>
+          {quitarLoanId && (() => {
+            const loan = loans.find((l) => l.id === quitarLoanId);
+            const lp = progressMap[quitarLoanId];
+            const penaltyPending = lp ? Math.max(0, lp.penaltyTotal - lp.penaltyPaid) : 0;
+            return (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{loan?.clients.name}</p>
+                <div className="rounded-lg border p-3 space-y-1 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{lp ? lp.total - Math.floor(lp.progress) : "..."}/{lp?.total ?? loan?.installment_count}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(lp?.remaining ?? 0)}</span></div>
+                  {penaltyPending > 0.01 && (
+                    <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(penaltyPending)}</span></div>
+                  )}
+                  <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + penaltyPending)}</span></div>
+                </div>
+                <div>
+                  <Label>Data do pagamento</Label>
+                  <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+                </div>
+                <Button onClick={handleQuitarFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                  {isSubmitting ? "Processando..." : "Confirmar Quitação"}
+                </Button>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
