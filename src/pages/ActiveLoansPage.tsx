@@ -280,6 +280,94 @@ export default function ActiveLoansPage() {
     fetchData();
   };
 
+  // --- Quitar Empréstimo from list ---
+  const handleQuitarFromList = async () => {
+    if (!quitarLoanId || isSubmitting) return;
+    setIsSubmitting(true);
+
+    const loan = loans.find((l) => l.id === quitarLoanId);
+    if (!loan) { setIsSubmitting(false); return; }
+
+    try {
+      const { data: allUnpaid } = await supabase
+        .from("installments").select("*")
+        .eq("loan_id", quitarLoanId).neq("status", "paid").order("number");
+
+      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); setQuitarLoanId(null); fetchData(); return; }
+
+      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
+      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
+
+      let totalRegularPaying = 0;
+      let totalPenaltyPaying = 0;
+
+      for (const i of regularUnpaid) {
+        const remaining = Number(i.amount) - Number(i.paid_amount);
+        if (remaining <= 0.01) continue;
+        totalRegularPaying += remaining;
+        await supabase.from("installments").update({
+          paid_amount: Number(i.amount),
+          status: "paid",
+          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
+        }).eq("id", i.id);
+      }
+
+      for (const i of penaltyUnpaid) {
+        const remaining = Number(i.amount) - Number(i.paid_amount);
+        if (remaining <= 0.01) continue;
+        totalPenaltyPaying += remaining;
+        await supabase.from("installments").update({
+          paid_amount: Number(i.amount),
+          status: "paid",
+          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
+        }).eq("id", i.id);
+      }
+
+      await supabase.from("loans").update({ status: "paid" }).eq("id", quitarLoanId);
+
+      if (totalRegularPaying > 0) {
+        const loanInterest = Number(loan.total_amount) - Number(loan.amount);
+        const { data: allLoanInsts } = await supabase
+          .from("installments").select("paid_amount")
+          .eq("loan_id", quitarLoanId).eq("is_penalty", false);
+        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const totalPaidBefore = totalPaidNow - totalRegularPaying;
+        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+        const toInterest = Math.min(totalRegularPaying, interestRemaining);
+        const toPrincipal = totalRegularPaying - toInterest;
+
+        await updateCashBalance({
+          available_cash: totalRegularPaying,
+          interest_receivable: -toInterest,
+          money_lent: -toPrincipal,
+        });
+        await createCashMovement({
+          type: "recebimento_normal", amount: totalRegularPaying,
+          client_id: loan.clients.id, loan_id: quitarLoanId,
+          observation: `Quitação empréstimo - ${loan.clients.name}`,
+        });
+      }
+
+      if (totalPenaltyPaying > 0) {
+        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
+        await createCashMovement({
+          type: "recebimento_multa", amount: totalPenaltyPaying,
+          client_id: loan.clients.id, loan_id: quitarLoanId,
+          observation: `Quitação multa - ${loan.clients.name}`,
+        });
+      }
+
+      toast.success("Empréstimo quitado!");
+    } catch {
+      toast.error("Erro ao quitar, recarregando...");
+    } finally {
+      setIsSubmitting(false);
+      setQuitarLoanId(null);
+      setQuitarDate(format(new Date(), "yyyy-MM-dd"));
+      fetchData();
+    }
+  };
+
   // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
