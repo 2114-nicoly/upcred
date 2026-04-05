@@ -1172,6 +1172,31 @@ export default function LoanDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Quitar Dialog */}
+      <Dialog open={quitarOpen} onOpenChange={(o) => { if (!o) { setQuitarOpen(false); setQuitarDate(format(new Date(), "yyyy-MM-dd")); } }}>
+        <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">{loan.clients.name}</p>
+            <div className="rounded-lg border p-3 space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{totalInstallments - Math.floor(paidInstallmentsProgress)}/{totalInstallments}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(Math.max(0, remainingLoan))}</span></div>
+              {penaltyTotal - penaltyPaid > 0.01 && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              )}
+              <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency(Math.max(0, remainingLoan) + Math.max(0, penaltyTotal - penaltyPaid))}</span></div>
+            </div>
+            <div>
+              <Label>Data do pagamento</Label>
+              <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+            </div>
+            <Button onClick={handleQuitarEmprestimo} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+              {isSubmitting ? "Processando..." : "Confirmar Quitação"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
