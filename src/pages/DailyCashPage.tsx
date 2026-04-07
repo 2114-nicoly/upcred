@@ -348,6 +348,7 @@ export default function DailyCashPage() {
             type: "recebimento_multa", amount: multaValue,
             client_id: inst.loans.client_id, loan_id: inst.loan_id,
             observation: `Pagamento de multa - ${inst.loans.clients.name}`,
+            cash_date: selectedDate,
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
         }
