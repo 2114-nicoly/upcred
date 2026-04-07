@@ -147,59 +147,32 @@ export default function DailyCashPage() {
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
 
-      const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
+      const { data: paymentMovementData } = await (supabase.from("cash_movements")
+        .select("installment_id, created_at") as any)
+        .eq("type", "recebimento_normal")
+        .eq("cash_date", selectedDate)
+        .not("installment_id", "is", null);
 
-      const [
-        { data: paidData },
-        { data: paymentMovementData },
-        { data: npData },
-      ] = await Promise.all([
-        supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-          .eq("is_penalty", false)
-          .gte("paid_at", selectedDate + "T00:00:00")
-          .lt("paid_at", nextDay + "T00:00:00")
-          .order("number"),
-        supabase.from("cash_movements")
-          .select("installment_id, created_at")
-          .eq("type", "recebimento_normal")
-          .gte("created_at", selectedDate + "T00:00:00")
-          .lt("created_at", nextDay + "T00:00:00")
-          .not("installment_id", "is", null),
-        supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
-      ]);
+      const { data: npData } = await supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate);
 
-      const paidInstMap = new Map<string, InstallmentWithLoan>(
-        (((paidData as unknown as InstallmentWithLoan[]) || []).map((inst) => [inst.id, inst]))
-      );
-
-      const paymentTimesByInstallment = new Map<string, string>();
+      // Build paid installments from cash_movements for this cash_date
+      const paidInstIds = new Set<string>();
       for (const movement of paymentMovementData || []) {
-        if (!movement.installment_id) continue;
-        const prev = paymentTimesByInstallment.get(movement.installment_id);
-        if (!prev || new Date(movement.created_at).getTime() > new Date(prev).getTime()) {
-          paymentTimesByInstallment.set(movement.installment_id, movement.created_at);
-        }
+        if (movement.installment_id) paidInstIds.add(movement.installment_id);
       }
 
-      const missingPaidIds = [...paymentTimesByInstallment.keys()].filter((id) => !paidInstMap.has(id));
-      if (missingPaidIds.length > 0) {
+      let paidInsts: InstallmentWithLoan[] = [];
+      if (paidInstIds.size > 0) {
         const { data: paidFromMovements } = await supabase
           .from("installments")
           .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-          .in("id", missingPaidIds)
+          .in("id", [...paidInstIds])
           .eq("is_penalty", false);
 
-        for (const inst of ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])) {
-          if (Number(inst.paid_amount) <= 0) continue;
-          paidInstMap.set(inst.id, {
-            ...inst,
-            paid_at: inst.paid_at || paymentTimesByInstallment.get(inst.id) || null,
-          });
-        }
+        paidInsts = ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])
+          .filter(inst => Number(inst.paid_amount) > 0)
+          .sort((a, b) => a.number - b.number);
       }
-
-      const paidInsts = Array.from(paidInstMap.values()).sort((a, b) => a.number - b.number);
       setPaidInstallments(paidInsts);
 
       const npMarks = (npData || []) as unknown as NotPaidMark[];
@@ -241,7 +214,7 @@ export default function DailyCashPage() {
       const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
       const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
 
-      const paidInstIds = new Set(paidInsts.map(i => i.id));
+      const paidInstIdSet = new Set(paidInsts.map(i => i.id));
       const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
       const actionedLoanIds = new Set([
@@ -251,7 +224,7 @@ export default function DailyCashPage() {
       ]);
 
       const allCandidates = [...validOverdue, ...dueToday].filter(
-        i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
+        i => !paidInstIdSet.has(i.id) && !npMarkInstIds.has(i.id)
           && !actionedLoanIds.has(i.loan_id)
           && Number(i.amount) - Number(i.paid_amount) > 0.01
       );
@@ -371,6 +344,7 @@ export default function DailyCashPage() {
             type: "recebimento_multa", amount: multaValue,
             client_id: inst.loans.client_id, loan_id: inst.loan_id,
             observation: `Pagamento de multa - ${inst.loans.clients.name}`,
+            cash_date: selectedDate,
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
         }
@@ -422,6 +396,7 @@ export default function DailyCashPage() {
             type: "recebimento_normal", amount: totalApplied,
             client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
             observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+            cash_date: selectedDate,
           });
         }
         if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
@@ -616,11 +591,10 @@ export default function DailyCashPage() {
   const handleCloseCash = async () => {
     const totalReceived = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
 
-    const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
-    const { data: penaltyMovements } = await supabase
-      .from("cash_movements").select("amount").eq("type", "recebimento_multa")
-      .gte("created_at", selectedDate + "T00:00:00")
-      .lt("created_at", nextDay + "T00:00:00");
+    const { data: penaltyMovements } = await (supabase
+      .from("cash_movements").select("amount") as any)
+      .eq("type", "recebimento_multa")
+      .eq("cash_date", selectedDate);
 
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
@@ -734,6 +708,7 @@ export default function DailyCashPage() {
           type: "recebimento_normal", amount: totalRegularPaying,
           client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
           observation: `Quitação empréstimo - ${inst.loans.clients.name}`,
+          cash_date: selectedDate,
         });
       }
 
@@ -744,6 +719,7 @@ export default function DailyCashPage() {
           type: "recebimento_multa", amount: totalPenaltyPaying,
           client_id: inst.loans.client_id, loan_id: inst.loan_id,
           observation: `Quitação multa - ${inst.loans.clients.name}`,
+          cash_date: selectedDate,
         });
       }
     } catch {

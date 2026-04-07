@@ -50,7 +50,7 @@ export default function DailyCashHistoryPage() {
 
       const grouped: Record<string, MovementDay> = {};
       for (const mov of data as any[]) {
-        const day = format(new Date(mov.created_at), "yyyy-MM-dd");
+        const day = mov.cash_date || format(new Date(mov.created_at), "yyyy-MM-dd");
         if (!grouped[day]) {
           grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [] };
         }

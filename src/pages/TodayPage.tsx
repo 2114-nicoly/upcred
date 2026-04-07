@@ -144,6 +144,7 @@ export default function TodayPage() {
           client_id: inst.loans.client_id,
           loan_id: inst.loan_id,
           observation: `Pagamento de multa - ${inst.loans.clients.name}`,
+          cash_date: payDate,
         });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
@@ -211,6 +212,7 @@ export default function TodayPage() {
           loan_id: inst.loan_id,
           installment_id: inst.id,
           observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+          cash_date: payDate,
         });
       }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);

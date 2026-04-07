@@ -135,6 +135,7 @@ export default function NewLoanPage() {
       client_id: clientId!,
       loan_id: loan.id,
       observation: `${renewFromLoanId ? "Renovação" : "Empréstimo"} de ${formatCurrency(numAmount)} para ${clientName}`,
+      cash_date: loanDate,
     });
 
     // If renewal, close old loan
@@ -189,6 +190,7 @@ export default function NewLoanPage() {
               type: "recebimento_normal", amount: totalRegular,
               client_id: clientId!, loan_id: renewFromLoanId,
               observation: `Quitação por renovação - ${clientName}`,
+              cash_date: loanDate,
             });
           }
           if (totalPenalty > 0) {
@@ -197,6 +199,7 @@ export default function NewLoanPage() {
               type: "recebimento_multa", amount: totalPenalty,
               client_id: clientId!, loan_id: renewFromLoanId,
               observation: `Quitação multa por renovação - ${clientName}`,
+              cash_date: loanDate,
             });
           }
         }

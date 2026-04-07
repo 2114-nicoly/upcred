@@ -44,6 +44,7 @@ export type Database = {
       cash_movements: {
         Row: {
           amount: number
+          cash_date: string
           client_id: string | null
           created_at: string
           id: string
@@ -54,6 +55,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          cash_date?: string
           client_id?: string | null
           created_at?: string
           id?: string
@@ -64,6 +66,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          cash_date?: string
           client_id?: string | null
           created_at?: string
           id?: string

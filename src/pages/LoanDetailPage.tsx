@@ -161,6 +161,7 @@ export default function LoanDetailPage() {
           client_id: loan?.client_id,
           loan_id: loanId!,
           observation: `Pagamento de multa`,
+          cash_date: payDate,
         });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
@@ -221,6 +222,7 @@ export default function LoanDetailPage() {
           loan_id: loanId!,
           installment_id: currentInst.id,
           observation: `Parcela ${currentInst.number}`,
+          cash_date: payDate,
         });
       }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
@@ -551,6 +553,7 @@ export default function LoanDetailPage() {
           type: "recebimento_normal", amount: totalRegularPaying,
           client_id: loan.client_id, loan_id: loanId!,
           observation: `Quitação empréstimo - ${loan.clients.name}`,
+          cash_date: quitarDate,
         });
       }
 
@@ -560,6 +563,7 @@ export default function LoanDetailPage() {
           type: "recebimento_multa", amount: totalPenaltyPaying,
           client_id: loan.client_id, loan_id: loanId!,
           observation: `Quitação multa - ${loan.clients.name}`,
+          cash_date: quitarDate,
         });
       }
 
