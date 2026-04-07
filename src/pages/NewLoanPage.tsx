@@ -140,6 +140,17 @@ export default function NewLoanPage() {
       cash_date: loanDate,
     });
 
+    // Register daily event
+    await createDailyEvent({
+      cash_date: loanDate,
+      event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
+      client_id: clientId!,
+      loan_id: loan.id,
+      amount_out: numAmount,
+      observation: `${renewFromLoanId ? "Renovação" : "Novo empréstimo"} - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`,
+      origin: "novo_emprestimo",
+    });
+
     // If renewal, close old loan
     if (renewFromLoanId) {
       // Mark all unpaid installments as paid (closed)
