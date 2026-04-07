@@ -54,6 +54,7 @@ export async function createCashMovement(movement: {
   loan_id?: string | null;
   installment_id?: string | null;
   observation?: string | null;
+  cash_date?: string | null;
 }) {
   const { data } = await supabase.from("cash_movements").insert({
     type: movement.type,
@@ -62,7 +63,8 @@ export async function createCashMovement(movement: {
     loan_id: movement.loan_id || null,
     installment_id: movement.installment_id || null,
     observation: movement.observation || null,
-  }).select().single();
+    cash_date: movement.cash_date || new Date().toISOString().slice(0, 10),
+  } as any).select().single();
   return data;
 }
 
