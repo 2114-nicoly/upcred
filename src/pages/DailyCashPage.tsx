@@ -591,11 +591,10 @@ export default function DailyCashPage() {
   const handleCloseCash = async () => {
     const totalReceived = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
 
-    const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
-    const { data: penaltyMovements } = await supabase
-      .from("cash_movements").select("amount").eq("type", "recebimento_multa")
-      .gte("created_at", selectedDate + "T00:00:00")
-      .lt("created_at", nextDay + "T00:00:00");
+    const { data: penaltyMovements } = await (supabase
+      .from("cash_movements").select("amount") as any)
+      .eq("type", "recebimento_multa")
+      .eq("cash_date", selectedDate);
 
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
