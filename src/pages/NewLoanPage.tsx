@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ import { toast } from "sonner";
 export default function NewLoanPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const renewFromLoanId = searchParams.get("renewFrom");
 
   const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
@@ -34,6 +36,22 @@ export default function NewLoanPage() {
     };
     fetchClient();
   }, [clientId]);
+
+  // Pre-fill from renewal loan
+  useEffect(() => {
+    if (!renewFromLoanId) return;
+    const fetchRenewalLoan = async () => {
+      const { data } = await supabase.from("loans").select("amount, interest_type, interest_value, payment_type, installment_count").eq("id", renewFromLoanId).single();
+      if (data) {
+        setAmount(String(data.amount));
+        setInterestType(data.interest_type as "percentage" | "fixed");
+        setInterestValue(String(data.interest_value));
+        setPaymentType(data.payment_type as typeof paymentType);
+        setInstallmentCount(String(data.installment_count));
+      }
+    };
+    fetchRenewalLoan();
+  }, [renewFromLoanId]);
 
   const numAmount = parseFloat(amount) || 0;
   const numInterest = parseFloat(interestValue) || 0;
