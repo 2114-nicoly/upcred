@@ -45,21 +45,20 @@ export default function DailyCashHistoryPage() {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
-        .from("cash_movements")
-        .select("*, clients(name)")
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      if (!data) { setLoading(false); return; }
+    const fetchAll = async () => {
+      const [{ data }, { data: renewalData }] = await Promise.all([
+        supabase.from("cash_movements").select("*, clients(name)").order("created_at", { ascending: false }).limit(500),
+        supabase.from("loans").select("id, amount, total_amount, loan_date, clients:client_id(name)").not("renewed_from_loan_id", "is", null) as any,
+      ]);
 
       const grouped: Record<string, MovementDay> = {};
-      for (const mov of data as any[]) {
+      const ensureDay = (day: string) => {
+        if (!grouped[day]) grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [], renewals: [] };
+      };
+
+      for (const mov of (data || []) as any[]) {
         const day = mov.cash_date || format(new Date(mov.created_at), "yyyy-MM-dd");
-        if (!grouped[day]) {
-          grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [] };
-        }
+        ensureDay(day);
         const amount = Number(mov.amount);
         if (amount >= 0) grouped[day].totalIn += amount;
         else grouped[day].totalOut += Math.abs(amount);
@@ -67,11 +66,17 @@ export default function DailyCashHistoryPage() {
         grouped[day].movements.push(mov);
       }
 
+      for (const r of (renewalData || []) as any[]) {
+        const day = r.loan_date;
+        ensureDay(day);
+        grouped[day].renewals.push(r);
+      }
+
       const sorted = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
       setDays(sorted);
       setLoading(false);
     };
-    fetch();
+    fetchAll();
   }, []);
 
   return (
