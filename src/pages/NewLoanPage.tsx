@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,13 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
-import { ArrowLeft, Calculator } from "lucide-react";
+import { ArrowLeft, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 export default function NewLoanPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const renewFromLoanId = searchParams.get("renewFrom");
 
   const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
@@ -34,6 +36,22 @@ export default function NewLoanPage() {
     };
     fetchClient();
   }, [clientId]);
+
+  // Pre-fill from renewal loan
+  useEffect(() => {
+    if (!renewFromLoanId) return;
+    const fetchRenewalLoan = async () => {
+      const { data } = await supabase.from("loans").select("amount, interest_type, interest_value, payment_type, installment_count").eq("id", renewFromLoanId).single();
+      if (data) {
+        setAmount(String(data.amount));
+        setInterestType(data.interest_type as "percentage" | "fixed");
+        setInterestValue(String(data.interest_value));
+        setPaymentType(data.payment_type as typeof paymentType);
+        setInstallmentCount(String(data.installment_count));
+      }
+    };
+    fetchRenewalLoan();
+  }, [renewFromLoanId]);
 
   const numAmount = parseFloat(amount) || 0;
   const numInterest = parseFloat(interestValue) || 0;
@@ -116,15 +134,90 @@ export default function NewLoanPage() {
       amount: -numAmount,
       client_id: clientId!,
       loan_id: loan.id,
-      observation: `Empréstimo de ${formatCurrency(numAmount)} para ${clientName}`,
+      observation: `${renewFromLoanId ? "Renovação" : "Empréstimo"} de ${formatCurrency(numAmount)} para ${clientName}`,
     });
 
-    toast.success("Empréstimo criado com sucesso!");
+    // If renewal, close old loan
+    if (renewFromLoanId) {
+      // Mark all unpaid installments as paid (closed)
+      const { data: unpaidInsts } = await supabase
+        .from("installments").select("*")
+        .eq("loan_id", renewFromLoanId).neq("status", "paid");
+
+      if (unpaidInsts && unpaidInsts.length > 0) {
+        const now = new Date().toISOString();
+        for (const inst of unpaidInsts) {
+          await supabase.from("installments").update({
+            status: "paid",
+            paid_amount: Number(inst.amount),
+            paid_at: now,
+          }).eq("id", inst.id);
+        }
+
+        // Calculate remaining balances for old loan
+        const { data: oldLoan } = await supabase.from("loans").select("amount, total_amount, client_id").eq("id", renewFromLoanId).single();
+        if (oldLoan) {
+          const regularUnpaid = unpaidInsts.filter((i: any) => !i.is_penalty);
+          const penaltyUnpaid = unpaidInsts.filter((i: any) => i.is_penalty);
+
+          let totalRegular = 0;
+          for (const i of regularUnpaid) {
+            totalRegular += Number(i.amount) - Number(i.paid_amount);
+          }
+          let totalPenalty = 0;
+          for (const i of penaltyUnpaid) {
+            totalPenalty += Number(i.amount) - Number(i.paid_amount);
+          }
+
+          if (totalRegular > 0) {
+            const loanInterest = Number(oldLoan.total_amount) - Number(oldLoan.amount);
+            const { data: allOldInsts } = await supabase
+              .from("installments").select("paid_amount")
+              .eq("loan_id", renewFromLoanId).eq("is_penalty", false);
+            const totalPaidNow = (allOldInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+            const totalPaidBefore = totalPaidNow - totalRegular;
+            const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+            const toInterest = Math.min(totalRegular, interestRemaining);
+            const toPrincipal = totalRegular - toInterest;
+
+            await updateCashBalance({
+              available_cash: totalRegular,
+              interest_receivable: -toInterest,
+              money_lent: -toPrincipal,
+            });
+            await createCashMovement({
+              type: "recebimento_normal", amount: totalRegular,
+              client_id: clientId!, loan_id: renewFromLoanId,
+              observation: `Quitação por renovação - ${clientName}`,
+            });
+          }
+          if (totalPenalty > 0) {
+            await updateCashBalance({ available_cash: totalPenalty, penalty_receivable: -totalPenalty });
+            await createCashMovement({
+              type: "recebimento_multa", amount: totalPenalty,
+              client_id: clientId!, loan_id: renewFromLoanId,
+              observation: `Quitação multa por renovação - ${clientName}`,
+            });
+          }
+        }
+      }
+
+      await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
+      toast.success("Empréstimo renovado com sucesso!");
+    } else {
+      toast.success("Empréstimo criado com sucesso!");
+    }
     navigate("/");
   };
 
   return (
     <div className="mx-auto max-w-lg p-4">
+      {renewFromLoanId && (
+        <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-primary">Renovação de Empréstimo</span>
+        </div>
+      )}
       {clientName && <p className="mb-4 text-sm text-muted-foreground">Cliente: <span className="font-medium text-foreground">{clientName}</span></p>}
 
       <div className="space-y-4">
@@ -218,7 +311,7 @@ export default function NewLoanPage() {
         )}
 
         <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-          {saving ? "Salvando..." : "Criar Empréstimo"}
+          {saving ? "Processando..." : renewFromLoanId ? "Renovar Empréstimo" : "Criar Empréstimo"}
         </Button>
       </div>
     </div>
