@@ -218,7 +218,7 @@ export default function DailyCashPage() {
       const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
       const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
 
-      const paidInstIds = new Set(paidInsts.map(i => i.id));
+      const paidInstIdSet = new Set(paidInsts.map(i => i.id));
       const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
       const actionedLoanIds = new Set([
