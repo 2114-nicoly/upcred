@@ -228,7 +228,7 @@ export default function DailyCashPage() {
       ]);
 
       const allCandidates = [...validOverdue, ...dueToday].filter(
-        i => !paidInstIds.has(i.id) && !npMarkInstIds.has(i.id)
+        i => !paidInstIdSet.has(i.id) && !npMarkInstIds.has(i.id)
           && !actionedLoanIds.has(i.loan_id)
           && Number(i.amount) - Number(i.paid_amount) > 0.01
       );
