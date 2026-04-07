@@ -631,7 +631,7 @@ export default function DailyCashPage() {
   };
 
   const handleCloseCash = async () => {
-    const totalReceived = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+    const totalReceived = Object.values(movementAmountByLoan).reduce((s, v) => s + v, 0) || paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
 
     const { data: penaltyMovements } = await (supabase
       .from("cash_movements").select("amount") as any)
