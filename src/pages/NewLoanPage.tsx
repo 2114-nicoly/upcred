@@ -190,6 +190,7 @@ export default function NewLoanPage() {
               type: "recebimento_normal", amount: totalRegular,
               client_id: clientId!, loan_id: renewFromLoanId,
               observation: `Quitação por renovação - ${clientName}`,
+              cash_date: loanDate,
             });
           }
           if (totalPenalty > 0) {
