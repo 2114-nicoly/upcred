@@ -1183,7 +1183,7 @@ export default function DailyCashPage() {
       </div>
 
       {/* Tab counters */}
-      <div className={`mb-3 grid gap-1.5 ${renewals.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`mb-3 grid gap-1.5 ${newLoans.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <button
           onClick={() => setActiveTab("pending")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "pending" ? "border-primary/50 bg-accent/50" : "bg-card"}`}
@@ -1205,13 +1205,13 @@ export default function DailyCashPage() {
           <p className="text-[10px] text-muted-foreground">Não Pagos</p>
           <p className="text-base font-bold text-destructive">{notPaidMarks.length}</p>
         </button>
-        {renewals.length > 0 && (
+        {newLoans.length > 0 && (
           <button
-            onClick={() => setActiveTab("renewals")}
-            className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "renewals" ? "border-primary/50 bg-primary/5" : "bg-card"}`}
+            onClick={() => setActiveTab("newloans")}
+            className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "newloans" ? "border-primary/50 bg-primary/5" : "bg-card"}`}
           >
-            <p className="text-[10px] text-muted-foreground">Renovações</p>
-            <p className="text-base font-bold text-primary">{renewals.length}</p>
+            <p className="text-[10px] text-muted-foreground">Novos</p>
+            <p className="text-base font-bold text-primary">{newLoans.length}</p>
           </button>
         )}
       </div>
