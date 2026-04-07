@@ -708,6 +708,7 @@ export default function DailyCashPage() {
           type: "recebimento_normal", amount: totalRegularPaying,
           client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
           observation: `Quitação empréstimo - ${inst.loans.clients.name}`,
+          cash_date: selectedDate,
         });
       }
 
