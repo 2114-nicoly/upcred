@@ -562,6 +562,18 @@ export default function DailyCashPage() {
     }));
     try {
       await supabase.from("not_paid_marks").insert(inserts);
+      // Register daily events for each batch item
+      for (const inst of selectedInsts) {
+        await createDailyEvent({
+          cash_date: selectedDate,
+          event_type: "nao_pagou",
+          client_id: inst.loans.client_id,
+          loan_id: inst.loan_id,
+          installment_id: inst.id,
+          observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+          origin: "rota",
+        });
+      }
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
