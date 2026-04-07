@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle } from "lucide-react";
+import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { format } from "date-fns";
@@ -497,6 +497,9 @@ export default function ActiveLoansPage() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate(`/new-loan/${loan.clients.id}?renewFrom=${loan.id}`)}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
                 <XCircle className="mr-2 h-4 w-4" /> Não Pagou
