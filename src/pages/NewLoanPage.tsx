@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { ArrowLeft, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -137,6 +138,17 @@ export default function NewLoanPage() {
       loan_id: loan.id,
       observation: `${renewFromLoanId ? "Renovação" : "Empréstimo"} de ${formatCurrency(numAmount)} para ${clientName}`,
       cash_date: loanDate,
+    });
+
+    // Register daily event
+    await createDailyEvent({
+      cash_date: loanDate,
+      event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
+      client_id: clientId!,
+      loan_id: loan.id,
+      amount_out: numAmount,
+      observation: `${renewFromLoanId ? "Renovação" : "Novo empréstimo"} - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`,
+      origin: "novo_emprestimo",
     });
 
     // If renewal, close old loan

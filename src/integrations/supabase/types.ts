@@ -176,6 +176,70 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_events: {
+        Row: {
+          amount_in: number
+          amount_out: number
+          cash_date: string
+          client_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          installment_id: string | null
+          loan_id: string | null
+          observation: string | null
+          origin: string | null
+        }
+        Insert: {
+          amount_in?: number
+          amount_out?: number
+          cash_date?: string
+          client_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          installment_id?: string | null
+          loan_id?: string | null
+          observation?: string | null
+          origin?: string | null
+        }
+        Update: {
+          amount_in?: number
+          amount_out?: number
+          cash_date?: string
+          client_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          installment_id?: string | null
+          loan_id?: string | null
+          observation?: string | null
+          origin?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_events_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: false
+            referencedRelation: "installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_events_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       installments: {
         Row: {
           amount: number

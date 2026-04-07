@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, calculateOverdueDays } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
@@ -387,6 +388,15 @@ export default function DailyCashPage() {
             observation: `Pagamento de multa - ${inst.loans.clients.name}`,
             cash_date: selectedDate,
           });
+          await createDailyEvent({
+            cash_date: payDate,
+            event_type: "recebimento_multa",
+            client_id: inst.loans.client_id,
+            loan_id: inst.loan_id,
+            amount_in: multaValue,
+            observation: `Multa - ${inst.loans.clients.name}`,
+            origin: "rota",
+          });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
         }
       }
@@ -439,6 +449,16 @@ export default function DailyCashPage() {
             observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
             cash_date: selectedDate,
           });
+          await createDailyEvent({
+            cash_date: payDate,
+            event_type: "pagamento",
+            client_id: inst.loans.client_id,
+            loan_id: inst.loan_id,
+            installment_id: inst.id,
+            amount_in: totalApplied,
+            observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+            origin: "rota",
+          });
         }
         if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
       }
@@ -488,6 +508,15 @@ export default function DailyCashPage() {
         loan_id: inst.loan_id, client_id: inst.loans.client_id,
         observation: obs || null,
       });
+      await createDailyEvent({
+        cash_date: selectedDate,
+        event_type: "nao_pagou",
+        client_id: inst.loans.client_id,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+        origin: "rota",
+      });
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -533,6 +562,18 @@ export default function DailyCashPage() {
     }));
     try {
       await supabase.from("not_paid_marks").insert(inserts);
+      // Register daily events for each batch item
+      for (const inst of selectedInsts) {
+        await createDailyEvent({
+          cash_date: selectedDate,
+          event_type: "nao_pagou",
+          client_id: inst.loans.client_id,
+          loan_id: inst.loan_id,
+          installment_id: inst.id,
+          observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+          origin: "rota",
+        });
+      }
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -594,6 +635,16 @@ export default function DailyCashPage() {
     toast.success("Marcação desfeita!");
     try {
       await supabase.from("not_paid_marks").delete().eq("id", markId);
+      // Delete corresponding daily_event
+      if (mark) {
+        const { data: events } = await (supabase.from("daily_events" as any)
+          .select("id").eq("event_type", "nao_pagou")
+          .eq("installment_id", mark.installment_id)
+          .eq("cash_date", selectedDate) as any);
+        for (const ev of (events || [])) {
+          await deleteDailyEvent(ev.id);
+        }
+      }
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -620,6 +671,15 @@ export default function DailyCashPage() {
         await supabase
           .from("cash_movements").select("id, amount")
           .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
+      }
+
+      // Delete corresponding daily_events for this installment
+      const { data: events } = await (supabase.from("daily_events" as any)
+        .select("id").eq("event_type", "pagamento")
+        .eq("installment_id", id)
+        .eq("cash_date", selectedDate) as any);
+      for (const ev of (events || [])) {
+        await deleteDailyEvent(ev.id);
       }
 
       await recalculateCashBalanceFromLedger();
@@ -763,6 +823,17 @@ export default function DailyCashPage() {
           cash_date: selectedDate,
         });
       }
+      // Register daily event for quitar
+      await createDailyEvent({
+        cash_date: quitarDate,
+        event_type: "pagamento",
+        client_id: inst.loans.client_id,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        amount_in: totalRegularPaying + totalPenaltyPaying,
+        observation: `Quitação - ${inst.loans.clients.name}`,
+        origin: "rota",
+      });
     } catch {
       toast.error("Erro ao quitar, recarregando...");
     } finally {
