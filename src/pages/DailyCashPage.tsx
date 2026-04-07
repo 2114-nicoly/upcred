@@ -147,24 +147,14 @@ export default function DailyCashPage() {
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
 
-      const nextDay = format(addDays(new Date(selectedDate + "T12:00:00"), 1), "yyyy-MM-dd");
-
       const [
-        { data: paidData },
         { data: paymentMovementData },
         { data: npData },
       ] = await Promise.all([
-        supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-          .eq("is_penalty", false)
-          .gte("paid_at", selectedDate + "T00:00:00")
-          .lt("paid_at", nextDay + "T00:00:00")
-          .order("number"),
         supabase.from("cash_movements")
           .select("installment_id, created_at")
           .eq("type", "recebimento_normal")
-          .gte("created_at", selectedDate + "T00:00:00")
-          .lt("created_at", nextDay + "T00:00:00")
+          .eq("cash_date" as any, selectedDate)
           .not("installment_id", "is", null),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
       ]);
