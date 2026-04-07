@@ -118,6 +118,22 @@ export default function DailyCashHistoryPage() {
                 </button>
                 {isExpanded && (
                   <CardContent className="space-y-1 border-t pt-3 pb-3">
+                    {day.renewals.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <RefreshCw className="h-3 w-3" /> Renovações
+                        </p>
+                        {day.renewals.map((r: any) => (
+                          <div key={r.id} className="flex items-center justify-between rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 mb-1">
+                            <div>
+                              <p className="text-xs font-medium text-primary">Renovação</p>
+                              {r.clients?.name && <p className="text-xs text-muted-foreground">{r.clients.name}</p>}
+                            </div>
+                            <span className="text-sm font-bold text-primary">{formatCurrency(Number(r.amount))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {day.movements.map(mov => (
                       <div key={mov.id} className="flex items-center justify-between rounded-lg bg-accent px-3 py-2">
                         <div>
