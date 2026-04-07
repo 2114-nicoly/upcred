@@ -222,6 +222,7 @@ export default function LoanDetailPage() {
           loan_id: loanId!,
           installment_id: currentInst.id,
           observation: `Parcela ${currentInst.number}`,
+          cash_date: payDate,
         });
       }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
