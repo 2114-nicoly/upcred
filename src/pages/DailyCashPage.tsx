@@ -388,6 +388,15 @@ export default function DailyCashPage() {
             observation: `Pagamento de multa - ${inst.loans.clients.name}`,
             cash_date: selectedDate,
           });
+          await createDailyEvent({
+            cash_date: payDate,
+            event_type: "recebimento_multa",
+            client_id: inst.loans.client_id,
+            loan_id: inst.loan_id,
+            amount_in: multaValue,
+            observation: `Multa - ${inst.loans.clients.name}`,
+            origin: "rota",
+          });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
         }
       }
