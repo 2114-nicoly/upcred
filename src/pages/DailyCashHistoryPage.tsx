@@ -23,6 +23,12 @@ type MovementDay = {
     created_at: string;
     clients?: { name: string } | null;
   }[];
+  renewals: {
+    id: string;
+    amount: number;
+    total_amount: number;
+    clients: { name: string } | null;
+  }[];
 };
 
 function getDayLabel(dateStr: string): string {
