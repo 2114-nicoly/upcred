@@ -159,37 +159,24 @@ export default function DailyCashPage() {
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
       ]);
 
-      const paidInstMap = new Map<string, InstallmentWithLoan>(
-        (((paidData as unknown as InstallmentWithLoan[]) || []).map((inst) => [inst.id, inst]))
-      );
-
-      const paymentTimesByInstallment = new Map<string, string>();
+      // Build paid installments from cash_movements for this cash_date
+      const paidInstIds = new Set<string>();
       for (const movement of paymentMovementData || []) {
-        if (!movement.installment_id) continue;
-        const prev = paymentTimesByInstallment.get(movement.installment_id);
-        if (!prev || new Date(movement.created_at).getTime() > new Date(prev).getTime()) {
-          paymentTimesByInstallment.set(movement.installment_id, movement.created_at);
-        }
+        if (movement.installment_id) paidInstIds.add(movement.installment_id);
       }
 
-      const missingPaidIds = [...paymentTimesByInstallment.keys()].filter((id) => !paidInstMap.has(id));
-      if (missingPaidIds.length > 0) {
+      let paidInsts: InstallmentWithLoan[] = [];
+      if (paidInstIds.size > 0) {
         const { data: paidFromMovements } = await supabase
           .from("installments")
           .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-          .in("id", missingPaidIds)
+          .in("id", [...paidInstIds])
           .eq("is_penalty", false);
 
-        for (const inst of ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])) {
-          if (Number(inst.paid_amount) <= 0) continue;
-          paidInstMap.set(inst.id, {
-            ...inst,
-            paid_at: inst.paid_at || paymentTimesByInstallment.get(inst.id) || null,
-          });
-        }
+        paidInsts = ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])
+          .filter(inst => Number(inst.paid_amount) > 0)
+          .sort((a, b) => a.number - b.number);
       }
-
-      const paidInsts = Array.from(paidInstMap.values()).sort((a, b) => a.number - b.number);
       setPaidInstallments(paidInsts);
 
       const npMarks = (npData || []) as unknown as NotPaidMark[];
