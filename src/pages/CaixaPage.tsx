@@ -30,8 +30,9 @@ type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
 
 export default function CaixaPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const today = format(new Date(), "yyyy-MM-dd");
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [events, setEvents] = useState<DailyEvent[]>([]);
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
