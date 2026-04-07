@@ -311,7 +311,7 @@ export default function NewLoanPage() {
         )}
 
         <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-          {saving ? "Salvando..." : "Criar Empréstimo"}
+          {saving ? "Processando..." : renewFromLoanId ? "Renovar Empréstimo" : "Criar Empréstimo"}
         </Button>
       </div>
     </div>
