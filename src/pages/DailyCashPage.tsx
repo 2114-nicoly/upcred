@@ -1312,7 +1312,10 @@ export default function DailyCashPage() {
                     }
                     const g = grouped.get(key)!;
                     g.installments.push(inst);
-                    g.totalPaid += Number(inst.paid_amount);
+                  }
+                  // Use movement amounts from cash_movements ledger (actual money received that day)
+                  for (const g of grouped.values()) {
+                    g.totalPaid = movementAmountByLoan[g.loanId] || g.installments.reduce((s, i) => s + Number(i.paid_amount), 0);
                   }
                   return Array.from(grouped.values()).map(group => renderPaidGroupCard(group));
                 })()
