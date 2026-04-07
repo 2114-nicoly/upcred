@@ -768,9 +768,14 @@ export default function LoanDetailPage() {
     <div className="mx-auto max-w-lg p-4">
       <div className="mb-2 flex items-center justify-between">
         {loan.status !== "paid" && (
-          <Button size="sm" className="bg-success hover:bg-success/90" onClick={() => setQuitarOpen(true)}>
-            <DollarSign className="mr-1 h-4 w-4" /> Quitar
-          </Button>
+          <div className="flex gap-1">
+            <Button size="sm" className="bg-success hover:bg-success/90" onClick={() => setQuitarOpen(true)}>
+              <DollarSign className="mr-1 h-4 w-4" /> Quitar
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/clients/${loan.client_id}/new-loan?renewFrom=${loanId}`)}>
+              <RefreshCw className="mr-1 h-4 w-4" /> Renovar
+            </Button>
+          </div>
         )}
         <div className="flex gap-1 ml-auto">
           <Button variant="ghost" size="sm" onClick={openEditLoan}>
