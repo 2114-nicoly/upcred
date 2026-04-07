@@ -161,6 +161,7 @@ export default function LoanDetailPage() {
           client_id: loan?.client_id,
           loan_id: loanId!,
           observation: `Pagamento de multa`,
+          cash_date: payDate,
         });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
