@@ -144,6 +144,7 @@ export default function TodayPage() {
           client_id: inst.loans.client_id,
           loan_id: inst.loan_id,
           observation: `Pagamento de multa - ${inst.loans.clients.name}`,
+          cash_date: payDate,
         });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
