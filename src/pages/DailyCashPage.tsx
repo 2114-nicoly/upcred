@@ -804,6 +804,17 @@ export default function DailyCashPage() {
           cash_date: selectedDate,
         });
       }
+      // Register daily event for quitar
+      await createDailyEvent({
+        cash_date: quitarDate,
+        event_type: "pagamento",
+        client_id: inst.loans.client_id,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        amount_in: totalRegularPaying + totalPenaltyPaying,
+        observation: `Quitação - ${inst.loans.clients.name}`,
+        origin: "rota",
+      });
     } catch {
       toast.error("Erro ao quitar, recarregando...");
     } finally {
