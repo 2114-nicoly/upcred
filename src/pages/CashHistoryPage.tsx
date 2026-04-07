@@ -74,7 +74,7 @@ export default function CashHistoryPage() {
   const groupedDays: GroupedDay[] = (() => {
     const grouped: Record<string, MovementWithClient[]> = {};
     for (const mov of movements) {
-      const day = format(new Date(mov.created_at), "yyyy-MM-dd");
+      const day = (mov as any).cash_date || format(new Date(mov.created_at), "yyyy-MM-dd");
       if (!grouped[day]) grouped[day] = [];
       grouped[day].push(mov);
     }
