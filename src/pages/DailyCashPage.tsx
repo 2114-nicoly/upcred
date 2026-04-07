@@ -673,6 +673,15 @@ export default function DailyCashPage() {
           .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
       }
 
+      // Delete corresponding daily_events for this installment
+      const { data: events } = await (supabase.from("daily_events" as any)
+        .select("id").eq("event_type", "pagamento")
+        .eq("installment_id", id)
+        .eq("cash_date", selectedDate) as any);
+      for (const ev of (events || [])) {
+        await deleteDailyEvent(ev.id);
+      }
+
       await recalculateCashBalanceFromLedger();
     } finally {
       setIsSubmitting(false);
