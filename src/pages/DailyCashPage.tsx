@@ -147,10 +147,10 @@ export default function DailyCashPage() {
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
 
-      const { data: paymentMovementData } = await supabase.from("cash_movements")
-        .select("installment_id, created_at")
+      const { data: paymentMovementData } = await (supabase.from("cash_movements")
+        .select("installment_id, created_at") as any)
         .eq("type", "recebimento_normal")
-        .eq("cash_date" as any, selectedDate)
+        .eq("cash_date", selectedDate)
         .not("installment_id", "is", null);
 
       const { data: npData } = await supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate);
