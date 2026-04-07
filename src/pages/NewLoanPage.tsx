@@ -205,6 +205,17 @@ export default function NewLoanPage() {
               observation: `Quitação por renovação - ${clientName}`,
               cash_date: loanDate,
             });
+
+            // Register payoff as daily event (entry)
+            await createDailyEvent({
+              cash_date: loanDate,
+              event_type: "pagamento",
+              client_id: clientId!,
+              loan_id: renewFromLoanId,
+              amount_in: totalRegular,
+              observation: `Quitação por renovação - ${clientName} - ${formatCurrency(totalRegular)}`,
+              origin: "renovacao",
+            });
           }
           if (totalPenalty > 0) {
             await updateCashBalance({ available_cash: totalPenalty, penalty_receivable: -totalPenalty });
@@ -213,6 +224,17 @@ export default function NewLoanPage() {
               client_id: clientId!, loan_id: renewFromLoanId,
               observation: `Quitação multa por renovação - ${clientName}`,
               cash_date: loanDate,
+            });
+
+            // Register penalty payoff as daily event (entry)
+            await createDailyEvent({
+              cash_date: loanDate,
+              event_type: "recebimento_multa",
+              client_id: clientId!,
+              loan_id: renewFromLoanId,
+              amount_in: totalPenalty,
+              observation: `Multa quitada por renovação - ${clientName} - ${formatCurrency(totalPenalty)}`,
+              origin: "renovacao",
             });
           }
         }
