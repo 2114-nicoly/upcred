@@ -225,13 +225,12 @@ export default function DailyCashPage() {
       const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
       setNotPaidMarks(enrichedNpMarks);
 
-      // Fetch renewals for this cash date
-      const { data: renewalData } = await (supabase
+      // Fetch all loans created on this cash date (new + renewals)
+      const { data: newLoanData } = await (supabase
         .from("loans")
         .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)") as any)
-        .eq("loan_date", selectedDate)
-        .not("renewed_from_loan_id", "is", null);
-      setRenewals((renewalData as RenewalInfo[]) || []);
+        .eq("loan_date", selectedDate);
+      setNewLoans((newLoanData as NewLoanInfo[]) || []);
 
       if (status === "closed") {
         setPendingInstallments([]);
