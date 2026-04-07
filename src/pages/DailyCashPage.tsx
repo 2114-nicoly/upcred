@@ -508,6 +508,15 @@ export default function DailyCashPage() {
         loan_id: inst.loan_id, client_id: inst.loans.client_id,
         observation: obs || null,
       });
+      await createDailyEvent({
+        cash_date: selectedDate,
+        event_type: "nao_pagou",
+        client_id: inst.loans.client_id,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+        origin: "rota",
+      });
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
