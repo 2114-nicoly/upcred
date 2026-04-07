@@ -185,25 +185,23 @@ export default function DailyCashPage() {
       // plus those referenced in cash_movements, to capture multi-installment payments
       let paidInsts: InstallmentWithLoan[] = [];
       if (paidInstIds.size > 0 || paidLoanIds.size > 0) {
-        // Get installments from movements + any installments paid_at on selectedDate for those loans
-        const queries: Promise<any>[] = [];
+        const allPaidMap = new Map<string, InstallmentWithLoan>();
         if (paidInstIds.size > 0) {
-          queries.push(supabase.from("installments")
+          const { data: d1 } = await supabase.from("installments")
             .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-            .in("id", [...paidInstIds]).eq("is_penalty", false));
+            .in("id", [...paidInstIds]).eq("is_penalty", false);
+          for (const inst of ((d1 as unknown as InstallmentWithLoan[]) || [])) {
+            if (Number(inst.paid_amount) > 0) allPaidMap.set(inst.id, inst);
+          }
         }
         if (paidLoanIds.size > 0) {
-          queries.push(supabase.from("installments")
+          const { data: d2 } = await supabase.from("installments")
             .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
             .in("loan_id", [...paidLoanIds])
             .gte("paid_at", selectedDate + "T00:00:00")
             .lt("paid_at", selectedDate + "T23:59:59.999")
-            .eq("is_penalty", false));
-        }
-        const results = await Promise.all(queries);
-        const allPaidMap = new Map<string, InstallmentWithLoan>();
-        for (const res of results) {
-          for (const inst of ((res.data as unknown as InstallmentWithLoan[]) || [])) {
+            .eq("is_penalty", false);
+          for (const inst of ((d2 as unknown as InstallmentWithLoan[]) || [])) {
             if (Number(inst.paid_amount) > 0) allPaidMap.set(inst.id, inst);
           }
         }
