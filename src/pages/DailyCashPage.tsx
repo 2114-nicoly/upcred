@@ -773,7 +773,7 @@ export default function DailyCashPage() {
   };
 
   const totalPendingValue = pendingInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
-  const totalPaidValue = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const totalPaidValue = Object.values(movementAmountByLoan).reduce((s, v) => s + v, 0) || paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
   const totalTodayValue = todayItems.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalOverdueValue = overdueItems.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalTreated = paidInstallments.length + notPaidMarks.length;
