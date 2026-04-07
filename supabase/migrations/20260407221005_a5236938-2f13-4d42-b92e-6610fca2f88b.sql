@@ -1,0 +1,1 @@
+ALTER TABLE public.loans ADD COLUMN renewed_from_loan_id uuid REFERENCES public.loans(id) DEFAULT NULL;

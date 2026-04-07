@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getMovementTypeLabel, getMovementTypeColor } from "@/lib/cash-utils";
-import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarDays, ChevronRight, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
 
@@ -22,6 +22,12 @@ type MovementDay = {
     observation: string | null;
     created_at: string;
     clients?: { name: string } | null;
+  }[];
+  renewals: {
+    id: string;
+    amount: number;
+    total_amount: number;
+    clients: { name: string } | null;
   }[];
 };
 
@@ -39,21 +45,20 @@ export default function DailyCashHistoryPage() {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
-        .from("cash_movements")
-        .select("*, clients(name)")
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      if (!data) { setLoading(false); return; }
+    const fetchAll = async () => {
+      const [{ data }, { data: renewalData }] = await Promise.all([
+        supabase.from("cash_movements").select("*, clients(name)").order("created_at", { ascending: false }).limit(500),
+        supabase.from("loans").select("id, amount, total_amount, loan_date, clients:client_id(name)").not("renewed_from_loan_id", "is", null) as any,
+      ]);
 
       const grouped: Record<string, MovementDay> = {};
-      for (const mov of data as any[]) {
+      const ensureDay = (day: string) => {
+        if (!grouped[day]) grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [], renewals: [] };
+      };
+
+      for (const mov of (data || []) as any[]) {
         const day = mov.cash_date || format(new Date(mov.created_at), "yyyy-MM-dd");
-        if (!grouped[day]) {
-          grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [] };
-        }
+        ensureDay(day);
         const amount = Number(mov.amount);
         if (amount >= 0) grouped[day].totalIn += amount;
         else grouped[day].totalOut += Math.abs(amount);
@@ -61,11 +66,17 @@ export default function DailyCashHistoryPage() {
         grouped[day].movements.push(mov);
       }
 
+      for (const r of (renewalData || []) as any[]) {
+        const day = r.loan_date;
+        ensureDay(day);
+        grouped[day].renewals.push(r);
+      }
+
       const sorted = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
       setDays(sorted);
       setLoading(false);
     };
-    fetch();
+    fetchAll();
   }, []);
 
   return (
@@ -92,6 +103,7 @@ export default function DailyCashHistoryPage() {
                       <span className="text-success">+{formatCurrency(day.totalIn)}</span>
                       {day.totalOut > 0 && <span className="text-destructive">-{formatCurrency(day.totalOut)}</span>}
                       <span>{day.count} mov.</span>
+                      {day.renewals.length > 0 && <span className="text-primary">{day.renewals.length} renov.</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -107,6 +119,22 @@ export default function DailyCashHistoryPage() {
                 </button>
                 {isExpanded && (
                   <CardContent className="space-y-1 border-t pt-3 pb-3">
+                    {day.renewals.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <RefreshCw className="h-3 w-3" /> Renovações
+                        </p>
+                        {day.renewals.map((r: any) => (
+                          <div key={r.id} className="flex items-center justify-between rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 mb-1">
+                            <div>
+                              <p className="text-xs font-medium text-primary">Renovação</p>
+                              {r.clients?.name && <p className="text-xs text-muted-foreground">{r.clients.name}</p>}
+                            </div>
+                            <span className="text-sm font-bold text-primary">{formatCurrency(Number(r.amount))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {day.movements.map(mov => (
                       <div key={mov.id} className="flex items-center justify-between rounded-lg bg-accent px-3 py-2">
                         <div>

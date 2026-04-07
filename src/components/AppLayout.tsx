@@ -5,12 +5,12 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const bottomNavItems = [
   { path: "/", label: "Rota", icon: MapPin },
-  { path: "/caixa", label: "Caixa", icon: Wallet },
+  { path: "/caixa", label: "Geral", icon: Wallet },
 ];
 
 const sidebarItems = [
   { path: "/", label: "Rota", icon: MapPin },
-  { path: "/caixa", label: "Caixa", icon: Wallet },
+  { path: "/caixa", label: "Geral", icon: Wallet },
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
   { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
@@ -21,7 +21,7 @@ const sidebarItems = [
 // Extended route labels for header (includes sub-pages)
 const routeLabels: Record<string, string> = {
   "/": "Rota",
-  "/caixa": "Caixa",
+  "/caixa": "Geral",
   "/clients": "Clientes",
   "/active-loans": "Empréstimos Ativos",
   "/daily-cash-history": "Histórico",

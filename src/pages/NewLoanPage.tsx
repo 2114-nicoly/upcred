@@ -103,7 +103,8 @@ export default function NewLoanPage() {
         payment_type: paymentType,
         loan_date: loanDate,
         first_due_date: paymentType !== "fixed_dates" ? firstDueDate : null,
-      })
+        renewed_from_loan_id: renewFromLoanId || null,
+      } as any)
       .select()
       .single();
 

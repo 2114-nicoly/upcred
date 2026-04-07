@@ -16,7 +16,7 @@ import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
-  Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History, Filter, ChevronDown
+  Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History, Filter, ChevronDown, RefreshCw
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
@@ -61,7 +61,18 @@ type LoanProgress = {
   penaltyPaid: number;
 };
 
-type ActiveTab = "pending" | "paid" | "notpaid";
+type RenewalInfo = {
+  id: string;
+  amount: number;
+  total_amount: number;
+  installment_count: number;
+  payment_type: string;
+  loan_date: string;
+  renewed_from_loan_id: string;
+  clients: { id: string; name: string };
+};
+
+type ActiveTab = "pending" | "paid" | "notpaid" | "renewals";
 type PendingFilter = "all" | "overdue" | "today";
 
 export default function DailyCashPage() {
@@ -78,6 +89,7 @@ export default function DailyCashPage() {
   const [paidInstallments, setPaidInstallments] = useState<InstallmentWithLoan[]>([]);
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
+  const [renewals, setRenewals] = useState<RenewalInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
@@ -190,6 +202,14 @@ export default function DailyCashPage() {
 
       const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
       setNotPaidMarks(enrichedNpMarks);
+
+      // Fetch renewals for this cash date
+      const { data: renewalData } = await (supabase
+        .from("loans")
+        .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)") as any)
+        .eq("loan_date", selectedDate)
+        .not("renewed_from_loan_id", "is", null);
+      setRenewals((renewalData as RenewalInfo[]) || []);
 
       if (status === "closed") {
         setPendingInstallments([]);
@@ -1142,7 +1162,7 @@ export default function DailyCashPage() {
       </div>
 
       {/* Tab counters */}
-      <div className="mb-3 grid grid-cols-3 gap-1.5">
+      <div className={`mb-3 grid gap-1.5 ${renewals.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <button
           onClick={() => setActiveTab("pending")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "pending" ? "border-primary/50 bg-accent/50" : "bg-card"}`}
@@ -1164,6 +1184,15 @@ export default function DailyCashPage() {
           <p className="text-[10px] text-muted-foreground">Não Pagos</p>
           <p className="text-base font-bold text-destructive">{notPaidMarks.length}</p>
         </button>
+        {renewals.length > 0 && (
+          <button
+            onClick={() => setActiveTab("renewals")}
+            className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "renewals" ? "border-primary/50 bg-primary/5" : "bg-card"}`}
+          >
+            <p className="text-[10px] text-muted-foreground">Renovações</p>
+            <p className="text-base font-bold text-primary">{renewals.length}</p>
+          </button>
+        )}
       </div>
 
       {loading && pendingInstallments.length === 0 && paidInstallments.length === 0 && notPaidMarks.length === 0 ? (
@@ -1286,7 +1315,46 @@ export default function DailyCashPage() {
             </div>
           )}
 
-          {/* Close / Reopen */}
+          {/* RENEWALS TAB */}
+          {activeTab === "renewals" && (
+            <div className="space-y-2">
+              <h2 className="text-xs font-semibold text-primary flex items-center gap-1 uppercase tracking-wider">
+                <RefreshCw className="h-3 w-3" /> Renovações do Dia
+              </h2>
+              {renewals.length === 0 ? (
+                <div className="flex flex-col items-center py-8">
+                  <RefreshCw className="mb-2 h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Nenhuma renovação neste dia</p>
+                </div>
+              ) : (
+                renewals.map(r => (
+                  <div key={r.id} className="rounded-lg border border-primary/30 bg-card p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.installment_count}x de {formatCurrency(Number(r.total_amount) / r.installment_count)} • {r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-primary">{formatCurrency(Number(r.amount))}</p>
+                        <Badge className="bg-primary/10 text-primary text-[9px] px-1.5 py-0 h-3.5">Renovação</Badge>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.id}`)}>
+                        <Eye className="mr-1 h-3 w-3" /> Ver novo
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.renewed_from_loan_id}`)}>
+                        <History className="mr-1 h-3 w-3" /> Ver anterior
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {isClosed ? (
             <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm">
               <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
