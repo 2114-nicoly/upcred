@@ -21,7 +21,7 @@ const sidebarItems = [
 // Extended route labels for header (includes sub-pages)
 const routeLabels: Record<string, string> = {
   "/": "Rota",
-  "/caixa": "Caixa",
+  "/caixa": "Geral",
   "/clients": "Clientes",
   "/active-loans": "Empréstimos Ativos",
   "/daily-cash-history": "Histórico",
