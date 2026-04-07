@@ -212,6 +212,7 @@ export default function TodayPage() {
           loan_id: inst.loan_id,
           installment_id: inst.id,
           observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+          cash_date: payDate,
         });
       }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
