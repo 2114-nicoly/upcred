@@ -553,6 +553,7 @@ export default function LoanDetailPage() {
           type: "recebimento_normal", amount: totalRegularPaying,
           client_id: loan.client_id, loan_id: loanId!,
           observation: `Quitação empréstimo - ${loan.clients.name}`,
+          cash_date: quitarDate,
         });
       }
 
