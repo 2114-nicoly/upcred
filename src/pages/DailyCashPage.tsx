@@ -719,6 +719,7 @@ export default function DailyCashPage() {
           type: "recebimento_multa", amount: totalPenaltyPaying,
           client_id: inst.loans.client_id, loan_id: inst.loan_id,
           observation: `Quitação multa - ${inst.loans.clients.name}`,
+          cash_date: selectedDate,
         });
       }
     } catch {
