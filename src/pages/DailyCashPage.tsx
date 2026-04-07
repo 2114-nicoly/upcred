@@ -399,6 +399,7 @@ export default function DailyCashPage() {
             type: "recebimento_normal", amount: totalApplied,
             client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
             observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+            cash_date: selectedDate,
           });
         }
         if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
