@@ -212,6 +212,12 @@ export default function NewLoanPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
+      {renewFromLoanId && (
+        <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-primary">Renovação de Empréstimo</span>
+        </div>
+      )}
       {clientName && <p className="mb-4 text-sm text-muted-foreground">Cliente: <span className="font-medium text-foreground">{clientName}</span></p>}
 
       <div className="space-y-4">
