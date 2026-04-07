@@ -563,6 +563,7 @@ export default function LoanDetailPage() {
           type: "recebimento_multa", amount: totalPenaltyPaying,
           client_id: loan.client_id, loan_id: loanId!,
           observation: `Quitação multa - ${loan.clients.name}`,
+          cash_date: quitarDate,
         });
       }
 

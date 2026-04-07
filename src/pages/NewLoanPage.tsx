@@ -199,6 +199,7 @@ export default function NewLoanPage() {
               type: "recebimento_multa", amount: totalPenalty,
               client_id: clientId!, loan_id: renewFromLoanId,
               observation: `Quitação multa por renovação - ${clientName}`,
+              cash_date: loanDate,
             });
           }
         }
