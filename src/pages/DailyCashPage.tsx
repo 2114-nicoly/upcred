@@ -440,6 +440,16 @@ export default function DailyCashPage() {
             observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
             cash_date: selectedDate,
           });
+          await createDailyEvent({
+            cash_date: payDate,
+            event_type: "pagamento",
+            client_id: inst.loans.client_id,
+            loan_id: inst.loan_id,
+            installment_id: inst.id,
+            amount_in: totalApplied,
+            observation: `Parcela ${inst.number} - ${inst.loans.clients.name}`,
+            origin: "rota",
+          });
         }
         if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
       }
