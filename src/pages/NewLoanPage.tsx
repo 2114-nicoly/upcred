@@ -135,6 +135,7 @@ export default function NewLoanPage() {
       client_id: clientId!,
       loan_id: loan.id,
       observation: `${renewFromLoanId ? "Renovação" : "Empréstimo"} de ${formatCurrency(numAmount)} para ${clientName}`,
+      cash_date: loanDate,
     });
 
     // If renewal, close old loan
