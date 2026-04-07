@@ -90,7 +90,7 @@ export default function DailyCashPage() {
   const [movementAmountByLoan, setMovementAmountByLoan] = useState<Record<string, number>>({});
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
-  const [renewals, setRenewals] = useState<RenewalInfo[]>([]);
+  const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
