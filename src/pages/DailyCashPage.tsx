@@ -635,6 +635,16 @@ export default function DailyCashPage() {
     toast.success("Marcação desfeita!");
     try {
       await supabase.from("not_paid_marks").delete().eq("id", markId);
+      // Delete corresponding daily_event
+      if (mark) {
+        const { data: events } = await (supabase.from("daily_events" as any)
+          .select("id").eq("event_type", "nao_pagou")
+          .eq("installment_id", mark.installment_id)
+          .eq("cash_date", selectedDate) as any);
+        for (const ev of (events || [])) {
+          await deleteDailyEvent(ev.id);
+        }
+      }
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
