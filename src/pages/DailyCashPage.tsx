@@ -61,18 +61,18 @@ type LoanProgress = {
   penaltyPaid: number;
 };
 
-type RenewalInfo = {
+type NewLoanInfo = {
   id: string;
   amount: number;
   total_amount: number;
   installment_count: number;
   payment_type: string;
   loan_date: string;
-  renewed_from_loan_id: string;
+  renewed_from_loan_id: string | null;
   clients: { id: string; name: string };
 };
 
-type ActiveTab = "pending" | "paid" | "notpaid" | "renewals";
+type ActiveTab = "pending" | "paid" | "notpaid" | "newloans";
 type PendingFilter = "all" | "overdue" | "today";
 
 export default function DailyCashPage() {
