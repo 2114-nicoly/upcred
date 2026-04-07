@@ -103,6 +103,7 @@ export default function DailyCashHistoryPage() {
                       <span className="text-success">+{formatCurrency(day.totalIn)}</span>
                       {day.totalOut > 0 && <span className="text-destructive">-{formatCurrency(day.totalOut)}</span>}
                       <span>{day.count} mov.</span>
+                      {day.renewals.length > 0 && <span className="text-primary">{day.renewals.length} renov.</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
