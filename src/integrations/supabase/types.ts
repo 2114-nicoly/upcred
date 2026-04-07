@@ -239,6 +239,7 @@ export type Database = {
           is_cravo: boolean
           loan_date: string
           payment_type: string
+          renewed_from_loan_id: string | null
           route_id: string | null
           status: string
           total_amount: number
@@ -255,6 +256,7 @@ export type Database = {
           is_cravo?: boolean
           loan_date?: string
           payment_type: string
+          renewed_from_loan_id?: string | null
           route_id?: string | null
           status?: string
           total_amount: number
@@ -271,6 +273,7 @@ export type Database = {
           is_cravo?: boolean
           loan_date?: string
           payment_type?: string
+          renewed_from_loan_id?: string | null
           route_id?: string | null
           status?: string
           total_amount?: number
@@ -281,6 +284,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loans_renewed_from_loan_id_fkey"
+            columns: ["renewed_from_loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
             referencedColumns: ["id"]
           },
           {
