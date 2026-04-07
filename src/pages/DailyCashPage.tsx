@@ -87,6 +87,7 @@ export default function DailyCashPage() {
 
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
   const [paidInstallments, setPaidInstallments] = useState<InstallmentWithLoan[]>([]);
+  const [movementAmountByLoan, setMovementAmountByLoan] = useState<Record<string, number>>({});
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [renewals, setRenewals] = useState<RenewalInfo[]>([]);
@@ -160,30 +161,51 @@ export default function DailyCashPage() {
       setDailyCashStatus(status);
 
       const { data: paymentMovementData } = await (supabase.from("cash_movements")
-        .select("installment_id, created_at") as any)
+        .select("installment_id, loan_id, amount, created_at") as any)
         .eq("type", "recebimento_normal")
         .eq("cash_date", selectedDate)
         .not("installment_id", "is", null);
 
       const { data: npData } = await supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate);
 
-      // Build paid installments from cash_movements for this cash_date
+      // Build movement amount totals by loan_id from cash_movements
+      const movAmountByLoan: Record<string, number> = {};
       const paidInstIds = new Set<string>();
+      const paidLoanIds = new Set<string>();
       for (const movement of paymentMovementData || []) {
         if (movement.installment_id) paidInstIds.add(movement.installment_id);
+        if (movement.loan_id) {
+          paidLoanIds.add(movement.loan_id);
+          movAmountByLoan[movement.loan_id] = (movAmountByLoan[movement.loan_id] || 0) + Number(movement.amount);
+        }
       }
+      setMovementAmountByLoan(movAmountByLoan);
 
+      // Fetch all installments that were paid on this cash_date (by paid_at date match)
+      // plus those referenced in cash_movements, to capture multi-installment payments
       let paidInsts: InstallmentWithLoan[] = [];
-      if (paidInstIds.size > 0) {
-        const { data: paidFromMovements } = await supabase
-          .from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-          .in("id", [...paidInstIds])
-          .eq("is_penalty", false);
-
-        paidInsts = ((paidFromMovements as unknown as InstallmentWithLoan[]) || [])
-          .filter(inst => Number(inst.paid_amount) > 0)
-          .sort((a, b) => a.number - b.number);
+      if (paidInstIds.size > 0 || paidLoanIds.size > 0) {
+        const allPaidMap = new Map<string, InstallmentWithLoan>();
+        if (paidInstIds.size > 0) {
+          const { data: d1 } = await supabase.from("installments")
+            .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+            .in("id", [...paidInstIds]).eq("is_penalty", false);
+          for (const inst of ((d1 as unknown as InstallmentWithLoan[]) || [])) {
+            if (Number(inst.paid_amount) > 0) allPaidMap.set(inst.id, inst);
+          }
+        }
+        if (paidLoanIds.size > 0) {
+          const { data: d2 } = await supabase.from("installments")
+            .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+            .in("loan_id", [...paidLoanIds])
+            .gte("paid_at", selectedDate + "T00:00:00")
+            .lt("paid_at", selectedDate + "T23:59:59.999")
+            .eq("is_penalty", false);
+          for (const inst of ((d2 as unknown as InstallmentWithLoan[]) || [])) {
+            if (Number(inst.paid_amount) > 0) allPaidMap.set(inst.id, inst);
+          }
+        }
+        paidInsts = Array.from(allPaidMap.values()).sort((a, b) => a.number - b.number);
       }
       setPaidInstallments(paidInsts);
 
@@ -609,7 +631,7 @@ export default function DailyCashPage() {
   };
 
   const handleCloseCash = async () => {
-    const totalReceived = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+    const totalReceived = Object.values(movementAmountByLoan).reduce((s, v) => s + v, 0) || paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
 
     const { data: penaltyMovements } = await (supabase
       .from("cash_movements").select("amount") as any)
@@ -751,7 +773,7 @@ export default function DailyCashPage() {
   };
 
   const totalPendingValue = pendingInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
-  const totalPaidValue = paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const totalPaidValue = Object.values(movementAmountByLoan).reduce((s, v) => s + v, 0) || paidInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
   const totalTodayValue = todayItems.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalOverdueValue = overdueItems.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
   const totalTreated = paidInstallments.length + notPaidMarks.length;
@@ -1290,7 +1312,10 @@ export default function DailyCashPage() {
                     }
                     const g = grouped.get(key)!;
                     g.installments.push(inst);
-                    g.totalPaid += Number(inst.paid_amount);
+                  }
+                  // Use movement amounts from cash_movements ledger (actual money received that day)
+                  for (const g of grouped.values()) {
+                    g.totalPaid = movementAmountByLoan[g.loanId] || g.installments.reduce((s, i) => s + Number(i.paid_amount), 0);
                   }
                   return Array.from(grouped.values()).map(group => renderPaidGroupCard(group));
                 })()
