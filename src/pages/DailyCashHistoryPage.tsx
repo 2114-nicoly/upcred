@@ -6,9 +6,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getMovementTypeLabel, getMovementTypeColor } from "@/lib/cash-utils";
-import { CalendarDays, ChevronRight, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { CalendarDays, ChevronRight, ChevronDown, ChevronUp, RefreshCw, Plus } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
+
+type NewLoanEntry = {
+  id: string;
+  amount: number;
+  total_amount: number;
+  installment_count: number;
+  payment_type: string;
+  renewed_from_loan_id: string | null;
+  clients: { name: string } | null;
+};
 
 type MovementDay = {
   date: string;
@@ -23,12 +33,7 @@ type MovementDay = {
     created_at: string;
     clients?: { name: string } | null;
   }[];
-  renewals: {
-    id: string;
-    amount: number;
-    total_amount: number;
-    clients: { name: string } | null;
-  }[];
+  newLoans: NewLoanEntry[];
 };
 
 function getDayLabel(dateStr: string): string {
@@ -46,14 +51,14 @@ export default function DailyCashHistoryPage() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [{ data }, { data: renewalData }] = await Promise.all([
+      const [{ data }, { data: loanData }] = await Promise.all([
         supabase.from("cash_movements").select("*, clients(name)").order("created_at", { ascending: false }).limit(500),
-        supabase.from("loans").select("id, amount, total_amount, loan_date, clients:client_id(name)").not("renewed_from_loan_id", "is", null) as any,
+        supabase.from("loans").select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(name)") as any,
       ]);
 
       const grouped: Record<string, MovementDay> = {};
       const ensureDay = (day: string) => {
-        if (!grouped[day]) grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [], renewals: [] };
+        if (!grouped[day]) grouped[day] = { date: day, totalIn: 0, totalOut: 0, count: 0, movements: [], newLoans: [] };
       };
 
       for (const mov of (data || []) as any[]) {
@@ -66,10 +71,10 @@ export default function DailyCashHistoryPage() {
         grouped[day].movements.push(mov);
       }
 
-      for (const r of (renewalData || []) as any[]) {
+      for (const r of (loanData || []) as any[]) {
         const day = r.loan_date;
         ensureDay(day);
-        grouped[day].renewals.push(r);
+        grouped[day].newLoans.push(r);
       }
 
       const sorted = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
@@ -91,6 +96,8 @@ export default function DailyCashHistoryPage() {
         <div className="space-y-2">
           {days.map(day => {
             const isExpanded = expandedDay === day.date;
+            const renewalCount = day.newLoans.filter(l => !!l.renewed_from_loan_id).length;
+            const newCount = day.newLoans.length - renewalCount;
             return (
               <Card key={day.date}>
                 <button
@@ -99,11 +106,12 @@ export default function DailyCashHistoryPage() {
                 >
                   <div>
                     <p className="font-semibold capitalize">{getDayLabel(day.date)}</p>
-                    <div className="flex gap-3 text-xs text-muted-foreground mt-0.5">
+                    <div className="flex gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
                       <span className="text-success">+{formatCurrency(day.totalIn)}</span>
                       {day.totalOut > 0 && <span className="text-destructive">-{formatCurrency(day.totalOut)}</span>}
                       <span>{day.count} mov.</span>
-                      {day.renewals.length > 0 && <span className="text-primary">{day.renewals.length} renov.</span>}
+                      {renewalCount > 0 && <span className="text-primary">{renewalCount} renov.</span>}
+                      {newCount > 0 && <span className="text-success">{newCount} novo{newCount > 1 ? "s" : ""}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -119,20 +127,29 @@ export default function DailyCashHistoryPage() {
                 </button>
                 {isExpanded && (
                   <CardContent className="space-y-1 border-t pt-3 pb-3">
-                    {day.renewals.length > 0 && (
+                    {day.newLoans.length > 0 && (
                       <div className="mb-2">
                         <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1">
-                          <RefreshCw className="h-3 w-3" /> Renovações
+                          <Plus className="h-3 w-3" /> Empréstimos Novos
                         </p>
-                        {day.renewals.map((r: any) => (
-                          <div key={r.id} className="flex items-center justify-between rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 mb-1">
-                            <div>
-                              <p className="text-xs font-medium text-primary">Renovação</p>
-                              {r.clients?.name && <p className="text-xs text-muted-foreground">{r.clients.name}</p>}
+                        {day.newLoans.map((r: any) => {
+                          const isRenewal = !!r.renewed_from_loan_id;
+                          const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
+                          return (
+                            <div key={r.id} className={`flex items-center justify-between rounded-lg px-3 py-2 mb-1 border ${isRenewal ? "bg-primary/5 border-primary/20" : "bg-success/5 border-success/20"}`}>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className={`text-xs font-medium ${isRenewal ? "text-primary" : "text-success"}`}>
+                                    {isRenewal ? "Renovação" : "Novo Empréstimo"}
+                                  </p>
+                                </div>
+                                {r.clients?.name && <p className="text-xs text-muted-foreground">{r.clients.name}</p>}
+                                <p className="text-[10px] text-muted-foreground">{r.installment_count}x • {paymentLabel}</p>
+                              </div>
+                              <span className={`text-sm font-bold ${isRenewal ? "text-primary" : "text-success"}`}>{formatCurrency(Number(r.amount))}</span>
                             </div>
-                            <span className="text-sm font-bold text-primary">{formatCurrency(Number(r.amount))}</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                     {day.movements.map(mov => (

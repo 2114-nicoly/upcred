@@ -61,18 +61,18 @@ type LoanProgress = {
   penaltyPaid: number;
 };
 
-type RenewalInfo = {
+type NewLoanInfo = {
   id: string;
   amount: number;
   total_amount: number;
   installment_count: number;
   payment_type: string;
   loan_date: string;
-  renewed_from_loan_id: string;
+  renewed_from_loan_id: string | null;
   clients: { id: string; name: string };
 };
 
-type ActiveTab = "pending" | "paid" | "notpaid" | "renewals";
+type ActiveTab = "pending" | "paid" | "notpaid" | "newloans";
 type PendingFilter = "all" | "overdue" | "today";
 
 export default function DailyCashPage() {
@@ -90,7 +90,7 @@ export default function DailyCashPage() {
   const [movementAmountByLoan, setMovementAmountByLoan] = useState<Record<string, number>>({});
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
-  const [renewals, setRenewals] = useState<RenewalInfo[]>([]);
+  const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
@@ -225,13 +225,12 @@ export default function DailyCashPage() {
       const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
       setNotPaidMarks(enrichedNpMarks);
 
-      // Fetch renewals for this cash date
-      const { data: renewalData } = await (supabase
+      // Fetch all loans created on this cash date (new + renewals)
+      const { data: newLoanData } = await (supabase
         .from("loans")
         .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)") as any)
-        .eq("loan_date", selectedDate)
-        .not("renewed_from_loan_id", "is", null);
-      setRenewals((renewalData as RenewalInfo[]) || []);
+        .eq("loan_date", selectedDate);
+      setNewLoans((newLoanData as NewLoanInfo[]) || []);
 
       if (status === "closed") {
         setPendingInstallments([]);
@@ -1184,7 +1183,7 @@ export default function DailyCashPage() {
       </div>
 
       {/* Tab counters */}
-      <div className={`mb-3 grid gap-1.5 ${renewals.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`mb-3 grid gap-1.5 ${newLoans.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <button
           onClick={() => setActiveTab("pending")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "pending" ? "border-primary/50 bg-accent/50" : "bg-card"}`}
@@ -1206,13 +1205,13 @@ export default function DailyCashPage() {
           <p className="text-[10px] text-muted-foreground">Não Pagos</p>
           <p className="text-base font-bold text-destructive">{notPaidMarks.length}</p>
         </button>
-        {renewals.length > 0 && (
+        {newLoans.length > 0 && (
           <button
-            onClick={() => setActiveTab("renewals")}
-            className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "renewals" ? "border-primary/50 bg-primary/5" : "bg-card"}`}
+            onClick={() => setActiveTab("newloans")}
+            className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "newloans" ? "border-primary/50 bg-primary/5" : "bg-card"}`}
           >
-            <p className="text-[10px] text-muted-foreground">Renovações</p>
-            <p className="text-base font-bold text-primary">{renewals.length}</p>
+            <p className="text-[10px] text-muted-foreground">Novos</p>
+            <p className="text-base font-bold text-primary">{newLoans.length}</p>
           </button>
         )}
       </div>
@@ -1340,42 +1339,53 @@ export default function DailyCashPage() {
             </div>
           )}
 
-          {/* RENEWALS TAB */}
-          {activeTab === "renewals" && (
+          {/* NEW LOANS TAB */}
+          {activeTab === "newloans" && (
             <div className="space-y-2">
               <h2 className="text-xs font-semibold text-primary flex items-center gap-1 uppercase tracking-wider">
-                <RefreshCw className="h-3 w-3" /> Renovações do Dia
+                <Plus className="h-3 w-3" /> Empréstimos Novos do Dia
               </h2>
-              {renewals.length === 0 ? (
+              {newLoans.length === 0 ? (
                 <div className="flex flex-col items-center py-8">
-                  <RefreshCw className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Nenhuma renovação neste dia</p>
+                  <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Nenhum empréstimo neste dia</p>
                 </div>
               ) : (
-                renewals.map(r => (
-                  <div key={r.id} className="rounded-lg border border-primary/30 bg-card p-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.installment_count}x de {formatCurrency(Number(r.total_amount) / r.installment_count)} • {r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type}
-                        </p>
+                newLoans.map(r => {
+                  const isRenewal = !!r.renewed_from_loan_id;
+                  const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
+                  return (
+                    <div key={r.id} className={`rounded-lg border bg-card p-3 ${isRenewal ? "border-primary/30" : "border-success/30"}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {r.installment_count}x de {formatCurrency(Number(r.total_amount) / r.installment_count)} • {paymentLabel}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {format(new Date(r.loan_date + "T12:00:00"), "dd/MM/yyyy")}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${isRenewal ? "text-primary" : "text-success"}`}>{formatCurrency(Number(r.amount))}</p>
+                          <Badge className={`text-[9px] px-1.5 py-0 h-3.5 ${isRenewal ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>
+                            {isRenewal ? "Renovação" : "Novo Empréstimo"}
+                          </Badge>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-primary">{formatCurrency(Number(r.amount))}</p>
-                        <Badge className="bg-primary/10 text-primary text-[9px] px-1.5 py-0 h-3.5">Renovação</Badge>
+                      <div className="flex gap-2 mt-2">
+                        <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.id}`)}>
+                          <Eye className="mr-1 h-3 w-3" /> Ver empréstimo
+                        </Button>
+                        {isRenewal && r.renewed_from_loan_id && (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.renewed_from_loan_id}`)}>
+                            <History className="mr-1 h-3 w-3" /> Ver anterior
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-2 mt-2">
-                      <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.id}`)}>
-                        <Eye className="mr-1 h-3 w-3" /> Ver novo
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.renewed_from_loan_id}`)}>
-                        <History className="mr-1 h-3 w-3" /> Ver anterior
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
