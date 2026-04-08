@@ -38,6 +38,7 @@ type InstallmentWithLoan = {
     client_id: string;
     amount: number;
     total_amount: number;
+    remaining_balance: number;
     installment_count: number;
     payment_type: string;
     clients: { id: string; name: string };
