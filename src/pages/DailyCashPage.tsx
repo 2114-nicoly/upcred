@@ -1356,7 +1356,7 @@ export default function DailyCashPage() {
       )}
 
       {/* Batch not-paid floating bar */}
-      {selectedForNotPaid.size > 0 && !isClosed && activeTab === "pending" && (
+      {selectedForNotPaid.size > 0 && !isClosed && (
         <div className="fixed bottom-20 left-0 right-0 z-40 flex items-center justify-center gap-2 px-4">
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
             <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); } }}>
