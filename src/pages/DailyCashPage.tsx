@@ -368,7 +368,7 @@ export default function DailyCashPage() {
       status: paidValue >= instRemaining - 0.01 ? "paid" : "partial",
       paid_at: new Date(payDate + "T12:00:00").toISOString(),
     };
-    localActionedLoanIds.current.add(inst.loan_id);
+    localActionedInstIds.current.add(inst.id);
     setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setPaidInstallments(prev => [...prev, optimisticPaid]);
     resetPayDialog();
