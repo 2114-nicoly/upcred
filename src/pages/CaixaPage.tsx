@@ -139,6 +139,16 @@ export default function CaixaPage() {
     fetchData();
   };
 
+  const handleUndoEvent = async (event: DailyEvent) => {
+    try {
+      await undoDailyEvent(event);
+      toast.success("Lançamento desfeito!");
+      fetchData();
+    } catch {
+      toast.error("Erro ao desfazer lançamento");
+    }
+  };
+
   if (loading) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
   return (
