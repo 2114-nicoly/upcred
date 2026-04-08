@@ -257,21 +257,26 @@ export default function DailyCashPage() {
       const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
       const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
 
-      const paidInstIdSet = new Set(paidInsts.map(i => i.id));
+      // Build set of installments that are FULLY paid today (no remaining balance)
+      const fullyPaidInstIds = new Set(
+        paidInsts.filter(i => Number(i.paid_amount) >= Number(i.amount) - 0.01).map(i => i.id)
+      );
       const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
-      const actionedLoanIds = new Set([
-        ...paidInsts.map(i => i.loan_id),
-        ...npMarks.map(m => m.loan_id),
-        ...localActionedLoanIds.current,
-      ]);
+      // Also build set of loans that have a not-paid mark today (hide those loans entirely)
+      const npMarkLoanIds = new Set(npMarks.map(m => m.loan_id));
 
+      // Filter: keep installments that still have remaining balance,
+      // are not fully paid today, not marked as not-paid, and not optimistically actioned
       const allCandidates = [...validOverdue, ...dueToday].filter(
-        i => !paidInstIdSet.has(i.id) && !npMarkInstIds.has(i.id)
-          && !actionedLoanIds.has(i.loan_id)
+        i => !fullyPaidInstIds.has(i.id)
+          && !npMarkInstIds.has(i.id)
+          && !npMarkLoanIds.has(i.loan_id)
+          && !localActionedInstIds.current.has(i.id)
           && Number(i.amount) - Number(i.paid_amount) > 0.01
       );
 
+      // Show only the earliest unpaid installment per loan
       const seenLoans = new Set<string>();
       const dedupedPending: InstallmentWithLoan[] = [];
       for (const inst of allCandidates.sort((a, b) => a.number - b.number)) {
