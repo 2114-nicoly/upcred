@@ -82,7 +82,7 @@ export default function DailyCashPage() {
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
   const today = format(new Date(), "yyyy-MM-dd");
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>("pending");
+  
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>("all");
 
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
