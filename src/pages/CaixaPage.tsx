@@ -16,7 +16,7 @@ import {
   recalculateCashBalanceFromLedger,
   CashBalance,
 } from "@/lib/cash-utils";
-import { getDailyEvents, createDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
+import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
