@@ -5,7 +5,7 @@ import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
-import { getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
+import { getEventTypeLabel, getEventTypeColor, undoDailyEvent, DailyEvent } from "@/lib/daily-events";
 import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
