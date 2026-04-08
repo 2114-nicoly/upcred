@@ -190,7 +190,7 @@ export default function DailyCashPage() {
         const allPaidMap = new Map<string, InstallmentWithLoan>();
         if (paidInstIds.size > 0) {
           const { data: d1 } = await supabase.from("installments")
-            .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+            .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
             .in("id", [...paidInstIds]).eq("is_penalty", false);
           for (const inst of ((d1 as unknown as InstallmentWithLoan[]) || [])) {
             if (Number(inst.paid_amount) > 0) allPaidMap.set(inst.id, inst);
@@ -198,7 +198,7 @@ export default function DailyCashPage() {
         }
         if (paidLoanIds.size > 0) {
           const { data: d2 } = await supabase.from("installments")
-            .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+            .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
             .in("loan_id", [...paidLoanIds])
             .gte("paid_at", selectedDate + "T00:00:00")
             .lt("paid_at", selectedDate + "T23:59:59.999")
@@ -218,7 +218,7 @@ export default function DailyCashPage() {
       if (npInstIds.length > 0) {
         const { data: npInstData } = await supabase
           .from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
           .in("id", npInstIds);
         const npInsts = (npInstData as unknown as InstallmentWithLoan[]) || [];
         npInstMap = Object.fromEntries(npInsts.map(i => [i.id, i]));
@@ -246,10 +246,10 @@ export default function DailyCashPage() {
         { data: overdueData },
       ] = await Promise.all([
         supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
           .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
         supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
           .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
       ]);
 
