@@ -550,7 +550,7 @@ export default function DailyCashPage() {
     }));
 
     const batchLoanIds = new Set(selectedInsts.map(i => i.loan_id));
-    batchLoanIds.forEach(lid => localActionedLoanIds.current.add(lid));
+    selectedInsts.forEach(i => localActionedInstIds.current.add(i.id));
     setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id) && !batchLoanIds.has(i.loan_id)));
     setNotPaidMarks(prev => [...prev, ...optimisticMarks]);
     setSelectedForNotPaid(new Set());
