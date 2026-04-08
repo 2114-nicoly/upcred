@@ -1010,12 +1010,12 @@ export default function DailyCashPage() {
             <div className="space-y-3">
               <p className="text-sm font-medium">{inst.loans.clients.name}</p>
               <div className="rounded-lg border p-3 space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{lp ? lp.total - Math.floor(lp.progress) : "..."}/{lp?.total ?? inst.loans.installment_count}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(lp?.remaining ?? 0)}</span></div>
-                {(lp && lp.penaltyTotal - lp.penaltyPaid > 0.01) && (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Saldo restante:</span><span className="font-bold text-foreground">{formatCurrency(remainingBalance)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Parcela:</span><span className="text-muted-foreground">{formatCurrency(instAmount)}</span></div>
+                {penaltyPending > 0.01 && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(penaltyPending)}</span></div>
                 )}
-                <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + (lp ? Math.max(0, lp.penaltyTotal - lp.penaltyPaid) : 0))}</span></div>
+                <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency(remainingBalance + penaltyPending)}</span></div>
               </div>
               <div>
                 <Label>Data do pagamento</Label>
