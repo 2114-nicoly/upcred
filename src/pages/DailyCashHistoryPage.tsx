@@ -9,6 +9,7 @@ import { getEventTypeLabel, getEventTypeColor, undoDailyEvent, DailyEvent } from
 import { CalendarDays, ChevronRight, ChevronDown, ChevronUp, Undo2 } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 type DayGroup = {
   date: string;
