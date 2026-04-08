@@ -369,15 +369,20 @@ export default function CaixaPage() {
             movimentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className={`text-xs font-medium ${getEventTypeColor(ev.event_type)}`}>
                       {getEventTypeLabel(ev.event_type)}
                     </p>
                     {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{ev.observation}</p>}
                   </div>
-                  <span className={`text-sm font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : "text-destructive"}`}>
-                    {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : `-${formatCurrency(Number(ev.amount_out))}`}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : "text-destructive"}`}>
+                      {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : `-${formatCurrency(Number(ev.amount_out))}`}
+                    </span>
+                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
