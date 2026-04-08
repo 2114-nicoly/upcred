@@ -239,10 +239,12 @@ export default function ActiveLoansPage() {
 
     // Handle regular payment (sequential abatement)
     if (parcValue !== null && parcValue > 0) {
+      const loan = loans.find((l) => l.id === payLoanId);
       const unpaid = allInst
         .filter((i: any) => i.status !== "paid" && !i.is_penalty)
         .sort((a: any, b: any) => a.number - b.number);
 
+      const firstUnpaid = unpaid[0];
       let remaining = parcValue;
       for (const inst of unpaid) {
         if (remaining <= 0) break;
@@ -258,8 +260,61 @@ export default function ActiveLoansPage() {
         remaining -= applying;
       }
       const totalApplied = parcValue - remaining;
+
+      if (totalApplied > 0 && loan) {
+        // Update cash balance
+        const loanInterest = Number(loan.total_amount) - Number(loan.amount);
+        const { data: allLoanInsts } = await supabase
+          .from("installments").select("paid_amount")
+          .eq("loan_id", payLoanId).eq("is_penalty", false);
+        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+        const totalPaidBefore = totalPaidNow - totalApplied;
+        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+        const toInterest = Math.min(totalApplied, interestRemaining);
+        const toPrincipal = totalApplied - toInterest;
+
+        await updateCashBalance({
+          available_cash: totalApplied,
+          interest_receivable: -toInterest,
+          money_lent: -toPrincipal,
+        });
+        await createCashMovement({
+          type: "recebimento_normal", amount: totalApplied,
+          client_id: loan.clients.id, loan_id: payLoanId,
+          installment_id: firstUnpaid?.id,
+          observation: `Parcela ${firstUnpaid?.number || "?"} - ${loan.clients.name}`,
+          cash_date: payDate,
+        });
+        await createDailyEvent({
+          cash_date: payDate,
+          event_type: "pagamento",
+          client_id: loan.clients.id,
+          loan_id: payLoanId,
+          installment_id: firstUnpaid?.id,
+          amount_in: totalApplied,
+          observation: `Parcela ${firstUnpaid?.number || "?"} - ${loan.clients.name}`,
+          origin: "emprestimos_ativos",
+        });
+      }
+
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
       if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
+    }
+
+    // Handle penalty daily event
+    if (multaValue > 0) {
+      const loan = loans.find((l) => l.id === payLoanId);
+      if (loan) {
+        await createDailyEvent({
+          cash_date: payDate,
+          event_type: "recebimento_multa",
+          client_id: loan.clients.id,
+          loan_id: payLoanId,
+          amount_in: multaValue,
+          observation: `Multa - ${loan.clients.name}`,
+          origin: "emprestimos_ativos",
+        });
+      }
     }
 
     // Update loan status
