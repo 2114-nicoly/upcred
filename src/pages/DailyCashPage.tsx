@@ -73,7 +73,6 @@ type NewLoanInfo = {
   clients: { id: string; name: string };
 };
 
-type ActiveTab = "pending" | "newloans";
 type PendingFilter = "all" | "overdue" | "today";
 
 export default function DailyCashPage() {
