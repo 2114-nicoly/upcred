@@ -24,6 +24,7 @@ import {
   generateDueDates,
 } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -163,6 +164,15 @@ export default function LoanDetailPage() {
           observation: `Pagamento de multa`,
           cash_date: payDate,
         });
+        await createDailyEvent({
+          cash_date: payDate,
+          event_type: "recebimento_multa",
+          client_id: loan?.client_id,
+          loan_id: loanId!,
+          amount_in: multaValue,
+          observation: `Multa - ${loan?.clients?.name || ""}`,
+          origin: "detalhe_emprestimo",
+        });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
         toast.error("Nenhuma multa registrada para abater");
@@ -223,6 +233,16 @@ export default function LoanDetailPage() {
           installment_id: currentInst.id,
           observation: `Parcela ${currentInst.number}`,
           cash_date: payDate,
+        });
+        await createDailyEvent({
+          cash_date: payDate,
+          event_type: "pagamento",
+          client_id: loan?.client_id,
+          loan_id: loanId!,
+          installment_id: currentInst.id,
+          amount_in: totalApplied,
+          observation: `Parcela ${currentInst.number} - ${loan?.clients?.name || ""}`,
+          origin: "detalhe_emprestimo",
         });
       }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);

@@ -110,9 +110,10 @@ export default function DailyCashPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
   const [quitarDate, setQuitarDate] = useState(selectedDate);
-  const localActionedLoanIds = useRef<Set<string>>(new Set());
+  // Track loans actioned optimistically in this session (cleared on each refresh)
+  const localActionedInstIds = useRef<Set<string>>(new Set());
 
-  useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
+  useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedInstIds.current = new Set(); }, [selectedDate]);
 
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
@@ -256,21 +257,26 @@ export default function DailyCashPage() {
       const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
       const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
 
-      const paidInstIdSet = new Set(paidInsts.map(i => i.id));
+      // Build set of installments that are FULLY paid today (no remaining balance)
+      const fullyPaidInstIds = new Set(
+        paidInsts.filter(i => Number(i.paid_amount) >= Number(i.amount) - 0.01).map(i => i.id)
+      );
       const npMarkInstIds = new Set(npMarks.map(m => m.installment_id));
 
-      const actionedLoanIds = new Set([
-        ...paidInsts.map(i => i.loan_id),
-        ...npMarks.map(m => m.loan_id),
-        ...localActionedLoanIds.current,
-      ]);
+      // Also build set of loans that have a not-paid mark today (hide those loans entirely)
+      const npMarkLoanIds = new Set(npMarks.map(m => m.loan_id));
 
+      // Filter: keep installments that still have remaining balance,
+      // are not fully paid today, not marked as not-paid, and not optimistically actioned
       const allCandidates = [...validOverdue, ...dueToday].filter(
-        i => !paidInstIdSet.has(i.id) && !npMarkInstIds.has(i.id)
-          && !actionedLoanIds.has(i.loan_id)
+        i => !fullyPaidInstIds.has(i.id)
+          && !npMarkInstIds.has(i.id)
+          && !npMarkLoanIds.has(i.loan_id)
+          && !localActionedInstIds.current.has(i.id)
           && Number(i.amount) - Number(i.paid_amount) > 0.01
       );
 
+      // Show only the earliest unpaid installment per loan
       const seenLoans = new Set<string>();
       const dedupedPending: InstallmentWithLoan[] = [];
       for (const inst of allCandidates.sort((a, b) => a.number - b.number)) {
@@ -362,7 +368,7 @@ export default function DailyCashPage() {
       status: paidValue >= instRemaining - 0.01 ? "paid" : "partial",
       paid_at: new Date(payDate + "T12:00:00").toISOString(),
     };
-    localActionedLoanIds.current.add(inst.loan_id);
+    localActionedInstIds.current.add(inst.id);
     setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setPaidInstallments(prev => [...prev, optimisticPaid]);
     resetPayDialog();
@@ -493,7 +499,7 @@ export default function DailyCashPage() {
       created_at: new Date().toISOString(),
       installment: inst,
     };
-    localActionedLoanIds.current.add(inst.loan_id);
+    localActionedInstIds.current.add(inst.id);
     setPendingInstallments(prev => prev.filter(i => i.id !== id && i.loan_id !== inst.loan_id));
     setNotPaidMarks(prev => [...prev, optimisticMark]);
     setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
@@ -544,7 +550,7 @@ export default function DailyCashPage() {
     }));
 
     const batchLoanIds = new Set(selectedInsts.map(i => i.loan_id));
-    batchLoanIds.forEach(lid => localActionedLoanIds.current.add(lid));
+    selectedInsts.forEach(i => localActionedInstIds.current.add(i.id));
     setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id) && !batchLoanIds.has(i.loan_id)));
     setNotPaidMarks(prev => [...prev, ...optimisticMarks]);
     setSelectedForNotPaid(new Set());
@@ -741,7 +747,7 @@ export default function DailyCashPage() {
     if (!inst) { setIsSubmitting(false); return; }
 
     // Optimistic: remove from pending, add to paid
-    localActionedLoanIds.current.add(inst.loan_id);
+    localActionedInstIds.current.add(inst.id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
     setPaidInstallments(prev => [...prev, { ...inst, status: "paid", paid_amount: Number(inst.amount), paid_at: new Date(quitarDate + "T12:00:00").toISOString() }]);
     setQuitarDialogId(null);
