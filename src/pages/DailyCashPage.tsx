@@ -948,14 +948,11 @@ export default function DailyCashPage() {
               <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
+                  {inst.loans.clients.name} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
-                {Number(inst.paid_amount) > 0 && (
-                  <p className="text-sm text-primary">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>
-                )}
                 <div>
-                  <Label>Valor da parcela recebido</Label>
-                  <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                  <Label>Valor recebido</Label>
+                  <Input type="number" placeholder={`Padrão: ${instAmount.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
                 </div>
                 {penaltyPending > 0.01 && (
                   <div className="rounded-lg border border-warning/50 p-3 space-y-2">
