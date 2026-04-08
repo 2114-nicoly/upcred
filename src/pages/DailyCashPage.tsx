@@ -756,11 +756,15 @@ export default function DailyCashPage() {
     // Optimistic: remove from pending, add to paid
     localActionedInstIds.current.add(inst.id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    setPaidInstallments(prev => [...prev, { ...inst, status: "paid", paid_amount: Number(inst.amount), paid_at: new Date(quitarDate + "T12:00:00").toISOString() }]);
+    setPaidInstallments(prev => [...prev, { ...inst, status: "paid", paid_amount: Number(inst.amount), paid_at: new Date(quitarDate + "T12:00:00").toISOString(), loans: { ...inst.loans, remaining_balance: 0 } }]);
     setQuitarDialogId(null);
     toast.success("Empréstimo quitado!");
 
     try {
+      // Get current remaining_balance from the loan directly
+      const { data: loanData } = await supabase.from("loans").select("remaining_balance").eq("id", inst.loan_id).single();
+      const currentBalance = Number(loanData?.remaining_balance ?? inst.loans.remaining_balance);
+
       // Fetch ALL unpaid installments for this loan (regular + penalty)
       const { data: allUnpaid } = await supabase
         .from("installments").select("*")
@@ -771,14 +775,10 @@ export default function DailyCashPage() {
       const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
       const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
 
-      let totalRegularPaying = 0;
       let totalPenaltyPaying = 0;
 
-      // Pay all regular installments
+      // Mark all regular installments as paid
       for (const i of regularUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalRegularPaying += remaining;
         await supabase.from("installments").update({
           paid_amount: Number(i.amount),
           status: "paid",
@@ -798,35 +798,38 @@ export default function DailyCashPage() {
         }).eq("id", i.id);
       }
 
-      // Update loan status
-      await supabase.from("loans").update({ status: "paid" }).eq("id", inst.loan_id);
+      // Use apply_loan_payment RPC to zero out remaining_balance
+      if (currentBalance > 0) {
+        await supabase.rpc("apply_loan_payment", { p_loan_id: inst.loan_id, p_amount: currentBalance });
+      } else {
+        await supabase.from("loans").update({ status: "paid" }).eq("id", inst.loan_id);
+      }
 
-      // Update cash balance - regular payments
-      if (totalRegularPaying > 0) {
+      // Update cash balance
+      if (currentBalance > 0) {
         const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
         const { data: allLoanInsts } = await supabase
           .from("installments").select("paid_amount")
           .eq("loan_id", inst.loan_id).eq("is_penalty", false);
         const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - totalRegularPaying;
+        const totalPaidBefore = totalPaidNow - currentBalance;
         const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(totalRegularPaying, interestRemaining);
-        const toPrincipal = totalRegularPaying - toInterest;
+        const toInterest = Math.min(currentBalance, interestRemaining);
+        const toPrincipal = currentBalance - toInterest;
 
         await updateCashBalance({
-          available_cash: totalRegularPaying,
+          available_cash: currentBalance,
           interest_receivable: -toInterest,
           money_lent: -toPrincipal,
         });
         await createCashMovement({
-          type: "recebimento_normal", amount: totalRegularPaying,
+          type: "recebimento_normal", amount: currentBalance,
           client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
           observation: `Quitação empréstimo - ${inst.loans.clients.name}`,
           cash_date: selectedDate,
         });
       }
 
-      // Update cash balance - penalty payments
       if (totalPenaltyPaying > 0) {
         await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
         await createCashMovement({
@@ -836,14 +839,11 @@ export default function DailyCashPage() {
           cash_date: selectedDate,
         });
       }
-      // Register daily event for quitar
+
       await createDailyEvent({
-        cash_date: quitarDate,
-        event_type: "pagamento",
-        client_id: inst.loans.client_id,
-        loan_id: inst.loan_id,
-        installment_id: inst.id,
-        amount_in: totalRegularPaying + totalPenaltyPaying,
+        cash_date: quitarDate, event_type: "pagamento",
+        client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
+        amount_in: currentBalance + totalPenaltyPaying,
         observation: `Quitação - ${inst.loans.clients.name}`,
         origin: "rota",
       });
