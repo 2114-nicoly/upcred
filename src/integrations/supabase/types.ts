@@ -303,6 +303,7 @@ export type Database = {
           is_cravo: boolean
           loan_date: string
           payment_type: string
+          remaining_balance: number
           renewed_from_loan_id: string | null
           route_id: string | null
           status: string
@@ -320,6 +321,7 @@ export type Database = {
           is_cravo?: boolean
           loan_date?: string
           payment_type: string
+          remaining_balance?: number
           renewed_from_loan_id?: string | null
           route_id?: string | null
           status?: string
@@ -337,6 +339,7 @@ export type Database = {
           is_cravo?: boolean
           loan_date?: string
           payment_type?: string
+          remaining_balance?: number
           renewed_from_loan_id?: string | null
           route_id?: string | null
           status?: string
@@ -513,6 +516,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_loan_payment: {
+        Args: { p_amount: number; p_loan_id: string }
+        Returns: number
+      }
+      reverse_loan_payment: {
+        Args: { p_amount: number; p_loan_id: string }
+        Returns: number
+      }
       update_cash_balance_atomic: {
         Args: {
           p_available_cash?: number
