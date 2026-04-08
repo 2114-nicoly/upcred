@@ -415,6 +415,20 @@ export default function ActiveLoansPage() {
         });
       }
 
+      // Register daily event for the full payoff
+      const totalPaying = totalRegularPaying + totalPenaltyPaying;
+      if (totalPaying > 0) {
+        await createDailyEvent({
+          cash_date: quitarDate,
+          event_type: "pagamento",
+          client_id: loan.clients.id,
+          loan_id: quitarLoanId,
+          amount_in: totalPaying,
+          observation: `Quitação - ${loan.clients.name}`,
+          origin: "emprestimos_ativos",
+        });
+      }
+
       toast.success("Empréstimo quitado!");
     } catch {
       toast.error("Erro ao quitar, recarregando...");
