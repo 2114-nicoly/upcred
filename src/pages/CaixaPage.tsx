@@ -16,11 +16,11 @@ import {
   recalculateCashBalanceFromLedger,
   CashBalance,
 } from "@/lib/cash-utils";
-import { getDailyEvents, createDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
+import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
-  DollarSign, ArrowDownCircle, ArrowUpCircle
+  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -139,6 +139,16 @@ export default function CaixaPage() {
     fetchData();
   };
 
+  const handleUndoEvent = async (event: DailyEvent) => {
+    try {
+      await undoDailyEvent(event);
+      toast.success("Lançamento desfeito!");
+      fetchData();
+    } catch {
+      toast.error("Erro ao desfazer lançamento");
+    }
+  };
+
   if (loading) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
   return (
@@ -253,14 +263,19 @@ export default function CaixaPage() {
             pagamentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold">{ev.client_id ? clientNames[ev.client_id] || "Cliente" : "—"}</p>
                     <p className={`text-[11px] font-medium ${getEventTypeColor(ev.event_type)}`}>
                       {getEventTypeLabel(ev.event_type)}
                     </p>
                     {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{ev.observation}</p>}
                   </div>
-                  <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(Number(ev.amount_in))}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(Number(ev.amount_in))}</span>
+                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -282,11 +297,16 @@ export default function CaixaPage() {
             naoPagos.map(ev => (
               <div key={ev.id} className="rounded-lg border border-destructive/30 bg-card p-2.5">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold">{ev.client_id ? clientNames[ev.client_id] || "Cliente" : "—"}</p>
                     {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{ev.observation}</p>}
                   </div>
-                  <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
+                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -349,15 +369,20 @@ export default function CaixaPage() {
             movimentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className={`text-xs font-medium ${getEventTypeColor(ev.event_type)}`}>
                       {getEventTypeLabel(ev.event_type)}
                     </p>
                     {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{ev.observation}</p>}
                   </div>
-                  <span className={`text-sm font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : "text-destructive"}`}>
-                    {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : `-${formatCurrency(Number(ev.amount_out))}`}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : "text-destructive"}`}>
+                      {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : `-${formatCurrency(Number(ev.amount_out))}`}
+                    </span>
+                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -377,16 +402,21 @@ export default function CaixaPage() {
               <CardContent className="px-3 pb-3 space-y-1.5">
                 {events.map(ev => (
                   <div key={ev.id} className="flex items-center justify-between rounded-lg bg-accent px-2.5 py-1.5">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className={`text-[11px] font-medium ${getEventTypeColor(ev.event_type)}`}>
                         {getEventTypeLabel(ev.event_type)}
                       </p>
                       {ev.client_id && <p className="text-[10px] text-muted-foreground">{clientNames[ev.client_id] || "Cliente"}</p>}
                       {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[180px]">{ev.observation}</p>}
                     </div>
-                    <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                      {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                        {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
+                      </span>
+                      <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
+                        <Undo2 className="h-3 w-3 text-destructive" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </CardContent>

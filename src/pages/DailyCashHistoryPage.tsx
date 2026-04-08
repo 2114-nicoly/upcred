@@ -5,10 +5,11 @@ import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
-import { getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
-import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { getEventTypeLabel, getEventTypeColor, undoDailyEvent, DailyEvent } from "@/lib/daily-events";
+import { CalendarDays, ChevronRight, ChevronDown, ChevronUp, Undo2 } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 type DayGroup = {
   date: string;
@@ -118,16 +119,41 @@ export default function DailyCashHistoryPage() {
                   <CardContent className="space-y-1 border-t pt-3 pb-3">
                     {day.events.map(ev => (
                       <div key={ev.id} className="flex items-center justify-between rounded-lg bg-accent px-3 py-2">
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <p className={`text-xs font-medium ${getEventTypeColor(ev.event_type)}`}>
                             {getEventTypeLabel(ev.event_type)}
                           </p>
                           {ev.clientName && <p className="text-xs text-muted-foreground">{ev.clientName}</p>}
                           {ev.observation && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{ev.observation}</p>}
                         </div>
-                        <span className={`text-sm font-bold ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                          {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-bold ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                            {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
+                          </span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await undoDailyEvent(ev);
+                                toast.success("Lançamento desfeito!");
+                                // Remove from local state
+                                setDays(prev => prev.map(d => d.date === day.date ? {
+                                  ...d,
+                                  events: d.events.filter(e2 => e2.id !== ev.id),
+                                  totalIn: d.totalIn - Number(ev.amount_in),
+                                  totalOut: d.totalOut - Number(ev.amount_out),
+                                  count: d.count - 1,
+                                } : d).filter(d => d.count > 0));
+                              } catch {
+                                toast.error("Erro ao desfazer");
+                              }
+                            }}
+                            className="p-1 rounded hover:bg-destructive/10"
+                            title="Desfazer"
+                          >
+                            <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </CardContent>

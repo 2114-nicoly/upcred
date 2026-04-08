@@ -63,6 +63,95 @@ export async function deleteDailyEvent(id: string) {
   await supabase.from("daily_events" as any).delete().eq("id", id);
 }
 
+/**
+ * Undo a daily event: reverses the financial impact based on event type.
+ * - pagamento/recebimento_multa: reverts installment paid_amount, cash_balance, cash_movements
+ * - nao_pagou: removes not_paid_mark
+ * - entrada_manual/saida_manual/ajuste_manual: reverts cash_balance and cash_movements
+ * - emprestimo_novo/renovacao: complex - only removes the event record
+ */
+export async function undoDailyEvent(event: DailyEvent) {
+  const { updateCashBalance, recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
+
+  if (event.event_type === "pagamento") {
+    // Revert installment payments for this loan on this date
+    if (event.loan_id) {
+      // Find and delete cash_movements for this loan on this date
+      const { data: movements } = await supabase.from("cash_movements")
+        .select("id, amount, installment_id")
+        .eq("loan_id", event.loan_id)
+        .eq("cash_date", event.cash_date)
+        .eq("type", "recebimento_normal");
+
+      for (const mov of (movements || [])) {
+        await supabase.from("cash_movements").delete().eq("id", mov.id);
+        if (mov.installment_id) {
+          await supabase.from("installments").update({
+            status: "pending", paid_at: null, paid_amount: 0,
+          }).eq("id", mov.installment_id);
+        }
+      }
+
+      // Also revert any installments paid on this date for this loan that may not have movements
+      if (event.installment_id) {
+        await supabase.from("installments").update({
+          status: "pending", paid_at: null, paid_amount: 0,
+        }).eq("id", event.installment_id);
+      }
+
+      // Update loan status back
+      const { data: loanInsts } = await supabase.from("installments")
+        .select("status").eq("loan_id", event.loan_id);
+      const allPaid = loanInsts?.every((i: any) => i.status === "paid");
+      const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
+      await supabase.from("loans").update({
+        status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
+      }).eq("id", event.loan_id);
+    }
+    await recalculateCashBalanceFromLedger();
+  } else if (event.event_type === "recebimento_multa") {
+    if (event.loan_id) {
+      // Revert penalty installment
+      const { data: penaltyInsts } = await supabase.from("installments")
+        .select("id, amount, paid_amount")
+        .eq("loan_id", event.loan_id).eq("is_penalty", true);
+      for (const pi of (penaltyInsts || [])) {
+        const newPaid = Math.max(0, Number(pi.paid_amount) - Number(event.amount_in));
+        await supabase.from("installments").update({
+          paid_amount: newPaid,
+          status: newPaid < Number(pi.amount) - 0.01 ? "pending" : "paid",
+          paid_at: newPaid < Number(pi.amount) - 0.01 ? null : undefined,
+        }).eq("id", pi.id);
+      }
+      // Delete cash_movement
+      await supabase.from("cash_movements").delete()
+        .eq("loan_id", event.loan_id)
+        .eq("cash_date", event.cash_date)
+        .eq("type", "recebimento_multa");
+    }
+    await recalculateCashBalanceFromLedger();
+  } else if (event.event_type === "nao_pagou") {
+    // Remove not_paid_mark
+    if (event.installment_id) {
+      await supabase.from("not_paid_marks").delete()
+        .eq("installment_id", event.installment_id)
+        .eq("mark_date", event.cash_date);
+    }
+  } else if (event.event_type === "entrada_manual" || event.event_type === "saida_manual" || event.event_type === "ajuste_manual") {
+    // Revert cash balance
+    const revertIn = -Number(event.amount_in);
+    const revertOut = Number(event.amount_out);
+    await updateCashBalance({ available_cash: revertIn + revertOut });
+    // Delete cash_movement
+    await supabase.from("cash_movements").delete()
+      .eq("type", event.event_type)
+      .eq("cash_date", event.cash_date);
+  }
+
+  // Always delete the daily_event record
+  await deleteDailyEvent(event.id);
+}
+
 export async function getDailyEventsByType(cashDate: string, eventType: string): Promise<DailyEvent[]> {
   const { data } = await (supabase.from("daily_events" as any)
     .select("*")
