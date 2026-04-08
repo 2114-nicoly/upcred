@@ -24,6 +24,7 @@ import {
   generateDueDates,
 } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
