@@ -1044,96 +1044,43 @@ export default function DailyCashPage() {
     );
   };
 
-  // === Grouped paid card per client ===
-  const renderPaidGroupCard = (group: { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }) => {
-    const lp = loanProgressMap[group.loanId];
-    const paidCount = lp ? Math.floor(lp.progress) : 0;
-    const totalCount = lp ? lp.total : group.installments[0].loans.installment_count;
-    const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
-    const remaining = lp ? Math.max(0, lp.remaining) : 0;
-    const allFullyPaid = group.installments.every(i => Number(i.amount) - Number(i.paid_amount) < 0.01);
-
-    return (
-      <div key={`${group.clientId}-${group.loanId}`} className={`rounded-lg border bg-card overflow-hidden ${allFullyPaid ? "border-success/30" : "border-warning/30"}`}>
-        <div className="flex items-center gap-2 p-2.5">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="font-semibold text-sm truncate">{group.clientName}</span>
-              <span className={`font-bold text-sm shrink-0 ${allFullyPaid ? "text-success" : "text-warning"}`}>
-                {formatCurrency(group.totalPaid)}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {group.installments.length > 1
-                  ? `${group.installments.length} parcelas pagas`
-                  : `Parcela ${group.installments[0].number}`}
-              </span>
-              {remaining > 0.01 && (
-                <span className="text-[11px] text-destructive">• Resta {formatCurrency(remaining)}</span>
-              )}
-              <Badge className={`ml-auto text-[9px] px-1.5 py-0 h-3.5 ${allFullyPaid ? "bg-paid text-paid-foreground" : "bg-warning text-warning-foreground"}`}>
-                {remaining <= 0.01 ? "Quitado" : allFullyPaid ? "Pago" : "Parcial"}
-              </Badge>
-            </div>
-            {/* Progress bar */}
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${progressPct}%` }} />
-              </div>
-              <span className="text-[10px] font-semibold text-success tabular-nums shrink-0">
-                {paidCount}/{totalCount}
-              </span>
-            </div>
-          </div>
-          {!isClosed && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-1 rounded-md hover:bg-muted shrink-0">
-                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {group.installments.map(inst => (
-                  <DropdownMenuItem key={inst.id} onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
-                    Desfazer Parcela {inst.number}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
-                  <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+  // === Simple paid row (name + value) ===
+  const renderPaidRow = (group: { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }) => (
+    <div key={`${group.clientId}-${group.loanId}`} className="flex items-center justify-between rounded-lg border border-success/30 bg-card px-3 py-2">
+      <span className="font-semibold text-sm truncate">{group.clientName}</span>
+      <div className="flex items-center gap-2">
+        <span className="font-bold text-sm text-success shrink-0">{formatCurrency(group.totalPaid)}</span>
+        {!isClosed && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1 rounded-md hover:bg-muted shrink-0">
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {group.installments.map(inst => (
+                <DropdownMenuItem key={inst.id} onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
+                  Desfazer Parcela {inst.number}
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+              ))}
+              <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
+                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
 
-  // === Compact not-paid row ===
+  // === Simple not-paid row (name only) ===
   const renderNotPaidRow = (mark: NotPaidMark & { installment?: InstallmentWithLoan }) => {
     const inst = mark.installment;
-    const lp = inst ? loanProgressMap[inst.loan_id] : null;
-    const paidCount = lp ? Math.floor(lp.progress) : 0;
-    const totalCount = lp ? lp.total : (inst?.loans.installment_count || 0);
-
     return (
-      <div key={mark.id} className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-card p-2.5">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-sm truncate">{inst?.loans.clients.name || "Cliente"}</span>
-            <span className="text-sm text-muted-foreground shrink-0">
-              {inst ? formatCurrency(Number(inst.amount)) : "—"}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-[11px] text-muted-foreground">
-              {inst ? `${inst.number}/${totalCount} • Pago ${paidCount}/${totalCount}` : "—"}
-            </span>
-            <Badge className="ml-auto bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
-          </div>
-          {mark.observation && <p className="text-[10px] text-muted-foreground italic mt-0.5">"{mark.observation}"</p>}
-          <p className="text-[10px] text-muted-foreground">{format(new Date(mark.created_at), "dd/MM HH:mm")}</p>
+      <div key={mark.id} className="flex items-center justify-between rounded-lg border border-destructive/30 bg-card px-3 py-2">
+        <div className="min-w-0">
+          <span className="font-semibold text-sm truncate block">{inst?.loans.clients.name || "Cliente"}</span>
+          {mark.observation && <p className="text-[10px] text-muted-foreground italic">"{mark.observation}"</p>}
         </div>
         {!isClosed && (
           <DropdownMenu>
