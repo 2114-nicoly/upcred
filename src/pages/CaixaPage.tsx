@@ -20,7 +20,7 @@ import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, ge
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
-  DollarSign, ArrowDownCircle, ArrowUpCircle
+  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
