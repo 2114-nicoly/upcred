@@ -747,7 +747,7 @@ export default function DailyCashPage() {
     if (!inst) { setIsSubmitting(false); return; }
 
     // Optimistic: remove from pending, add to paid
-    localActionedLoanIds.current.add(inst.loan_id);
+    localActionedInstIds.current.add(inst.id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
     setPaidInstallments(prev => [...prev, { ...inst, status: "paid", paid_amount: Number(inst.amount), paid_at: new Date(quitarDate + "T12:00:00").toISOString() }]);
     setQuitarDialogId(null);
