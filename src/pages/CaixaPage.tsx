@@ -297,11 +297,16 @@ export default function CaixaPage() {
             naoPagos.map(ev => (
               <div key={ev.id} className="rounded-lg border border-destructive/30 bg-card p-2.5">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold">{ev.client_id ? clientNames[ev.client_id] || "Cliente" : "—"}</p>
                     {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{ev.observation}</p>}
                   </div>
-                  <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
+                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
