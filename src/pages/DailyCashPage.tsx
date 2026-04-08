@@ -1032,33 +1032,44 @@ export default function DailyCashPage() {
   };
 
   // === Simple paid row (name + value) ===
-  const renderPaidRow = (group: { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }) => (
-    <div key={`${group.clientId}-${group.loanId}`} className="flex items-center justify-between rounded-lg border border-success/30 bg-card px-3 py-2">
-      <span className="font-semibold text-sm truncate">{group.clientName}</span>
-      <div className="flex items-center gap-2">
-        <span className="font-bold text-sm text-success shrink-0">{formatCurrency(group.totalPaid)}</span>
-        {!isClosed && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="p-1 rounded-md hover:bg-muted shrink-0">
-                <MoreVertical className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {group.installments.map(inst => (
-                <DropdownMenuItem key={inst.id} onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
-                  Desfazer Parcela {inst.number}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
-                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+  const renderPaidRow = (group: { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }) => {
+    const firstInst = group.installments[0];
+    const remainingAfter = firstInst ? Number(firstInst.loans.remaining_balance) : 0;
+    const instAmount = firstInst ? Number(firstInst.amount) : 0;
+    return (
+      <div key={`${group.clientId}-${group.loanId}`} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-sm truncate">{group.clientName}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm text-success shrink-0">+{formatCurrency(group.totalPaid)}</span>
+            {!isClosed && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-1 rounded-md hover:bg-muted shrink-0">
+                    <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {group.installments.map(inst => (
+                    <DropdownMenuItem key={inst.id} onClick={() => handleUndoPayment(inst.id)} className="text-destructive">
+                      Desfazer Parcela {inst.number}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
+                    <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(remainingAfter)}</span>
+          <span className="text-[10px] text-muted-foreground tabular-nums">Parcela: {formatCurrency(instAmount)}</span>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // === Simple not-paid row (name only) ===
   const renderNotPaidRow = (mark: NotPaidMark & { installment?: InstallmentWithLoan }) => {
