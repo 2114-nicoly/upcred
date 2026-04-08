@@ -164,6 +164,15 @@ export default function LoanDetailPage() {
           observation: `Pagamento de multa`,
           cash_date: payDate,
         });
+        await createDailyEvent({
+          cash_date: payDate,
+          event_type: "recebimento_multa",
+          client_id: loan?.client_id,
+          loan_id: loanId!,
+          amount_in: multaValue,
+          observation: `Multa - ${loan?.clients?.name || ""}`,
+          origin: "detalhe_emprestimo",
+        });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       } else {
         toast.error("Nenhuma multa registrada para abater");
