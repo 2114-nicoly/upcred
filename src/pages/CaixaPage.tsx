@@ -402,16 +402,21 @@ export default function CaixaPage() {
               <CardContent className="px-3 pb-3 space-y-1.5">
                 {events.map(ev => (
                   <div key={ev.id} className="flex items-center justify-between rounded-lg bg-accent px-2.5 py-1.5">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className={`text-[11px] font-medium ${getEventTypeColor(ev.event_type)}`}>
                         {getEventTypeLabel(ev.event_type)}
                       </p>
                       {ev.client_id && <p className="text-[10px] text-muted-foreground">{clientNames[ev.client_id] || "Cliente"}</p>}
                       {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[180px]">{ev.observation}</p>}
                     </div>
-                    <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                      {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                        {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
+                      </span>
+                      <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
+                        <Undo2 className="h-3 w-3 text-destructive" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </CardContent>

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getEventTypeLabel, getEventTypeColor, undoDailyEvent, DailyEvent } from "@/lib/daily-events";
-import { CalendarDays, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarDays, ChevronRight, ChevronDown, ChevronUp, Undo2 } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { useNavigate } from "react-router-dom";
 
