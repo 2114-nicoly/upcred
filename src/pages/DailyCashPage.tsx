@@ -673,14 +673,18 @@ export default function DailyCashPage() {
     toast.success("Pagamento desfeito!");
 
     try {
-      await supabase.from("cash_movements").delete().eq("installment_id", id);
-      await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
+      // Get the actual amount paid from cash_movements for this installment
+      const { data: movs } = await supabase.from("cash_movements")
+        .select("amount").eq("installment_id", id).eq("type", "recebimento_normal").eq("cash_date", selectedDate);
+      const totalReversed = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
-      if (inst) {
-        await supabase
-          .from("cash_movements").select("id, amount")
-          .eq("loan_id", inst.loan_id).eq("type", "recebimento_multa");
+      // Reverse remaining_balance via RPC
+      if (totalReversed > 0 && inst) {
+        await supabase.rpc("reverse_loan_payment", { p_loan_id: inst.loan_id, p_amount: totalReversed });
       }
+
+      await supabase.from("cash_movements").delete().eq("installment_id", id).eq("cash_date", selectedDate);
+      await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
 
       // Delete corresponding daily_events for this installment
       const { data: events } = await (supabase.from("daily_events" as any)
