@@ -110,7 +110,8 @@ export default function DailyCashPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
   const [quitarDate, setQuitarDate] = useState(selectedDate);
-  const localActionedLoanIds = useRef<Set<string>>(new Set());
+  // Track loans actioned optimistically in this session (cleared on each refresh)
+  const localActionedInstIds = useRef<Set<string>>(new Set());
 
   useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
