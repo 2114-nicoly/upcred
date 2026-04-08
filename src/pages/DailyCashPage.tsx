@@ -1206,40 +1206,6 @@ export default function DailyCashPage() {
         </div>
       </div>
 
-      {/* Tab counters */}
-      <div className={`mb-3 grid gap-1.5 ${newLoans.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
-        <button
-          onClick={() => setActiveTab("pending")}
-          className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "pending" ? "border-primary/50 bg-accent/50" : "bg-card"}`}
-        >
-          <p className="text-[10px] text-muted-foreground">Pendentes</p>
-          <p className="text-base font-bold">{pendingInstallments.length}</p>
-        </button>
-        <button
-          onClick={() => setActiveTab("paid")}
-          className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "paid" ? "border-success/50 bg-success/5" : "bg-card"}`}
-        >
-          <p className="text-[10px] text-muted-foreground">Pagos</p>
-          <p className="text-base font-bold text-success">{paidInstallments.length}</p>
-        </button>
-        <button
-          onClick={() => setActiveTab("notpaid")}
-          className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "notpaid" ? "border-destructive/50 bg-destructive/5" : "bg-card"}`}
-        >
-          <p className="text-[10px] text-muted-foreground">Não Pagos</p>
-          <p className="text-base font-bold text-destructive">{notPaidMarks.length}</p>
-        </button>
-        {newLoans.length > 0 && (
-          <button
-            onClick={() => setActiveTab("newloans")}
-            className={`rounded-lg border p-1.5 text-center transition-colors ${activeTab === "newloans" ? "border-primary/50 bg-primary/5" : "bg-card"}`}
-          >
-            <p className="text-[10px] text-muted-foreground">Novos</p>
-            <p className="text-base font-bold text-primary">{newLoans.length}</p>
-          </button>
-        )}
-      </div>
-
       {loading && pendingInstallments.length === 0 && paidInstallments.length === 0 && notPaidMarks.length === 0 ? (
         <>
           <SummarySkeleton />
@@ -1252,130 +1218,107 @@ export default function DailyCashPage() {
               Atualizando...
             </div>
           )}
-          {activeTab !== "pending" && (
-            <Button variant="ghost" size="sm" className="mb-2 h-7 text-xs" onClick={() => setActiveTab("pending")}>
-              <ChevronLeft className="mr-1 h-3 w-3" /> Voltar para Pendentes
-            </Button>
-          )}
 
-          {/* PENDING TAB */}
-          {activeTab === "pending" && (
-            <div className="space-y-2">
-              {isClosed ? (
-                <div className="flex flex-col items-center py-8">
-                  <Lock className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Caixa fechado — sem pendentes</p>
+          {/* PENDENTES */}
+          <div className="space-y-2 mb-4">
+            <h2 className="text-xs font-semibold text-foreground flex items-center gap-1 uppercase tracking-wider">
+              <Clock className="h-3 w-3" /> Pendentes ({pendingInstallments.length})
+            </h2>
+            {isClosed ? (
+              <div className="flex flex-col items-center py-6">
+                <Lock className="mb-2 h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Caixa fechado — sem pendentes</p>
+              </div>
+            ) : pendingInstallments.length === 0 ? (
+              <div className="flex flex-col items-center py-6">
+                <CheckCircle className="mb-2 h-8 w-8 text-success" />
+                <p className="text-sm font-medium">Tudo tratado!</p>
+              </div>
+            ) : (
+              <>
+                {/* Filter pills */}
+                <div className="flex items-center gap-1.5">
+                  {(["all", "overdue", "today"] as PendingFilter[]).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setPendingFilter(f)}
+                      className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${pendingFilter === f ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-accent"}`}
+                    >
+                      {f === "all" ? `Todos (${pendingInstallments.length})` : f === "overdue" ? `Atrasados (${overdueItems.length})` : `Hoje (${todayItems.length})`}
+                    </button>
+                  ))}
                 </div>
-              ) : pendingInstallments.length === 0 ? (
-                <div className="flex flex-col items-center py-8">
-                  <CheckCircle className="mb-2 h-8 w-8 text-success" />
-                  <p className="text-sm font-medium">Tudo tratado!</p>
+
+                {/* Select all row */}
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                    <Checkbox
+                      checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
+                      onCheckedChange={toggleSelectAll}
+                      className="h-3.5 w-3.5"
+                    />
+                    Selecionar exibidos
+                  </label>
+                  {selectedForNotPaid.size > 0 && (
+                    <button
+                      className="text-[11px] text-muted-foreground hover:underline"
+                      onClick={() => setSelectedForNotPaid(new Set())}
+                    >
+                      Limpar ({selectedForNotPaid.size})
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <>
-                  {/* Filter pills */}
-                  <div className="flex items-center gap-1.5">
-                    {(["all", "overdue", "today"] as PendingFilter[]).map(f => (
-                      <button
-                        key={f}
-                        onClick={() => setPendingFilter(f)}
-                        className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${pendingFilter === f ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-accent"}`}
-                      >
-                        {f === "all" ? `Todos (${pendingInstallments.length})` : f === "overdue" ? `Atrasados (${overdueItems.length})` : `Hoje (${todayItems.length})`}
-                      </button>
-                    ))}
-                  </div>
 
-                  {/* Select all row */}
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
-                      <Checkbox
-                        checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
-                        onCheckedChange={toggleSelectAll}
-                        className="h-3.5 w-3.5"
-                      />
-                      Selecionar exibidos
-                    </label>
-                    {selectedForNotPaid.size > 0 && (
-                      <button
-                        className="text-[11px] text-muted-foreground hover:underline"
-                        onClick={() => setSelectedForNotPaid(new Set())}
-                      >
-                        Limpar ({selectedForNotPaid.size})
-                      </button>
-                    )}
-                  </div>
+                {/* Items */}
+                {renderPendingSections()}
+              </>
+            )}
+          </div>
 
-                  {/* Items */}
-                  {renderPendingSections()}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* PAID TAB */}
-          {activeTab === "paid" && (
-            <div className="space-y-2">
+          {/* PAGOS DO DIA */}
+          {paidInstallments.length > 0 && (
+            <div className="space-y-1.5 mb-4">
               <h2 className="text-xs font-semibold text-success flex items-center gap-1 uppercase tracking-wider">
-                <CheckCircle className="h-3 w-3" /> Pagos do Dia
+                <CheckCircle className="h-3 w-3" /> Pagos do Dia ({paidInstallments.length})
               </h2>
-              {paidInstallments.length === 0 ? (
-                <div className="flex flex-col items-center py-8">
-                  <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Nenhum pagamento registrado</p>
-                </div>
-              ) : (
-                (() => {
-                  // Group paid installments by client+loan
-                  const grouped = new Map<string, { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }>();
-                  for (const inst of paidInstallments) {
-                    const key = `${inst.loans.client_id}-${inst.loan_id}`;
-                    if (!grouped.has(key)) {
-                      grouped.set(key, { clientName: inst.loans.clients.name, clientId: inst.loans.client_id, loanId: inst.loan_id, installments: [], totalPaid: 0 });
-                    }
-                    const g = grouped.get(key)!;
-                    g.installments.push(inst);
+              {(() => {
+                const grouped = new Map<string, { clientName: string; clientId: string; loanId: string; installments: InstallmentWithLoan[]; totalPaid: number }>();
+                for (const inst of paidInstallments) {
+                  const key = `${inst.loans.client_id}-${inst.loan_id}`;
+                  if (!grouped.has(key)) {
+                    grouped.set(key, { clientName: inst.loans.clients.name, clientId: inst.loans.client_id, loanId: inst.loan_id, installments: [], totalPaid: 0 });
                   }
-                  // Use movement amounts from cash_movements ledger (actual money received that day)
-                  for (const g of grouped.values()) {
-                    g.totalPaid = movementAmountByLoan[g.loanId] || g.installments.reduce((s, i) => s + Number(i.paid_amount), 0);
-                  }
-                  return Array.from(grouped.values()).map(group => renderPaidGroupCard(group));
-                })()
-              )}
+                  grouped.get(key)!.installments.push(inst);
+                }
+                for (const g of grouped.values()) {
+                  g.totalPaid = movementAmountByLoan[g.loanId] || g.installments.reduce((s, i) => s + Number(i.paid_amount), 0);
+                }
+                return Array.from(grouped.values()).map(group => renderPaidRow(group));
+              })()}
             </div>
           )}
 
-          {/* NOT PAID TAB */}
-          {activeTab === "notpaid" && (
-            <div className="space-y-2">
+          {/* NÃO PAGOS DO DIA */}
+          {notPaidMarks.length > 0 && (
+            <div className="space-y-1.5 mb-4">
               <h2 className="text-xs font-semibold text-destructive flex items-center gap-1 uppercase tracking-wider">
-                <XCircle className="h-3 w-3" /> Não Pagos do Dia
+                <XCircle className="h-3 w-3" /> Não Pagos do Dia ({notPaidMarks.length})
               </h2>
-              {notPaidMarks.length === 0 ? (
-                <div className="flex flex-col items-center py-8">
-                  <CheckCircle className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Nenhuma marcação</p>
-                </div>
-              ) : (
-                notPaidMarks.map(renderNotPaidRow)
-              )}
+              {notPaidMarks.map(renderNotPaidRow)}
             </div>
           )}
 
-          {/* NEW LOANS TAB */}
-          {activeTab === "newloans" && (
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold text-primary flex items-center gap-1 uppercase tracking-wider">
-                <Plus className="h-3 w-3" /> Empréstimos Novos do Dia
-              </h2>
-              {newLoans.length === 0 ? (
-                <div className="flex flex-col items-center py-8">
-                  <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Nenhum empréstimo neste dia</p>
-                </div>
-              ) : (
-                newLoans.map(r => {
+          {/* NOVOS EMPRÉSTIMOS */}
+          {newLoans.length > 0 && (
+            <Collapsible className="mb-4">
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1 text-xs font-semibold text-primary uppercase tracking-wider w-full">
+                  <Plus className="h-3 w-3" /> Novos do Dia ({newLoans.length})
+                  <ChevronDown className="ml-auto h-3.5 w-3.5" />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2">
+                {newLoans.map(r => {
                   const isRenewal = !!r.renewed_from_loan_id;
                   const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
                   return (
@@ -1386,32 +1329,19 @@ export default function DailyCashPage() {
                           <p className="text-xs text-muted-foreground">
                             {r.installment_count}x de {formatCurrency(Number(r.total_amount) / r.installment_count)} • {paymentLabel}
                           </p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {format(new Date(r.loan_date + "T12:00:00"), "dd/MM/yyyy")}
-                          </p>
                         </div>
                         <div className="text-right">
                           <p className={`text-sm font-bold ${isRenewal ? "text-primary" : "text-success"}`}>{formatCurrency(Number(r.amount))}</p>
                           <Badge className={`text-[9px] px-1.5 py-0 h-3.5 ${isRenewal ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>
-                            {isRenewal ? "Renovação" : "Novo Empréstimo"}
+                            {isRenewal ? "Renovação" : "Novo"}
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex gap-2 mt-2">
-                        <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.id}`)}>
-                          <Eye className="mr-1 h-3 w-3" /> Ver empréstimo
-                        </Button>
-                        {isRenewal && r.renewed_from_loan_id && (
-                          <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => navigate(`/loans/${r.renewed_from_loan_id}`)}>
-                            <History className="mr-1 h-3 w-3" /> Ver anterior
-                          </Button>
-                        )}
-                      </div>
                     </div>
                   );
-                })
-              )}
-            </div>
+                })}
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {isClosed ? (
