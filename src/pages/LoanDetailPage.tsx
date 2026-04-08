@@ -225,6 +225,16 @@ export default function LoanDetailPage() {
           observation: `Parcela ${currentInst.number}`,
           cash_date: payDate,
         });
+        await createDailyEvent({
+          cash_date: payDate,
+          event_type: "pagamento",
+          client_id: loan?.client_id,
+          loan_id: loanId!,
+          installment_id: currentInst.id,
+          amount_in: totalApplied,
+          observation: `Parcela ${currentInst.number} - ${loan?.clients?.name || ""}`,
+          origin: "detalhe_emprestimo",
+        });
       }
       toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
       if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
