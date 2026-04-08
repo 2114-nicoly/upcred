@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
