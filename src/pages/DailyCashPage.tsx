@@ -113,7 +113,7 @@ export default function DailyCashPage() {
   // Track loans actioned optimistically in this session (cleared on each refresh)
   const localActionedInstIds = useRef<Set<string>>(new Set());
 
-  useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
+  useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedInstIds.current = new Set(); }, [selectedDate]);
 
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
