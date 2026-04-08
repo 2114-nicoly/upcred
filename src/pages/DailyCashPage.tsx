@@ -865,14 +865,12 @@ export default function DailyCashPage() {
   // === Compact pending row ===
   const renderPendingRow = (inst: InstallmentWithLoan) => {
     const lp = loanProgressMap[inst.loan_id];
-    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
+    const remainingBalance = Number(inst.loans.remaining_balance);
+    const instAmount = Number(inst.amount);
     const overdueDays = getOverdueDays(inst);
     const isOverdue = overdueDays > 0;
     const penaltyPending = lp ? lp.penaltyTotal - lp.penaltyPaid : 0;
-    const paidCount = lp ? Math.floor(lp.progress) : 0;
-    const totalCount = lp ? lp.total : inst.loans.installment_count;
     const isSelected = selectedForNotPaid.has(inst.id);
-    const progressPct = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
 
     return (
       <div
@@ -890,28 +888,28 @@ export default function DailyCashPage() {
             {/* Row 1: Client name */}
             <span className="font-bold text-base truncate block">{inst.loans.clients.name}</span>
 
-            {/* Row 2: Remaining value (main highlight) */}
+            {/* Row 2: Saldo restante (primary) */}
             <div className="flex items-center justify-between gap-2 mt-1">
               <span className="text-sm font-extrabold tabular-nums text-foreground">
-                Pagar: {formatCurrency(instRemaining)}
+                Saldo: {formatCurrency(remainingBalance)}
               </span>
               {isOverdue && (
                 <Badge
                   variant="outline"
                   className="text-[10px] px-1.5 py-0 h-4 leading-none font-semibold border-destructive/50 text-destructive bg-destructive/10"
                 >
-                  Atraso de {overdueDays} dia{overdueDays > 1 ? "s" : ""}
+                  Atraso {overdueDays}d
                 </Badge>
               )}
             </div>
 
-            {/* Row 3: Secondary info */}
+            {/* Row 3: Parcela (secondary) + vencimento */}
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                {paidCount}/{totalCount} parcelas
+                Parcela: {formatCurrency(instAmount)}
               </span>
               <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
-                Vence em: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+                Vence: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
               </span>
             </div>
           </div>
@@ -936,21 +934,6 @@ export default function DailyCashPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-
-        {/* Progress bar */}
-        <div className="px-3 pb-1.5">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${isOverdue ? "bg-destructive" : "bg-primary"}`}
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${isOverdue ? "text-destructive" : "text-primary"}`}>
-              {paidCount}/{totalCount}
-            </span>
-          </div>
         </div>
 
         {/* Action buttons */}
