@@ -722,7 +722,7 @@ export default function DailyCashPage() {
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}>
-                <Plus className="mr-2 h-4 w-4" /> Renovar Empréstimo
+                <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalhes
