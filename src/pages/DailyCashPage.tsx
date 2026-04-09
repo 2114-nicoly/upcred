@@ -573,35 +573,7 @@ export default function DailyCashPage() {
     toast.success("Pagamento desfeito!");
 
     try {
-      // Get total amounts from cash_movements
-      const { data: movs } = await supabase.from("cash_movements")
-        .select("amount, installment_id").eq("type", "recebimento_normal").eq("cash_date", selectedDate).eq("loan_id", loanId);
-      const totalReversed = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
-      const affectedInstIds = [...new Set((movs || []).map((m: any) => m.installment_id).filter(Boolean))];
-
-      // Reverse remaining_balance via RPC
-      if (totalReversed > 0) {
-        await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
-      }
-
-      // Delete cash_movements for this loan today
-      await supabase.from("cash_movements").delete().eq("loan_id", loanId).eq("cash_date", selectedDate).eq("type", "recebimento_normal");
-
-      // Reset installments
-      for (const instId of affectedInstIds) {
-        await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", instId);
-      }
-
-      // Delete daily_events
-      const { data: events } = await (supabase.from("daily_events" as any)
-        .select("id").eq("event_type", "pagamento")
-        .eq("loan_id", loanId)
-        .eq("cash_date", selectedDate) as any);
-      for (const ev of (events || [])) {
-        await deleteDailyEvent(ev.id);
-      }
-
-      await recalculateCashBalanceFromLedger();
+      await reversePayment({ loanId, cashDate: selectedDate });
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
