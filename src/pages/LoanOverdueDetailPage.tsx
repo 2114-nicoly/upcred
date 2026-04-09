@@ -30,6 +30,7 @@ type Loan = {
   id: string;
   total_amount: number;
   payment_type: string;
+  client_id: string;
   clients: { name: string };
 };
 
