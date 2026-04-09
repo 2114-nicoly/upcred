@@ -49,7 +49,7 @@ export default function LoanOverdueDetailPage() {
   const [editInstDueDate, setEditInstDueDate] = useState("");
 
   const fetchData = async () => {
-    const { data: l } = await supabase.from("loans").select("id, total_amount, payment_type, clients(name)").eq("id", loanId!).single();
+    const { data: l } = await supabase.from("loans").select("id, total_amount, payment_type, client_id, clients(name)").eq("id", loanId!).single();
     setLoan(l as unknown as Loan);
 
     const today = format(new Date(), "yyyy-MM-dd");
