@@ -152,96 +152,15 @@ export default function NewLoanPage() {
       origin: "novo_emprestimo",
     });
 
-    // If renewal, close old loan
+    // If renewal, close old loan using centralized logic
     if (renewFromLoanId) {
-      // Mark all unpaid installments as paid (closed)
-      const { data: unpaidInsts } = await supabase
-        .from("installments").select("*")
-        .eq("loan_id", renewFromLoanId).neq("status", "paid");
-
-      if (unpaidInsts && unpaidInsts.length > 0) {
-        const now = new Date().toISOString();
-        for (const inst of unpaidInsts) {
-          await supabase.from("installments").update({
-            status: "paid",
-            paid_amount: Number(inst.amount),
-            paid_at: now,
-          }).eq("id", inst.id);
-        }
-
-        // Calculate remaining balances for old loan
-        const { data: oldLoan } = await supabase.from("loans").select("amount, total_amount, client_id").eq("id", renewFromLoanId).single();
-        if (oldLoan) {
-          const regularUnpaid = unpaidInsts.filter((i: any) => !i.is_penalty);
-          const penaltyUnpaid = unpaidInsts.filter((i: any) => i.is_penalty);
-
-          let totalRegular = 0;
-          for (const i of regularUnpaid) {
-            totalRegular += Number(i.amount) - Number(i.paid_amount);
-          }
-          let totalPenalty = 0;
-          for (const i of penaltyUnpaid) {
-            totalPenalty += Number(i.amount) - Number(i.paid_amount);
-          }
-
-          if (totalRegular > 0) {
-            const loanInterest = Number(oldLoan.total_amount) - Number(oldLoan.amount);
-            const { data: allOldInsts } = await supabase
-              .from("installments").select("paid_amount")
-              .eq("loan_id", renewFromLoanId).eq("is_penalty", false);
-            const totalPaidNow = (allOldInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-            const totalPaidBefore = totalPaidNow - totalRegular;
-            const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-            const toInterest = Math.min(totalRegular, interestRemaining);
-            const toPrincipal = totalRegular - toInterest;
-
-            await updateCashBalance({
-              available_cash: totalRegular,
-              interest_receivable: -toInterest,
-              money_lent: -toPrincipal,
-            });
-            await createCashMovement({
-              type: "recebimento_normal", amount: totalRegular,
-              client_id: clientId!, loan_id: renewFromLoanId,
-              observation: `Quitação por renovação - ${clientName}`,
-              cash_date: loanDate,
-            });
-
-            // Register payoff as daily event (entry)
-            await createDailyEvent({
-              cash_date: loanDate,
-              event_type: "pagamento",
-              client_id: clientId!,
-              loan_id: renewFromLoanId,
-              amount_in: totalRegular,
-              observation: `Quitação por renovação - ${clientName} - ${formatCurrency(totalRegular)}`,
-              origin: "renovacao",
-            });
-          }
-          if (totalPenalty > 0) {
-            await updateCashBalance({ available_cash: totalPenalty, penalty_receivable: -totalPenalty });
-            await createCashMovement({
-              type: "recebimento_multa", amount: totalPenalty,
-              client_id: clientId!, loan_id: renewFromLoanId,
-              observation: `Quitação multa por renovação - ${clientName}`,
-              cash_date: loanDate,
-            });
-
-            // Register penalty payoff as daily event (entry)
-            await createDailyEvent({
-              cash_date: loanDate,
-              event_type: "recebimento_multa",
-              client_id: clientId!,
-              loan_id: renewFromLoanId,
-              amount_in: totalPenalty,
-              observation: `Multa quitada por renovação - ${clientName} - ${formatCurrency(totalPenalty)}`,
-              origin: "renovacao",
-            });
-          }
-        }
-      }
-
-      await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
+      await settleLoan({
+        loanId: renewFromLoanId,
+        clientId: clientId!,
+        clientName: clientName,
+        cashDate: loanDate,
+        origin: "renovacao",
+      });
       toast.success("Empréstimo renovado com sucesso!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
