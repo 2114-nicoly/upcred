@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, calculateOverdueDays } from "@/lib/loan-utils";
+import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { ArrowLeft, Plus, XCircle, Undo2, Pencil, Trash2, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
