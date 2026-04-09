@@ -645,84 +645,13 @@ export default function DailyCashPage() {
     toast.success("Empréstimo quitado!");
 
     try {
-      const { data: loanData } = await supabase.from("loans").select("remaining_balance").eq("id", inst.loan_id).single();
-      const realBalance = Number(loanData?.remaining_balance ?? currentBalance);
-
-      const { data: allUnpaid } = await supabase
-        .from("installments").select("*")
-        .eq("loan_id", inst.loan_id).neq("status", "paid").order("number");
-
-      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); refreshDataInBackground(); return; }
-
-      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
-      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
-      let totalPenaltyPaying = 0;
-
-      for (const i of regularUnpaid) {
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      for (const i of penaltyUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalPenaltyPaying += remaining;
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      if (realBalance > 0) {
-        await supabase.rpc("apply_loan_payment", { p_loan_id: inst.loan_id, p_amount: realBalance });
-      } else {
-        await supabase.from("loans").update({ status: "paid" }).eq("id", inst.loan_id);
-      }
-
-      if (realBalance > 0) {
-        const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
-        const { data: allLoanInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", inst.loan_id).eq("is_penalty", false);
-        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - realBalance;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(realBalance, interestRemaining);
-        const toPrincipal = realBalance - toInterest;
-
-        await updateCashBalance({
-          available_cash: realBalance,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-        await createCashMovement({
-          type: "recebimento_normal", amount: realBalance,
-          client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
-          observation: `Quitação empréstimo - ${inst.loans.clients.name}`,
-          cash_date: selectedDate,
-        });
-      }
-
-      if (totalPenaltyPaying > 0) {
-        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-        await createCashMovement({
-          type: "recebimento_multa", amount: totalPenaltyPaying,
-          client_id: inst.loans.client_id, loan_id: inst.loan_id,
-          observation: `Quitação multa - ${inst.loans.clients.name}`,
-          cash_date: selectedDate,
-        });
-      }
-
-      await createDailyEvent({
-        cash_date: quitarDate, event_type: "pagamento",
-        client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
-        amount_in: realBalance + totalPenaltyPaying,
-        observation: `Quitação - ${inst.loans.clients.name}`,
+      await settleLoan({
+        loanId: inst.loan_id,
+        clientId: inst.loans.client_id,
+        clientName: inst.loans.clients.name,
+        cashDate: quitarDate,
         origin: "rota",
+        installmentId: inst.id,
       });
     } catch {
       toast.error("Erro ao quitar, recarregando...");
