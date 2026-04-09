@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
+import { settleLoan } from "@/lib/payment-utils";
 import { ArrowLeft, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
