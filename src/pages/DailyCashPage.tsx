@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatCurrency, calculateOverdueDays } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
+import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
@@ -355,97 +356,23 @@ export default function DailyCashPage() {
     try {
       // Penalty payment
       if (multaValue > 0) {
-        const { data: penaltyInsts } = await supabase
-          .from("installments").select("*").eq("loan_id", inst.loan_id).eq("is_penalty", true);
-        const penaltyInst = penaltyInsts?.[0];
-        if (penaltyInst) {
-          const newPaid = Number(penaltyInst.paid_amount) + multaValue;
-          const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-          await supabase.from("installments").update({
-            paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-            status: fullyPaid ? "paid" : penaltyInst.status,
-            paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-          }).eq("id", penaltyInst.id);
-          await updateCashBalance({ available_cash: multaValue, penalty_receivable: -multaValue });
-          await createCashMovement({
-            type: "recebimento_multa", amount: multaValue,
-            client_id: inst.loans.client_id, loan_id: inst.loan_id,
-            observation: `Pagamento de multa - ${inst.loans.clients.name}`,
-            cash_date: selectedDate,
-          });
-          await createDailyEvent({
-            cash_date: payDate, event_type: "recebimento_multa",
-            client_id: inst.loans.client_id, loan_id: inst.loan_id,
-            amount_in: multaValue,
-            observation: `Multa - ${inst.loans.clients.name}`,
-            origin: "rota",
+        try {
+          await registerPenaltyPayment({
+            loanId: inst.loan_id, amount: multaValue,
+            clientId: inst.loans.client_id, clientName: inst.loans.clients.name,
+            cashDate: payDate, origin: "rota",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-        }
+        } catch { toast.error("Nenhuma multa registrada para abater"); }
       }
 
-      // Main payment: atomic RPC
+      // Main payment via centralized function
       if (paidValue > 0) {
-        await supabase.rpc("apply_loan_payment", { p_loan_id: inst.loan_id, p_amount: paidValue });
-
-        // Update installment for tracking
-        const newPaidAmount = Number(inst.paid_amount) + paidValue;
-        const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : "partial",
-          paid_at: new Date(payDate + "T12:00:00").toISOString(),
-        }).eq("id", inst.id);
-
-        // Overflow to next installments
-        let overflow = paidValue - (Number(inst.amount) - Number(inst.paid_amount));
-        if (overflow > 0.01) {
-          const { data: nextUnpaid } = await supabase
-            .from("installments").select("*")
-            .eq("loan_id", inst.loan_id).neq("status", "paid").eq("is_penalty", false)
-            .gt("number", inst.number).order("number");
-          for (const ni of (nextUnpaid || [])) {
-            if (overflow <= 0.01) break;
-            const niRemaining = Number(ni.amount) - Number(ni.paid_amount);
-            const applying = Math.min(overflow, niRemaining);
-            const niNewPaid = Number(ni.paid_amount) + applying;
-            await supabase.from("installments").update({
-              paid_amount: niNewPaid,
-              status: niNewPaid >= Number(ni.amount) - 0.01 ? "paid" : "partial",
-              paid_at: new Date(payDate + "T12:00:00").toISOString(),
-            }).eq("id", ni.id);
-            overflow -= applying;
-          }
-        }
-
-        // Cash balance
-        const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
-        const { data: allLoanInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", inst.loan_id).eq("is_penalty", false);
-        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - paidValue;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(paidValue, interestRemaining);
-        const toPrincipal = paidValue - toInterest;
-        await updateCashBalance({
-          available_cash: paidValue,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-
-        await createCashMovement({
-          type: "recebimento_normal", amount: paidValue,
-          client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
-          observation: `Pagamento - ${inst.loans.clients.name}`,
-          cash_date: selectedDate,
-        });
-        await createDailyEvent({
-          cash_date: payDate, event_type: "pagamento",
-          client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
-          amount_in: paidValue,
-          observation: `Pagamento - ${inst.loans.clients.name}`,
-          origin: "rota",
+        await registerPayment({
+          loanId: inst.loan_id, amount: paidValue,
+          clientId: inst.loans.client_id, clientName: inst.loans.clients.name,
+          cashDate: payDate, origin: "rota",
+          installmentId: inst.id, startInstNumber: inst.number,
         });
       }
     } catch {
@@ -646,35 +573,7 @@ export default function DailyCashPage() {
     toast.success("Pagamento desfeito!");
 
     try {
-      // Get total amounts from cash_movements
-      const { data: movs } = await supabase.from("cash_movements")
-        .select("amount, installment_id").eq("type", "recebimento_normal").eq("cash_date", selectedDate).eq("loan_id", loanId);
-      const totalReversed = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
-      const affectedInstIds = [...new Set((movs || []).map((m: any) => m.installment_id).filter(Boolean))];
-
-      // Reverse remaining_balance via RPC
-      if (totalReversed > 0) {
-        await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
-      }
-
-      // Delete cash_movements for this loan today
-      await supabase.from("cash_movements").delete().eq("loan_id", loanId).eq("cash_date", selectedDate).eq("type", "recebimento_normal");
-
-      // Reset installments
-      for (const instId of affectedInstIds) {
-        await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", instId);
-      }
-
-      // Delete daily_events
-      const { data: events } = await (supabase.from("daily_events" as any)
-        .select("id").eq("event_type", "pagamento")
-        .eq("loan_id", loanId)
-        .eq("cash_date", selectedDate) as any);
-      for (const ev of (events || [])) {
-        await deleteDailyEvent(ev.id);
-      }
-
-      await recalculateCashBalanceFromLedger();
+      await reversePayment({ loanId, cashDate: selectedDate });
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -746,84 +645,13 @@ export default function DailyCashPage() {
     toast.success("Empréstimo quitado!");
 
     try {
-      const { data: loanData } = await supabase.from("loans").select("remaining_balance").eq("id", inst.loan_id).single();
-      const realBalance = Number(loanData?.remaining_balance ?? currentBalance);
-
-      const { data: allUnpaid } = await supabase
-        .from("installments").select("*")
-        .eq("loan_id", inst.loan_id).neq("status", "paid").order("number");
-
-      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); refreshDataInBackground(); return; }
-
-      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
-      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
-      let totalPenaltyPaying = 0;
-
-      for (const i of regularUnpaid) {
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      for (const i of penaltyUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalPenaltyPaying += remaining;
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      if (realBalance > 0) {
-        await supabase.rpc("apply_loan_payment", { p_loan_id: inst.loan_id, p_amount: realBalance });
-      } else {
-        await supabase.from("loans").update({ status: "paid" }).eq("id", inst.loan_id);
-      }
-
-      if (realBalance > 0) {
-        const loanInterest = Number(inst.loans.total_amount) - Number(inst.loans.amount);
-        const { data: allLoanInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", inst.loan_id).eq("is_penalty", false);
-        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - realBalance;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(realBalance, interestRemaining);
-        const toPrincipal = realBalance - toInterest;
-
-        await updateCashBalance({
-          available_cash: realBalance,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-        await createCashMovement({
-          type: "recebimento_normal", amount: realBalance,
-          client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
-          observation: `Quitação empréstimo - ${inst.loans.clients.name}`,
-          cash_date: selectedDate,
-        });
-      }
-
-      if (totalPenaltyPaying > 0) {
-        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-        await createCashMovement({
-          type: "recebimento_multa", amount: totalPenaltyPaying,
-          client_id: inst.loans.client_id, loan_id: inst.loan_id,
-          observation: `Quitação multa - ${inst.loans.clients.name}`,
-          cash_date: selectedDate,
-        });
-      }
-
-      await createDailyEvent({
-        cash_date: quitarDate, event_type: "pagamento",
-        client_id: inst.loans.client_id, loan_id: inst.loan_id, installment_id: inst.id,
-        amount_in: realBalance + totalPenaltyPaying,
-        observation: `Quitação - ${inst.loans.clients.name}`,
+      await settleLoan({
+        loanId: inst.loan_id,
+        clientId: inst.loans.client_id,
+        clientName: inst.loans.clients.name,
+        cashDate: quitarDate,
         origin: "rota",
+        installmentId: inst.id,
       });
     } catch {
       toast.error("Erro ao quitar, recarregando...");
@@ -894,7 +722,7 @@ export default function DailyCashPage() {
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}>
-                <Plus className="mr-2 h-4 w-4" /> Renovar Empréstimo
+                <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalhes

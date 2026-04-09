@@ -25,6 +25,7 @@ import {
 } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
+import { registerPayment, registerPenaltyPayment, settleLoan, reverseInstallmentPayment } from "@/lib/payment-utils";
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -135,7 +136,7 @@ export default function LoanDetailPage() {
     await supabase.from("loans").update({ status: newStatus }).eq("id", loanId!);
   };
 
-  // --- Payment ---
+  // --- Payment (centralized) ---
   const handlePay = async (id: string) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -144,112 +145,39 @@ export default function LoanDetailPage() {
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); setIsSubmitting(false); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); setIsSubmitting(false); return; }
 
-    if (multaValue > 0) {
-      const penaltyInst = installments.find((i) => i.is_penalty);
-      if (penaltyInst) {
-        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
-        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-          status: fullyPaid ? "paid" : penaltyInst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-        }).eq("id", penaltyInst.id);
-        // Cash: penalty payment
-        await updateCashBalance({ available_cash: multaValue, penalty_receivable: -multaValue });
-        await createCashMovement({
-          type: "recebimento_multa",
-          amount: multaValue,
-          client_id: loan?.client_id,
-          loan_id: loanId!,
-          observation: `Pagamento de multa`,
-          cash_date: payDate,
-        });
-        await createDailyEvent({
-          cash_date: payDate,
-          event_type: "recebimento_multa",
-          client_id: loan?.client_id,
-          loan_id: loanId!,
-          amount_in: multaValue,
-          observation: `Multa - ${loan?.clients?.name || ""}`,
-          origin: "detalhe_emprestimo",
-        });
-        toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-      } else {
-        toast.error("Nenhuma multa registrada para abater");
+    try {
+      if (multaValue > 0) {
+        try {
+          await registerPenaltyPayment({
+            loanId: loanId!, amount: multaValue,
+            clientId: loan?.client_id || "", clientName: loan?.clients?.name || "",
+            cashDate: payDate, origin: "detalhe_emprestimo",
+          });
+          toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
+        } catch { toast.error("Nenhuma multa registrada para abater"); }
       }
-    }
 
-    if (parcValue !== null || !payPenaltyAmount) {
-      const unpaid = installments.filter((i) => i.status !== "paid" && !i.is_penalty).sort((a, b) => a.number - b.number);
-      const currentInst = unpaid.find((i) => i.id === id);
-      if (!currentInst) {
-        if (multaValue > 0) {
-          setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
-          await updateLoanStatus(); fetchData(); return;
+      const currentInst = installments.find((i) => i.id === id);
+      if (currentInst && (parcValue !== null || !payPenaltyAmount)) {
+        const instRemaining = Number(currentInst.amount) - Number(currentInst.paid_amount);
+        const paidValue = parcValue ?? instRemaining;
+
+        if (paidValue > 0) {
+          await registerPayment({
+            loanId: loanId!, amount: paidValue,
+            clientId: loan?.client_id || "", clientName: loan?.clients?.name || "",
+            cashDate: payDate, origin: "detalhe_emprestimo",
+            installmentId: currentInst.id, startInstNumber: currentInst.number,
+          });
+          toast.success(`Parcela: ${formatCurrency(paidValue)} registrado!`);
+          const remaining = paidValue - instRemaining;
+          if (remaining > 0.01) toast.info(`Sobra de ${formatCurrency(remaining)}`);
         }
-        return;
       }
-      let remaining = parcValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount));
-      const toProcess = unpaid.filter((i) => i.number >= currentInst.number);
-      let isFirst = true;
-      for (const inst of toProcess) {
-        if (remaining <= 0) break;
-        const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-        const applying = Math.min(remaining, instRemaining);
-        const newPaidAmount = Number(inst.paid_amount) + applying;
-        const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
-        const shouldSetPaidAt = fullyPaid || isFirst;
-        await supabase.from("installments").update({
-          paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : (isFirst ? "partial" : inst.status),
-          paid_at: shouldSetPaidAt ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
-        }).eq("id", inst.id);
-        remaining -= applying;
-        isFirst = false;
-      }
-      const totalApplied = (parcValue ?? (Number(currentInst.amount) - Number(currentInst.paid_amount))) - remaining;
-      // Cash: normal payment - interest first, then principal
-      if (totalApplied > 0) {
-        const loanInterest = loan ? (Number(loan.total_amount) - Number(loan.amount)) : 0;
-        // Fetch fresh paid amounts from DB (not stale render-time state)
-        const { data: freshInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", loanId!).eq("is_penalty", false);
-        const totalPaidNow = (freshInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - totalApplied;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(totalApplied, interestRemaining);
-        const toPrincipal = totalApplied - toInterest;
-        await updateCashBalance({
-          available_cash: totalApplied,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-        await createCashMovement({
-          type: "recebimento_normal",
-          amount: totalApplied,
-          client_id: loan?.client_id,
-          loan_id: loanId!,
-          installment_id: currentInst.id,
-          observation: `Parcela ${currentInst.number}`,
-          cash_date: payDate,
-        });
-        await createDailyEvent({
-          cash_date: payDate,
-          event_type: "pagamento",
-          client_id: loan?.client_id,
-          loan_id: loanId!,
-          installment_id: currentInst.id,
-          amount_in: totalApplied,
-          observation: `Parcela ${currentInst.number} - ${loan?.clients?.name || ""}`,
-          origin: "detalhe_emprestimo",
-        });
-      }
-      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
-      if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
+    } catch {
+      toast.error("Erro ao processar pagamento");
     }
 
-    await updateLoanStatus();
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
     setIsSubmitting(false);
     fetchData();
@@ -272,17 +200,12 @@ export default function LoanDetailPage() {
   const handleUndoPayment = async (id: string) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    // 1. Delete ALL cash_movements linked to this installment
-    await supabase.from("cash_movements").delete().eq("installment_id", id);
-
-    // 2. Revert installment
-    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
-
-    // 3. Recalculate cash balance from ledger
-    await recalculateCashBalanceFromLedger();
-
-    await updateLoanStatus();
-    toast.success("Pagamento desfeito!");
+    try {
+      await reverseInstallmentPayment({ installmentId: id, loanId: loanId! });
+      toast.success("Pagamento desfeito!");
+    } catch {
+      toast.error("Erro ao desfazer pagamento");
+    }
     setIsSubmitting(false);
     fetchData();
   };
@@ -511,82 +434,19 @@ export default function LoanDetailPage() {
     navigate(-1);
   };
 
-  // --- Quitar Empréstimo ---
+  // --- Quitar Empréstimo (centralized) ---
   const handleQuitarEmprestimo = async () => {
     if (isSubmitting || !loan) return;
     setIsSubmitting(true);
 
     try {
-      const { data: allUnpaid } = await supabase
-        .from("installments").select("*")
-        .eq("loan_id", loanId!).neq("status", "paid").order("number");
-
-      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); setQuitarOpen(false); fetchData(); return; }
-
-      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
-      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
-
-      let totalRegularPaying = 0;
-      let totalPenaltyPaying = 0;
-
-      for (const i of regularUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalRegularPaying += remaining;
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      for (const i of penaltyUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalPenaltyPaying += remaining;
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      await supabase.from("loans").update({ status: "paid" }).eq("id", loanId!);
-
-      if (totalRegularPaying > 0) {
-        const loanInterest = Number(loan.total_amount) - Number(loan.amount);
-        const { data: allLoanInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", loanId!).eq("is_penalty", false);
-        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - totalRegularPaying;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(totalRegularPaying, interestRemaining);
-        const toPrincipal = totalRegularPaying - toInterest;
-
-        await updateCashBalance({
-          available_cash: totalRegularPaying,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-        await createCashMovement({
-          type: "recebimento_normal", amount: totalRegularPaying,
-          client_id: loan.client_id, loan_id: loanId!,
-          observation: `Quitação empréstimo - ${loan.clients.name}`,
-          cash_date: quitarDate,
-        });
-      }
-
-      if (totalPenaltyPaying > 0) {
-        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-        await createCashMovement({
-          type: "recebimento_multa", amount: totalPenaltyPaying,
-          client_id: loan.client_id, loan_id: loanId!,
-          observation: `Quitação multa - ${loan.clients.name}`,
-          cash_date: quitarDate,
-        });
-      }
-
+      await settleLoan({
+        loanId: loanId!,
+        clientId: loan.client_id,
+        clientName: loan.clients.name,
+        cashDate: quitarDate,
+        origin: "detalhe_emprestimo",
+      });
       toast.success("Empréstimo quitado!");
     } catch {
       toast.error("Erro ao quitar, recarregando...");

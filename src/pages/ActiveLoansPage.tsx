@@ -16,6 +16,7 @@ import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Tras
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
+import { registerPayment, registerPenaltyPayment, settleLoan } from "@/lib/payment-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -204,7 +205,7 @@ export default function ActiveLoansPage() {
     }
   };
 
-  // --- Payment from list ---
+  // --- Payment from list (centralized) ---
   const handlePayFromList = async () => {
     if (!payLoanId) return;
     const parcValue = payAmount ? parseFloat(payAmount) : null;
@@ -212,131 +213,57 @@ export default function ActiveLoansPage() {
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
-    // Fetch installments for this loan
-    const { data: allInst } = await supabase
-      .from("installments")
-      .select("*")
-      .eq("loan_id", payLoanId)
-      .order("number");
-    if (!allInst) return;
-
-    // Handle penalty payment
-    if (multaValue > 0) {
-      const penaltyInst = allInst.find((i: any) => i.is_penalty);
-      if (penaltyInst) {
-        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
-        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-          status: fullyPaid ? "paid" : penaltyInst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-        }).eq("id", penaltyInst.id);
-        toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-      } else {
-        toast.error("Nenhuma multa registrada para abater");
-      }
-    }
-
-    // Handle regular payment (sequential abatement)
-    if (parcValue !== null && parcValue > 0) {
-      const loan = loans.find((l) => l.id === payLoanId);
-      const unpaid = allInst
-        .filter((i: any) => i.status !== "paid" && !i.is_penalty)
-        .sort((a: any, b: any) => a.number - b.number);
-
-      const firstUnpaid = unpaid[0];
-      let remaining = parcValue;
-      for (const inst of unpaid) {
-        if (remaining <= 0) break;
-        const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-        const applying = Math.min(remaining, instRemaining);
-        const newPaidAmount = Number(inst.paid_amount) + applying;
-        const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : inst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : inst.paid_at,
-        }).eq("id", inst.id);
-        remaining -= applying;
-      }
-      const totalApplied = parcValue - remaining;
-
-      if (totalApplied > 0 && loan) {
-        // Update cash balance
-        const loanInterest = Number(loan.total_amount) - Number(loan.amount);
-        const { data: allLoanInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", payLoanId).eq("is_penalty", false);
-        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - totalApplied;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(totalApplied, interestRemaining);
-        const toPrincipal = totalApplied - toInterest;
-
-        await updateCashBalance({
-          available_cash: totalApplied,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-        await createCashMovement({
-          type: "recebimento_normal", amount: totalApplied,
-          client_id: loan.clients.id, loan_id: payLoanId,
-          installment_id: firstUnpaid?.id,
-          observation: `Parcela ${firstUnpaid?.number || "?"} - ${loan.clients.name}`,
-          cash_date: payDate,
-        });
-        await createDailyEvent({
-          cash_date: payDate,
-          event_type: "pagamento",
-          client_id: loan.clients.id,
-          loan_id: payLoanId,
-          installment_id: firstUnpaid?.id,
-          amount_in: totalApplied,
-          observation: `Parcela ${firstUnpaid?.number || "?"} - ${loan.clients.name}`,
-          origin: "emprestimos_ativos",
-        });
+    setIsSubmitting(true);
+    try {
+      // Handle penalty payment
+      if (multaValue > 0) {
+        const loan = loans.find((l) => l.id === payLoanId);
+        if (loan) {
+          try {
+            await registerPenaltyPayment({
+              loanId: payLoanId, amount: multaValue,
+              clientId: loan.clients.id, clientName: loan.clients.name,
+              cashDate: payDate, origin: "emprestimos_ativos",
+            });
+            toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
+          } catch { toast.error("Nenhuma multa registrada para abater"); }
+        }
       }
 
-      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
-      if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
-    }
+      // Handle regular payment
+      if (parcValue !== null && parcValue > 0) {
+        const loan = loans.find((l) => l.id === payLoanId);
+        if (loan) {
+          // Get first unpaid installment for reference
+          const { data: unpaid } = await supabase
+            .from("installments").select("id, number")
+            .eq("loan_id", payLoanId).neq("status", "paid").eq("is_penalty", false)
+            .order("number").limit(1);
+          const firstUnpaid = unpaid?.[0];
 
-    // Handle penalty daily event
-    if (multaValue > 0) {
-      const loan = loans.find((l) => l.id === payLoanId);
-      if (loan) {
-        await createDailyEvent({
-          cash_date: payDate,
-          event_type: "recebimento_multa",
-          client_id: loan.clients.id,
-          loan_id: payLoanId,
-          amount_in: multaValue,
-          observation: `Multa - ${loan.clients.name}`,
-          origin: "emprestimos_ativos",
-        });
+          const result = await registerPayment({
+            loanId: payLoanId, amount: parcValue,
+            clientId: loan.clients.id, clientName: loan.clients.name,
+            cashDate: payDate, origin: "emprestimos_ativos",
+            installmentId: firstUnpaid?.id,
+            startInstNumber: firstUnpaid?.number,
+          });
+          toast.success(`Parcela: ${formatCurrency(parcValue)} registrado!`);
+        }
       }
+    } catch (e) {
+      toast.error("Erro ao processar pagamento");
+    } finally {
+      setIsSubmitting(false);
+      setPayLoanId(null);
+      setPayAmount("");
+      setPayPenaltyAmount("");
+      setPayDate(format(new Date(), "yyyy-MM-dd"));
+      fetchData();
     }
-
-    // Update loan status
-    const { data: updatedInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", payLoanId);
-    if (updatedInst) {
-      const todayStr = format(new Date(), "yyyy-MM-dd");
-      const allPaid = updatedInst.every((i: any) => i.status === "paid");
-      const hasOverdue = updatedInst.some((i: any) => i.status === "overdue" && i.due_date < todayStr);
-      let newStatus = "open";
-      if (allPaid) newStatus = "paid";
-      else if (hasOverdue) newStatus = "overdue";
-      await supabase.from("loans").update({ status: newStatus }).eq("id", payLoanId);
-    }
-
-    setPayLoanId(null);
-    setPayAmount("");
-    setPayPenaltyAmount("");
-    setPayDate(format(new Date(), "yyyy-MM-dd"));
-    fetchData();
   };
 
-  // --- Quitar Empréstimo from list ---
+  // --- Quitar Empréstimo from list (centralized) ---
   const handleQuitarFromList = async () => {
     if (!quitarLoanId || isSubmitting) return;
     setIsSubmitting(true);
@@ -345,90 +272,13 @@ export default function ActiveLoansPage() {
     if (!loan) { setIsSubmitting(false); return; }
 
     try {
-      const { data: allUnpaid } = await supabase
-        .from("installments").select("*")
-        .eq("loan_id", quitarLoanId).neq("status", "paid").order("number");
-
-      if (!allUnpaid || allUnpaid.length === 0) { setIsSubmitting(false); setQuitarLoanId(null); fetchData(); return; }
-
-      const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
-      const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
-
-      let totalRegularPaying = 0;
-      let totalPenaltyPaying = 0;
-
-      for (const i of regularUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalRegularPaying += remaining;
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      for (const i of penaltyUnpaid) {
-        const remaining = Number(i.amount) - Number(i.paid_amount);
-        if (remaining <= 0.01) continue;
-        totalPenaltyPaying += remaining;
-        await supabase.from("installments").update({
-          paid_amount: Number(i.amount),
-          status: "paid",
-          paid_at: new Date(quitarDate + "T12:00:00").toISOString(),
-        }).eq("id", i.id);
-      }
-
-      await supabase.from("loans").update({ status: "paid" }).eq("id", quitarLoanId);
-
-      if (totalRegularPaying > 0) {
-        const loanInterest = Number(loan.total_amount) - Number(loan.amount);
-        const { data: allLoanInsts } = await supabase
-          .from("installments").select("paid_amount")
-          .eq("loan_id", quitarLoanId).eq("is_penalty", false);
-        const totalPaidNow = (allLoanInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const totalPaidBefore = totalPaidNow - totalRegularPaying;
-        const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-        const toInterest = Math.min(totalRegularPaying, interestRemaining);
-        const toPrincipal = totalRegularPaying - toInterest;
-
-        await updateCashBalance({
-          available_cash: totalRegularPaying,
-          interest_receivable: -toInterest,
-          money_lent: -toPrincipal,
-        });
-        await createCashMovement({
-          type: "recebimento_normal", amount: totalRegularPaying,
-          client_id: loan.clients.id, loan_id: quitarLoanId,
-          observation: `Quitação empréstimo - ${loan.clients.name}`,
-          cash_date: quitarDate,
-        });
-      }
-
-      if (totalPenaltyPaying > 0) {
-        await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-        await createCashMovement({
-          type: "recebimento_multa", amount: totalPenaltyPaying,
-          client_id: loan.clients.id, loan_id: quitarLoanId,
-          observation: `Quitação multa - ${loan.clients.name}`,
-          cash_date: quitarDate,
-        });
-      }
-
-      // Register daily event for the full payoff
-      const totalPaying = totalRegularPaying + totalPenaltyPaying;
-      if (totalPaying > 0) {
-        await createDailyEvent({
-          cash_date: quitarDate,
-          event_type: "pagamento",
-          client_id: loan.clients.id,
-          loan_id: quitarLoanId,
-          amount_in: totalPaying,
-          observation: `Quitação - ${loan.clients.name}`,
-          origin: "emprestimos_ativos",
-        });
-      }
-
+      await settleLoan({
+        loanId: quitarLoanId,
+        clientId: loan.clients.id,
+        clientName: loan.clients.name,
+        cashDate: quitarDate,
+        origin: "emprestimos_ativos",
+      });
       toast.success("Empréstimo quitado!");
     } catch {
       toast.error("Erro ao quitar, recarregando...");
