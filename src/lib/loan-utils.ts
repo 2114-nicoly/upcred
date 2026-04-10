@@ -71,6 +71,29 @@ export function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+/**
+ * Calculate fractional installment progress from remaining_balance (single source of truth).
+ * Returns { totalPaid, fractionalProgress, progressFormatted, progressPercent }
+ */
+export function calculateLoanProgress(params: {
+  totalAmount: number;
+  remainingBalance: number;
+  installmentCount: number;
+}) {
+  const { totalAmount, remainingBalance, installmentCount } = params;
+  const totalPaid = Math.max(0, totalAmount - remainingBalance);
+  const installmentValue = installmentCount > 0 ? totalAmount / installmentCount : 1;
+  const fractionalProgress = totalPaid / installmentValue;
+  const progressPercent = installmentCount > 0 ? (fractionalProgress / installmentCount) * 100 : 0;
+
+  // Format: show decimal only if fractional (e.g. 3.5/24, not 3.0/24)
+  const progressFormatted = fractionalProgress % 1 === 0
+    ? `${fractionalProgress}/${installmentCount}`
+    : `${fractionalProgress.toFixed(1)}/${installmentCount}`;
+
+  return { totalPaid, fractionalProgress, progressFormatted, progressPercent: Math.min(progressPercent, 100), installmentValue };
+}
+
 export function getStatusColor(status: string): string {
   switch (status) {
     case "paid":
