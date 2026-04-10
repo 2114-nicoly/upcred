@@ -483,6 +483,50 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  // --- Full recalculate after manual edits ---
+  const handleFullRecalculate = async () => {
+    if (isSubmitting || !loan) return;
+    setIsSubmitting(true);
+    try {
+      // 1. Sum all regular installment amounts to get new total_amount
+      const { data: currentInsts } = await supabase
+        .from("installments")
+        .select("amount")
+        .eq("loan_id", loanId!)
+        .eq("is_penalty", false);
+      const newTotalAmount = (currentInsts || []).reduce((s: number, i: any) => s + Number(i.amount), 0);
+
+      // 2. Get total paid from cash_movements
+      const { data: movs } = await supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("loan_id", loanId!)
+        .eq("type", "recebimento_normal");
+      const totalPaid = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
+
+      // 3. Update loan total_amount and remaining_balance
+      const newRemainingBalance = Math.max(0, newTotalAmount - totalPaid);
+      const newStatus = newRemainingBalance <= 0.01 ? "paid" : "open";
+      await supabase.from("loans").update({
+        total_amount: newTotalAmount,
+        remaining_balance: newRemainingBalance,
+        status: newStatus,
+      }).eq("id", loanId!);
+
+      // 4. Recalculate installment distribution
+      await recalculateInstallments(loanId!);
+
+      // 5. Recalculate cash balance
+      await recalculateCashBalanceFromLedger();
+
+      toast.success("Empréstimo atualizado e recalculado!");
+    } catch {
+      toast.error("Erro ao atualizar empréstimo");
+    }
+    setIsSubmitting(false);
+    fetchData();
+  };
+
   const handleDeleteInstallment = async (id: string) => {
     if (!confirm("Excluir esta parcela?")) return;
     const relatedPenalties = penalties.filter(p => p.installment_id === id);
