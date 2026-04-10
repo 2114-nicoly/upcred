@@ -181,6 +181,9 @@ export async function registerPayment(params: {
     origin,
   });
 
+  // Recalculate installment distribution based on remaining_balance
+  await recalculateInstallments(loanId);
+
   return { applied: amount, newBalance: Number(newBalance) };
 }
 
@@ -358,6 +361,8 @@ export async function settleLoan(params: {
     });
   }
 
+  await recalculateInstallments(loanId);
+
   return { regularPaid: realBalance, penaltyPaid: totalPenaltyPaying };
 }
 
@@ -416,16 +421,8 @@ export async function reversePayment(params: {
   // Recalculate cash balance
   await recalculateCashBalanceFromLedger();
 
-  // Update loan status
-  const { data: loanInsts } = await supabase
-    .from("installments")
-    .select("status")
-    .eq("loan_id", loanId);
-  const allPaid = loanInsts?.every((i: any) => i.status === "paid");
-  const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
-  await supabase.from("loans").update({
-    status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
-  }).eq("id", loanId);
+  // Recalculate installment distribution and loan status
+  await recalculateInstallments(loanId);
 
   return totalReversed;
 }
@@ -466,16 +463,8 @@ export async function reverseInstallmentPayment(params: {
   // Recalculate cash balance
   await recalculateCashBalanceFromLedger();
 
-  // Update loan status
-  const { data: loanInsts } = await supabase
-    .from("installments")
-    .select("status")
-    .eq("loan_id", loanId);
-  const allPaid = loanInsts?.every((i: any) => i.status === "paid");
-  const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
-  await supabase.from("loans").update({
-    status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
-  }).eq("id", loanId);
+  // Recalculate installment distribution and loan status
+  await recalculateInstallments(loanId);
 }
 
 /**
