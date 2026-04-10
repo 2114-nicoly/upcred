@@ -275,23 +275,13 @@ export default function LoanDetailPage() {
     setIsSubmitting(true);
     try {
       await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId!, p_amount: entry.amount });
-      const { data: movs } = await supabase.from("cash_movements")
-        .select("installment_id").eq("id", entry.movementId);
-      const instId = movs?.[0]?.installment_id;
-      if (instId) {
-        await supabase.from("installments").update({
-          status: "pending", paid_at: null, paid_amount: 0,
-        }).eq("id", instId);
-      }
+      // Delete the cash movement
       await supabase.from("cash_movements").delete().eq("id", entry.movementId);
+      // Delete the daily event
       if (entry.eventId) await deleteDailyEvent(entry.eventId);
+      // Recalculate everything from remaining_balance
       await recalculateCashBalanceFromLedger();
-      const { data: loanInsts } = await supabase.from("installments").select("status").eq("loan_id", loanId!);
-      const allPaid = loanInsts?.every((i: any) => i.status === "paid");
-      const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
-      await supabase.from("loans").update({
-        status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
-      }).eq("id", loanId!);
+      await recalculateInstallments(loanId!);
       toast.success("Pagamento desfeito!");
     } catch { toast.error("Erro ao desfazer pagamento"); }
     setIsSubmitting(false);
