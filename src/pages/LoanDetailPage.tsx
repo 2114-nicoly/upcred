@@ -1066,6 +1066,27 @@ export default function LoanDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Edit Payment Dialog */}
+      <Dialog open={editPayOpen} onOpenChange={(o) => { if (!o) { setEditPayOpen(false); setEditPayEntry(null); setEditPayNewAmount(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Pagamento</DialogTitle></DialogHeader>
+          {editPayEntry && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <div className="flex justify-between"><span>Data:</span><span>{format(new Date(editPayEntry.cashDate + "T12:00:00"), "dd/MM/yyyy")}</span></div>
+                <div className="flex justify-between"><span>Valor atual:</span><span className="font-bold">{formatCurrency(editPayEntry.amount)}</span></div>
+              </div>
+              <div>
+                <Label>Novo valor</Label>
+                <Input type="number" value={editPayNewAmount} onChange={(e) => setEditPayNewAmount(e.target.value)} />
+              </div>
+              <Button onClick={handleEditPaymentConfirm} className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "Processando..." : "Salvar Alteração"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
