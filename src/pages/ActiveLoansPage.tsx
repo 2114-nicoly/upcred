@@ -110,8 +110,6 @@ export default function ActiveLoansPage() {
       .order("loan_date", { ascending: false });
 
     const loansList = (loansData as unknown as LoanWithClient[]) || [];
-
-    const loansList = (loansData as unknown as LoanWithClient[]) || [];
     setLoans(loansList);
 
     const today = format(new Date(), "yyyy-MM-dd");
