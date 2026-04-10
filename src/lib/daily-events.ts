@@ -71,8 +71,8 @@ export async function deleteDailyEvent(id: string) {
  * - emprestimo_novo/renovacao: complex - only removes the event record
  */
 export async function undoDailyEvent(event: DailyEvent) {
-  const { updateCashBalance } = await import("@/lib/cash-utils");
-  const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
+  const { updateCashBalance, recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
+  const { recalculateInstallments } = await import("@/lib/payment-utils");
 
   if (event.event_type === "pagamento") {
     if (event.loan_id) {
@@ -88,18 +88,6 @@ export async function undoDailyEvent(event: DailyEvent) {
       // Delete cash_movements
       for (const mov of (movements || [])) {
         await supabase.from("cash_movements").delete().eq("id", mov.id);
-        if (mov.installment_id) {
-          await supabase.from("installments").update({
-            status: "pending", paid_at: null, paid_amount: 0,
-          }).eq("id", mov.installment_id);
-        }
-      }
-
-      // Also revert installment from event if not covered by movements
-      if (event.installment_id) {
-        await supabase.from("installments").update({
-          status: "pending", paid_at: null, paid_amount: 0,
-        }).eq("id", event.installment_id);
       }
 
       // Reverse remaining_balance via RPC
@@ -110,14 +98,8 @@ export async function undoDailyEvent(event: DailyEvent) {
         });
       }
 
-      // Update loan status
-      const { data: loanInsts } = await supabase.from("installments")
-        .select("status").eq("loan_id", event.loan_id);
-      const allPaid = loanInsts?.every((i: any) => i.status === "paid");
-      const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
-      await supabase.from("loans").update({
-        status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
-      }).eq("id", event.loan_id);
+      // Recalculate installment distribution from remaining_balance
+      await recalculateInstallments(event.loan_id);
     }
     await recalculateCashBalanceFromLedger();
   } else if (event.event_type === "recebimento_multa") {
