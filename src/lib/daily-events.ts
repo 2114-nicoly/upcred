@@ -71,18 +71,21 @@ export async function deleteDailyEvent(id: string) {
  * - emprestimo_novo/renovacao: complex - only removes the event record
  */
 export async function undoDailyEvent(event: DailyEvent) {
-  const { updateCashBalance, recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
+  const { updateCashBalance } = await import("@/lib/cash-utils");
+  const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
 
   if (event.event_type === "pagamento") {
-    // Revert installment payments for this loan on this date
     if (event.loan_id) {
-      // Find and delete cash_movements for this loan on this date
+      // Find cash_movements for this loan on this date
       const { data: movements } = await supabase.from("cash_movements")
         .select("id, amount, installment_id")
         .eq("loan_id", event.loan_id)
         .eq("cash_date", event.cash_date)
         .eq("type", "recebimento_normal");
 
+      const totalReversed = (movements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
+
+      // Delete cash_movements
       for (const mov of (movements || [])) {
         await supabase.from("cash_movements").delete().eq("id", mov.id);
         if (mov.installment_id) {
@@ -92,14 +95,22 @@ export async function undoDailyEvent(event: DailyEvent) {
         }
       }
 
-      // Also revert any installments paid on this date for this loan that may not have movements
+      // Also revert installment from event if not covered by movements
       if (event.installment_id) {
         await supabase.from("installments").update({
           status: "pending", paid_at: null, paid_amount: 0,
         }).eq("id", event.installment_id);
       }
 
-      // Update loan status back
+      // Reverse remaining_balance via RPC
+      if (totalReversed > 0) {
+        await supabase.rpc("reverse_loan_payment", {
+          p_loan_id: event.loan_id,
+          p_amount: totalReversed,
+        });
+      }
+
+      // Update loan status
       const { data: loanInsts } = await supabase.from("installments")
         .select("status").eq("loan_id", event.loan_id);
       const allPaid = loanInsts?.every((i: any) => i.status === "paid");

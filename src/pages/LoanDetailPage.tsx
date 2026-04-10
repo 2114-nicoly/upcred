@@ -25,8 +25,9 @@ import {
   calculateLoanProgress,
 } from "@/lib/loan-utils";
 import { updateCashBalance, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { registerPayment, registerPenaltyPayment, settleLoan, reverseInstallmentPayment } from "@/lib/payment-utils";
-import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle } from "lucide-react";
+import { registerPayment, registerPenaltyPayment, settleLoan, reverseInstallmentPayment, editPayment } from "@/lib/payment-utils";
+import { deleteDailyEvent } from "@/lib/daily-events";
+import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -68,12 +69,22 @@ type Penalty = {
   observation: string | null;
 };
 
+type PaymentHistoryEntry = {
+  movementId: string;
+  eventId: string;
+  amount: number;
+  cashDate: string;
+  observation: string | null;
+  createdAt: string;
+};
+
 export default function LoanDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
   const [loan, setLoan] = useState<Loan | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Payment dialog
@@ -119,6 +130,12 @@ export default function LoanDetailPage() {
 
   // Collapsible sections
   const [paidOpen, setPaidOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Edit payment
+  const [editPayOpen, setEditPayOpen] = useState(false);
+  const [editPayEntry, setEditPayEntry] = useState<PaymentHistoryEntry | null>(null);
+  const [editPayNewAmount, setEditPayNewAmount] = useState("");
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
@@ -127,6 +144,33 @@ export default function LoanDetailPage() {
     setInstallments(inst || []);
     const { data: pen } = await supabase.from("penalties").select("*").eq("loan_id", loanId!).order("created_at");
     setPenalties((pen as Penalty[]) || []);
+
+    // Fetch payment history: join cash_movements with daily_events
+    const { data: movs } = await supabase.from("cash_movements")
+      .select("id, amount, cash_date, observation, created_at")
+      .eq("loan_id", loanId!)
+      .eq("type", "recebimento_normal")
+      .order("cash_date", { ascending: false });
+
+    const { data: events } = await (supabase.from("daily_events" as any)
+      .select("id, cash_date, amount_in, observation")
+      .eq("loan_id", loanId!)
+      .eq("event_type", "pagamento")
+      .order("cash_date", { ascending: false }) as any);
+
+    // Match movements with events by cash_date
+    const history: PaymentHistoryEntry[] = (movs || []).map((m: any) => {
+      const matchingEvent = (events || []).find((e: any) => e.cash_date === m.cash_date);
+      return {
+        movementId: m.id,
+        eventId: matchingEvent?.id || "",
+        amount: Number(m.amount),
+        cashDate: m.cash_date,
+        observation: m.observation,
+        createdAt: m.created_at,
+      };
+    });
+    setPaymentHistory(history);
   };
 
   useEffect(() => { fetchData(); }, [loanId]);
@@ -221,6 +265,57 @@ export default function LoanDetailPage() {
       toast.error("Erro ao desfazer pagamento");
     }
     setIsSubmitting(false);
+    fetchData();
+  };
+
+  // --- Undo payment from history ---
+  const handleUndoHistoryPayment = async (entry: PaymentHistoryEntry) => {
+    if (isSubmitting || !loan) return;
+    if (!confirm(`Desfazer pagamento de ${formatCurrency(entry.amount)}?`)) return;
+    setIsSubmitting(true);
+    try {
+      await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId!, p_amount: entry.amount });
+      const { data: movs } = await supabase.from("cash_movements")
+        .select("installment_id").eq("id", entry.movementId);
+      const instId = movs?.[0]?.installment_id;
+      if (instId) {
+        await supabase.from("installments").update({
+          status: "pending", paid_at: null, paid_amount: 0,
+        }).eq("id", instId);
+      }
+      await supabase.from("cash_movements").delete().eq("id", entry.movementId);
+      if (entry.eventId) await deleteDailyEvent(entry.eventId);
+      await recalculateCashBalanceFromLedger();
+      const { data: loanInsts } = await supabase.from("installments").select("status").eq("loan_id", loanId!);
+      const allPaid = loanInsts?.every((i: any) => i.status === "paid");
+      const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
+      await supabase.from("loans").update({
+        status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
+      }).eq("id", loanId!);
+      toast.success("Pagamento desfeito!");
+    } catch { toast.error("Erro ao desfazer pagamento"); }
+    setIsSubmitting(false);
+    fetchData();
+  };
+
+  // --- Edit payment from history ---
+  const handleEditPaymentConfirm = async () => {
+    if (isSubmitting || !loan || !editPayEntry) return;
+    const newAmount = parseFloat(editPayNewAmount);
+    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    setIsSubmitting(true);
+    try {
+      await editPayment({
+        loanId: loanId!, clientId: loan.client_id, clientName: loan.clients.name,
+        cashDate: editPayEntry.cashDate, oldAmount: editPayEntry.amount, newAmount,
+        origin: "detalhe_emprestimo", movementId: editPayEntry.movementId, eventId: editPayEntry.eventId,
+      });
+      toast.success("Pagamento editado!");
+    } catch { toast.error("Erro ao editar pagamento"); }
+    setIsSubmitting(false);
+    setEditPayOpen(false);
+    setEditPayEntry(null);
+    setEditPayNewAmount("");
     fetchData();
   };
 
@@ -675,6 +770,50 @@ export default function LoanDetailPage() {
         </Card>
       )}
 
+      {/* === PAYMENT HISTORY SECTION === */}
+      <Collapsible open={historyOpen} onOpenChange={setHistoryOpen} className="mt-4 mb-4">
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full">
+            <History className="mr-2 h-4 w-4" />
+            Histórico de Pagamentos ({paymentHistory.length})
+            <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 space-y-2">
+          {paymentHistory.length === 0 ? (
+            <p className="py-3 text-center text-sm text-muted-foreground">Nenhum pagamento registrado.</p>
+          ) : paymentHistory.map((entry) => (
+            <Card key={entry.movementId}>
+              <CardContent className="p-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-success">{formatCurrency(entry.amount)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(entry.cashDate + "T12:00:00"), "dd/MM/yyyy")}
+                    </p>
+                    {entry.observation && (
+                      <p className="text-xs text-muted-foreground italic mt-0.5">"{entry.observation}"</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                      setEditPayEntry(entry);
+                      setEditPayNewAmount(String(entry.amount));
+                      setEditPayOpen(true);
+                    }} disabled={isSubmitting}>
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleUndoHistoryPayment(entry)} disabled={isSubmitting}>
+                      <Undo2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+
       {/* ======= DIALOGS ======= */}
 
       {/* Register Payment Dialog */}
@@ -925,6 +1064,27 @@ export default function LoanDetailPage() {
               {isSubmitting ? "Processando..." : "Confirmar Quitação"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Edit Payment Dialog */}
+      <Dialog open={editPayOpen} onOpenChange={(o) => { if (!o) { setEditPayOpen(false); setEditPayEntry(null); setEditPayNewAmount(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Pagamento</DialogTitle></DialogHeader>
+          {editPayEntry && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <div className="flex justify-between"><span>Data:</span><span>{format(new Date(editPayEntry.cashDate + "T12:00:00"), "dd/MM/yyyy")}</span></div>
+                <div className="flex justify-between"><span>Valor atual:</span><span className="font-bold">{formatCurrency(editPayEntry.amount)}</span></div>
+              </div>
+              <div>
+                <Label>Novo valor</Label>
+                <Input type="number" value={editPayNewAmount} onChange={(e) => setEditPayNewAmount(e.target.value)} />
+              </div>
+              <Button onClick={handleEditPaymentConfirm} className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "Processando..." : "Salvar Alteração"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
