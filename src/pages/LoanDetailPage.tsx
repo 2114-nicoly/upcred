@@ -25,7 +25,7 @@ import {
   calculateLoanProgress,
 } from "@/lib/loan-utils";
 import { updateCashBalance, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { registerPayment, registerPenaltyPayment, settleLoan, reverseInstallmentPayment, editPayment } from "@/lib/payment-utils";
+import { registerPayment, registerPenaltyPayment, settleLoan, reverseInstallmentPayment, editPayment, recalculateInstallments } from "@/lib/payment-utils";
 import { deleteDailyEvent } from "@/lib/daily-events";
 import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History } from "lucide-react";
 import { format } from "date-fns";
