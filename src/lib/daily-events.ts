@@ -71,6 +71,7 @@ export async function deleteDailyEvent(id: string) {
  * - emprestimo_novo/renovacao: complex - only removes the event record
  */
 export async function undoDailyEvent(event: DailyEvent) {
+  const { updateCashBalance } = await import("@/lib/cash-utils");
   const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
 
   if (event.event_type === "pagamento") {
