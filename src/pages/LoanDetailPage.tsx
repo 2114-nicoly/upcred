@@ -268,6 +268,57 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
+  // --- Undo payment from history ---
+  const handleUndoHistoryPayment = async (entry: PaymentHistoryEntry) => {
+    if (isSubmitting || !loan) return;
+    if (!confirm(`Desfazer pagamento de ${formatCurrency(entry.amount)}?`)) return;
+    setIsSubmitting(true);
+    try {
+      await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId!, p_amount: entry.amount });
+      const { data: movs } = await supabase.from("cash_movements")
+        .select("installment_id").eq("id", entry.movementId);
+      const instId = movs?.[0]?.installment_id;
+      if (instId) {
+        await supabase.from("installments").update({
+          status: "pending", paid_at: null, paid_amount: 0,
+        }).eq("id", instId);
+      }
+      await supabase.from("cash_movements").delete().eq("id", entry.movementId);
+      if (entry.eventId) await deleteDailyEvent(entry.eventId);
+      await recalculateCashBalanceFromLedger();
+      const { data: loanInsts } = await supabase.from("installments").select("status").eq("loan_id", loanId!);
+      const allPaid = loanInsts?.every((i: any) => i.status === "paid");
+      const hasOverdue = loanInsts?.some((i: any) => i.status === "overdue");
+      await supabase.from("loans").update({
+        status: allPaid ? "paid" : hasOverdue ? "overdue" : "open",
+      }).eq("id", loanId!);
+      toast.success("Pagamento desfeito!");
+    } catch { toast.error("Erro ao desfazer pagamento"); }
+    setIsSubmitting(false);
+    fetchData();
+  };
+
+  // --- Edit payment from history ---
+  const handleEditPaymentConfirm = async () => {
+    if (isSubmitting || !loan || !editPayEntry) return;
+    const newAmount = parseFloat(editPayNewAmount);
+    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    setIsSubmitting(true);
+    try {
+      await editPayment({
+        loanId: loanId!, clientId: loan.client_id, clientName: loan.clients.name,
+        cashDate: editPayEntry.cashDate, oldAmount: editPayEntry.amount, newAmount,
+        origin: "detalhe_emprestimo", movementId: editPayEntry.movementId, eventId: editPayEntry.eventId,
+      });
+      toast.success("Pagamento editado!");
+    } catch { toast.error("Erro ao editar pagamento"); }
+    setIsSubmitting(false);
+    setEditPayOpen(false);
+    setEditPayEntry(null);
+    setEditPayNewAmount("");
+    fetchData();
+  };
+
   // --- Quitar ---
   const handleQuitarEmprestimo = async () => {
     if (isSubmitting || !loan) return;
