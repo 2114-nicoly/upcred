@@ -130,6 +130,12 @@ export default function LoanDetailPage() {
 
   // Collapsible sections
   const [paidOpen, setPaidOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Edit payment
+  const [editPayOpen, setEditPayOpen] = useState(false);
+  const [editPayEntry, setEditPayEntry] = useState<PaymentHistoryEntry | null>(null);
+  const [editPayNewAmount, setEditPayNewAmount] = useState("");
 
   const fetchData = async () => {
     const { data: l } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
