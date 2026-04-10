@@ -9,6 +9,72 @@ import { formatCurrency } from "@/lib/loan-utils";
  */
 
 /**
+ * Recalculate installment paid_amount/status based on the loan's remaining_balance.
+ * This is the SINGLE SOURCE OF TRUTH for installment progress.
+ * totalPaid = total_amount - remaining_balance, then distributed in order.
+ */
+export async function recalculateInstallments(loanId: string) {
+  const { data: loan } = await supabase
+    .from("loans")
+    .select("total_amount, remaining_balance")
+    .eq("id", loanId)
+    .single();
+
+  if (!loan) return;
+
+  const totalPaid = Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance));
+
+  const { data: insts } = await supabase
+    .from("installments")
+    .select("*")
+    .eq("loan_id", loanId)
+    .eq("is_penalty", false)
+    .order("number");
+
+  if (!insts || insts.length === 0) return;
+
+  let remaining = totalPaid;
+
+  for (const inst of insts) {
+    const instAmount = Number(inst.amount);
+    if (remaining >= instAmount - 0.01) {
+      // Fully paid
+      const newPaid = instAmount;
+      const needsUpdate = Number(inst.paid_amount) !== newPaid || inst.status !== "paid";
+      if (needsUpdate) {
+        await supabase.from("installments").update({
+          paid_amount: newPaid,
+          status: "paid",
+          paid_at: inst.paid_at || new Date().toISOString(),
+        }).eq("id", inst.id);
+      }
+      remaining -= instAmount;
+    } else if (remaining > 0.01) {
+      // Partially paid
+      const newPaid = remaining;
+      await supabase.from("installments").update({
+        paid_amount: newPaid,
+        status: "partial",
+        paid_at: null,
+      }).eq("id", inst.id);
+      remaining = 0;
+    } else {
+      // Not paid - check if overdue
+      const isOverdue = new Date(inst.due_date) < new Date(new Date().toISOString().split("T")[0]);
+      const newStatus = isOverdue ? "overdue" : "pending";
+      const needsUpdate = Number(inst.paid_amount) !== 0 || (inst.status !== newStatus && inst.status !== "pending" && inst.status !== "overdue");
+      if (needsUpdate || Number(inst.paid_amount) !== 0) {
+        await supabase.from("installments").update({
+          paid_amount: 0,
+          status: newStatus,
+          paid_at: null,
+        }).eq("id", inst.id);
+      }
+    }
+  }
+}
+
+/**
  * Register a regular payment against a loan.
  * 1. Calls apply_loan_payment RPC (remaining_balance -= amount)
  * 2. Updates installment records (informational)
