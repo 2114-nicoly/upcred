@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatCurrency, calculateOverdueDays } from "@/lib/loan-utils";
+import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
@@ -675,6 +675,11 @@ export default function DailyCashPage() {
     const overdueDays = getOverdueDays(inst);
     const isOverdue = overdueDays > 0;
     const isSelected = selectedForNotPaid.has(inst.id);
+    const progress = calculateLoanProgress({
+      totalAmount: Number(inst.loans.total_amount),
+      remainingBalance,
+      installmentCount: inst.loans.installment_count,
+    });
 
     return (
       <div
@@ -704,7 +709,7 @@ export default function DailyCashPage() {
             </div>
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                Parcela: {formatCurrency(instAmount)}
+                {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)}
               </span>
               <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
                 Vence: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}

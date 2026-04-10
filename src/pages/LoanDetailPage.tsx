@@ -22,6 +22,7 @@ import {
   getPaymentTypeLabel,
   calculateLoan,
   generateDueDates,
+  calculateLoanProgress,
 } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
@@ -36,6 +37,7 @@ type Loan = {
   interest_type: string;
   interest_value: number;
   total_amount: number;
+  remaining_balance: number;
   installment_count: number;
   payment_type: string;
   first_due_date: string | null;
@@ -470,17 +472,21 @@ export default function LoanDetailPage() {
     return ds !== "paid" && ds !== "overdue";
   });
 
-  const totalPaidAmount = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
-  const installmentValue = regularInstallments.length > 0 ? Number(regularInstallments[0].amount) : 1;
-  const paidInstallmentsProgress = totalPaidAmount / installmentValue;
-  const totalInstallments = regularInstallments.length;
-  const progressPercent = totalInstallments > 0 ? (paidInstallmentsProgress / totalInstallments) * 100 : 0;
+  // Use remaining_balance as single source of truth for progress
+  const loanProgress = calculateLoanProgress({
+    totalAmount: Number(loan.total_amount),
+    remainingBalance: Number(loan.remaining_balance),
+    installmentCount: loan.installment_count,
+  });
+
+  const totalInstallments = loan.installment_count;
+  const progressPercent = loanProgress.progressPercent;
 
   const totalLoanAmount = Number(loan.total_amount);
-  const totalPaidAll = regularInstallments.reduce((s, i) => s + Number(i.paid_amount), 0);
+  const totalPaidAll = loanProgress.totalPaid;
   const penaltyTotal = penaltyInst ? Number(penaltyInst.amount) : 0;
   const penaltyPaid = penaltyInst ? Number(penaltyInst.paid_amount) : 0;
-  const remainingLoan = totalLoanAmount - totalPaidAll;
+  const remainingLoan = Number(loan.remaining_balance);
 
   // Overdue days calculation: from the oldest overdue installment's due_date
   const oldestOverdue = overdueRegular.length > 0
@@ -690,8 +696,8 @@ export default function LoanDetailPage() {
           <div className="flex justify-between"><span className="text-muted-foreground">Emprestado:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Juros:</span><span>{formatCurrency(Number(loan.total_amount) - Number(loan.amount))}</span></div>
           <div className="flex justify-between font-bold"><span>Valor Total do Empréstimo:</span><span className="text-primary">{formatCurrency(totalLoanAmount)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Pago (parcelas):</span><span className="text-success">{formatCurrency(totalPaidAll)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Resta (parcelas):</span><span>{formatCurrency(Math.max(0, remainingLoan))}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Pago:</span><span className="text-success">{formatCurrency(totalPaidAll)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Saldo Restante:</span><span className="font-bold">{formatCurrency(remainingLoan)}</span></div>
           {penaltyTotal > 0 && (
             <div className="border-t pt-2 space-y-1">
               <div className="flex justify-between"><span className="text-destructive font-medium">Total de Multas:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
@@ -729,7 +735,7 @@ export default function LoanDetailPage() {
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="font-medium">Progresso</span>
             <span className="text-muted-foreground">
-              {paidInstallmentsProgress % 1 === 0 ? paidInstallmentsProgress : paidInstallmentsProgress.toFixed(1)}/{totalInstallments} parcelas
+              {loanProgress.progressFormatted} parcelas
             </span>
           </div>
           <Progress value={Math.min(progressPercent, 100)} className="mb-3" />

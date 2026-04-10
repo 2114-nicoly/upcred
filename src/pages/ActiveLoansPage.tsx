@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel, calculateOverdueDays } from "@/lib/loan-utils";
+import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
@@ -24,6 +24,7 @@ type LoanWithClient = {
   id: string;
   amount: number;
   total_amount: number;
+  remaining_balance: number;
   status: string;
   payment_type: string;
   first_due_date: string | null;
@@ -107,6 +108,8 @@ export default function ActiveLoansPage() {
       .select("*, clients(id, name)")
       .neq("status", "paid")
       .order("loan_date", { ascending: false });
+
+    const loansList = (loansData as unknown as LoanWithClient[]) || [];
 
     const loansList = (loansData as unknown as LoanWithClient[]) || [];
     setLoans(loansList);
@@ -338,14 +341,16 @@ export default function ActiveLoansPage() {
 
   const renderLoanCard = (loan: LoanWithClient) => {
     const lp = progressMap[loan.id];
-    const progressPct = lp && lp.total > 0 ? (Math.floor(lp.progress) / lp.total) * 100 : 0;
+    const progress = calculateLoanProgress({
+      totalAmount: Number(loan.total_amount),
+      remainingBalance: Number(loan.remaining_balance),
+      installmentCount: loan.installment_count,
+    });
     const isDueToday = lp?.nextDueDate === todayStr;
     const isOverdue = !isDueToday && (loan.status === "overdue" || (lp?.nextDueDate && lp.nextDueDate < todayStr));
     const cardBg = isDueToday ? "bg-card-due-today-bg" : isOverdue ? "bg-card-overdue-bg" : "bg-card";
     const overdueDays = getLoanOverdueDays(loan);
-    const remaining = Math.max(0, lp?.remaining ?? Number(loan.total_amount));
-    const paidCount = lp ? Math.floor(lp.progress) : 0;
-    const totalCount = lp?.total ?? loan.installment_count;
+    const remaining = Number(loan.remaining_balance);
 
     return (
       <div
@@ -375,10 +380,10 @@ export default function ActiveLoansPage() {
               )}
             </div>
 
-            {/* Row 3: Secondary info */}
+            {/* Row 3: Secondary info with fractional progress */}
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                {paidCount}/{totalCount} parcelas • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+                {progress.progressFormatted} parcelas • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
               </span>
               {lp?.nextDueDate && (
                 <span className={`text-[11px] font-medium tabular-nums ${isDueToday ? "text-primary" : isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
@@ -388,19 +393,17 @@ export default function ActiveLoansPage() {
             </div>
 
             {/* Progress bar */}
-            {lp && (
-              <div className="flex items-center gap-2 mt-1.5">
-                <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${isOverdue ? "bg-destructive" : "bg-primary"}`}
-                    style={{ width: `${progressPct}%` }}
-                  />
-                </div>
-                <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${isOverdue ? "text-destructive" : "text-primary"}`}>
-                  {paidCount}/{totalCount}
-                </span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${isOverdue ? "bg-destructive" : "bg-primary"}`}
+                  style={{ width: `${progress.progressPercent}%` }}
+                />
               </div>
-            )}
+              <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${isOverdue ? "text-destructive" : "text-primary"}`}>
+                {progress.progressFormatted}
+              </span>
+            </div>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
