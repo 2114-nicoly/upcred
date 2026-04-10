@@ -770,6 +770,50 @@ export default function LoanDetailPage() {
         </Card>
       )}
 
+      {/* === PAYMENT HISTORY SECTION === */}
+      <Collapsible open={historyOpen} onOpenChange={setHistoryOpen} className="mt-4 mb-4">
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full">
+            <History className="mr-2 h-4 w-4" />
+            Histórico de Pagamentos ({paymentHistory.length})
+            <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 space-y-2">
+          {paymentHistory.length === 0 ? (
+            <p className="py-3 text-center text-sm text-muted-foreground">Nenhum pagamento registrado.</p>
+          ) : paymentHistory.map((entry) => (
+            <Card key={entry.movementId}>
+              <CardContent className="p-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-success">{formatCurrency(entry.amount)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(entry.cashDate + "T12:00:00"), "dd/MM/yyyy")}
+                    </p>
+                    {entry.observation && (
+                      <p className="text-xs text-muted-foreground italic mt-0.5">"{entry.observation}"</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                      setEditPayEntry(entry);
+                      setEditPayNewAmount(String(entry.amount));
+                      setEditPayOpen(true);
+                    }} disabled={isSubmitting}>
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleUndoHistoryPayment(entry)} disabled={isSubmitting}>
+                      <Undo2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+
       {/* ======= DIALOGS ======= */}
 
       {/* Register Payment Dialog */}
