@@ -659,10 +659,15 @@ export default function LoanDetailPage() {
 
       {/* === REGISTER PAYMENT BUTTON === */}
       {loan.status !== "paid" && (
-        <Button className="w-full mb-4 bg-success hover:bg-success/90" size="lg" onClick={() => setPayOpen(true)}>
+        <Button className="w-full mb-2 bg-success hover:bg-success/90" size="lg" onClick={() => setPayOpen(true)}>
           <Plus className="mr-2 h-5 w-5" /> Registrar Pagamento
         </Button>
       )}
+
+      {/* === RECALCULATE BUTTON === */}
+      <Button variant="outline" className="w-full mb-4" onClick={handleFullRecalculate} disabled={isSubmitting}>
+        <Calculator className="mr-2 h-4 w-4" /> Atualizar
+      </Button>
 
       {/* === INSTALLMENTS SECTION === */}
       <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
