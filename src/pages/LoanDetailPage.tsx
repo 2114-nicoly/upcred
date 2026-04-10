@@ -69,6 +69,15 @@ type Penalty = {
   observation: string | null;
 };
 
+type PaymentHistoryEntry = {
+  movementId: string;
+  eventId: string;
+  amount: number;
+  cashDate: string;
+  observation: string | null;
+  createdAt: string;
+};
+
 export default function LoanDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
