@@ -144,6 +144,33 @@ export default function LoanDetailPage() {
     setInstallments(inst || []);
     const { data: pen } = await supabase.from("penalties").select("*").eq("loan_id", loanId!).order("created_at");
     setPenalties((pen as Penalty[]) || []);
+
+    // Fetch payment history: join cash_movements with daily_events
+    const { data: movs } = await supabase.from("cash_movements")
+      .select("id, amount, cash_date, observation, created_at")
+      .eq("loan_id", loanId!)
+      .eq("type", "recebimento_normal")
+      .order("cash_date", { ascending: false });
+
+    const { data: events } = await (supabase.from("daily_events" as any)
+      .select("id, cash_date, amount_in, observation")
+      .eq("loan_id", loanId!)
+      .eq("event_type", "pagamento")
+      .order("cash_date", { ascending: false }) as any);
+
+    // Match movements with events by cash_date
+    const history: PaymentHistoryEntry[] = (movs || []).map((m: any) => {
+      const matchingEvent = (events || []).find((e: any) => e.cash_date === m.cash_date);
+      return {
+        movementId: m.id,
+        eventId: matchingEvent?.id || "",
+        amount: Number(m.amount),
+        cashDate: m.cash_date,
+        observation: m.observation,
+        createdAt: m.created_at,
+      };
+    });
+    setPaymentHistory(history);
   };
 
   useEffect(() => { fetchData(); }, [loanId]);
