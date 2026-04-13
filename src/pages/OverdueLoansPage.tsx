@@ -64,53 +64,59 @@ export default function OverdueLoansPage() {
   const today = format(new Date(), "yyyy-MM-dd");
 
   const fetchData = async () => {
-    const { data } = await supabase
-      .from("installments")
-      .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
-      .lt("due_date", today)
-      .neq("status", "paid")
-      .eq("is_penalty", false)
-      .order("due_date");
-
-    const insts = (data as unknown as InstallmentWithLoan[]) || [];
-
-    // Fetch penalty info per loan
-    const loanIds = [...new Set(insts.map((i) => i.loan_id))];
-    const penaltyMap: Record<string, { total: number; paid: number }> = {};
-    if (loanIds.length > 0) {
-      const { data: penaltyInsts } = await supabase
+    try {
+      const { data } = await supabase
         .from("installments")
-        .select("loan_id, amount, paid_amount")
-        .in("loan_id", loanIds)
-        .eq("is_penalty", true);
-      for (const p of penaltyInsts || []) {
-        penaltyMap[p.loan_id] = { total: Number(p.amount), paid: Number(p.paid_amount) };
-      }
-    }
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .lt("due_date", today)
+        .neq("status", "paid")
+        .eq("is_penalty", false)
+        .order("due_date");
 
-    const grouped: Record<string, LoanGroup> = {};
-    for (const inst of insts) {
-      if (!grouped[inst.loan_id]) {
-        const oldestDueDate = inst.due_date;
-        const pm = penaltyMap[inst.loan_id] || { total: 0, paid: 0 };
-        grouped[inst.loan_id] = {
-          loanId: inst.loan_id,
-          clientName: inst.loans.clients.name,
-          paymentType: inst.loans.payment_type,
-          totalAmount: Number(inst.loans.total_amount),
-          installments: [],
-          totalOverdue: 0,
-          overdueDays: calculateOverdueDays(oldestDueDate, inst.loans.payment_type),
-          penaltyTotal: pm.total,
-          penaltyPaid: pm.paid,
-        };
-      }
-      grouped[inst.loan_id].installments.push(inst);
-      grouped[inst.loan_id].totalOverdue += Number(inst.amount) - Number(inst.paid_amount);
-    }
+      const insts = (data as unknown as InstallmentWithLoan[]) || [];
 
-    setGroups(Object.values(grouped).sort((a, b) => b.overdueDays - a.overdueDays));
-    setLoading(false);
+      // Fetch penalty info per loan
+      const loanIds = [...new Set(insts.map((i) => i.loan_id))];
+      const penaltyMap: Record<string, { total: number; paid: number }> = {};
+      if (loanIds.length > 0) {
+        const { data: penaltyInsts } = await supabase
+          .from("installments")
+          .select("loan_id, amount, paid_amount")
+          .in("loan_id", loanIds)
+          .eq("is_penalty", true);
+        for (const p of penaltyInsts || []) {
+          penaltyMap[p.loan_id] = { total: Number(p.amount), paid: Number(p.paid_amount) };
+        }
+      }
+
+      const grouped: Record<string, LoanGroup> = {};
+      for (const inst of insts) {
+        if (!grouped[inst.loan_id]) {
+          const oldestDueDate = inst.due_date;
+          const pm = penaltyMap[inst.loan_id] || { total: 0, paid: 0 };
+          grouped[inst.loan_id] = {
+            loanId: inst.loan_id,
+            clientName: inst.loans.clients.name,
+            paymentType: inst.loans.payment_type,
+            totalAmount: Number(inst.loans.total_amount),
+            installments: [],
+            totalOverdue: 0,
+            overdueDays: calculateOverdueDays(oldestDueDate, inst.loans.payment_type),
+            penaltyTotal: pm.total,
+            penaltyPaid: pm.paid,
+          };
+        }
+        grouped[inst.loan_id].installments.push(inst);
+        grouped[inst.loan_id].totalOverdue += Number(inst.amount) - Number(inst.paid_amount);
+      }
+
+      setGroups(Object.values(grouped).sort((a, b) => b.overdueDays - a.overdueDays));
+    } catch (err) {
+      console.error("Error in OverdueLoansPage fetchData:", err);
+      toast.error("Erro ao carregar parcelas atrasadas");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);

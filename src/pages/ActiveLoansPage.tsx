@@ -103,57 +103,62 @@ export default function ActiveLoansPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: loansData } = await supabase
-      .from("loans")
-      .select("*, clients(id, name)")
-      .neq("status", "paid")
-      .order("loan_date", { ascending: false });
+    try {
+      const { data: loansData } = await supabase
+        .from("loans")
+        .select("*, clients(id, name)")
+        .neq("status", "paid")
+        .order("loan_date", { ascending: false });
 
-    const loansList = (loansData as unknown as LoanWithClient[]) || [];
-    setLoans(loansList);
+      const loansList = (loansData as unknown as LoanWithClient[]) || [];
+      setLoans(loansList);
 
-    const today = format(new Date(), "yyyy-MM-dd");
-    const loanIds = loansList.map((l) => l.id);
-    if (loanIds.length > 0) {
-      const { data: todayInst } = await supabase
-        .from("installments")
-        .select("loan_id")
-        .in("loan_id", loanIds)
-        .eq("due_date", today)
-        .neq("status", "paid");
-      setTodayLoanIds(new Set((todayInst || []).map((i) => i.loan_id)));
+      const today = format(new Date(), "yyyy-MM-dd");
+      const loanIds = loansList.map((l) => l.id);
+      if (loanIds.length > 0) {
+        const { data: todayInst } = await supabase
+          .from("installments")
+          .select("loan_id")
+          .in("loan_id", loanIds)
+          .eq("due_date", today)
+          .neq("status", "paid");
+        setTodayLoanIds(new Set((todayInst || []).map((i) => i.loan_id)));
 
-      const { data: allInst } = await supabase
-        .from("installments")
-        .select("loan_id, amount, paid_amount, is_penalty, due_date, status")
-        .in("loan_id", loanIds);
+        const { data: allInst } = await supabase
+          .from("installments")
+          .select("loan_id, amount, paid_amount, is_penalty, due_date, status")
+          .in("loan_id", loanIds);
 
-      const pm: Record<string, LoanProgress> = {};
-      for (const lid of loanIds) {
-        const insts = (allInst || []).filter((i: any) => i.loan_id === lid);
-        const regular = insts.filter((i: any) => !i.is_penalty);
-        const penalties = insts.filter((i: any) => i.is_penalty);
-        const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-        const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
+        const pm: Record<string, LoanProgress> = {};
+        for (const lid of loanIds) {
+          const insts = (allInst || []).filter((i: any) => i.loan_id === lid);
+          const regular = insts.filter((i: any) => !i.is_penalty);
+          const penalties = insts.filter((i: any) => i.is_penalty);
+          const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+          const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
 
-        // Next due date: earliest unpaid regular installment
-        const unpaidRegular = regular
-          .filter((i: any) => i.status !== "paid")
-          .sort((a: any, b: any) => a.due_date.localeCompare(b.due_date));
-        const nextDueDate = unpaidRegular.length > 0 ? unpaidRegular[0].due_date : null;
+          const unpaidRegular = regular
+            .filter((i: any) => i.status !== "paid")
+            .sort((a: any, b: any) => a.due_date.localeCompare(b.due_date));
+          const nextDueDate = unpaidRegular.length > 0 ? unpaidRegular[0].due_date : null;
 
-        pm[lid] = {
-          progress: totalPaid / instValue,
-          total: regular.length,
-          remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
-          penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
-          penaltyPaid: penalties.reduce((s: number, i: any) => s + Number(i.paid_amount), 0),
-          nextDueDate,
-        };
+          pm[lid] = {
+            progress: totalPaid / instValue,
+            total: regular.length,
+            remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
+            penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
+            penaltyPaid: penalties.reduce((s: number, i: any) => s + Number(i.paid_amount), 0),
+            nextDueDate,
+          };
+        }
+        setProgressMap(pm);
       }
-      setProgressMap(pm);
+    } catch (err) {
+      console.error("Error in ActiveLoansPage fetchData:", err);
+      toast.error("Erro ao carregar empréstimos");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, []);
