@@ -56,25 +56,38 @@ export default function ClientDetailPage() {
   const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
 
+  const [loading, setLoading] = useState(true);
+
   const fetchData = async () => {
-    const { data: c } = await supabase.from("clients").select("*").eq("id", clientId!).single();
-    setClient(c);
-    const { data: l } = await supabase.from("loans").select("*").eq("client_id", clientId!).order("created_at", { ascending: false });
-    setLoans(l || []);
+    try {
+      const { data: c, error: cErr } = await supabase.from("clients").select("*").eq("id", clientId!).single();
+      if (cErr || !c) {
+        console.error("Error fetching client:", cErr);
+        return;
+      }
+      setClient(c);
+      const { data: l } = await supabase.from("loans").select("*").eq("client_id", clientId!).order("created_at", { ascending: false });
+      setLoans(l || []);
 
-    if (l && l.length > 0) {
-      const loanIds = l.map((loan: Loan) => loan.id);
-      const { data: inst } = await supabase
-        .from("installments")
-        .select("id, due_date, status, is_penalty, loan_id, paid_amount, amount")
-        .in("loan_id", loanIds);
+      if (l && l.length > 0) {
+        const loanIds = l.map((loan: Loan) => loan.id);
+        const { data: inst } = await supabase
+          .from("installments")
+          .select("id, due_date, status, is_penalty, loan_id, paid_amount, amount")
+          .in("loan_id", loanIds);
 
-      const grouped: Record<string, Installment[]> = {};
-      (inst || []).forEach((i: any) => {
-        if (!grouped[i.loan_id]) grouped[i.loan_id] = [];
-        grouped[i.loan_id].push(i);
-      });
-      setInstallmentsByLoan(grouped);
+        const grouped: Record<string, Installment[]> = {};
+        (inst || []).forEach((i: any) => {
+          if (!grouped[i.loan_id]) grouped[i.loan_id] = [];
+          grouped[i.loan_id].push(i);
+        });
+        setInstallmentsByLoan(grouped);
+      }
+    } catch (err) {
+      console.error("Error in ClientDetailPage fetchData:", err);
+      toast.error("Erro ao carregar dados do cliente");
+    } finally {
+      setLoading(false);
     }
   };
 

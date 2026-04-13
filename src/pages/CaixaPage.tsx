@@ -51,23 +51,28 @@ export default function CaixaPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [bal, dayEvents] = await Promise.all([
-      getCashBalance(),
-      getDailyEvents(selectedDate),
-    ]);
-    setBalance(bal);
-    setEvents(dayEvents);
+    try {
+      const [bal, dayEvents] = await Promise.all([
+        getCashBalance(),
+        getDailyEvents(selectedDate),
+      ]);
+      setBalance(bal);
+      setEvents(dayEvents);
 
-    // Fetch client names for all events
-    const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
-    if (clientIds.length > 0) {
-      const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);
-      const names: Record<string, string> = {};
-      for (const c of (clients || [])) names[c.id] = c.name;
-      setClientNames(names);
+      // Fetch client names for all events
+      const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
+      if (clientIds.length > 0) {
+        const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);
+        const names: Record<string, string> = {};
+        for (const c of (clients || [])) names[c.id] = c.name;
+        setClientNames(names);
+      }
+    } catch (err) {
+      console.error("Error in CaixaPage fetchData:", err);
+      toast.error("Erro ao carregar dados do caixa");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, [selectedDate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
