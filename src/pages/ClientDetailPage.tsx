@@ -145,7 +145,7 @@ export default function ClientDetailPage() {
 
   // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
 
-  if (!client) return <p className="p-4 text-center">Carregando...</p>;
+  if (loading || !client) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
   return (
     <div className="mx-auto max-w-lg p-4">
