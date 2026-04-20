@@ -1,7 +1,10 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const bottomNavItems = [
   { path: "/", label: "Rota", icon: MapPin },
@@ -47,7 +50,14 @@ function getRouteLabel(pathname: string): string {
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAdmin, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Sessão encerrada");
+    navigate("/auth", { replace: true });
+  };
 
   const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin"];
   const isMainPage = mainPages.includes(location.pathname);
@@ -88,6 +98,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                     );
                   })}
                 </nav>
+                <div className="border-t p-3 space-y-2">
+                  {user && (
+                    <div className="px-2 py-1 text-xs text-muted-foreground">
+                      <p className="truncate font-medium text-foreground">{user.email}</p>
+                      {isAdmin && <p className="text-primary">Administrador</p>}
+                    </div>
+                  )}
+                  <Button variant="outline" size="sm" className="w-full" onClick={handleSignOut}>
+                    <LogOut className="mr-2 h-4 w-4" /> Sair
+                  </Button>
+                </div>
               </div>
             </SheetContent>
           </Sheet>
