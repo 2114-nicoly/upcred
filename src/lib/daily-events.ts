@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserId } from "@/lib/auth-utils";
 
 export type DailyEventType =
   | "pagamento"
@@ -36,6 +37,7 @@ export async function createDailyEvent(event: {
   observation?: string | null;
   origin?: string;
 }) {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase.from("daily_events" as any).insert({
     cash_date: event.cash_date,
     event_type: event.event_type,
@@ -46,6 +48,7 @@ export async function createDailyEvent(event: {
     amount_out: event.amount_out ?? 0,
     observation: event.observation || null,
     origin: event.origin || "rota",
+    user_id: userId,
   }).select().single();
   if (error) console.error("Error creating daily event:", error);
   return data as unknown as DailyEvent | null;

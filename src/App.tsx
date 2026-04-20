@@ -1,11 +1,11 @@
-import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
 import { ErrorBoundary, PageErrorBoundary } from "@/components/ErrorBoundary";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import DailyCashPage from "@/pages/DailyCashPage";
 import DailyCashHistoryPage from "@/pages/DailyCashHistoryPage";
 import ClientsPage from "@/pages/ClientsPage";
@@ -17,7 +17,7 @@ import ActiveLoansPage from "@/pages/ActiveLoansPage";
 import ReportsPage from "@/pages/ReportsPage";
 import OverdueLoansPage from "@/pages/OverdueLoansPage";
 import TodaySummaryPage from "@/pages/TodaySummaryPage";
-import LoginPage from "@/pages/LoginPage";
+import AuthPage from "@/pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import UnpaidInstallmentsPage from "@/pages/UnpaidInstallmentsPage";
 import LoanOverdueDetailPage from "@/pages/LoanOverdueDetailPage";
@@ -25,6 +25,7 @@ import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
 import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
 import AdminPage from "@/pages/AdminPage";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,32 +40,30 @@ function WrappedRoute({ element }: { element: React.ReactNode }) {
   return <PageErrorBoundary>{element}</PageErrorBoundary>;
 }
 
-const App = () => {
-  const [authenticated, setAuthenticated] = useState(
-    () => localStorage.getItem("authenticated") === "true"
-  );
-
-  if (!authenticated) {
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { session, loading } = useAuth();
+  const location = useLocation();
+  if (loading) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <ErrorBoundary>
-            <LoginPage onLogin={() => setAuthenticated(true)} />
-          </ErrorBoundary>
-        </TooltipProvider>
-      </QueryClientProvider>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
     );
   }
+  if (!session) {
+    return <Navigate to="/auth" replace state={{ from: location }} />;
+  }
+  return <>{children}</>;
+}
 
+function AppRoutes() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <ErrorBoundary>
+    <Routes>
+      <Route path="/auth" element={<AuthPage />} />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
             <AppLayout>
               <Routes>
                 <Route path="/" element={<WrappedRoute element={<DailyCashPage />} />} />
@@ -87,11 +86,27 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
-          </ErrorBoundary>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
-};
+}
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </ErrorBoundary>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
 export default App;
