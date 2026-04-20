@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserId } from "@/lib/auth-utils";
 
 export type CashMovementType =
   | "emprestimo"
