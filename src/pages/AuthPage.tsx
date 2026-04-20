@@ -94,8 +94,8 @@ export default function AuthPage() {
                   <Input id="signup-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
                 <div>
-                  <Label htmlFor="signup-password">Senha (mín. 4 caracteres)</Label>
-                  <Input id="signup-password" type="password" required minLength={4} value={password} onChange={(e) => setPassword(e.target.value)} />
+                  <Label htmlFor="signup-password">Senha (mín. 6 caracteres)</Label>
+                  <Input id="signup-password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar conta"}
