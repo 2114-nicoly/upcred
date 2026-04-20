@@ -220,12 +220,14 @@ export default function OverdueLoansPage() {
     const amount = parseFloat(penaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
 
+    const { data: { session } } = await supabase.auth.getSession();
     await supabase.from("penalties").insert({
       loan_id: inst.loan_id,
       installment_id: inst.id,
       amount,
       observation: penaltyObservation || null,
-    });
+      user_id: session?.user?.id,
+    } as any);
 
     await supabase.from("installments").update({
       penalty_amount: Number(inst.penalty_amount) + amount,

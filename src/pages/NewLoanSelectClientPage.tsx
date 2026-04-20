@@ -54,9 +54,11 @@ export default function NewLoanSelectClientPage() {
       .limit(1);
     const nextCode = (maxCode && maxCode[0]?.client_code ? Number(maxCode[0].client_code) : 0) + 1;
 
+    const { data: { session } } = await supabase.auth.getSession();
     const { data, error } = await supabase.from("clients").insert({
       name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
-    }).select().single();
+      user_id: session?.user?.id,
+    } as any).select().single();
 
     setSaving(false);
     if (error || !data) { toast.error("Erro ao cadastrar cliente"); return; }

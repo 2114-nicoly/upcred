@@ -93,6 +93,10 @@ export default function NewLoanPage() {
 
     setSaving(true);
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) { toast.error("Sessão expirada"); setSaving(false); return; }
+
     const { data: loan, error: loanError } = await supabase
       .from("loans")
       .insert({
@@ -106,6 +110,7 @@ export default function NewLoanPage() {
         loan_date: loanDate,
         first_due_date: paymentType !== "fixed_dates" ? firstDueDate : null,
         renewed_from_loan_id: renewFromLoanId || null,
+        user_id: userId,
       } as any)
       .select()
       .single();
