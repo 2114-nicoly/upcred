@@ -52,6 +52,7 @@ export type Database = {
           loan_id: string | null
           observation: string | null
           type: string
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -63,6 +64,7 @@ export type Database = {
           loan_id?: string | null
           observation?: string | null
           type: string
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -74,6 +76,7 @@ export type Database = {
           loan_id?: string | null
           observation?: string | null
           type?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -108,6 +111,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           route_id: string | null
+          user_id: string | null
         }
         Insert: {
           client_code?: number | null
@@ -117,6 +121,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           route_id?: string | null
+          user_id?: string | null
         }
         Update: {
           client_code?: number | null
@@ -126,6 +131,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           route_id?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -149,6 +155,7 @@ export type Database = {
           total_not_paid_count: number
           total_penalty_received: number
           total_received: number
+          user_id: string | null
         }
         Insert: {
           cash_date: string
@@ -161,6 +168,7 @@ export type Database = {
           total_not_paid_count?: number
           total_penalty_received?: number
           total_received?: number
+          user_id?: string | null
         }
         Update: {
           cash_date?: string
@@ -173,6 +181,7 @@ export type Database = {
           total_not_paid_count?: number
           total_penalty_received?: number
           total_received?: number
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -189,6 +198,7 @@ export type Database = {
           loan_id: string | null
           observation: string | null
           origin: string | null
+          user_id: string | null
         }
         Insert: {
           amount_in?: number
@@ -202,6 +212,7 @@ export type Database = {
           loan_id?: string | null
           observation?: string | null
           origin?: string | null
+          user_id?: string | null
         }
         Update: {
           amount_in?: number
@@ -215,6 +226,7 @@ export type Database = {
           loan_id?: string | null
           observation?: string | null
           origin?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -308,6 +320,7 @@ export type Database = {
           route_id: string | null
           status: string
           total_amount: number
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -326,6 +339,7 @@ export type Database = {
           route_id?: string | null
           status?: string
           total_amount: number
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -344,6 +358,7 @@ export type Database = {
           route_id?: string | null
           status?: string
           total_amount?: number
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -378,6 +393,7 @@ export type Database = {
           loan_id: string
           mark_date: string
           observation: string | null
+          user_id: string | null
         }
         Insert: {
           client_id: string
@@ -387,6 +403,7 @@ export type Database = {
           loan_id: string
           mark_date: string
           observation?: string | null
+          user_id?: string | null
         }
         Update: {
           client_id?: string
@@ -396,6 +413,7 @@ export type Database = {
           loan_id?: string
           mark_date?: string
           observation?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -429,6 +447,7 @@ export type Database = {
           installment_id: string
           loan_id: string
           observation: string | null
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -437,6 +456,7 @@ export type Database = {
           installment_id: string
           loan_id: string
           observation?: string | null
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -445,6 +465,7 @@ export type Database = {
           installment_id?: string
           loan_id?: string
           observation?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -462,6 +483,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       route_requests: {
         Row: {
@@ -493,6 +541,7 @@ export type Database = {
           id: string
           route_number: string
           status: string
+          user_id: string | null
           worker_name: string
         }
         Insert: {
@@ -500,6 +549,7 @@ export type Database = {
           id?: string
           route_number: string
           status?: string
+          user_id?: string | null
           worker_name: string
         }
         Update: {
@@ -507,7 +557,29 @@ export type Database = {
           id?: string
           route_number?: string
           status?: string
+          user_id?: string | null
           worker_name?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -519,6 +591,13 @@ export type Database = {
       apply_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
       }
       reverse_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
@@ -535,7 +614,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "operador"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -662,6 +741,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "operador"],
+    },
   },
 } as const

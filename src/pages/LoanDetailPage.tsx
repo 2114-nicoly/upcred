@@ -351,10 +351,12 @@ export default function LoanDetailPage() {
     const inst = installments.find((i) => i.id === installmentId);
     if (!inst) return;
 
+    const { data: { session } } = await supabase.auth.getSession();
     await supabase.from("penalties").insert({
       loan_id: loanId!, installment_id: installmentId,
       amount: penAmount, observation: penObs || null,
-    });
+      user_id: session?.user?.id,
+    } as any);
 
     const newPenalty = Number(inst.penalty_amount) + penAmount;
     await supabase.from("installments").update({ penalty_amount: newPenalty }).eq("id", installmentId);

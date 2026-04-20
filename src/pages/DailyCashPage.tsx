@@ -416,11 +416,13 @@ export default function DailyCashPage() {
     toast.info("Marcado como 'Não Pagou'");
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       await supabase.from("not_paid_marks").insert({
         mark_date: selectedDate, installment_id: inst.id,
         loan_id: inst.loan_id, client_id: inst.loans.client_id,
         observation: obs || null,
-      });
+        user_id: session?.user?.id,
+      } as any);
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
@@ -466,15 +468,17 @@ export default function DailyCashPage() {
     setShowBatchNotPaidObs(false);
     toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
 
+    const { data: { session: s2 } } = await supabase.auth.getSession();
     const inserts = selectedInsts.map(inst => ({
       mark_date: selectedDate,
       installment_id: inst.id,
       loan_id: inst.loan_id,
       client_id: inst.loans.client_id,
       observation: obs || null,
+      user_id: s2?.user?.id,
     }));
     try {
-      await supabase.from("not_paid_marks").insert(inserts);
+      await supabase.from("not_paid_marks").insert(inserts as any);
       for (const inst of selectedInsts) {
         await createDailyEvent({
           cash_date: selectedDate,
@@ -589,10 +593,11 @@ export default function DailyCashPage() {
       .eq("cash_date", selectedDate);
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
+    const { data: { session: s3 } } = await supabase.auth.getSession();
     const { data: existing } = await supabase
       .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
 
-    const payload = {
+    const payload: any = {
       cash_date: selectedDate, status: "closed", total_received: totalReceived,
       total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
       total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
@@ -601,7 +606,7 @@ export default function DailyCashPage() {
     if (existing) {
       await supabase.from("daily_cash").update(payload).eq("id", existing.id);
     } else {
-      await supabase.from("daily_cash").insert(payload);
+      await supabase.from("daily_cash").insert({ ...payload, user_id: s3?.user?.id });
     }
 
     toast.success("Caixa do dia fechado!");

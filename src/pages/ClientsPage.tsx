@@ -75,9 +75,11 @@ export default function ClientsPage() {
   const handleCreate = async () => {
     if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
     const nextCode = await getNextClientCode();
+    const { data: { session } } = await supabase.auth.getSession();
     const { error } = await supabase.from("clients").insert({
       name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
-    });
+      user_id: session?.user?.id,
+    } as any);
     if (error) { toast.error("Erro ao cadastrar cliente"); return; }
     toast.success(`Cliente #${nextCode} cadastrado!`);
     setName(""); setPhone(""); setNotes(""); setOpen(false);

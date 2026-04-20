@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserId } from "@/lib/auth-utils";
 
 export type CashMovementType =
   | "emprestimo"
@@ -56,6 +57,7 @@ export async function createCashMovement(movement: {
   observation?: string | null;
   cash_date?: string | null;
 }) {
+  const userId = await getCurrentUserId();
   const { data } = await supabase.from("cash_movements").insert({
     type: movement.type,
     amount: movement.amount,
@@ -64,6 +66,7 @@ export async function createCashMovement(movement: {
     installment_id: movement.installment_id || null,
     observation: movement.observation || null,
     cash_date: movement.cash_date || new Date().toISOString().slice(0, 10),
+    user_id: userId,
   } as any).select().single();
   return data;
 }
