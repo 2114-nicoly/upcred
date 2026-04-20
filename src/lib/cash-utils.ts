@@ -73,59 +73,53 @@ export async function deleteCashMovement(id: string) {
 }
 
 /**
- * Recalculates cash_balance from all cash_movements (ledger = source of truth).
- * Call this after bulk deletes or when balance may be out of sync.
+ * Recalculates cash_balance from authoritative sources:
+ * - available_cash: sum of ALL cash_movements (ledger of cash flow)
+ * - money_lent + interest_receivable: derived from loans.remaining_balance (single source of truth)
+ * - penalty_receivable: derived from penalty installments (amount - paid_amount)
+ *
+ * IMPORTANT: This uses loan.remaining_balance (set by apply_loan_payment RPC) instead of
+ * installments.paid_amount, ensuring consistency even when installments are edited manually.
  */
 export async function recalculateCashBalanceFromLedger() {
-  const { data: movements } = await supabase.from("cash_movements").select("type, amount");
-  if (!movements) return;
+  const [{ data: movements }, { data: loans }, { data: installments }] = await Promise.all([
+    supabase.from("cash_movements").select("amount"),
+    supabase.from("loans").select("amount, total_amount, remaining_balance, status"),
+    supabase.from("installments").select("amount, paid_amount, is_penalty"),
+  ]);
 
   let available_cash = 0;
   let money_lent = 0;
   let interest_receivable = 0;
   let penalty_receivable = 0;
 
-  // We also need loan data to compute interest/principal split
-  // Instead, we derive from movements directly:
-  // emprestimo: cash -= |amount|, money_lent += |amount|, interest_receivable += interest
-  // recebimento_normal: cash += amount (interest/principal split needs loan data)
-  // recebimento_multa: cash += amount, penalty_receivable -= amount
-  // entrada_manual: cash += amount
-  // saida_manual: cash += amount (amount is negative)
-  // ajuste_manual: cash += amount
-
-  // For accurate split, we need loan-level data. Let's compute from loans table.
-  const { data: loans } = await supabase.from("loans").select("id, amount, total_amount");
-  const { data: installments } = await supabase.from("installments").select("loan_id, amount, paid_amount, is_penalty");
-  const { data: penaltyRecords } = await supabase.from("penalties").select("amount");
-
-  // money_lent = sum of loan.amount for non-fully-paid loans minus what was paid toward principal
-  // interest_receivable = sum of (loan.total_amount - loan.amount) minus what was paid toward interest
-  // penalty_receivable = sum of penalty amounts minus penalty payments
-
-  if (loans && installments) {
-    for (const loan of loans) {
-      const loanInsts = installments.filter(i => i.loan_id === loan.id && !i.is_penalty);
-      const totalPaid = loanInsts.reduce((s, i) => s + Number(i.paid_amount), 0);
-      const loanInterest = Number(loan.total_amount) - Number(loan.amount);
-      const interestPaid = Math.min(loanInterest, totalPaid);
-      const principalPaid = totalPaid - interestPaid;
-
-      money_lent += Number(loan.amount) - principalPaid;
-      interest_receivable += loanInterest - interestPaid;
-    }
-  }
-
-  // penalty_receivable from installments
-  if (installments) {
-    const penaltyInsts = installments.filter(i => i.is_penalty);
-    penalty_receivable = penaltyInsts.reduce((s, i) => s + Number(i.amount) - Number(i.paid_amount), 0);
-  }
-
-  // available_cash = sum of all movements
-  for (const m of movements) {
+  // available_cash = ledger sum
+  for (const m of (movements || [])) {
     available_cash += Number(m.amount);
   }
+
+  // money_lent + interest_receivable: derived from remaining_balance
+  // Allocation rule: paid amount goes to interest first, then principal
+  for (const loan of (loans || [])) {
+    const principal = Number(loan.amount);
+    const total = Number(loan.total_amount);
+    const remaining = Math.max(0, Number(loan.remaining_balance));
+    const interestPortion = Math.max(0, total - principal);
+    const totalPaid = Math.max(0, total - remaining);
+
+    const interestPaid = Math.min(interestPortion, totalPaid);
+    const principalPaid = totalPaid - interestPaid;
+
+    money_lent += Math.max(0, principal - principalPaid);
+    interest_receivable += Math.max(0, interestPortion - interestPaid);
+  }
+
+  // penalty_receivable: from penalty installments
+  const penaltyInsts = (installments || []).filter((i: any) => i.is_penalty);
+  penalty_receivable = penaltyInsts.reduce(
+    (s: number, i: any) => s + Math.max(0, Number(i.amount) - Number(i.paid_amount)),
+    0
+  );
 
   const current = await getCashBalance();
   if (!current) return;

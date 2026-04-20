@@ -65,18 +65,33 @@ export async function deleteDailyEvent(id: string) {
 
 /**
  * Undo a daily event: reverses the financial impact based on event type.
- * - pagamento/recebimento_multa: reverts installment paid_amount, cash_balance, cash_movements
+ * - pagamento/recebimento_multa: reverts via RPC reverse_loan_payment + recalculates installments
  * - nao_pagou: removes not_paid_mark
- * - entrada_manual/saida_manual/ajuste_manual: reverts cash_balance and cash_movements
- * - emprestimo_novo/renovacao: complex - only removes the event record
+ * - entrada_manual/saida_manual/ajuste_manual: deletes movement and recalculates cash from ledger
+ * - emprestimo_novo/renovacao: BLOCKED — must be undone manually (too complex/risky)
+ *
+ * Throws an Error with a user-friendly message when the event cannot be undone safely.
  */
 export async function undoDailyEvent(event: DailyEvent) {
-  const { updateCashBalance, recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
+  // Block undo for new loans and renewals — these create downstream state
+  // (installments, balances, possibly closing of previous loan) that cannot
+  // be safely reversed without manual review.
+  if (event.event_type === "emprestimo_novo") {
+    throw new Error(
+      "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
+    );
+  }
+  if (event.event_type === "renovacao") {
+    throw new Error(
+      "Não é possível desfazer uma renovação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
+    );
+  }
+
+  const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
   const { recalculateInstallments } = await import("@/lib/payment-utils");
 
   if (event.event_type === "pagamento") {
     if (event.loan_id) {
-      // Find cash_movements for this loan on this date
       const { data: movements } = await supabase.from("cash_movements")
         .select("id, amount, installment_id")
         .eq("loan_id", event.loan_id)
@@ -85,12 +100,10 @@ export async function undoDailyEvent(event: DailyEvent) {
 
       const totalReversed = (movements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
 
-      // Delete cash_movements
       for (const mov of (movements || [])) {
         await supabase.from("cash_movements").delete().eq("id", mov.id);
       }
 
-      // Reverse remaining_balance via RPC
       if (totalReversed > 0) {
         await supabase.rpc("reverse_loan_payment", {
           p_loan_id: event.loan_id,
@@ -98,13 +111,11 @@ export async function undoDailyEvent(event: DailyEvent) {
         });
       }
 
-      // Recalculate installment distribution from remaining_balance
       await recalculateInstallments(event.loan_id);
     }
     await recalculateCashBalanceFromLedger();
   } else if (event.event_type === "recebimento_multa") {
     if (event.loan_id) {
-      // Revert penalty installment
       const { data: penaltyInsts } = await supabase.from("installments")
         .select("id, amount, paid_amount")
         .eq("loan_id", event.loan_id).eq("is_penalty", true);
@@ -116,7 +127,6 @@ export async function undoDailyEvent(event: DailyEvent) {
           paid_at: newPaid < Number(pi.amount) - 0.01 ? null : undefined,
         }).eq("id", pi.id);
       }
-      // Delete cash_movement
       await supabase.from("cash_movements").delete()
         .eq("loan_id", event.loan_id)
         .eq("cash_date", event.cash_date)
@@ -124,24 +134,22 @@ export async function undoDailyEvent(event: DailyEvent) {
     }
     await recalculateCashBalanceFromLedger();
   } else if (event.event_type === "nao_pagou") {
-    // Remove not_paid_mark
     if (event.installment_id) {
       await supabase.from("not_paid_marks").delete()
         .eq("installment_id", event.installment_id)
         .eq("mark_date", event.cash_date);
     }
-  } else if (event.event_type === "entrada_manual" || event.event_type === "saida_manual" || event.event_type === "ajuste_manual") {
-    // Revert cash balance
-    const revertIn = -Number(event.amount_in);
-    const revertOut = Number(event.amount_out);
-    await updateCashBalance({ available_cash: revertIn + revertOut });
-    // Delete cash_movement
+  } else if (
+    event.event_type === "entrada_manual" ||
+    event.event_type === "saida_manual" ||
+    event.event_type === "ajuste_manual"
+  ) {
     await supabase.from("cash_movements").delete()
       .eq("type", event.event_type)
       .eq("cash_date", event.cash_date);
+    await recalculateCashBalanceFromLedger();
   }
 
-  // Always delete the daily_event record
   await deleteDailyEvent(event.id);
 }
 
