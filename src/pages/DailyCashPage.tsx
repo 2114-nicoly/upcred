@@ -123,6 +123,13 @@ export default function DailyCashPage() {
   const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
   const [quitarDate, setQuitarDate] = useState(selectedDate);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
+  const fetchSeqRef = useRef(0);
+  const refreshTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const urlDate = dateParam || today;
+    setSelectedDate((current) => current === urlDate ? current : urlDate);
+  }, [dateParam, today]);
 
   useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
@@ -162,6 +169,8 @@ export default function DailyCashPage() {
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments]);
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    const requestId = ++fetchSeqRef.current;
+    const isStale = () => requestId !== fetchSeqRef.current;
     if (!silent) setLoading(true);
     if (silent) setIsRefreshing(true);
 
@@ -172,6 +181,7 @@ export default function DailyCashPage() {
         { data: eventsData },
         { data: npData },
         { data: newLoanData },
+        { data: paidMovementsData },
       ] = await Promise.all([
         supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
         supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as any,
@@ -179,7 +189,13 @@ export default function DailyCashPage() {
         supabase.from("loans")
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as any,
+        supabase.from("cash_movements")
+          .select("loan_id, amount")
+          .eq("cash_date", selectedDate)
+          .eq("type", "recebimento_normal") as any,
       ]);
+
+      if (isStale()) return;
 
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
@@ -199,6 +215,14 @@ export default function DailyCashPage() {
           paidLoanIds.add(ev.loan_id);
           paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
         }
+      }
+      const paidMovementsByLoan = new Map<string, number>();
+      for (const mov of (paidMovementsData || []) as { loan_id: string | null; amount: number }[]) {
+        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, (paidMovementsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
+      }
+      for (const [loanId, total] of paidMovementsByLoan) {
+        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
+        paidLoanIds.add(loanId);
       }
       for (const m of npMarks) {
         npLoanIds.add(m.loan_id);
@@ -245,6 +269,7 @@ export default function DailyCashPage() {
           g.installmentIds = instByLoan.get(g.loanId) || [];
         }
       }
+      if (isStale()) return;
       setPaidGroups(paidGroupsList);
 
       // Not paid marks enrichment
@@ -258,6 +283,7 @@ export default function DailyCashPage() {
         const npInsts = (npInstData as unknown as InstallmentWithLoan[]) || [];
         npInstMap = Object.fromEntries(npInsts.map(i => [i.id, i]));
       }
+      if (isStale()) return;
       const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
       setNotPaidMarks(enrichedNpMarks);
 
@@ -280,6 +306,7 @@ export default function DailyCashPage() {
       const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
       const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
       const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
+      if (isStale()) return;
 
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
       const allCandidates = [...validOverdue, ...dueToday].filter(
@@ -300,8 +327,10 @@ export default function DailyCashPage() {
       setPendingInstallments(dedupedPending);
       setSelectedForNotPaid(new Set());
     } finally {
-      if (!silent) setLoading(false);
-      if (silent) setIsRefreshing(false);
+      if (!isStale()) {
+        if (!silent) setLoading(false);
+        if (silent) setIsRefreshing(false);
+      }
     }
   }, [selectedDate]);
 
@@ -310,6 +339,34 @@ export default function DailyCashPage() {
   const refreshDataInBackground = useCallback(() => {
     void fetchData({ silent: true });
   }, [fetchData]);
+
+  useEffect(() => {
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = window.setTimeout(() => fetchData({ silent: true }), 250);
+    };
+
+    const channel = supabase
+      .channel(`rota-${selectedDate}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "not_paid_marks" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "installments" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "loans" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_cash" }, scheduleRefresh)
+      .subscribe();
+
+    const handleFocus = () => fetchData({ silent: true });
+    const handleVisibility = () => { if (document.visibilityState === "visible") handleFocus(); };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      supabase.removeChannel(channel);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [selectedDate, fetchData]);
 
   // === Payment handler with optimistic UI ===
   const handlePay = async (id: string) => {
