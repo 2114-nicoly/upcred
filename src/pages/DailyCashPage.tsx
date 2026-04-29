@@ -255,6 +255,7 @@ export default function DailyCashPage() {
           g.installmentIds = instByLoan.get(g.loanId) || [];
         }
       }
+      if (isStale()) return;
       setPaidGroups(paidGroupsList);
 
       // Not paid marks enrichment
@@ -268,6 +269,7 @@ export default function DailyCashPage() {
         const npInsts = (npInstData as unknown as InstallmentWithLoan[]) || [];
         npInstMap = Object.fromEntries(npInsts.map(i => [i.id, i]));
       }
+      if (isStale()) return;
       const enrichedNpMarks = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
       setNotPaidMarks(enrichedNpMarks);
 
@@ -290,6 +292,7 @@ export default function DailyCashPage() {
       const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
       const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
       const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
+      if (isStale()) return;
 
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
       const allCandidates = [...validOverdue, ...dueToday].filter(
