@@ -50,12 +50,13 @@ export async function recalculateInstallments(loanId: string) {
       }
       remaining -= instAmount;
     } else if (remaining > 0.01) {
-      // Partially paid
+      // Any value received counts as treated/paid for the route day.
+      // remaining_balance stays the financial source of truth for what is still owed.
       const newPaid = remaining;
       await supabase.from("installments").update({
         paid_amount: newPaid,
-        status: "partial",
-        paid_at: null,
+        status: "paid",
+        paid_at: new Date().toISOString(),
       }).eq("id", inst.id);
       remaining = 0;
     } else {
