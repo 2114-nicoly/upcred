@@ -123,6 +123,12 @@ export default function DailyCashPage() {
   const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
   const [quitarDate, setQuitarDate] = useState(selectedDate);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
+  const fetchSeqRef = useRef(0);
+
+  useEffect(() => {
+    const urlDate = dateParam || today;
+    setSelectedDate((current) => current === urlDate ? current : urlDate);
+  }, [dateParam, today]);
 
   useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
