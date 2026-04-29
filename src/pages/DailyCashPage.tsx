@@ -216,11 +216,13 @@ export default function DailyCashPage() {
           paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
         }
       }
+      const paidMovementsByLoan = new Map<string, number>();
       for (const mov of (paidMovementsData || []) as { loan_id: string | null; amount: number }[]) {
-        if (mov.loan_id) {
-          paidLoanIds.add(mov.loan_id);
-          paidEventsByLoan.set(mov.loan_id, (paidEventsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
-        }
+        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, (paidMovementsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
+      }
+      for (const [loanId, total] of paidMovementsByLoan) {
+        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
+        paidLoanIds.add(loanId);
       }
       for (const m of npMarks) {
         npLoanIds.add(m.loan_id);
