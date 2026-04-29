@@ -50,7 +50,10 @@ export async function createDailyEvent(event: {
     origin: event.origin || "rota",
     user_id: userId,
   }).select().single();
-  if (error) console.error("Error creating daily event:", error);
+  if (error) {
+    console.error("Error creating daily event:", error);
+    throw error;
+  }
   return data as unknown as DailyEvent | null;
 }
 
