@@ -168,6 +168,8 @@ export default function DailyCashPage() {
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments]);
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    const requestId = ++fetchSeqRef.current;
+    const isStale = () => requestId !== fetchSeqRef.current;
     if (!silent) setLoading(true);
     if (silent) setIsRefreshing(true);
 
@@ -186,6 +188,8 @@ export default function DailyCashPage() {
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as any,
       ]);
+
+      if (isStale()) return;
 
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
