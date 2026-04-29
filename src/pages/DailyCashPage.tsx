@@ -181,6 +181,7 @@ export default function DailyCashPage() {
         { data: eventsData },
         { data: npData },
         { data: newLoanData },
+        { data: paidMovementsData },
       ] = await Promise.all([
         supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
         supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as any,
@@ -188,6 +189,10 @@ export default function DailyCashPage() {
         supabase.from("loans")
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as any,
+        supabase.from("cash_movements")
+          .select("loan_id, amount")
+          .eq("cash_date", selectedDate)
+          .eq("type", "recebimento_normal") as any,
       ]);
 
       if (isStale()) return;
@@ -209,6 +214,12 @@ export default function DailyCashPage() {
         if (ev.event_type === "pagamento" && ev.loan_id) {
           paidLoanIds.add(ev.loan_id);
           paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
+        }
+      }
+      for (const mov of (paidMovementsData || []) as { loan_id: string | null; amount: number }[]) {
+        if (mov.loan_id && !paidEventsByLoan.has(mov.loan_id)) {
+          paidLoanIds.add(mov.loan_id);
+          paidEventsByLoan.set(mov.loan_id, Number(mov.amount));
         }
       }
       for (const m of npMarks) {
