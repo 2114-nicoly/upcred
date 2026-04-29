@@ -217,9 +217,9 @@ export default function DailyCashPage() {
         }
       }
       for (const mov of (paidMovementsData || []) as { loan_id: string | null; amount: number }[]) {
-        if (mov.loan_id && !paidEventsByLoan.has(mov.loan_id)) {
+        if (mov.loan_id) {
           paidLoanIds.add(mov.loan_id);
-          paidEventsByLoan.set(mov.loan_id, Number(mov.amount));
+          paidEventsByLoan.set(mov.loan_id, (paidEventsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
         }
       }
       for (const m of npMarks) {
