@@ -313,8 +313,10 @@ export default function DailyCashPage() {
       setPendingInstallments(dedupedPending);
       setSelectedForNotPaid(new Set());
     } finally {
-      if (!silent) setLoading(false);
-      if (silent) setIsRefreshing(false);
+      if (!isStale()) {
+        if (!silent) setLoading(false);
+        if (silent) setIsRefreshing(false);
+      }
     }
   }, [selectedDate]);
 
