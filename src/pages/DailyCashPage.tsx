@@ -124,6 +124,7 @@ export default function DailyCashPage() {
   const [quitarDate, setQuitarDate] = useState(selectedDate);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
+  const refreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const urlDate = dateParam || today;
@@ -325,6 +326,34 @@ export default function DailyCashPage() {
   const refreshDataInBackground = useCallback(() => {
     void fetchData({ silent: true });
   }, [fetchData]);
+
+  useEffect(() => {
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = window.setTimeout(() => fetchData({ silent: true }), 250);
+    };
+
+    const channel = supabase
+      .channel(`rota-${selectedDate}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "not_paid_marks" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "installments" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "loans" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_cash" }, scheduleRefresh)
+      .subscribe();
+
+    const handleFocus = () => fetchData({ silent: true });
+    const handleVisibility = () => { if (document.visibilityState === "visible") handleFocus(); };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      supabase.removeChannel(channel);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [selectedDate, fetchData]);
 
   // === Payment handler with optimistic UI ===
   const handlePay = async (id: string) => {
