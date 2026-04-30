@@ -85,6 +85,7 @@ type PaidGroup = {
   clientId: string;
   loanId: string;
   totalPaid: number;
+  accumulatedPaid: number;
   remainingBalance: number;
   instAmount: number;
   installmentIds: string[];
@@ -246,6 +247,7 @@ export default function DailyCashPage() {
             clientId: loan.client_id,
             loanId: loan.id,
             totalPaid: paidEventsByLoan.get(loan.id) || 0,
+            accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
             remainingBalance: Number(loan.remaining_balance),
             instAmount: Number(loan.total_amount) / Number(loan.installment_count),
             installmentIds: [], // populated below if needed for undo
@@ -393,7 +395,7 @@ export default function DailyCashPage() {
       const existing = prev.find(g => g.loanId === inst.loan_id);
       if (existing) {
         return prev.map(g => g.loanId === inst.loan_id
-          ? { ...g, totalPaid: g.totalPaid + paidValue, remainingBalance: newRemainingBalance }
+          ? { ...g, totalPaid: g.totalPaid + paidValue, accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance), remainingBalance: newRemainingBalance }
           : g
         );
       }
@@ -402,6 +404,7 @@ export default function DailyCashPage() {
         clientId: inst.loans.client_id,
         loanId: inst.loan_id,
         totalPaid: paidValue,
+        accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance),
         remainingBalance: newRemainingBalance,
         instAmount: Number(inst.amount),
         installmentIds: [inst.id],
@@ -699,6 +702,7 @@ export default function DailyCashPage() {
       clientId: inst.loans.client_id,
       loanId: inst.loan_id,
       totalPaid: currentBalance,
+      accumulatedPaid: Number(inst.loans.total_amount),
       remainingBalance: 0,
       instAmount: Number(inst.amount),
       installmentIds: [inst.id],
@@ -742,6 +746,7 @@ export default function DailyCashPage() {
       remainingBalance,
       installmentCount: inst.loans.installment_count,
     });
+    const accumulatedPaid = progress.totalPaid;
 
     return (
       <div
@@ -770,8 +775,8 @@ export default function DailyCashPage() {
               )}
             </div>
             <div className="flex items-center justify-between gap-2 mt-0.5">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)}
+              <span className="min-w-0 text-[11px] text-muted-foreground tabular-nums">
+                {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)} • Pago: {formatCurrency(accumulatedPaid)}
               </span>
               <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
                 Vence: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
@@ -914,7 +919,7 @@ export default function DailyCashPage() {
           </div>
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(group.remainingBalance)}</span>
+          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(group.remainingBalance)} • Pago: {formatCurrency(group.accumulatedPaid)}</span>
           <span className="text-[10px] text-muted-foreground tabular-nums">Parcela: {formatCurrency(group.instAmount)}</span>
         </div>
       </div>
