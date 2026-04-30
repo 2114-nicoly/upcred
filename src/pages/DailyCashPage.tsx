@@ -555,7 +555,7 @@ export default function DailyCashPage() {
         loan_id: inst.loan_id, client_id: inst.loans.client_id,
         observation: obs || null,
         user_id: session?.user?.id,
-      } as any);
+      });
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
@@ -611,7 +611,7 @@ export default function DailyCashPage() {
       user_id: s2?.user?.id,
     }));
     try {
-      await supabase.from("not_paid_marks").insert(inserts as any);
+      await supabase.from("not_paid_marks").insert(inserts);
       for (const inst of selectedInsts) {
         await createDailyEvent({
           cash_date: selectedDate,
