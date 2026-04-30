@@ -337,23 +337,16 @@ export default function DailyCashPage() {
         return;
       }
 
-      // Fetch pending installments
-      const [{ data: dueTodayData }, { data: overdueData }] = await Promise.all([
-        supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
-          .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-        supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
-          .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-      ]);
+      // Fetch only the first pending installment per loan up to the selected date.
+      // This avoids loading every overdue installment when switching days.
+      const { data: routeRows } = await (supabase as any)
+        .rpc("get_route_installments", { p_cash_date: selectedDate });
 
-      const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
-      const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
-      const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
+      const routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
       if (isStale()) return;
 
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
-      const allCandidates = [...validOverdue, ...dueToday].filter(
+      const allCandidates = routeInstallments.filter(
         i => !paidLoanIds.has(i.loan_id)
           && !npLoanIds.has(i.loan_id)
           && !localActionedLoanIds.current.has(i.loan_id)
