@@ -387,6 +387,7 @@ export default function ActiveLoansPage() {
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <span className="text-[11px] text-muted-foreground tabular-nums">
                 {progress.progressFormatted} parcelas • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
+                <span className="ml-1 text-success">• Pago: {formatCurrency(progress.totalPaid)}</span>
               </span>
               {lp?.nextDueDate && (
                 <span className={`text-[11px] font-medium tabular-nums ${isDueToday ? "text-primary" : isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
