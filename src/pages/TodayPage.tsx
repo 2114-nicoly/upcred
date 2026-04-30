@@ -229,7 +229,7 @@ export default function TodayPage() {
                 Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
                 {lp && (
                   <span className="ml-1 text-xs text-success">
-                    (pago: {formatCurrency(Math.max(0, (lp.total * (Number(inst.amount))) - lp.remaining))})
+                    • Pago: {formatCurrency(Math.max(0, Number(inst.loans.total_amount) - lp.remaining))}
                   </span>
                 )}
               </p>
