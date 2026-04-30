@@ -228,6 +228,17 @@ export default function LoanDetailPage() {
       toast.error("Valor inválido");
       return;
     }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) {
+      toast.error("Valor de multa inválido");
+      return;
+    }
+
+    // Same rule as Rota: if no amount typed, default to remaining of next installment
+    const firstUnpaid = pendingInstallments.slice().sort((a, b) => a.number - b.number)[0];
+    const instRemaining = firstUnpaid
+      ? Math.max(0, Number(firstUnpaid.amount) - Number(firstUnpaid.paid_amount))
+      : 0;
+    const paidValue = parcValue ?? instRemaining;
 
     setIsSubmitting(true);
     try {
@@ -244,17 +255,15 @@ export default function LoanDetailPage() {
       }
 
       // Regular payment - auto-distributes across installments
-      if (parcValue && parcValue > 0) {
-        // Find first unpaid installment to start from
-        const firstUnpaid = pendingInstallments.sort((a, b) => a.number - b.number)[0];
+      if (paidValue > 0 && firstUnpaid) {
         await registerPayment({
-          loanId: loanId!, amount: parcValue,
+          loanId: loanId!, amount: paidValue,
           clientId: loan.client_id, clientName: loan.clients.name,
           cashDate: payDate, origin: "detalhe_emprestimo",
-          installmentId: firstUnpaid?.id,
-          startInstNumber: firstUnpaid?.number || 1,
+          installmentId: firstUnpaid.id,
+          startInstNumber: firstUnpaid.number,
         });
-        toast.success(`Pagamento de ${formatCurrency(parcValue)} distribuído nas parcelas!`);
+        toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
     } catch {
       toast.error("Erro ao processar pagamento");
@@ -885,10 +894,10 @@ export default function LoanDetailPage() {
             </div>
 
             <div>
-              <Label>Valor do pagamento *</Label>
-              <Input type="number" placeholder={nextInstValue > 0 ? `Ex: ${nextInstValue.toFixed(2)}` : "Valor"} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+              <Label>Valor do pagamento</Label>
+              <Input type="number" placeholder={nextInstValue > 0 ? `Padrão: ${nextInstValue.toFixed(2)}` : "Valor"} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
               <p className="text-xs text-muted-foreground mt-1">
-                💡 O valor será distribuído automaticamente nas parcelas abertas em ordem. Sobra avança para as próximas.
+                💡 Em branco = paga o valor da próxima parcela. Sobra avança automaticamente para as próximas.
               </p>
             </div>
 
