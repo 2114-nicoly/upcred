@@ -894,10 +894,10 @@ export default function LoanDetailPage() {
             </div>
 
             <div>
-              <Label>Valor do pagamento *</Label>
-              <Input type="number" placeholder={nextInstValue > 0 ? `Ex: ${nextInstValue.toFixed(2)}` : "Valor"} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+              <Label>Valor do pagamento</Label>
+              <Input type="number" placeholder={nextInstValue > 0 ? `Padrão: ${nextInstValue.toFixed(2)}` : "Valor"} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
               <p className="text-xs text-muted-foreground mt-1">
-                💡 O valor será distribuído automaticamente nas parcelas abertas em ordem. Sobra avança para as próximas.
+                💡 Em branco = paga o valor da próxima parcela. Sobra avança automaticamente para as próximas.
               </p>
             </div>
 
