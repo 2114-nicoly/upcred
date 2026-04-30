@@ -99,6 +99,13 @@ type RouteInstallmentRow = {
   client_name: string;
 };
 
+type RouteRpcClient = {
+  rpc: (
+    fn: "get_route_installments",
+    args: { p_cash_date: string }
+  ) => Promise<{ data: RouteInstallmentRow[] | null; error: { message?: string } | null }>;
+};
+
 const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => ({
   id: row.id,
   number: row.number,
@@ -339,8 +346,9 @@ export default function DailyCashPage() {
 
       // Fetch only the first pending installment per loan up to the selected date.
       // This avoids loading every overdue installment when switching days.
-      const { data: routeRows } = await (supabase as any)
+      const { data: routeRows, error: routeError } = await (supabase as unknown as RouteRpcClient)
         .rpc("get_route_installments", { p_cash_date: selectedDate });
+      if (routeError) throw routeError;
 
       const routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
       if (isStale()) return;
