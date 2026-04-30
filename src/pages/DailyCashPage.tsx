@@ -79,6 +79,85 @@ type NewLoanInfo = {
   clients: { id: string; name: string };
 };
 
+type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } | null }>;
+
+type CashMovementPaymentRow = {
+  loan_id: string | null;
+  amount: number;
+};
+
+type PaidLoanRow = {
+  id: string;
+  client_id: string;
+  amount: number;
+  total_amount: number;
+  remaining_balance: number;
+  installment_count: number;
+  payment_type: string;
+  clients: { id: string; name: string } | null;
+};
+
+type PenaltyMovementRow = { amount: number };
+
+type DailyCashPayload = {
+  cash_date: string;
+  status: string;
+  total_received: number;
+  total_penalty_received: number;
+  total_not_paid_count: number;
+  total_items_treated: number;
+  closed_at: string;
+};
+
+type RouteInstallmentRow = {
+  id: string;
+  number: number;
+  amount: number;
+  due_date: string;
+  status: string;
+  loan_id: string;
+  is_penalty: boolean;
+  paid_amount: number;
+  paid_at: string | null;
+  loan_client_id: string;
+  loan_amount: number;
+  loan_total_amount: number;
+  loan_remaining_balance: number;
+  loan_installment_count: number;
+  loan_payment_type: string;
+  client_id: string;
+  client_name: string;
+};
+
+type RouteRpcClient = {
+  rpc: (
+    fn: "get_route_installments",
+    args: { p_cash_date: string }
+  ) => Promise<{ data: RouteInstallmentRow[] | null; error: { message?: string } | null }>;
+};
+
+const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => ({
+  id: row.id,
+  number: row.number,
+  amount: row.amount,
+  due_date: row.due_date,
+  status: row.status,
+  loan_id: row.loan_id,
+  is_penalty: row.is_penalty,
+  paid_amount: row.paid_amount,
+  paid_at: row.paid_at,
+  loans: {
+    id: row.loan_id,
+    client_id: row.loan_client_id,
+    amount: row.loan_amount,
+    total_amount: row.loan_total_amount,
+    remaining_balance: row.loan_remaining_balance,
+    installment_count: row.loan_installment_count,
+    payment_type: row.loan_payment_type,
+    clients: { id: row.client_id, name: row.client_name },
+  },
+});
+
 // Paid group for display
 type PaidGroup = {
   clientName: string;
@@ -185,15 +264,15 @@ export default function DailyCashPage() {
         { data: paidMovementsData },
       ] = await Promise.all([
         supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
-        supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as any,
+        supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as unknown as QueryResult<DailyEventRow>,
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
         supabase.from("loans")
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
-          .eq("loan_date", selectedDate) as any,
+          .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
           .select("loan_id, amount")
           .eq("cash_date", selectedDate)
-          .eq("type", "recebimento_normal") as any,
+          .eq("type", "recebimento_normal") as unknown as QueryResult<CashMovementPaymentRow>,
       ]);
 
       if (isStale()) return;
@@ -233,15 +312,15 @@ export default function DailyCashPage() {
       // Build paid groups from daily_events (source of truth for display)
       // We need loan info for display - fetch loans that have payments today
       const paidLoanIdArr = [...paidLoanIds];
-      let paidGroupsList: PaidGroup[] = [];
+      const paidGroupsList: PaidGroup[] = [];
       if (paidLoanIdArr.length > 0) {
         const { data: paidLoansData } = await supabase
           .from("loans")
           .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-          .in("id", paidLoanIdArr) as any;
+          .in("id", paidLoanIdArr) as unknown as { data: PaidLoanRow[] | null };
 
         for (const loan of (paidLoansData || [])) {
-          const client = (loan as any).clients;
+          const client = loan.clients;
           paidGroupsList.push({
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
@@ -295,23 +374,17 @@ export default function DailyCashPage() {
         return;
       }
 
-      // Fetch pending installments
-      const [{ data: dueTodayData }, { data: overdueData }] = await Promise.all([
-        supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
-          .eq("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-        supabase.from("installments")
-          .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
-          .lt("due_date", selectedDate).neq("status", "paid").eq("is_penalty", false).order("number"),
-      ]);
+      // Fetch only the first pending installment per loan up to the selected date.
+      // This avoids loading every overdue installment when switching days.
+      const { data: routeRows, error: routeError } = await (supabase as unknown as RouteRpcClient)
+        .rpc("get_route_installments", { p_cash_date: selectedDate });
+      if (routeError) throw routeError;
 
-      const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
-      const validOverdue = overdueInsts.filter(i => Number(i.amount) - Number(i.paid_amount) > 0.01);
-      const dueToday = (dueTodayData as unknown as InstallmentWithLoan[]) || [];
+      const routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
       if (isStale()) return;
 
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
-      const allCandidates = [...validOverdue, ...dueToday].filter(
+      const allCandidates = routeInstallments.filter(
         i => !paidLoanIds.has(i.loan_id)
           && !npLoanIds.has(i.loan_id)
           && !localActionedLoanIds.current.has(i.loan_id)
@@ -482,7 +555,7 @@ export default function DailyCashPage() {
         loan_id: inst.loan_id, client_id: inst.loans.client_id,
         observation: obs || null,
         user_id: session?.user?.id,
-      } as any);
+      });
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
@@ -538,7 +611,7 @@ export default function DailyCashPage() {
       user_id: s2?.user?.id,
     }));
     try {
-      await supabase.from("not_paid_marks").insert(inserts as any);
+      await supabase.from("not_paid_marks").insert(inserts);
       for (const inst of selectedInsts) {
         await createDailyEvent({
           cash_date: selectedDate,
@@ -612,10 +685,10 @@ export default function DailyCashPage() {
     try {
       await supabase.from("not_paid_marks").delete().eq("id", markId);
       if (mark) {
-        const { data: events } = await (supabase.from("daily_events" as any)
+        const { data: events } = await (supabase.from("daily_events")
           .select("id").eq("event_type", "nao_pagou")
           .eq("installment_id", mark.installment_id)
-          .eq("cash_date", selectedDate) as any);
+          .eq("cash_date", selectedDate) as unknown as QueryResult<{ id: string }>);
         for (const ev of (events || [])) {
           await deleteDailyEvent(ev.id);
         }
@@ -648,16 +721,17 @@ export default function DailyCashPage() {
     const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
 
     const { data: penaltyMovements } = await (supabase
-      .from("cash_movements").select("amount") as any)
+      .from("cash_movements")
+      .select("amount")
       .eq("type", "recebimento_multa")
-      .eq("cash_date", selectedDate);
-    const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
+      .eq("cash_date", selectedDate) as unknown as QueryResult<PenaltyMovementRow>);
+    const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
     const { data: { session: s3 } } = await supabase.auth.getSession();
     const { data: existing } = await supabase
       .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
 
-    const payload: any = {
+    const payload: DailyCashPayload = {
       cash_date: selectedDate, status: "closed", total_received: totalReceived,
       total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
       total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),

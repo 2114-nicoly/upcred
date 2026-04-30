@@ -592,6 +592,28 @@ export type Database = {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
       }
+      get_route_installments: {
+        Args: { p_cash_date: string }
+        Returns: {
+          amount: number
+          client_id: string
+          client_name: string
+          due_date: string
+          id: string
+          is_penalty: boolean
+          loan_amount: number
+          loan_client_id: string
+          loan_id: string
+          loan_installment_count: number
+          loan_payment_type: string
+          loan_remaining_balance: number
+          loan_total_amount: number
+          number: number
+          paid_amount: number
+          paid_at: string
+          status: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
