@@ -264,15 +264,15 @@ export default function DailyCashPage() {
         { data: paidMovementsData },
       ] = await Promise.all([
         supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
-        supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as any,
+        supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as unknown as QueryResult<DailyEventRow>,
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
         supabase.from("loans")
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
-          .eq("loan_date", selectedDate) as any,
+          .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
           .select("loan_id, amount")
           .eq("cash_date", selectedDate)
-          .eq("type", "recebimento_normal") as any,
+          .eq("type", "recebimento_normal") as unknown as QueryResult<CashMovementPaymentRow>,
       ]);
 
       if (isStale()) return;
@@ -312,15 +312,15 @@ export default function DailyCashPage() {
       // Build paid groups from daily_events (source of truth for display)
       // We need loan info for display - fetch loans that have payments today
       const paidLoanIdArr = [...paidLoanIds];
-      let paidGroupsList: PaidGroup[] = [];
+      const paidGroupsList: PaidGroup[] = [];
       if (paidLoanIdArr.length > 0) {
         const { data: paidLoansData } = await supabase
           .from("loans")
           .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-          .in("id", paidLoanIdArr) as any;
+          .in("id", paidLoanIdArr) as unknown as { data: PaidLoanRow[] | null };
 
         for (const loan of (paidLoansData || [])) {
-          const client = (loan as any).clients;
+          const client = loan.clients;
           paidGroupsList.push({
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
