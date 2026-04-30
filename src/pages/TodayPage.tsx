@@ -227,6 +227,11 @@ export default function TodayPage() {
               <p className="font-semibold">{inst.loans.clients.name}</p>
               <p className="text-sm text-muted-foreground">
                 Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
+                {lp && (
+                  <span className="ml-1 text-xs text-success">
+                    (pago: {formatCurrency(Math.max(0, (lp.total * (Number(inst.amount))) - lp.remaining))})
+                  </span>
+                )}
               </p>
               {lp && (
                 <p className="text-xs text-primary font-medium">
