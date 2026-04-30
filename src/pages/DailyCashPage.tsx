@@ -721,9 +721,10 @@ export default function DailyCashPage() {
     const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
 
     const { data: penaltyMovements } = await (supabase
-      .from("cash_movements").select("amount") as unknown as { eq: (column: string, value: string) => { eq: (column: string, value: string) => QueryResult<PenaltyMovementRow> } })
+      .from("cash_movements")
+      .select("amount")
       .eq("type", "recebimento_multa")
-      .eq("cash_date", selectedDate);
+      .eq("cash_date", selectedDate) as unknown as QueryResult<PenaltyMovementRow>);
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
     const { data: { session: s3 } } = await supabase.auth.getSession();
