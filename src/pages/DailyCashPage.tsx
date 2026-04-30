@@ -79,6 +79,48 @@ type NewLoanInfo = {
   clients: { id: string; name: string };
 };
 
+type RouteInstallmentRow = {
+  id: string;
+  number: number;
+  amount: number;
+  due_date: string;
+  status: string;
+  loan_id: string;
+  is_penalty: boolean;
+  paid_amount: number;
+  paid_at: string | null;
+  loan_client_id: string;
+  loan_amount: number;
+  loan_total_amount: number;
+  loan_remaining_balance: number;
+  loan_installment_count: number;
+  loan_payment_type: string;
+  client_id: string;
+  client_name: string;
+};
+
+const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => ({
+  id: row.id,
+  number: row.number,
+  amount: row.amount,
+  due_date: row.due_date,
+  status: row.status,
+  loan_id: row.loan_id,
+  is_penalty: row.is_penalty,
+  paid_amount: row.paid_amount,
+  paid_at: row.paid_at,
+  loans: {
+    id: row.loan_id,
+    client_id: row.loan_client_id,
+    amount: row.loan_amount,
+    total_amount: row.loan_total_amount,
+    remaining_balance: row.loan_remaining_balance,
+    installment_count: row.loan_installment_count,
+    payment_type: row.loan_payment_type,
+    clients: { id: row.client_id, name: row.client_name },
+  },
+});
+
 // Paid group for display
 type PaidGroup = {
   clientName: string;
