@@ -85,6 +85,7 @@ type PaidGroup = {
   clientId: string;
   loanId: string;
   totalPaid: number;
+  accumulatedPaid: number;
   remainingBalance: number;
   instAmount: number;
   installmentIds: string[];
@@ -246,6 +247,7 @@ export default function DailyCashPage() {
             clientId: loan.client_id,
             loanId: loan.id,
             totalPaid: paidEventsByLoan.get(loan.id) || 0,
+            accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
             remainingBalance: Number(loan.remaining_balance),
             instAmount: Number(loan.total_amount) / Number(loan.installment_count),
             installmentIds: [], // populated below if needed for undo
@@ -393,7 +395,7 @@ export default function DailyCashPage() {
       const existing = prev.find(g => g.loanId === inst.loan_id);
       if (existing) {
         return prev.map(g => g.loanId === inst.loan_id
-          ? { ...g, totalPaid: g.totalPaid + paidValue, remainingBalance: newRemainingBalance }
+          ? { ...g, totalPaid: g.totalPaid + paidValue, accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance), remainingBalance: newRemainingBalance }
           : g
         );
       }
@@ -402,6 +404,7 @@ export default function DailyCashPage() {
         clientId: inst.loans.client_id,
         loanId: inst.loan_id,
         totalPaid: paidValue,
+        accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance),
         remainingBalance: newRemainingBalance,
         instAmount: Number(inst.amount),
         installmentIds: [inst.id],
@@ -699,6 +702,7 @@ export default function DailyCashPage() {
       clientId: inst.loans.client_id,
       loanId: inst.loan_id,
       totalPaid: currentBalance,
+      accumulatedPaid: Number(inst.loans.total_amount),
       remainingBalance: 0,
       instAmount: Number(inst.amount),
       installmentIds: [inst.id],
