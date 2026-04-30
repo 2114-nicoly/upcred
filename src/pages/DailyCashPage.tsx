@@ -79,6 +79,36 @@ type NewLoanInfo = {
   clients: { id: string; name: string };
 };
 
+type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } | null }>;
+
+type CashMovementPaymentRow = {
+  loan_id: string | null;
+  amount: number;
+};
+
+type PaidLoanRow = {
+  id: string;
+  client_id: string;
+  amount: number;
+  total_amount: number;
+  remaining_balance: number;
+  installment_count: number;
+  payment_type: string;
+  clients: { id: string; name: string } | null;
+};
+
+type PenaltyMovementRow = { amount: number };
+
+type DailyCashPayload = {
+  cash_date: string;
+  status: string;
+  total_received: number;
+  total_penalty_received: number;
+  total_not_paid_count: number;
+  total_items_treated: number;
+  closed_at: string;
+};
+
 type RouteInstallmentRow = {
   id: string;
   number: number;
