@@ -86,6 +86,14 @@ export default function TodayPage() {
       const allInsts = [...todayInsts, ...overdueInsts];
       const uniqueLoanIds = [...new Set(allInsts.map((d) => d.loan_id))];
       const progressMap: Record<string, LoanProgress> = {};
+
+      // Fetch loan remaining_balance (source of truth) for all loans in view
+      const { data: loansData } = await supabase
+        .from("loans")
+        .select("id, total_amount, remaining_balance, installment_count")
+        .in("id", uniqueLoanIds);
+      const loanById = new Map((loansData || []).map((l: any) => [l.id, l]));
+
       for (const lid of uniqueLoanIds) {
         const { data: allInst } = await supabase
           .from("installments")
@@ -94,12 +102,16 @@ export default function TodayPage() {
         if (!allInst) continue;
         const regular = allInst.filter((i: any) => !i.is_penalty);
         const penalties = allInst.filter((i: any) => i.is_penalty);
-        const totalPaid = regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
         const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
+        const loan = loanById.get(lid);
+        // Use loan.remaining_balance + total_amount as source of truth (same as ActiveLoansPage)
+        const totalAmt = loan ? Number(loan.total_amount) : regular.reduce((s: number, i: any) => s + Number(i.amount), 0);
+        const remaining = loan ? Number(loan.remaining_balance) : (totalAmt - regular.reduce((s: number, i: any) => s + Number(i.paid_amount), 0));
+        const totalPaid = Math.max(0, totalAmt - remaining);
         progressMap[lid] = {
           progress: totalPaid / instValue,
           total: regular.length,
-          remaining: regular.reduce((s: number, i: any) => s + Number(i.amount), 0) - totalPaid,
+          remaining,
           penaltyTotal: penalties.reduce((s: number, i: any) => s + Number(i.amount), 0),
           penaltyPaid: penalties.reduce((s: number, i: any) => s + Number(i.paid_amount), 0),
         };
