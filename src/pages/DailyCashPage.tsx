@@ -746,6 +746,7 @@ export default function DailyCashPage() {
       remainingBalance,
       installmentCount: inst.loans.installment_count,
     });
+    const accumulatedPaid = progress.totalPaid;
 
     return (
       <div
@@ -774,8 +775,8 @@ export default function DailyCashPage() {
               )}
             </div>
             <div className="flex items-center justify-between gap-2 mt-0.5">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)}
+              <span className="min-w-0 text-[11px] text-muted-foreground tabular-nums">
+                {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)} • Pago: {formatCurrency(accumulatedPaid)}
               </span>
               <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
                 Vence: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
@@ -918,7 +919,7 @@ export default function DailyCashPage() {
           </div>
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(group.remainingBalance)}</span>
+          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(group.remainingBalance)} • Pago: {formatCurrency(group.accumulatedPaid)}</span>
           <span className="text-[10px] text-muted-foreground tabular-nums">Parcela: {formatCurrency(group.instAmount)}</span>
         </div>
       </div>
