@@ -685,10 +685,10 @@ export default function DailyCashPage() {
     try {
       await supabase.from("not_paid_marks").delete().eq("id", markId);
       if (mark) {
-        const { data: events } = await (supabase.from("daily_events" as any)
+        const { data: events } = await (supabase.from("daily_events")
           .select("id").eq("event_type", "nao_pagou")
           .eq("installment_id", mark.installment_id)
-          .eq("cash_date", selectedDate) as any);
+          .eq("cash_date", selectedDate) as unknown as QueryResult<{ id: string }>);
         for (const ev of (events || [])) {
           await deleteDailyEvent(ev.id);
         }
@@ -721,16 +721,16 @@ export default function DailyCashPage() {
     const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
 
     const { data: penaltyMovements } = await (supabase
-      .from("cash_movements").select("amount") as any)
+      .from("cash_movements").select("amount") as unknown as { eq: (column: string, value: string) => { eq: (column: string, value: string) => QueryResult<PenaltyMovementRow> } })
       .eq("type", "recebimento_multa")
       .eq("cash_date", selectedDate);
-    const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
+    const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
     const { data: { session: s3 } } = await supabase.auth.getSession();
     const { data: existing } = await supabase
       .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
 
-    const payload: any = {
+    const payload: DailyCashPayload = {
       cash_date: selectedDate, status: "closed", total_received: totalReceived,
       total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
       total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
