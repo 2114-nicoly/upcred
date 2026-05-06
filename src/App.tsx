@@ -99,8 +99,10 @@ function AppRoutes() {
                 <Route path="/caixa" element={<WrappedRoute element={<CaixaPage />} />} />
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
                 <Route path="/reports" element={<WrappedRoute element={<ReportsPage />} />} />
-                <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
+                <Route path="/admin-tools" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
                 <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
+                <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
+                <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
