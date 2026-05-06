@@ -298,8 +298,8 @@ export default function LoanDetailPage() {
     try {
       await editPayment({
         loanId: loanId!, clientId: loan.client_id, clientName: loan.clients.name,
-        cashDate: editPayEntry.cashDate, oldAmount: editPayEntry.amount, newAmount,
-        origin: "detalhe_emprestimo", movementId: editPayEntry.movementId, eventId: editPayEntry.eventId,
+        cashDate: editPayEntry.cashDate, newAmount,
+        origin: "detalhe_emprestimo", movementId: editPayEntry.movementId,
       });
       toast.success("Pagamento editado!");
     } catch { toast.error("Erro ao editar pagamento"); }
