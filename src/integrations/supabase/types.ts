@@ -608,6 +608,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_assign_client_codes: { Args: never; Returns: number }
+      admin_recalculate_installments: { Args: never; Returns: number }
+      admin_recalculate_loans: { Args: never; Returns: number }
       apply_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
