@@ -92,7 +92,7 @@ export async function registerPayment(params: {
   /** Starting installment number for overflow */
   startInstNumber?: number;
 }) {
-  const { loanId, amount, clientId, clientName, cashDate, origin, installmentId, startInstNumber } = params;
+  const { loanId, amount, clientId, clientName, cashDate, origin, installmentId } = params;
   if (amount <= 0) return { applied: 0, newBalance: 0 };
 
   const { data: loanData } = await supabase
@@ -189,15 +189,15 @@ export async function registerPenaltyPayment(params: {
   }).eq("id", penaltyInst.id);
 
   await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
-  await createCashMovement({
+  const movement = await createCashMovement({
     type: "recebimento_multa",
     amount,
     client_id: clientId,
     loan_id: loanId,
     observation: `Pagamento de multa - ${clientName}`,
     cash_date: cashDate,
-  });
-  await createDailyEvent({
+  }) as any;
+  const event = await createDailyEvent({
     cash_date: cashDate,
     event_type: "recebimento_multa",
     client_id: clientId,
@@ -205,7 +205,9 @@ export async function registerPenaltyPayment(params: {
     amount_in: amount,
     observation: `Multa - ${clientName}`,
     origin,
-  });
+    cash_movement_id: movement?.id || null,
+  } as any) as any;
+  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
 }
 
 /**
