@@ -23,6 +23,7 @@ export async function recalculateInstallments(loanId: string) {
   if (!loan) return;
 
   const totalPaid = Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance));
+  const today = new Date().toISOString().split("T")[0];
 
   const { data: insts } = await supabase
     .from("installments")
@@ -50,21 +51,18 @@ export async function recalculateInstallments(loanId: string) {
       }
       remaining -= instAmount;
     } else if (remaining > 0.01) {
-      // Any value received counts as treated/paid for the route day.
-      // remaining_balance stays the financial source of truth for what is still owed.
+      // Partially paid: never mark as paid until paid_amount reaches amount.
       const newPaid = remaining;
       await supabase.from("installments").update({
         paid_amount: newPaid,
-        status: "paid",
+        status: "partial",
         paid_at: new Date().toISOString(),
       }).eq("id", inst.id);
       remaining = 0;
     } else {
-      // Not paid - check if overdue
-      const isOverdue = new Date(inst.due_date) < new Date(new Date().toISOString().split("T")[0]);
+      const isOverdue = inst.due_date < today;
       const newStatus = isOverdue ? "overdue" : "pending";
-      const needsUpdate = Number(inst.paid_amount) !== 0 || (inst.status !== newStatus && inst.status !== "pending" && inst.status !== "overdue");
-      if (needsUpdate || Number(inst.paid_amount) !== 0) {
+      if (Number(inst.paid_amount) !== 0 || inst.status !== newStatus || inst.paid_at) {
         await supabase.from("installments").update({
           paid_amount: 0,
           status: newStatus,
