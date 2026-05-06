@@ -11,15 +11,15 @@ const bottomNavItems = [
   { path: "/caixa", label: "Geral", icon: Wallet },
 ];
 
-const sidebarItems = [
+const baseSidebarItems = [
   { path: "/", label: "Rota", icon: MapPin },
   { path: "/caixa", label: "Geral", icon: Wallet },
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
   { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
-  { path: "/admin", label: "Administrador", icon: Shield },
 ];
+const adminSidebarItem = { path: "/admin", label: "Administrador", icon: Shield };
 
 // Extended route labels for header (includes sub-pages)
 const routeLabels: Record<string, string> = {
