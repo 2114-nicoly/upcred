@@ -1275,7 +1275,7 @@ export default function DailyCashPage() {
                 {newLoans.filter(r => !!r.renewed_from_loan_id).map(r => {
                   const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
                   // Find the renovacao daily_event for this loan to extract paid/liberado from observation
-                  const renewEvt = allEventsToday.find((e: any) => e.event_type === "renovacao" && e.loan_id === r.id);
+                  const renewEvt = renewalEvents.find((e) => e.event_type === "renovacao" && e.loan_id === r.id);
                   const liberado = renewEvt ? Number(renewEvt.amount_out) : Number(r.amount);
                   // Try parse Pago / Faltava from observation
                   const obs = renewEvt?.observation || "";
