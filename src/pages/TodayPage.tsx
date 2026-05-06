@@ -131,7 +131,7 @@ export default function TodayPage() {
     }
   };
 
-  useEffect(() => { fetchInstallments(); }, []);
+  useEffect(() => { fetchInstallments(); }, [selectedWorkerId]);
 
   const handlePay = async (id: string) => {
     const allInsts = [...installments, ...overdueInstallments];
