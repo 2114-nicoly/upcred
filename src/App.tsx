@@ -26,6 +26,9 @@ import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
 import AdminPage from "@/pages/AdminPage";
 import WorkersPage from "@/pages/WorkersPage";
+import AdminPanelPage from "@/pages/AdminPanelPage";
+import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
+import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -96,8 +99,10 @@ function AppRoutes() {
                 <Route path="/caixa" element={<WrappedRoute element={<CaixaPage />} />} />
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
                 <Route path="/reports" element={<WrappedRoute element={<ReportsPage />} />} />
-                <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
+                <Route path="/admin-tools" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
                 <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
+                <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
+                <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
@@ -116,7 +121,9 @@ const App = () => (
       <BrowserRouter>
         <ErrorBoundary>
           <AuthProvider>
-            <AppRoutes />
+            <WorkerFilterProvider>
+              <AppRoutes />
+            </WorkerFilterProvider>
           </AuthProvider>
         </ErrorBoundary>
       </BrowserRouter>

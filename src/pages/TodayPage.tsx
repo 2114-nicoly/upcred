@@ -15,6 +15,8 @@ import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 
 type InstallmentWithLoan = {
   id: string;
@@ -33,6 +35,7 @@ type InstallmentWithLoan = {
     total_amount: number;
     installment_count: number;
     payment_type: string;
+    worker_id: string | null;
     clients: { id: string; name: string };
   };
 };
@@ -47,6 +50,7 @@ type LoanProgress = {
 
 export default function TodayPage() {
   const navigate = useNavigate();
+  const { selectedWorkerId } = useWorkerFilter();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
@@ -63,24 +67,26 @@ export default function TodayPage() {
     try {
       const { data } = await supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, clients(id, name))")
         .eq("due_date", today)
         .neq("status", "paid")
         .eq("is_penalty", false)
         .order("number");
 
-      const todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
+      let todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
+      if (selectedWorkerId) todayInsts = todayInsts.filter((i) => i.loans?.worker_id === selectedWorkerId);
       setInstallments(todayInsts);
 
       const { data: overdueData } = await supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, clients(id, name))")
         .lt("due_date", today)
         .neq("status", "paid")
         .eq("is_penalty", false)
         .order("due_date");
 
-      const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
+      let overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
+      if (selectedWorkerId) overdueInsts = overdueInsts.filter((i) => i.loans?.worker_id === selectedWorkerId);
       setOverdueInstallments(overdueInsts);
 
       const allInsts = [...todayInsts, ...overdueInsts];
@@ -125,7 +131,7 @@ export default function TodayPage() {
     }
   };
 
-  useEffect(() => { fetchInstallments(); }, []);
+  useEffect(() => { fetchInstallments(); }, [selectedWorkerId]);
 
   const handlePay = async (id: string) => {
     const allInsts = [...installments, ...overdueInstallments];
@@ -303,9 +309,12 @@ export default function TodayPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <p className="mb-4 text-sm text-muted-foreground">
-        {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        </p>
+        <WorkerFilterSelect className="max-w-[200px]" />
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3">
         <Card className="text-center">

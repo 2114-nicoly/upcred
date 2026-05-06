@@ -1,85 +1,166 @@
-# Plano: 1 Empréstimo Ativo por Cliente + Área do Cliente Profissional
+## Fase 2 — Painel Admin, Filtros por Trabalhador, Transferência e Auditoria
 
-## Objetivo
-
-Cada cliente passa a ter no máximo **1 empréstimo ativo**, a tela do cliente vira o "centro de operação" do empréstimo dele, e o `#código` deixa de aparecer junto ao nome em todas as telas.
+### Visão geral
+Implementar visão consolidada do admin com filtro por trabalhador em todas as telas operacionais, criar Painel Admin com comparativo, transferência de cliente (apenas empréstimo ativo) e auditoria completa de ações.
 
 ---
 
-## 1) Regra: 1 empréstimo ativo por cliente
+### 1) Banco de dados (migração única)
 
-Considera-se "ativo" qualquer empréstimo com `status != 'paid'` (open/overdue).
+**Nova tabela `audit_logs`**
+- `user_id` (quem fez), `user_role`, `worker_id` (escopo do dado), `action_type`, `entity_type`, `entity_id`, `old_value` (jsonb), `new_value` (jsonb), `observation`, `created_at`
+- RLS: admin vê tudo; trabalhador vê apenas onde `worker_id = get_worker_id(auth.uid())` E `user_id = auth.uid()`
 
-**Helper novo** em `src/lib/loan-utils.ts`:
-- `getActiveLoanForClient(clientId)` → retorna o empréstimo ativo (ou null).
+**Nova tabela `client_transfers`**
+- `client_id`, `loan_id`, `from_worker_id`, `to_worker_id`, `transferred_by` (admin), `transferred_at`, `observation`
+- RLS: admin gerencia; trabalhador vê transferências que envolvem seu próprio worker_id
 
-**Bloqueios aplicados em:**
-- `NewLoanSelectClientPage.tsx`: ao clicar num cliente que já tem ativo, mostrar dialog com 3 opções (Abrir ativo / Renovar / Cancelar). Não navegar direto para `/clients/:id/new-loan`.
-- `NewLoanPage.tsx`: revalida no `handleSave`. Se já existe ativo e **não é renovação**, bloqueia com toast e oferece navegar ao ativo.
-- `ClientDetailPage.tsx`: botão "Novo" só aparece quando não há ativo. Quando há ativo, vira "Renovar".
-- Renovação continua permitida (passa por `settleLoan` do antigo dentro do mesmo fluxo, então no momento do insert o antigo ainda é ativo — tratamos isso permitindo o insert quando `renewFromLoanId` está presente E o ativo é exatamente esse loan).
+**Função `admin_transfer_client(p_client_id, p_to_worker_id, p_observation)`**
+- SECURITY DEFINER, somente admin
+- Move cliente e SOMENTE o empréstimo ativo + parcelas pendentes para o novo `worker_id`
+- Pagamentos, eventos, caixas e empréstimos antigos permanecem com worker_id original
+- Grava em `client_transfers` e `audit_logs`
 
-## 2) Remoção dos sufixos `#código` na UI
+**Função `log_audit(p_action, p_entity, p_entity_id, p_old, p_new, p_obs, p_worker_id)`**
+- Helper SECURITY DEFINER para inserir na tabela de logs sem expor RLS
 
-Remover a renderização de `#{client_code}` em todas as telas, mantendo o campo no banco apenas como ID interno:
-- `ClientsPage.tsx` (linha 185)
-- `ClientDetailPage.tsx` (linha 156)
-- `NewLoanSelectClientPage.tsx` (linha 113)
+---
 
-Busca por código continua funcionando (campo permanece pesquisável internamente).
+### 2) Hook de contexto admin
 
-## 3) Tela do Cliente reorganizada (`ClientDetailPage.tsx`)
+**`src/hooks/useWorkerFilter.tsx`**
+- Estado global do filtro de trabalhador selecionado pelo admin (persistido em localStorage)
+- Valores: `null` = consolidado (todos), ou `worker_id` específico
+- Lista de trabalhadores ativos
+- Helper `applyWorkerFilter(query)` que adiciona `.eq("worker_id", id)` se filtro ativo
 
-Estrutura nova (mantendo o layout mobile-first atual):
+**`src/lib/audit-utils.ts`**
+- `logAction(action_type, entity_type, entity_id, old?, new?, obs?)`
+- Chamada após cada operação sensível
 
+---
+
+### 3) Filtro de trabalhador nas telas operacionais
+
+Adicionar dropdown "Trabalhador" (visível só para admin) no topo de:
+- **TodayPage** (Rota)
+- **CaixaPage / DailyCashPage** (Geral)
+- **ActiveLoansPage** (Empréstimos Ativos)
+- **OverdueLoansPage** (Atrasados)
+- **ReportsPage** (Relatórios)
+- **ClientsPage** (Clientes)
+- **CashHistoryPage / DailyCashHistoryPage**
+
+Comportamento:
+- Default: "Todos os trabalhadores" (consolidado)
+- Opções: Todos + lista de trabalhadores ativos
+- Trabalhador comum: dropdown oculto, vê só os próprios dados (já garantido por RLS)
+- Badge com nome do trabalhador em cada item nas listas consolidadas
+
+---
+
+### 4) Painel Admin (`/admin`)
+
+Substituir/expandir a `WorkersPage` atual em uma nova `AdminPanelPage` com abas:
+
+**Aba 1 — Visão Geral (consolidado)**
+- Cards do dia: previsto, recebido, falta receber, %, emprestado, retirado, aportado, saldo líquido, clientes ativos, empréstimos ativos, atrasados, trabalhadores ativos
+- Mesmos cards para semana (seg-dom), mês, período personalizado
+- Cada card é clicável → drill-down
+
+**Aba 2 — Trabalhadores**
+- Lista de cards de trabalhadores com: nome, login, status, clientes ativos, empréstimos ativos, previsto hoje, recebido hoje, não pagos hoje, atrasados, saldo em aberto, recebido semana, recebido mês, saldo líquido período
+- Ações: criar, redefinir senha, ativar/desativar
+- Click no card → `/admin/worker/:id` (painel individual)
+
+**Aba 3 — Comparativo**
+- Tabela ranking: trabalhador | previsto | recebido | % | não pagos | atrasados | emprestado | retirado | aportado | saldo líquido
+- Ordenável por coluna; filtro de período (dia/semana/mês/personalizado)
+
+**Aba 4 — Auditoria**
+- Lista de logs com filtros: usuário, trabalhador, tipo de ação, período
+- Mostra valor anterior vs valor novo
+
+---
+
+### 5) Painel individual do trabalhador (`/admin/worker/:id`)
+
+Página completa com:
+- Resumo dia/semana/mês/personalizado
+- Atalhos: Clientes do trabalhador, Empréstimos ativos, Rota, Caixa, Pagamentos, Não pagos, Renovações, Empréstimos novos, Retiradas, Aportes
+- Botão "Ver como este trabalhador" → ativa filtro global e navega para Rota
+- Histórico de ações desse trabalhador (audit_logs filtrado)
+
+---
+
+### 6) Transferência de cliente
+
+**Botão "Transferir para outro trabalhador"** em:
+- `ClientDetailPage` (apenas admin)
+- Card de trabalhador no admin → transferir cliente específico
+
+**Diálogo de transferência:**
+- Selecionar trabalhador destino
+- Mostrar resumo: cliente X, empréstimo ativo Y (R$ Z), N parcelas pendentes
+- Aviso: "Histórico antigo permanece com o trabalhador atual"
+- Campo observação
+- Confirmação → chama `admin_transfer_client`
+
+---
+
+### 7) Logs de auditoria
+
+Instrumentar `logAction(...)` em:
+- Criação/edição/exclusão: cliente, empréstimo, parcela
+- Pagamento, desfazer pagamento, edição de pagamento
+- Marcar não pagou
+- Renovação, quitação
+- Aporte, retirada, ajuste manual de caixa
+- Fechamento de caixa
+- Criação/reset/ativar trabalhador
+- Transferência de cliente
+
+---
+
+### 8) Identificação visual
+
+- Header: badge "Admin" quando admin logado; quando filtro ativo → mostrar "Vendo: {nome do trabalhador}" com botão limpar
+- Quando consolidado: "Visão consolidada"
+- Listas consolidadas: mini-badge `[trabalhador]` em cada item
+
+---
+
+### Detalhes técnicos
+
+**Cálculo da semana:** `startOfWeek(d, { weekStartsOn: 1 })` até `endOfWeek(d, { weekStartsOn: 1 })` (segunda a domingo).
+
+**RLS:** já garantida pelas policies existentes (`has_role(admin) OR worker_id = get_worker_id(uid)`). O filtro do admin é aplicação-side (`.eq("worker_id", x)`), nunca remove a verificação RLS.
+
+**Performance:** consultas consolidadas paralelizadas com `Promise.all`. Hooks leves para não recarregar tudo ao trocar de aba.
+
+**Trabalhador comum:** todas as novas rotas admin (`/admin/*`) protegidas por guard `if (!isAdmin) navigate("/")`.
+
+### Estrutura de arquivos
+
+```text
+src/
+  hooks/
+    useWorkerFilter.tsx          (novo, contexto global)
+  lib/
+    audit-utils.ts               (novo)
+    consolidated-stats.ts        (novo, agregações)
+  pages/
+    AdminPanelPage.tsx           (novo, com abas)
+    AdminWorkerDetailPage.tsx    (novo)
+    WorkersPage.tsx              (mantido, vira aba)
+  components/
+    WorkerFilterSelect.tsx       (novo, dropdown)
+    TransferClientDialog.tsx     (novo)
+    AuditLogList.tsx             (novo)
+supabase/migrations/             (audit_logs + client_transfers + funções)
 ```
-[ Header limpo: Nome + telefone + notas + botão Editar ]
 
-[ Card "Empréstimo Ativo" ]
-  Se existe:
-    - Badge status (Em dia / Atrasado N dias)
-    - Saldo Restante (destaque grande)
-    - Total pago (secundário)
-    - Valor da parcela (referência)
-    - Progresso fracionado (ex.: 3,5/12) + barra
-    - Próximo vencimento
-    - Botões: [Pagar] [Renovar] [Ver Detalhes]
-  Se não existe:
-    - "Nenhum empréstimo ativo"
-    - Botão [Criar Empréstimo]
-
-[ Histórico de Empréstimos (collapsible) ]
-  Lista de loans com status='paid' ou encerrados:
-    - Data início → data quitação
-    - Valor total / Total pago
-    - Badge: Quitado / Renovado (quando outro loan tem renewed_from_loan_id = este.id)
-```
-
-Os botões "Pagar"/"Renovar" navegam para o `LoanDetailPage` e `NewLoanPage?renewFrom=...` já existentes (não duplicar lógica de pagamento aqui).
-
-## 4) Prevenção de duplicidade de cliente
-
-Em `ClientsPage.handleCreate` e `NewLoanSelectClientPage.handleCreateClient`:
-- Antes do insert, query: clientes com mesmo `name` (case-insensitive trim) **ou** mesmo `phone` (se preenchido).
-- Se encontrar, mostrar dialog "Cliente parecido encontrado: ..." com [Usar existente] [Criar mesmo assim] [Cancelar].
-
-## 5) Detalhes técnicos
-
-- **Sem migrations**: não tornamos a regra "1 ativo" um constraint no banco — fica como regra de aplicação. Justificativa: renovação precisa coexistir brevemente com o antigo durante a transação, e queremos exibir mensagens amigáveis ao usuário em vez de erros do Postgres.
-- `client_code` permanece no banco para ordenação determinística e busca; só sai da UI.
-- `LoanDetailPage`, `ActiveLoansPage`, `TodayPage` (Rota) já mostram o nome sem prefixo — só auditar e remover se houver algum.
-
-## 6) Arquivos editados
-
-- `src/lib/loan-utils.ts` — adicionar `getActiveLoanForClient`
-- `src/pages/ClientsPage.tsx` — remover `#código`, dedupe no create
-- `src/pages/ClientDetailPage.tsx` — reorganização total da tela + remover `#código`
-- `src/pages/NewLoanSelectClientPage.tsx` — remover `#código`, dialog "já tem ativo", dedupe
-- `src/pages/NewLoanPage.tsx` — guard server-side de "1 ativo"
-
-## 7) Validação
-
-- Build (rodado pela harness)
-- Manual: criar cliente novo → criar empréstimo → tentar criar outro (deve bloquear) → renovar (deve passar) → tela do cliente mostra ativo+histórico corretamente.
-
-Não mexo em pagamentos, daily_events, parcelas, multa nem layout geral — só na área de cliente/criação e nos rótulos.
+### Fora do escopo desta entrega
+- Edição inline de trabalhadores (mantém o que já existe)
+- Exportação de relatórios em PDF/Excel
+- Notificações em tempo real (realtime)

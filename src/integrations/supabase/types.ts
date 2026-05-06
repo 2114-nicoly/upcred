@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action_type: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          new_value: Json | null
+          observation: string | null
+          old_value: Json | null
+          user_id: string | null
+          user_role: string | null
+          worker_id: string | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          new_value?: Json | null
+          observation?: string | null
+          old_value?: Json | null
+          user_id?: string | null
+          user_role?: string | null
+          worker_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          new_value?: Json | null
+          observation?: string | null
+          old_value?: Json | null
+          user_id?: string | null
+          user_role?: string | null
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
       cash_balance: {
         Row: {
           available_cash: number
@@ -132,6 +174,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      client_transfers: {
+        Row: {
+          client_id: string
+          created_at: string
+          from_worker_id: string | null
+          id: string
+          loan_id: string | null
+          observation: string | null
+          to_worker_id: string
+          transferred_by: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          from_worker_id?: string | null
+          id?: string
+          loan_id?: string | null
+          observation?: string | null
+          to_worker_id: string
+          transferred_by: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          from_worker_id?: string | null
+          id?: string
+          loan_id?: string | null
+          observation?: string | null
+          to_worker_id?: string
+          transferred_by?: string
+        }
+        Relationships: []
       }
       clients: {
         Row: {
@@ -806,6 +881,15 @@ export type Database = {
     }
     Functions: {
       admin_assign_client_codes: { Args: never; Returns: number }
+      admin_list_workers: {
+        Args: never
+        Returns: {
+          active: boolean
+          id: string
+          login_codigo: string
+          nome: string
+        }[]
+      }
       admin_recalculate_installments: { Args: never; Returns: number }
       admin_recalculate_loans: { Args: never; Returns: number }
       admin_register_worker: {
@@ -815,6 +899,14 @@ export type Database = {
           p_nome: string
           p_notas?: string
           p_synthetic_email: string
+        }
+        Returns: string
+      }
+      admin_transfer_client: {
+        Args: {
+          p_client_id: string
+          p_observation?: string
+          p_to_worker_id: string
         }
         Returns: string
       }
@@ -855,6 +947,18 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      log_audit: {
+        Args: {
+          p_action: string
+          p_entity: string
+          p_entity_id?: string
+          p_new?: Json
+          p_obs?: string
+          p_old?: Json
+          p_worker_id?: string
+        }
+        Returns: string
       }
       reverse_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }

@@ -20,6 +20,9 @@ import {
 import { Plus, ChevronDown, History, Clock, Pencil, DollarSign, RefreshCw, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import TransferClientDialog from "@/components/TransferClientDialog";
+import { ArrowRightLeft } from "lucide-react";
 
 type Loan = {
   id: string;
@@ -56,12 +59,14 @@ type Client = {
 export default function ClientDetailPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [installmentsByLoan, setInstallmentsByLoan] = useState<Record<string, Installment[]>>({});
   const [renewedFromIds, setRenewedFromIds] = useState<Set<string>>(new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -162,15 +167,33 @@ export default function ClientDetailPage() {
           {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
           {client.notes && <p className="text-xs text-muted-foreground mt-1">{client.notes}</p>}
         </div>
-        <Button size="sm" variant="outline" onClick={() => {
-          setEditName(client.name);
-          setEditPhone(client.phone || "");
-          setEditNotes(client.notes || "");
-          setEditOpen(true);
-        }}>
-          <Pencil className="mr-1 h-3 w-3" /> Editar
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button size="sm" variant="outline" onClick={() => {
+            setEditName(client.name);
+            setEditPhone(client.phone || "");
+            setEditNotes(client.notes || "");
+            setEditOpen(true);
+          }}>
+            <Pencil className="mr-1 h-3 w-3" /> Editar
+          </Button>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setTransferOpen(true)}>
+              <ArrowRightLeft className="mr-1 h-3 w-3" /> Transferir
+            </Button>
+          )}
+        </div>
       </div>
+
+      {isAdmin && client && (
+        <TransferClientDialog
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          clientId={client.id}
+          clientName={client.name}
+          currentWorkerId={(client as any).worker_id ?? null}
+          onTransferred={fetchData}
+        />
+      )}
 
       {/* Active Loan section */}
       <div>

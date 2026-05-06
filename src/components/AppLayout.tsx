@@ -1,9 +1,11 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft, LogOut } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft, LogOut, Eye } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 const bottomNavItems = [
@@ -20,8 +22,8 @@ const baseSidebarItems = [
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
 ];
 const adminSidebarItems = [
-  { path: "/workers", label: "Trabalhadores", icon: Users },
-  { path: "/admin", label: "Administrador", icon: Shield },
+  { path: "/admin", label: "Painel Admin", icon: Shield },
+  { path: "/admin-tools", label: "Manutenção", icon: Shield },
 ];
 
 // Extended route labels for header (includes sub-pages)
@@ -32,7 +34,8 @@ const routeLabels: Record<string, string> = {
   "/active-loans": "Empréstimos Ativos",
   "/daily-cash-history": "Histórico",
   "/reports": "Relatórios",
-  "/admin": "Administrador",
+  "/admin": "Painel Admin",
+  "/admin-tools": "Manutenção",
   "/workers": "Trabalhadores",
   "/overdue": "Parcelas Atrasadas",
   "/today-summary": "Resumo do Dia",
@@ -55,6 +58,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin, signOut } = useAuth();
+  const { selectedWorkerId, selectedWorkerName, setSelectedWorkerId } = useWorkerFilter();
   const [open, setOpen] = useState(false);
 
   const handleSignOut = async () => {
@@ -63,7 +67,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navigate("/auth", { replace: true });
   };
 
-  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/workers"];
+  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/admin-tools", "/workers"];
   const isMainPage = mainPages.includes(location.pathname);
   const sidebarItems = isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
 
@@ -128,6 +132,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <span className="text-base font-bold text-foreground">
           {getRouteLabel(location.pathname)}
         </span>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-1.5">
+            {selectedWorkerId ? (
+              <button
+                onClick={() => setSelectedWorkerId(null)}
+                className="flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20"
+                title="Limpar filtro"
+              >
+                <Eye className="h-3 w-3" />
+                <span className="truncate max-w-[120px]">{selectedWorkerName}</span>
+                <X className="h-3 w-3" />
+              </button>
+            ) : (
+              <Badge variant="outline" className="text-[10px] h-5">Consolidado</Badge>
+            )}
+            <Badge className="text-[10px] h-5">Admin</Badge>
+          </div>
+        )}
       </header>
 
       <main className="flex-1 overflow-auto pb-20">{children}</main>
