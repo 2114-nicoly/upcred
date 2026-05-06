@@ -96,10 +96,26 @@ export default function NewLoanPage() {
     }
   }, [numInstallments, paymentType]);
 
+  // Renewal computed values
+  const renewPaid = parseFloat(renewPaidAmount) || 0;
+  const faltaQuitar = renewOldRemaining;
+  // Quanto do principal do novo empréstimo será absorvido para quitar o antigo
+  const absorvidoDoNovo = renewFromLoanId ? Math.max(0, faltaQuitar - renewPaid) : 0;
+  // Dinheiro real liberado ao cliente
+  const valorLiberado = renewFromLoanId ? Math.max(0, numAmount - absorvidoDoNovo) : numAmount;
+  // Quanto a renovação consegue cobrir do antigo
+  const cobreAntigo = renewPaid + numAmount;
+  const renovacaoQuita = renewFromLoanId ? cobreAntigo + 0.01 >= faltaQuitar : true;
+
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error("Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
+
+    if (renewFromLoanId && !renovacaoQuita) {
+      toast.error(`Renovação insuficiente. Faltam ${formatCurrency(faltaQuitar - cobreAntigo)} para quitar o empréstimo atual.`);
+      return;
+    }
 
     setSaving(true);
 
@@ -116,6 +132,26 @@ export default function NewLoanPage() {
     const userId = session?.user?.id;
     if (!userId) { toast.error("Sessão expirada"); setSaving(false); return; }
 
+    // ===== RENOVAÇÃO: registrar pagamento em dinheiro do cliente no antigo (se houver) =====
+    if (renewFromLoanId && renewPaid > 0) {
+      try {
+        await registerPayment({
+          loanId: renewFromLoanId,
+          amount: Math.min(renewPaid, faltaQuitar),
+          clientId: clientId!,
+          clientName: clientName,
+          cashDate: loanDate,
+          origin: "renovacao",
+        });
+      } catch (err) {
+        console.error("Erro ao registrar pagamento da renovação:", err);
+        toast.error("Erro ao registrar pagamento da renovação");
+        setSaving(false);
+        return;
+      }
+    }
+
+    // ===== Criar novo empréstimo =====
     const { data: loan, error: loanError } = await supabase
       .from("loans")
       .insert({
@@ -147,44 +183,61 @@ export default function NewLoanPage() {
     const { error: instError } = await supabase.from("installments").insert(installments);
     if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
 
-    // Update cash balance
+    // Cash balance: empréstimo novo sai numAmount em caixa.
+    // Renovação: o que sai do caixa real é apenas valorLiberado.
     const interest = calc.totalAmount - numAmount;
+    const cashOut = renewFromLoanId ? valorLiberado : numAmount;
     await updateCashBalance({
-      available_cash: -numAmount,
+      available_cash: -cashOut,
       money_lent: numAmount,
       interest_receivable: interest,
     });
 
-    // Create cash movement
-    await createCashMovement({
-      type: "emprestimo",
-      amount: -numAmount,
-      client_id: clientId!,
-      loan_id: loan.id,
-      observation: `${renewFromLoanId ? "Renovação" : "Empréstimo"} de ${formatCurrency(numAmount)} para ${clientName}`,
-      cash_date: loanDate,
-    });
+    if (cashOut > 0) {
+      await createCashMovement({
+        type: "emprestimo",
+        amount: -cashOut,
+        client_id: clientId!,
+        loan_id: loan.id,
+        observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
+        cash_date: loanDate,
+      });
+    }
 
-    // Register daily event
+    const renewObs = renewFromLoanId
+      ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
+      : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+
     await createDailyEvent({
       cash_date: loanDate,
       event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
       client_id: clientId!,
       loan_id: loan.id,
-      amount_out: numAmount,
-      observation: `${renewFromLoanId ? "Renovação" : "Novo empréstimo"} - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`,
+      amount_in: 0,
+      amount_out: cashOut,
+      observation: renewObs,
       origin: "novo_emprestimo",
     });
 
-    // If renewal, close old loan using centralized logic
+    // Se ainda restou saldo no antigo após o pagamento, quitar (absorvido pelo novo)
     if (renewFromLoanId) {
-      await settleLoan({
-        loanId: renewFromLoanId,
-        clientId: clientId!,
-        clientName: clientName,
-        cashDate: loanDate,
-        origin: "renovacao",
-      });
+      const { data: oldLoanState } = await supabase
+        .from("loans")
+        .select("remaining_balance")
+        .eq("id", renewFromLoanId)
+        .single();
+      const stillOwed = Number(oldLoanState?.remaining_balance) || 0;
+      if (stillOwed > 0.01) {
+        await settleLoan({
+          loanId: renewFromLoanId,
+          clientId: clientId!,
+          clientName: clientName,
+          cashDate: loanDate,
+          origin: "renovacao",
+        });
+      } else {
+        await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
+      }
       toast.success("Empréstimo renovado com sucesso!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
