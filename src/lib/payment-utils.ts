@@ -153,6 +153,7 @@ export async function registerPayment(params: {
 
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
+  await recalculateCashBalanceFromLedger();
 
   return { applied, newBalance: Number(newBalance) };
 }
@@ -208,6 +209,7 @@ export async function registerPenaltyPayment(params: {
     cash_movement_id: movement?.id || null,
   } as any) as any;
   if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+  await recalculateCashBalanceFromLedger();
 }
 
 /**
