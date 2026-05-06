@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
+import { createDailyEvent } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 
 /**
@@ -153,6 +153,7 @@ export async function registerPayment(params: {
 
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
+  await recalculateCashBalanceFromLedger();
 
   return { applied, newBalance: Number(newBalance) };
 }
@@ -184,7 +185,7 @@ export async function registerPenaltyPayment(params: {
   const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
   await supabase.from("installments").update({
     paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-    status: fullyPaid ? "paid" : penaltyInst.status,
+    status: fullyPaid ? "paid" : newPaid > 0.01 ? "partial" : penaltyInst.status,
     paid_at: fullyPaid ? new Date(cashDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
   }).eq("id", penaltyInst.id);
 
@@ -208,6 +209,7 @@ export async function registerPenaltyPayment(params: {
     cash_movement_id: movement?.id || null,
   } as any) as any;
   if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+  await recalculateCashBalanceFromLedger();
 }
 
 /**
@@ -279,7 +281,7 @@ export async function settleLoan(params: {
       interest_receivable: -toInterest,
       money_lent: -toPrincipal,
     });
-    await createCashMovement({
+    const movement = await createCashMovement({
       type: "recebimento_normal",
       amount: realBalance,
       client_id: clientId,
@@ -287,7 +289,19 @@ export async function settleLoan(params: {
       installment_id: installmentId || null,
       observation: `Quitação empréstimo - ${clientName}`,
       cash_date: cashDate,
-    });
+    }) as any;
+    const event = await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "pagamento",
+      client_id: clientId,
+      loan_id: loanId,
+      installment_id: installmentId || null,
+      amount_in: realBalance,
+      observation: `Quitação empréstimo - ${clientName}`,
+      origin,
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
   } else {
     // Balance already zero, just mark as paid
     await supabase.from("loans").update({ status: "paid" }).eq("id", loanId);
@@ -308,32 +322,29 @@ export async function settleLoan(params: {
 
   if (totalPenaltyPaying > 0) {
     await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-    await createCashMovement({
+    const movement = await createCashMovement({
       type: "recebimento_multa",
       amount: totalPenaltyPaying,
       client_id: clientId,
       loan_id: loanId,
       observation: `Quitação multa - ${clientName}`,
       cash_date: cashDate,
-    });
-  }
-
-  // Daily event for the full payoff
-  const totalPaying = realBalance + totalPenaltyPaying;
-  if (totalPaying > 0) {
-    await createDailyEvent({
+    }) as any;
+    const event = await createDailyEvent({
       cash_date: cashDate,
-      event_type: "pagamento",
+      event_type: "recebimento_multa",
       client_id: clientId,
       loan_id: loanId,
-      installment_id: installmentId || null,
-      amount_in: totalPaying,
-      observation: `Quitação - ${clientName}`,
+      amount_in: totalPenaltyPaying,
+      observation: `Quitação multa - ${clientName}`,
       origin,
-    });
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
   }
 
   await recalculateInstallments(loanId);
+  await recalculateCashBalanceFromLedger();
 
   return { regularPaid: realBalance, penaltyPaid: totalPenaltyPaying };
 }
@@ -349,17 +360,38 @@ export async function reversePayment(params: {
 
   const { data: movement, error } = await supabase
     .from("cash_movements")
-    .select("id, amount, loan_id, installment_id, daily_event_id")
+    .select("id, type, amount, loan_id, installment_id, daily_event_id")
     .eq("id", movementId)
-    .eq("type", "recebimento_normal")
     .single();
 
   if (error || !movement?.loan_id) throw new Error("Lançamento de pagamento não encontrado");
   const loanId = movement.loan_id;
   const totalReversed = Number(movement.amount);
 
-  if (totalReversed > 0) {
+  if (movement.type === "recebimento_normal" && totalReversed > 0) {
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
+  } else if (movement.type === "recebimento_multa" && totalReversed > 0) {
+    const { data: penaltyInsts } = await supabase
+      .from("installments")
+      .select("id, amount, paid_amount, due_date, paid_at")
+      .eq("loan_id", loanId)
+      .eq("is_penalty", true)
+      .order("number");
+    let remainingToReverse = totalReversed;
+    for (const inst of (penaltyInsts || [])) {
+      if (remainingToReverse <= 0.01) break;
+      const currentPaid = Number(inst.paid_amount);
+      const subtracting = Math.min(currentPaid, remainingToReverse);
+      const newPaid = Math.max(0, currentPaid - subtracting);
+      await supabase.from("installments").update({
+        paid_amount: newPaid,
+        status: newPaid >= Number(inst.amount) - 0.01 ? "paid" : newPaid > 0.01 ? "partial" : (inst.due_date < new Date().toISOString().split("T")[0] ? "overdue" : "pending"),
+        paid_at: newPaid >= Number(inst.amount) - 0.01 ? inst.paid_at : null,
+      }).eq("id", inst.id);
+      remainingToReverse -= subtracting;
+    }
+  } else {
+    throw new Error("Tipo de lançamento não pode ser desfeito automaticamente");
   }
 
   await supabase.from("cash_movements").delete().eq("id", movementId);
@@ -368,53 +400,13 @@ export async function reversePayment(params: {
     .select("id")
     .or(`id.eq.${(movement as any).daily_event_id || "00000000-0000-0000-0000-000000000000"},cash_movement_id.eq.${movementId}`) as any);
   for (const ev of (events || [])) {
-    await deleteDailyEvent(ev.id);
+    await supabase.from("daily_events" as any).delete().eq("id", ev.id);
   }
 
   await recalculateCashBalanceFromLedger();
   await recalculateInstallments(loanId);
 
   return totalReversed;
-}
-
-/**
- * Reverse a single installment payment (used in LoanDetail).
- */
-export async function reverseInstallmentPayment(params: {
-  installmentId: string;
-  loanId: string;
-}) {
-  const { installmentId, loanId } = params;
-
-  // Get the paid amount for this installment before resetting
-  const { data: instData } = await supabase
-    .from("installments")
-    .select("paid_amount")
-    .eq("id", installmentId)
-    .single();
-
-  const paidAmount = Number(instData?.paid_amount || 0);
-
-  // Delete cash_movements for this installment
-  await supabase.from("cash_movements").delete().eq("installment_id", installmentId);
-
-  // Revert installment
-  await supabase.from("installments").update({
-    status: "pending",
-    paid_at: null,
-    paid_amount: 0,
-  }).eq("id", installmentId);
-
-  // Reverse remaining_balance via RPC
-  if (paidAmount > 0) {
-    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: paidAmount });
-  }
-
-  // Recalculate cash balance
-  await recalculateCashBalanceFromLedger();
-
-  // Recalculate installment distribution and loan status
-  await recalculateInstallments(loanId);
 }
 
 /**
@@ -426,39 +418,16 @@ export async function editPayment(params: {
   clientId: string;
   clientName: string;
   cashDate: string;
-  oldAmount: number;
   newAmount: number;
   origin: string;
   movementId: string;
-  eventId: string;
 }) {
-  const { loanId, clientId, clientName, cashDate, oldAmount, newAmount, origin, movementId, eventId } = params;
+  const { loanId, clientId, clientName, cashDate, newAmount, origin, movementId } = params;
   if (newAmount <= 0) throw new Error("Valor deve ser maior que zero");
 
-  // 1. Reverse old payment from remaining_balance
-  if (oldAmount > 0) {
-    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: oldAmount });
-  }
+  // Reverse only the selected financial movement, then create a fresh linked movement/event.
+  await reversePayment({ movementId });
 
-  // 2. Reset all installments that were paid from this movement's cash_date
-  const { data: movs } = await supabase.from("cash_movements")
-    .select("installment_id")
-    .eq("loan_id", loanId)
-    .eq("cash_date", cashDate)
-    .eq("type", "recebimento_normal");
-
-  const affectedInstIds = [...new Set((movs || []).map((m: any) => m.installment_id).filter(Boolean))];
-  for (const instId of affectedInstIds) {
-    await supabase.from("installments").update({
-      status: "pending", paid_at: null, paid_amount: 0,
-    }).eq("id", instId);
-  }
-
-  // 3. Delete old cash_movement and daily_event
-  await supabase.from("cash_movements").delete().eq("id", movementId);
-  await supabase.from("daily_events" as any).delete().eq("id", eventId);
-
-  // 4. Apply new payment
   const result = await registerPayment({
     loanId, amount: newAmount,
     clientId, clientName,

@@ -6,23 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
+import { formatCurrency } from "@/lib/loan-utils";
+import { getMovementTypeLabel } from "@/lib/cash-utils";
+import { editPayment, reversePayment } from "@/lib/payment-utils";
 import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
-import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 
-type PaidInstallment = {
-  id: string;
-  number: number;
+type PaymentMovement = {
+  movementId: string;
+  eventId: string;
+  type: string;
   amount: number;
-  due_date: string;
-  paid_at: string;
-  paid_amount: number;
-  is_penalty: boolean;
-  loan_id: string;
-  loans: { id: string; amount: number; clients: { name: string } };
+  cashDate: string;
+  observation: string | null;
+  createdAt: string;
+  loanId: string | null;
+  clientId: string | null;
+  clientName: string;
 };
 
 function getDayLabel(dateStr: string): string {
@@ -33,89 +36,117 @@ function getDayLabel(dateStr: string): string {
 }
 
 export default function PaymentHistoryPage() {
-  const [installmentsByDay, setInstallmentsByDay] = useState<Record<string, PaidInstallment[]>>({});
+  const [paymentsByDay, setPaymentsByDay] = useState<Record<string, PaymentMovement[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editInst, setEditInst] = useState<PaidInstallment | null>(null);
+  const [editPaymentEntry, setEditPaymentEntry] = useState<PaymentMovement | null>(null);
   const [editPaidAmount, setEditPaidAmount] = useState("");
-  const [editPaidDate, setEditPaidDate] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchData = async () => {
-    const { data } = await supabase
-      .from("installments")
-      .select("*, loans(id, amount, clients(name))")
-      .eq("status", "paid")
-      .not("paid_at", "is", null)
-      .order("paid_at", { ascending: false });
+    setLoading(true);
+    try {
+      const { data: movements, error } = await supabase
+        .from("cash_movements")
+        .select("id, type, amount, cash_date, observation, created_at, loan_id, client_id, daily_event_id")
+        .in("type", ["recebimento_normal", "recebimento_multa"])
+        .order("cash_date", { ascending: false })
+        .order("created_at", { ascending: false });
 
-    const grouped: Record<string, PaidInstallment[]> = {};
-    ((data as unknown as PaidInstallment[]) || []).forEach((inst) => {
-      const day = format(new Date(inst.paid_at), "yyyy-MM-dd");
-      if (!grouped[day]) grouped[day] = [];
-      grouped[day].push(inst);
-    });
-    setInstallmentsByDay(grouped);
-    setLoading(false);
+      if (error) throw error;
+
+      const clientIds = [...new Set((movements || []).map((m: any) => m.client_id).filter(Boolean))];
+      const clientMap = new Map<string, string>();
+      if (clientIds.length > 0) {
+        const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);
+        for (const client of clients || []) clientMap.set(client.id, client.name);
+      }
+
+      const grouped: Record<string, PaymentMovement[]> = {};
+      ((movements as any[]) || []).forEach((movement) => {
+        const day = movement.cash_date;
+        if (!grouped[day]) grouped[day] = [];
+        grouped[day].push({
+          movementId: movement.id,
+          eventId: movement.daily_event_id || "",
+          type: movement.type,
+          amount: Number(movement.amount),
+          cashDate: movement.cash_date,
+          observation: movement.observation,
+          createdAt: movement.created_at,
+          loanId: movement.loan_id,
+          clientId: movement.client_id,
+          clientName: clientMap.get(movement.client_id) || "Cliente",
+        });
+      });
+      setPaymentsByDay(grouped);
+    } catch (err: any) {
+      console.error("PaymentHistoryPage fetchData error:", err);
+      toast.error(err?.message || "Erro ao carregar histórico");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleUndoPayment = async (inst: PaidInstallment) => {
-    if (!confirm("Desfazer este pagamento? A parcela voltará como pendente.")) return;
-    await supabase.from("installments").update({
-      status: "pending",
-      paid_at: null,
-      paid_amount: 0,
-    }).eq("id", inst.id);
-
-    const { data: allInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", inst.loan_id);
-    if (allInst) {
-      const todayStr = format(new Date(), "yyyy-MM-dd");
-      const allPaid = allInst.every((i: any) => i.status === "paid");
-      const hasOverdue = allInst.some((i: any) => i.status !== "paid" && i.due_date < todayStr);
-      let newStatus = "open";
-      if (allPaid) newStatus = "paid";
-      else if (hasOverdue) newStatus = "overdue";
-      await supabase.from("loans").update({ status: newStatus }).eq("id", inst.loan_id);
+  const handleUndoPayment = async (entry: PaymentMovement) => {
+    if (isSubmitting) return;
+    if (!confirm(`Desfazer lançamento de ${formatCurrency(entry.amount)}?`)) return;
+    setIsSubmitting(true);
+    try {
+      await reversePayment({ movementId: entry.movementId });
+      toast.success("Pagamento desfeito!");
+      await fetchData();
+    } catch (err: any) {
+      console.error("handleUndoPayment error:", err);
+      toast.error(err?.message || "Erro ao desfazer pagamento");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    toast.success("Pagamento desfeito!");
-    fetchData();
   };
 
   const handleEditPayment = async () => {
-    if (!editInst) return;
+    if (!editPaymentEntry || isSubmitting) return;
+    if (editPaymentEntry.type !== "recebimento_normal") {
+      toast.error("Edição automática está disponível apenas para pagamento normal.");
+      return;
+    }
+    if (!editPaymentEntry.loanId || !editPaymentEntry.clientId) {
+      toast.error("Lançamento sem vínculo suficiente para edição segura.");
+      return;
+    }
+
     const newAmount = parseFloat(editPaidAmount);
     if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
 
-    const fullyPaid = newAmount >= Number(editInst.amount) - 0.01;
-    await supabase.from("installments").update({
-      paid_amount: Math.min(newAmount, Number(editInst.amount)),
-      status: fullyPaid ? "paid" : "pending",
-      paid_at: fullyPaid ? new Date(editPaidDate + "T12:00:00").toISOString() : null,
-    }).eq("id", editInst.id);
-
-    const { data: allInst } = await supabase.from("installments").select("status, due_date").eq("loan_id", editInst.loan_id);
-    if (allInst) {
-      const todayStr = format(new Date(), "yyyy-MM-dd");
-      const allPaid = allInst.every((i: any) => i.status === "paid");
-      const hasOverdue = allInst.some((i: any) => i.status !== "paid" && i.due_date < todayStr);
-      let newStatus = "open";
-      if (allPaid) newStatus = "paid";
-      else if (hasOverdue) newStatus = "overdue";
-      await supabase.from("loans").update({ status: newStatus }).eq("id", editInst.loan_id);
+    setIsSubmitting(true);
+    try {
+      await editPayment({
+        loanId: editPaymentEntry.loanId,
+        clientId: editPaymentEntry.clientId,
+        clientName: editPaymentEntry.clientName,
+        cashDate: editPaymentEntry.cashDate,
+        newAmount,
+        origin: "historico_pagamentos",
+        movementId: editPaymentEntry.movementId,
+      });
+      toast.success("Pagamento atualizado!");
+      setEditPaymentEntry(null);
+      setEditPaidAmount("");
+      await fetchData();
+    } catch (err: any) {
+      console.error("handleEditPayment error:", err);
+      toast.error(err?.message || "Erro ao editar pagamento");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    toast.success("Pagamento atualizado!");
-    setEditInst(null);
-    fetchData();
   };
 
-  const days = Object.keys(installmentsByDay).sort((a, b) => b.localeCompare(a));
+  const days = Object.keys(paymentsByDay).sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="mx-auto max-w-lg p-4">
-
       {loading ? (
         <ListSkeleton count={4} />
       ) : days.length === 0 ? (
@@ -123,47 +154,53 @@ export default function PaymentHistoryPage() {
       ) : (
         <div className="space-y-2">
           {days.map((day) => {
-            const insts = installmentsByDay[day];
-            const total = insts.reduce((s, i) => s + Number(i.paid_amount || i.amount), 0);
+            const payments = paymentsByDay[day];
+            const total = payments.reduce((s, payment) => s + payment.amount, 0);
             const isExpanded = expandedDay === day;
             return (
               <Card key={day}>
                 <button className="flex w-full items-center justify-between p-4 text-left" onClick={() => setExpandedDay(isExpanded ? null : day)}>
                   <div>
                     <p className="font-semibold capitalize">{getDayLabel(day)}</p>
-                    <p className="text-sm text-muted-foreground">{insts.length} pagamento(s) • {formatCurrency(total)}</p>
+                    <p className="text-sm text-muted-foreground">{payments.length} lançamento(s) • {formatCurrency(total)}</p>
                   </div>
                   {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                 </button>
                 {isExpanded && (
                   <CardContent className="space-y-2 border-t pt-3">
-                    {insts.map((inst) => (
-                      <div key={inst.id} className="flex items-center justify-between rounded-lg bg-accent p-3">
+                    {payments.map((payment) => (
+                      <div key={payment.movementId} className="flex items-center justify-between rounded-lg bg-accent p-3">
                         <div>
-                          <p className="font-medium">{inst.loans.clients.name}</p>
+                          <p className="font-medium">{payment.clientName}</p>
                           <p className="text-sm text-muted-foreground">
-                            {inst.is_penalty ? "Multa" : `Parcela ${inst.number}`} • {formatCurrency(Number(inst.paid_amount || inst.amount))}
+                            {getMovementTypeLabel(payment.type)} • {formatCurrency(payment.amount)}
                           </p>
+                          {payment.observation && <p className="text-xs text-muted-foreground italic">{payment.observation}</p>}
                         </div>
                         <div className="flex items-center gap-1">
-                          <Badge className={getStatusColor("paid")}>{getStatusLabel("paid")}</Badge>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={() => {
-                              setEditInst(inst);
-                              setEditPaidAmount(String(inst.paid_amount || inst.amount));
-                              setEditPaidDate(format(new Date(inst.paid_at), "yyyy-MM-dd"));
-                            }}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          <Badge className={payment.type === "recebimento_multa" ? "bg-warning text-warning-foreground" : "bg-success text-success-foreground"}>
+                            {payment.type === "recebimento_multa" ? "Multa" : "Pago"}
+                          </Badge>
+                          {payment.type === "recebimento_normal" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => {
+                                setEditPaymentEntry(payment);
+                                setEditPaidAmount(String(payment.amount));
+                              }}
+                              disabled={isSubmitting}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-7 w-7 p-0 text-destructive"
-                            onClick={() => handleUndoPayment(inst)}
+                            onClick={() => handleUndoPayment(payment)}
+                            disabled={isSubmitting}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -178,25 +215,19 @@ export default function PaymentHistoryPage() {
         </div>
       )}
 
-      <Dialog open={!!editInst} onOpenChange={(o) => { if (!o) setEditInst(null); }}>
+      <Dialog open={!!editPaymentEntry} onOpenChange={(open) => { if (!open) setEditPaymentEntry(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Pagamento</DialogTitle></DialogHeader>
-          {editInst && (
+          {editPaymentEntry && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                {editInst.loans.clients.name} — {editInst.is_penalty ? "Multa" : `Parcela ${editInst.number}`}
+                {editPaymentEntry.clientName} — {formatCurrency(editPaymentEntry.amount)}
               </p>
-              <p className="text-sm text-muted-foreground">Valor da parcela: {formatCurrency(Number(editInst.amount))}</p>
               <div>
                 <Label>Valor pago</Label>
                 <Input type="number" value={editPaidAmount} onChange={(e) => setEditPaidAmount(e.target.value)} />
               </div>
-              <div>
-                <Label>Data do pagamento</Label>
-                <Input type="date" value={editPaidDate} onChange={(e) => setEditPaidDate(e.target.value)} />
-              </div>
-              <p className="text-xs text-muted-foreground">⚠️ Se o valor for menor que a parcela, o status voltará para pendente.</p>
-              <Button onClick={handleEditPayment} className="w-full">Salvar</Button>
+              <Button onClick={handleEditPayment} className="w-full" disabled={isSubmitting}>Salvar</Button>
             </div>
           )}
         </DialogContent>
