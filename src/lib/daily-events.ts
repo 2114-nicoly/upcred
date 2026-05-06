@@ -97,7 +97,7 @@ export async function undoDailyEvent(event: DailyEvent) {
   }
 
   const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
-  const { recalculateInstallments, reversePayment } = await import("@/lib/payment-utils");
+  const { reversePayment } = await import("@/lib/payment-utils");
 
   if (event.event_type === "pagamento") {
     if (!event.cash_movement_id) {
