@@ -9,8 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatCurrency, getLoanStatusColor, getStatusLabel, calculateOverdueDays, getPaymentTypeLabel } from "@/lib/loan-utils";
-import { ArrowLeft, Plus, ChevronDown, History, Clock, Pencil, Trash2 } from "lucide-react";
+import {
+  formatCurrency,
+  getLoanStatusColor,
+  getStatusLabel,
+  calculateOverdueDays,
+  getPaymentTypeLabel,
+  calculateLoanProgress,
+} from "@/lib/loan-utils";
+import { Plus, ChevronDown, History, Clock, Pencil, DollarSign, RefreshCw, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -18,6 +25,7 @@ type Loan = {
   id: string;
   amount: number;
   total_amount: number;
+  remaining_balance: number;
   installment_count: number;
   status: string;
   loan_date: string;
@@ -25,6 +33,7 @@ type Loan = {
   first_due_date: string | null;
   interest_type: string;
   interest_value: number;
+  renewed_from_loan_id: string | null;
 };
 
 type Installment = {
@@ -50,6 +59,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [installmentsByLoan, setInstallmentsByLoan] = useState<Record<string, Installment[]>>({});
+  const [renewedFromIds, setRenewedFromIds] = useState<Set<string>>(new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
@@ -67,10 +77,18 @@ export default function ClientDetailPage() {
       }
       setClient(c);
       const { data: l } = await supabase.from("loans").select("*").eq("client_id", clientId!).order("created_at", { ascending: false });
-      setLoans(l || []);
+      const loansList = (l || []) as Loan[];
+      setLoans(loansList);
 
-      if (l && l.length > 0) {
-        const loanIds = l.map((loan: Loan) => loan.id);
+      // Track which loans were renewed (i.e. another loan points to them)
+      const renewedFrom = new Set<string>();
+      loansList.forEach((loan) => {
+        if (loan.renewed_from_loan_id) renewedFrom.add(loan.renewed_from_loan_id);
+      });
+      setRenewedFromIds(renewedFrom);
+
+      if (loansList.length > 0) {
+        const loanIds = loansList.map((loan) => loan.id);
         const { data: inst } = await supabase
           .from("installments")
           .select("id, due_date, status, is_penalty, loan_id, paid_amount, amount")
@@ -105,16 +123,15 @@ export default function ClientDetailPage() {
     return calculateOverdueDays(overdueInsts[0].due_date, loan.payment_type);
   };
 
-  const getLoanProgress = (loan: Loan) => {
+  const getNextDueDate = (loan: Loan): string | null => {
+    const insts = (installmentsByLoan[loan.id] || []).filter((i) => !i.is_penalty && i.status !== "paid");
+    if (insts.length === 0) return null;
+    return insts.sort((a, b) => a.due_date.localeCompare(b.due_date))[0].due_date;
+  };
+
+  const getInstallmentValue = (loan: Loan): number => {
     const insts = (installmentsByLoan[loan.id] || []).filter((i) => !i.is_penalty);
-    const totalPaid = insts.reduce((s, i) => s + Number(i.paid_amount), 0);
-    const instValue = insts.length > 0 ? Number(insts[0].amount) : 1;
-    const progress = totalPaid / instValue;
-    const total = insts.length;
-    const remaining = insts.reduce((s, i) => s + Number(i.amount), 0) - totalPaid;
-    const penaltyInsts = (installmentsByLoan[loan.id] || []).filter((i) => i.is_penalty);
-    const penaltyTotal = penaltyInsts.reduce((s, i) => s + Number(i.amount), 0);
-    return { progress, total, remaining, penaltyTotal };
+    return insts.length > 0 ? Number(insts[0].amount) : 0;
   };
 
   const handleEditClient = async () => {
@@ -129,35 +146,21 @@ export default function ClientDetailPage() {
     fetchData();
   };
 
-  const handleDeleteLoan = async (loanId: string) => {
-    if (!confirm("Excluir este empréstimo e todas as parcelas?")) return;
-    await supabase.from("not_paid_marks").delete().eq("loan_id", loanId);
-    await supabase.from("cash_movements").delete().eq("loan_id", loanId);
-    await supabase.from("penalties").delete().eq("loan_id", loanId);
-    await supabase.from("installments").delete().eq("loan_id", loanId);
-    await supabase.from("loans").delete().eq("id", loanId);
-    toast.success("Empréstimo excluído!");
-    fetchData();
-  };
-
   const activeLoans = loans.filter((l) => l.status !== "paid");
-  const paidLoans = loans.filter((l) => l.status === "paid");
-
-  // Removed local paymentTypeLabel — using getPaymentTypeLabel from loan-utils
+  const activeLoan = activeLoans[0] || null;
+  const historyLoans = loans.filter((l) => l.status === "paid");
 
   if (loading || !client) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
   return (
-    <div className="mx-auto max-w-lg p-4">
+    <div className="mx-auto max-w-lg p-4 space-y-4">
 
-      <div className="mb-4 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {client.client_code ? <span className="mr-1 text-sm text-muted-foreground">#{client.client_code}</span> : null}
-            {client.name}
-          </h1>
+      {/* Header: Client info */}
+      <div className="flex items-start justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold truncate">{client.name}</h1>
           {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
-          {client.notes && <p className="text-sm text-muted-foreground">{client.notes}</p>}
+          {client.notes && <p className="text-xs text-muted-foreground mt-1">{client.notes}</p>}
         </div>
         <Button size="sm" variant="outline" onClick={() => {
           setEditName(client.name);
@@ -169,85 +172,146 @@ export default function ClientDetailPage() {
         </Button>
       </div>
 
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Empréstimos Ativos</h2>
-        <Link to={`/clients/${clientId}/new-loan`}>
-          <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
-        </Link>
+      {/* Active Loan section */}
+      <div>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Empréstimo Ativo</h2>
+
+        {!activeLoan ? (
+          <Card>
+            <CardContent className="p-6 text-center space-y-3">
+              <p className="text-muted-foreground">Nenhum empréstimo ativo</p>
+              <Link to={`/clients/${clientId}/new-loan`}>
+                <Button size="sm">
+                  <Plus className="mr-1 h-4 w-4" /> Criar Empréstimo
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (() => {
+          const overdueDays = getOverdueDays(activeLoan);
+          const progress = calculateLoanProgress({
+            totalAmount: Number(activeLoan.total_amount),
+            remainingBalance: Number(activeLoan.remaining_balance),
+            installmentCount: activeLoan.installment_count,
+          });
+          const nextDue = getNextDueDate(activeLoan);
+          const instValue = getInstallmentValue(activeLoan);
+          const remaining = Number(activeLoan.remaining_balance);
+          const status = overdueDays > 0 ? "overdue" : activeLoan.status;
+
+          return (
+            <Card className="overflow-hidden">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Saldo restante</p>
+                    <p className="text-2xl font-extrabold tabular-nums">{formatCurrency(remaining)}</p>
+                  </div>
+                  <Badge className={getLoanStatusColor(status)}>{getStatusLabel(status)}</Badge>
+                </div>
+
+                {overdueDays > 0 && (
+                  <div className="flex items-center gap-1 text-xs font-semibold text-destructive">
+                    <Clock className="h-3 w-3" />
+                    {overdueDays} dia{overdueDays > 1 ? "s" : ""} em atraso
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Total pago</p>
+                    <p className="font-semibold text-success tabular-nums">{formatCurrency(progress.totalPaid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Valor total</p>
+                    <p className="font-semibold tabular-nums">{formatCurrency(Number(activeLoan.total_amount))}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Parcela</p>
+                    <p className="font-semibold tabular-nums">{formatCurrency(instValue)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Próximo vencimento</p>
+                    <p className="font-semibold tabular-nums">
+                      {nextDue ? format(new Date(nextDue + "T12:00:00"), "dd/MM/yyyy") : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span>{progress.progressFormatted} parcelas • {getPaymentTypeLabel(activeLoan.payment_type, activeLoan.first_due_date)}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${overdueDays > 0 ? "bg-destructive" : "bg-primary"}`}
+                    style={{ width: `${progress.progressPercent}%` }}
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <Button size="sm" className="flex-1" onClick={() => navigate(`/loans/${activeLoan.id}`)}>
+                    <DollarSign className="mr-1 h-3.5 w-3.5" /> Pagar
+                  </Button>
+                  <Button size="sm" variant="secondary" className="flex-1" onClick={() => navigate(`/clients/${clientId}/new-loan?renewFrom=${activeLoan.id}`)}>
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> Renovar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/loans/${activeLoan.id}`)}>
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
       </div>
 
-      {activeLoans.length === 0 ? (
-        <p className="py-4 text-center text-muted-foreground">Nenhum empréstimo ativo</p>
-      ) : (
-        <div className="space-y-3">
-          {activeLoans.map((loan) => {
-            const overdueDays = getOverdueDays(loan);
-            const { progress, total, remaining, penaltyTotal } = getLoanProgress(loan);
-            return (
-              <Card key={loan.id} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <Link to={`/loans/${loan.id}`} className="flex-1">
-                      <p className="text-lg font-bold">{formatCurrency(Number(loan.total_amount))}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {loan.installment_count}x • {getPaymentTypeLabel(loan.payment_type, loan.first_due_date)}
-                      </p>
-                      <p className="text-xs text-primary font-medium">
-                        {progress % 1 === 0 ? progress : progress.toFixed(1)}/{total} • Resta: {formatCurrency(Math.max(0, remaining))}
-                      </p>
-                      {penaltyTotal > 0 && (
-                        <p className="text-xs text-destructive">Multa: {formatCurrency(penaltyTotal)}</p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}
-                      </p>
-                      {overdueDays > 0 && (
-                        <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-destructive">
-                          <Clock className="h-3 w-3" />
-                          {overdueDays} dia{overdueDays > 1 ? "s" : ""} em atraso
-                        </span>
-                      )}
-                    </Link>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge className={getLoanStatusColor(overdueDays > 0 ? "overdue" : loan.status)}>
-                        {getStatusLabel(overdueDays > 0 ? "overdue" : loan.status)}
-                      </Badge>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteLoan(loan.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {paidLoans.length > 0 && (
-        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen} className="mt-6">
+      {/* History */}
+      {historyLoans.length > 0 && (
+        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
           <CollapsibleTrigger asChild>
             <Button variant="outline" className="w-full">
-              <History className="mr-2 h-4 w-4" /> Histórico ({paidLoans.length})
+              <History className="mr-2 h-4 w-4" /> Histórico de Empréstimos ({historyLoans.length})
               <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 space-y-3">
-            {paidLoans.map((loan) => (
-              <Link key={loan.id} to={`/loans/${loan.id}`}>
-                <Card className="cursor-pointer opacity-75 transition-opacity hover:opacity-100">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-bold">{formatCurrency(Number(loan.total_amount))}</p>
-                        <p className="text-sm text-muted-foreground">{loan.installment_count}x</p>
+          <CollapsibleContent className="mt-3 space-y-2">
+            {historyLoans.map((loan) => {
+              const insts = (installmentsByLoan[loan.id] || []).filter((i) => !i.is_penalty);
+              const totalPaid = insts.reduce((s, i) => s + Number(i.paid_amount), 0);
+              const lastPaid = insts
+                .filter((i) => i.status === "paid")
+                .map((i) => i.due_date)
+                .sort()
+                .pop();
+              const wasRenewed = renewedFromIds.has(loan.id);
+              return (
+                <Link key={loan.id} to={`/loans/${loan.id}`}>
+                  <Card className="cursor-pointer transition-opacity hover:bg-accent/50">
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm tabular-nums">{formatCurrency(Number(loan.total_amount))}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {format(new Date(loan.loan_date + "T12:00:00"), "dd/MM/yyyy")}
+                            {lastPaid && ` → ${format(new Date(lastPaid + "T12:00:00"), "dd/MM/yyyy")}`}
+                          </p>
+                          <p className="text-[11px] text-success">Pago: {formatCurrency(totalPaid)}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
+                          {wasRenewed && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">Renovado</Badge>
+                          )}
+                          {!wasRenewed && loan.renewed_from_loan_id && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">Renovação</Badge>
+                          )}
+                        </div>
                       </div>
-                      <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
           </CollapsibleContent>
         </Collapsible>
       )}
