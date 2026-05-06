@@ -72,8 +72,22 @@ export default function ClientsPage() {
     return (data && data[0]?.client_code ? Number(data[0].client_code) : 0) + 1;
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (force = false) => {
     if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
+
+    if (!force) {
+      // Dedupe: same name (case-insensitive) or same phone
+      const trimmedName = name.trim();
+      const { data: dupes } = await supabase
+        .from("clients")
+        .select("id, name, phone")
+        .or(phone ? `name.ilike.${trimmedName},phone.eq.${phone}` : `name.ilike.${trimmedName}`);
+      if (dupes && dupes.length > 0) {
+        const ok = confirm(`Cliente parecido encontrado: ${dupes[0].name}${dupes[0].phone ? ` (${dupes[0].phone})` : ""}.\n\nDeseja criar mesmo assim?`);
+        if (!ok) return;
+      }
+    }
+
     const nextCode = await getNextClientCode();
     const { data: { session } } = await supabase.auth.getSession();
     const { error } = await supabase.from("clients").insert({
@@ -81,7 +95,7 @@ export default function ClientsPage() {
       user_id: session?.user?.id,
     } as any);
     if (error) { toast.error("Erro ao cadastrar cliente"); return; }
-    toast.success(`Cliente #${nextCode} cadastrado!`);
+    toast.success("Cliente cadastrado!");
     setName(""); setPhone(""); setNotes(""); setOpen(false);
     fetchClients();
   };
@@ -139,7 +153,7 @@ export default function ClientsPage() {
               <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
               <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
               <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações..." /></div>
-              <Button onClick={handleCreate} className="w-full">Cadastrar</Button>
+              <Button onClick={() => handleCreate()} className="w-full">Cadastrar</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -181,10 +195,7 @@ export default function ClientsPage() {
                 <CardContent className="flex items-center justify-between p-4">
                   <Link to={`/clients/${client.id}`} className="flex-1">
                     <div>
-                      <p className="font-semibold">
-                        {client.client_code ? <span className="mr-1 text-xs text-muted-foreground">#{client.client_code}</span> : null}
-                        {client.name}
-                      </p>
+                      <p className="font-semibold">{client.name}</p>
                       {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
                       {summary && (
                         <p className="text-xs text-primary">
