@@ -10,6 +10,7 @@ import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-util
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan } from "@/lib/payment-utils";
+import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { ArrowLeft, Calculator, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -92,6 +93,15 @@ export default function NewLoanPage() {
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
 
     setSaving(true);
+
+    // Guard: only 1 active loan per client (renewal allowed when targeting the existing active loan)
+    const activeLoan = await getActiveLoanForClient(clientId!);
+    if (activeLoan && (!renewFromLoanId || renewFromLoanId !== activeLoan.id)) {
+      toast.error("Cliente já possui empréstimo ativo. Quite ou renove antes de criar outro.");
+      setSaving(false);
+      navigate(`/loans/${activeLoan.id}`);
+      return;
+    }
 
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
