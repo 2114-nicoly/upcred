@@ -702,9 +702,6 @@ export default function LoanDetailPage() {
                         Pago: {formatCurrency(Number(inst.paid_amount))} de {formatCurrency(Number(inst.amount))}
                       </p>
                     </div>
-                    <Button size="sm" variant="outline" className="h-8" onClick={() => handleUndoPayment(inst.id)} disabled={isSubmitting}>
-                      <Undo2 className="mr-1 h-3 w-3" /> Desfazer
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -803,11 +800,6 @@ export default function LoanDetailPage() {
               </div>
               <Badge className={getStatusColor(penaltyInst.status)}>{getStatusLabel(penaltyInst.status)}</Badge>
             </div>
-            {penaltyInst.status === "paid" && (
-              <Button size="sm" variant="outline" className="w-full" onClick={() => handleUndoPayment(penaltyInst.id)} disabled={isSubmitting}>
-                <Undo2 className="mr-1 h-3 w-3" /> Desfazer
-              </Button>
-            )}
           </CardContent>
         </Card>
       )}
