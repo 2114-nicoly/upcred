@@ -58,6 +58,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin, signOut } = useAuth();
+  const { selectedWorkerId, selectedWorkerName, setSelectedWorkerId } = useWorkerFilter();
   const [open, setOpen] = useState(false);
 
   const handleSignOut = async () => {
@@ -66,7 +67,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navigate("/auth", { replace: true });
   };
 
-  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/workers"];
+  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/admin-tools", "/workers"];
   const isMainPage = mainPages.includes(location.pathname);
   const sidebarItems = isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
 
