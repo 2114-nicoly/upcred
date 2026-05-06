@@ -1228,20 +1228,19 @@ export default function DailyCashPage() {
           )}
 
           {/* NOVOS EMPRÉSTIMOS */}
-          {newLoans.length > 0 && (
+          {newLoans.filter(r => !r.renewed_from_loan_id).length > 0 && (
             <Collapsible className="mb-4">
               <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-1 text-xs font-semibold text-primary uppercase tracking-wider w-full">
-                  <Plus className="h-3 w-3" /> Novos do Dia ({newLoans.length})
+                <button className="flex items-center gap-1 text-xs font-semibold text-success uppercase tracking-wider w-full">
+                  <Plus className="h-3 w-3" /> Novos Empréstimos do Dia ({newLoans.filter(r => !r.renewed_from_loan_id).length})
                   <ChevronDown className="ml-auto h-3.5 w-3.5" />
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-2 space-y-2">
-                {newLoans.map(r => {
-                  const isRenewal = !!r.renewed_from_loan_id;
+                {newLoans.filter(r => !r.renewed_from_loan_id).map(r => {
                   const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
                   return (
-                    <div key={r.id} className={`rounded-lg border bg-card p-3 ${isRenewal ? "border-primary/30" : "border-success/30"}`}>
+                    <div key={r.id} className="rounded-lg border border-success/30 bg-card p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
@@ -1250,10 +1249,65 @@ export default function DailyCashPage() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className={`text-sm font-bold ${isRenewal ? "text-primary" : "text-success"}`}>{formatCurrency(Number(r.amount))}</p>
-                          <Badge className={`text-[9px] px-1.5 py-0 h-3.5 ${isRenewal ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>
-                            {isRenewal ? "Renovação" : "Novo"}
-                          </Badge>
+                          <p className="text-sm font-bold text-success">{formatCurrency(Number(r.amount))}</p>
+                          <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-success/10 text-success">Novo</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {/* RENOVAÇÕES DO DIA */}
+          {newLoans.filter(r => !!r.renewed_from_loan_id).length > 0 && (
+            <Collapsible className="mb-4">
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1 text-xs font-semibold text-primary uppercase tracking-wider w-full">
+                  <RefreshCw className="h-3 w-3" /> Renovações do Dia ({newLoans.filter(r => !!r.renewed_from_loan_id).length})
+                  <ChevronDown className="ml-auto h-3.5 w-3.5" />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2">
+                {newLoans.filter(r => !!r.renewed_from_loan_id).map(r => {
+                  const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
+                  // Find the renovacao daily_event for this loan to extract paid/liberado from observation
+                  const renewEvt = allEventsToday.find((e: any) => e.event_type === "renovacao" && e.loan_id === r.id);
+                  const liberado = renewEvt ? Number(renewEvt.amount_out) : Number(r.amount);
+                  // Try parse Pago / Faltava from observation
+                  const obs = renewEvt?.observation || "";
+                  const pagoMatch = obs.match(/Pago:\s*R\$\s*([\d.,]+)/);
+                  const faltavaMatch = obs.match(/Faltava:\s*R\$\s*([\d.,]+)/);
+                  const parseBR = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
+                  const pago = pagoMatch ? parseBR(pagoMatch[1]) : 0;
+                  const faltava = faltavaMatch ? parseBR(faltavaMatch[1]) : 0;
+                  return (
+                    <div key={r.id} className="rounded-lg border border-primary/30 bg-card p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
+                        <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-primary/10 text-primary">Renovação</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 text-xs">
+                        {pago > 0 && (
+                          <div className="flex justify-between col-span-2">
+                            <span className="text-muted-foreground">Pago na renovação:</span>
+                            <span className="font-semibold text-success">{formatCurrency(pago)}</span>
+                          </div>
+                        )}
+                        {faltava > 0 && (
+                          <div className="flex justify-between col-span-2">
+                            <span className="text-muted-foreground">Faltava quitar:</span>
+                            <span className="font-semibold">{formatCurrency(faltava)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between col-span-2">
+                          <span className="text-muted-foreground">Novo empréstimo:</span>
+                          <span className="font-semibold">{formatCurrency(Number(r.amount))} ({r.installment_count}x • {paymentLabel})</span>
+                        </div>
+                        <div className="flex justify-between col-span-2 border-t pt-1 mt-1">
+                          <span className="font-medium">Liberado ao cliente:</span>
+                          <span className="font-bold text-primary">{formatCurrency(liberado)}</span>
                         </div>
                       </div>
                     </div>
