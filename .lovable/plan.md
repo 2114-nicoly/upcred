@@ -1,78 +1,85 @@
-# 📋 App de Controle de Empréstimos
+# Plano: 1 Empréstimo Ativo por Cliente + Área do Cliente Profissional
 
-## Visão Geral
+## Objetivo
 
-Aplicativo moderno e colorido para gerenciar empréstimos pessoais, com cadastro de clientes, controle de parcelas, registro de pagamentos e visão diária de cobranças.
-
----
-
-## 🗄️ Banco de Dados (Supabase)
-
-Tabelas para armazenar clientes, empréstimos, parcelas e pagamentos de forma segura na nuvem.
+Cada cliente passa a ter no máximo **1 empréstimo ativo**, a tela do cliente vira o "centro de operação" do empréstimo dele, e o `#código` deixa de aparecer junto ao nome em todas as telas.
 
 ---
 
-## 📱 Telas e Funcionalidades
+## 1) Regra: 1 empréstimo ativo por cliente
 
-### 1. Tela "Hoje" (Página Inicial)
+Considera-se "ativo" qualquer empréstimo com `status != 'paid'` (open/overdue).
 
-- Lista todas as parcelas que vencem no dia atual
-- Cada parcela mostra: nome do cliente, valor, número da parcela
-- Indicador visual de status (em dia, atrasado)
-- Botões rápidos: **"Registrar Pagamento"** e **"Não Pagou"** em cada parcela
-- Resumo do dia: total a receber, total recebido, quantidade de cobranças
+**Helper novo** em `src/lib/loan-utils.ts`:
+- `getActiveLoanForClient(clientId)` → retorna o empréstimo ativo (ou null).
 
-### 2. Cadastro de Clientes
+**Bloqueios aplicados em:**
+- `NewLoanSelectClientPage.tsx`: ao clicar num cliente que já tem ativo, mostrar dialog com 3 opções (Abrir ativo / Renovar / Cancelar). Não navegar direto para `/clients/:id/new-loan`.
+- `NewLoanPage.tsx`: revalida no `handleSave`. Se já existe ativo e **não é renovação**, bloqueia com toast e oferece navegar ao ativo.
+- `ClientDetailPage.tsx`: botão "Novo" só aparece quando não há ativo. Quando há ativo, vira "Renovar".
+- Renovação continua permitida (passa por `settleLoan` do antigo dentro do mesmo fluxo, então no momento do insert o antigo ainda é ativo — tratamos isso permitindo o insert quando `renewFromLoanId` está presente E o ativo é exatamente esse loan).
 
-- Formulário com nome, telefone e observações
-- Lista de clientes com busca por nome
-- Ao clicar no cliente, abre a tela com seus empréstimos ativos
+## 2) Remoção dos sufixos `#código` na UI
 
-### 3. Tela do Cliente (Empréstimos)
+Remover a renderização de `#{client_code}` em todas as telas, mantendo o campo no banco apenas como ID interno:
+- `ClientsPage.tsx` (linha 185)
+- `ClientDetailPage.tsx` (linha 156)
+- `NewLoanSelectClientPage.tsx` (linha 113)
 
-- Lista de empréstimos **ativos** com status colorido (🟢 em dia, 🔴 atrasado)
-- Seção de **Histórico** para empréstimos quitados (ocultos por padrão, expansível)
-- Botão para criar novo empréstimo
+Busca por código continua funcionando (campo permanece pesquisável internamente).
 
-### 4. Novo Empréstimo
+## 3) Tela do Cliente reorganizada (`ClientDetailPage.tsx`)
 
-- Formulário com:
-  - Valor emprestado
-  - Tipo de juros para selecionar: porcentagem (%) ou valor fixo (R$) e depois digitar respectivamente 
-  - Quantidade de parcelas
-  - Tipo de pagamento selecionar: diário, semanal, quinzenal, mensal ou data fixa
-  - Data do empréstimo 
-  - Data do primeiro vencimento se nao for do tipo data fixa
-  - Se for do tipo data fixa ai colocar pra eu preencher as datas de vencimento de cada parcela, de acordo com a quantidade de parcelas que eu colocar que vai ser
-- **Cálculo automático** exibido em tempo real:
-  - Valor final (emprestado + juros)
-  - Valor de cada parcela
-  - Datas de vencimento previstas Para as parcelas subsequentes se houver, a partir da data de vencimento da primeira parcela digitada, caso nao for do tipo data fixa
+Estrutura nova (mantendo o layout mobile-first atual):
 
-### 5. Detalhes do Empréstimo
+```
+[ Header limpo: Nome + telefone + notas + botão Editar ]
 
-- Informações gerais: valor emprestado, juros, valor final, status
-- Barra de progresso visual do pagamento, mostrando a quatidade de parcelas pagas e o total que é
-- Saldo restante em destaque
-- Lista de todas as parcelas com:
-  - Número, valor, data de vencimento previsto, status (paga/pendente/atrasada)
-  - Botão **"Registrar Pagamento"** e **"Não Pagou"**
-- Opção de **adicionar multa** em parcelas individuais
-  - Multas acumulam em uma parcela extra adicionada ao final
-- Status do empréstimo: **Em Aberto**, **Atrasado** ou **Quitado**
+[ Card "Empréstimo Ativo" ]
+  Se existe:
+    - Badge status (Em dia / Atrasado N dias)
+    - Saldo Restante (destaque grande)
+    - Total pago (secundário)
+    - Valor da parcela (referência)
+    - Progresso fracionado (ex.: 3,5/12) + barra
+    - Próximo vencimento
+    - Botões: [Pagar] [Renovar] [Ver Detalhes]
+  Se não existe:
+    - "Nenhum empréstimo ativo"
+    - Botão [Criar Empréstimo]
 
-### 6. Registro de Pagamento
+[ Histórico de Empréstimos (collapsible) ]
+  Lista de loans com status='paid' ou encerrados:
+    - Data início → data quitação
+    - Valor total / Total pago
+    - Badge: Quitado / Renovado (quando outro loan tem renewed_from_loan_id = este.id)
+```
 
-- Ao clicar em "Registrar Pagamento": registra o valor da parcela como pago, atualiza saldo e progresso
-- Ao clicar em "Não Pagou": marca a parcela como atrasada
+Os botões "Pagar"/"Renovar" navegam para o `LoanDetailPage` e `NewLoanPage?renewFrom=...` já existentes (não duplicar lógica de pagamento aqui).
 
-7 Quero uma area de dias que mostre separado por dias, ai clicando no dia mostre todas parcelas que pagaram naquele dia. Sendo que todas as parcelas tem que mostrar ao qual emprestimo de qual cliente pertencem
+## 4) Prevenção de duplicidade de cliente
 
----
+Em `ClientsPage.handleCreate` e `NewLoanSelectClientPage.handleCreateClient`:
+- Antes do insert, query: clientes com mesmo `name` (case-insensitive trim) **ou** mesmo `phone` (se preenchido).
+- Se encontrar, mostrar dialog "Cliente parecido encontrado: ..." com [Usar existente] [Criar mesmo assim] [Cancelar].
 
-## 🎨 Design
+## 5) Detalhes técnicos
 
-- Visual moderno e colorido com cards destacados
-- Cores para status: verde (em dia/quitado), amarelo (hoje), vermelho (atrasado)
-- Layout responsivo para uso em celular e desktop
-- Navegação simples entre as telas via menu inferior ou lateral
+- **Sem migrations**: não tornamos a regra "1 ativo" um constraint no banco — fica como regra de aplicação. Justificativa: renovação precisa coexistir brevemente com o antigo durante a transação, e queremos exibir mensagens amigáveis ao usuário em vez de erros do Postgres.
+- `client_code` permanece no banco para ordenação determinística e busca; só sai da UI.
+- `LoanDetailPage`, `ActiveLoansPage`, `TodayPage` (Rota) já mostram o nome sem prefixo — só auditar e remover se houver algum.
+
+## 6) Arquivos editados
+
+- `src/lib/loan-utils.ts` — adicionar `getActiveLoanForClient`
+- `src/pages/ClientsPage.tsx` — remover `#código`, dedupe no create
+- `src/pages/ClientDetailPage.tsx` — reorganização total da tela + remover `#código`
+- `src/pages/NewLoanSelectClientPage.tsx` — remover `#código`, dialog "já tem ativo", dedupe
+- `src/pages/NewLoanPage.tsx` — guard server-side de "1 ativo"
+
+## 7) Validação
+
+- Build (rodado pela harness)
+- Manual: criar cliente novo → criar empréstimo → tentar criar outro (deve bloquear) → renovar (deve passar) → tela do cliente mostra ativo+histórico corretamente.
+
+Não mexo em pagamentos, daily_events, parcelas, multa nem layout geral — só na área de cliente/criação e nos rótulos.
