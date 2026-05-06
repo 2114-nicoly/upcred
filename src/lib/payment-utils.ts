@@ -464,7 +464,7 @@ export async function editPayment(params: {
   movementId: string;
   eventId: string;
 }) {
-  const { loanId, clientId, clientName, cashDate, oldAmount, newAmount, origin, movementId, eventId } = params;
+  const { loanId, clientId, clientName, cashDate, newAmount, origin, movementId } = params;
   if (newAmount <= 0) throw new Error("Valor deve ser maior que zero");
 
   // Reverse only the selected financial movement, then create a fresh linked movement/event.
