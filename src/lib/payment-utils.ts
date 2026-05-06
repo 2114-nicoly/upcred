@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
+import { createDailyEvent } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 
 /**
@@ -386,7 +386,7 @@ export async function reversePayment(params: {
       await supabase.from("installments").update({
         paid_amount: newPaid,
         status: newPaid >= Number(inst.amount) - 0.01 ? "paid" : newPaid > 0.01 ? "partial" : (inst.due_date < new Date().toISOString().split("T")[0] ? "overdue" : "pending"),
-        paid_at: newPaid >= Number(inst.amount) - 0.01 ? undefined : null,
+        paid_at: newPaid >= Number(inst.amount) - 0.01 ? new Date().toISOString() : null,
       }).eq("id", inst.id);
       remainingToReverse -= subtracting;
     }
@@ -400,7 +400,7 @@ export async function reversePayment(params: {
     .select("id")
     .or(`id.eq.${(movement as any).daily_event_id || "00000000-0000-0000-0000-000000000000"},cash_movement_id.eq.${movementId}`) as any);
   for (const ev of (events || [])) {
-    await deleteDailyEvent(ev.id);
+    await supabase.from("daily_events" as any).delete().eq("id", ev.id);
   }
 
   await recalculateCashBalanceFromLedger();
