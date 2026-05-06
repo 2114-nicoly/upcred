@@ -18,50 +18,15 @@ export default function AdminPage() {
 
   const addLog = (msg: string) => setLog((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
 
-  // 1) Update installments statuses based on current rules
+  // 1) Update installments statuses (server-enforced admin RPC)
   async function updateInstallments() {
     setInstallmentsStatus("running");
     addLog("Atualizando parcelas...");
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString().split("T")[0];
-
-      // Fetch all non-paid installments
-      const { data: installments, error } = await supabase
-        .from("installments")
-        .select("id, status, due_date, amount, paid_amount")
-        .neq("status", "paid");
-
+      const { data, error } = await supabase.rpc("admin_recalculate_installments");
       if (error) throw error;
-
-      let updated = 0;
-      for (const inst of installments || []) {
-        const paidAmount = Number(inst.paid_amount);
-        const amount = Number(inst.amount);
-        let newStatus = inst.status;
-
-        if (paidAmount >= amount) {
-          newStatus = "paid";
-        } else if (inst.due_date < todayStr) {
-          newStatus = "overdue";
-        } else if (inst.due_date === todayStr) {
-          newStatus = "pending"; // due_today is computed at display time
-        } else {
-          newStatus = "pending";
-        }
-
-        if (newStatus !== inst.status) {
-          const updateData: Record<string, unknown> = { status: newStatus };
-          if (newStatus === "paid" && !inst.paid_amount) {
-            // don't set paid_at if already set
-          }
-          await supabase.from("installments").update(updateData).eq("id", inst.id);
-          updated++;
-        }
-      }
-
-      addLog(`Parcelas atualizadas: ${updated} de ${installments?.length || 0}`);
+      const updated = Number(data ?? 0);
+      addLog(`Parcelas atualizadas: ${updated}`);
       setInstallmentsStatus("done");
       toast({ title: "Parcelas atualizadas", description: `${updated} parcelas corrigidas.` });
     } catch (e: any) {
@@ -71,44 +36,15 @@ export default function AdminPage() {
     }
   }
 
-  // 2) Update loans statuses based on installment totals
+  // 2) Update loans statuses (server-enforced admin RPC)
   async function updateLoans() {
     setLoansStatus("running");
     addLog("Atualizando empréstimos...");
     try {
-      const { data: loans, error } = await supabase
-        .from("loans")
-        .select("id, total_amount, status");
+      const { data, error } = await supabase.rpc("admin_recalculate_loans");
       if (error) throw error;
-
-      let updated = 0;
-      for (const loan of loans || []) {
-        // Sum paid amounts from installments
-        const { data: installments } = await supabase
-          .from("installments")
-          .select("paid_amount, status")
-          .eq("loan_id", loan.id);
-
-        const totalPaid = (installments || []).reduce((sum, i) => sum + Number(i.paid_amount), 0);
-        const totalAmount = Number(loan.total_amount);
-        const remaining = totalAmount - totalPaid;
-
-        let newStatus = loan.status;
-        if (remaining <= 0) {
-          newStatus = "paid";
-        } else {
-          // Check if any installment is overdue
-          const hasOverdue = (installments || []).some((i) => i.status === "overdue");
-          newStatus = hasOverdue ? "overdue" : "open";
-        }
-
-        if (newStatus !== loan.status) {
-          await supabase.from("loans").update({ status: newStatus }).eq("id", loan.id);
-          updated++;
-        }
-      }
-
-      addLog(`Empréstimos atualizados: ${updated} de ${loans?.length || 0}`);
+      const updated = Number(data ?? 0);
+      addLog(`Empréstimos atualizados: ${updated}`);
       setLoansStatus("done");
       toast({ title: "Empréstimos atualizados", description: `${updated} empréstimos corrigidos.` });
     } catch (e: any) {
@@ -118,33 +54,15 @@ export default function AdminPage() {
     }
   }
 
-  // 3) Update clients (recalculate derived info - currently no derived columns stored)
+  // 3) Assign missing client codes (server-enforced admin RPC)
   async function updateClients() {
     setClientsStatus("running");
     addLog("Atualizando clientes...");
     try {
-      // Clients table has no derived columns to recalculate.
-      // This ensures client_code is set for all clients missing one.
-      const { data: clients, error } = await supabase
-        .from("clients")
-        .select("id, client_code")
-        .order("created_at", { ascending: true });
+      const { data, error } = await supabase.rpc("admin_assign_client_codes");
       if (error) throw error;
-
-      let updated = 0;
-      const usedCodes = new Set((clients || []).filter((c) => c.client_code).map((c) => c.client_code));
-      let nextCode = 1;
-
-      for (const client of clients || []) {
-        if (!client.client_code) {
-          while (usedCodes.has(nextCode)) nextCode++;
-          await supabase.from("clients").update({ client_code: nextCode }).eq("id", client.id);
-          usedCodes.add(nextCode);
-          updated++;
-        }
-      }
-
-      addLog(`Clientes atualizados: ${updated} de ${clients?.length || 0}`);
+      const updated = Number(data ?? 0);
+      addLog(`Clientes atualizados: ${updated}`);
       setClientsStatus("done");
       toast({ title: "Clientes atualizados", description: `${updated} clientes corrigidos.` });
     } catch (e: any) {
