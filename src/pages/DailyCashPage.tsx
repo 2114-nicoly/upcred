@@ -186,6 +186,7 @@ export default function DailyCashPage() {
   const [paidGroups, setPaidGroups] = useState<PaidGroup[]>([]);
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
+  const [renewalEvents, setRenewalEvents] = useState<DailyEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
