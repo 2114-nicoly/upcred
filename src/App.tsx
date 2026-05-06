@@ -25,6 +25,7 @@ import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
 import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
 import AdminPage from "@/pages/AdminPage";
+import WorkersPage from "@/pages/WorkersPage";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -96,6 +97,7 @@ function AppRoutes() {
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
                 <Route path="/reports" element={<WrappedRoute element={<ReportsPage />} />} />
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
+                <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>

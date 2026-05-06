@@ -19,7 +19,10 @@ const baseSidebarItems = [
   { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
 ];
-const adminSidebarItem = { path: "/admin", label: "Administrador", icon: Shield };
+const adminSidebarItems = [
+  { path: "/workers", label: "Trabalhadores", icon: Users },
+  { path: "/admin", label: "Administrador", icon: Shield },
+];
 
 // Extended route labels for header (includes sub-pages)
 const routeLabels: Record<string, string> = {
@@ -30,6 +33,7 @@ const routeLabels: Record<string, string> = {
   "/daily-cash-history": "Histórico",
   "/reports": "Relatórios",
   "/admin": "Administrador",
+  "/workers": "Trabalhadores",
   "/overdue": "Parcelas Atrasadas",
   "/today-summary": "Resumo do Dia",
   "/payment-history": "Histórico de Pagamentos",
@@ -59,9 +63,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navigate("/auth", { replace: true });
   };
 
-  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin"];
+  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/workers"];
   const isMainPage = mainPages.includes(location.pathname);
-  const sidebarItems = isAdmin ? [...baseSidebarItems, adminSidebarItem] : baseSidebarItems;
+  const sidebarItems = isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
