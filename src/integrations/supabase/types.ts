@@ -22,6 +22,7 @@ export type Database = {
           money_lent: number
           penalty_receivable: number
           updated_at: string
+          worker_id: string | null
         }
         Insert: {
           available_cash?: number
@@ -30,6 +31,7 @@ export type Database = {
           money_lent?: number
           penalty_receivable?: number
           updated_at?: string
+          worker_id?: string | null
         }
         Update: {
           available_cash?: number
@@ -38,8 +40,17 @@ export type Database = {
           money_lent?: number
           penalty_receivable?: number
           updated_at?: string
+          worker_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cash_balance_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cash_movements: {
         Row: {
@@ -54,6 +65,7 @@ export type Database = {
           observation: string | null
           type: string
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           amount: number
@@ -67,6 +79,7 @@ export type Database = {
           observation?: string | null
           type: string
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           amount?: number
@@ -80,6 +93,7 @@ export type Database = {
           observation?: string | null
           type?: string
           user_id?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -110,6 +124,13 @@ export type Database = {
             referencedRelation: "loans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "cash_movements_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       clients: {
@@ -122,6 +143,7 @@ export type Database = {
           phone: string | null
           route_id: string | null
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           client_code?: number | null
@@ -132,6 +154,7 @@ export type Database = {
           phone?: string | null
           route_id?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           client_code?: number | null
@@ -142,6 +165,7 @@ export type Database = {
           phone?: string | null
           route_id?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -149,6 +173,13 @@ export type Database = {
             columns: ["route_id"]
             isOneToOne: false
             referencedRelation: "routes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
             referencedColumns: ["id"]
           },
         ]
@@ -166,6 +197,7 @@ export type Database = {
           total_penalty_received: number
           total_received: number
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           cash_date: string
@@ -179,6 +211,7 @@ export type Database = {
           total_penalty_received?: number
           total_received?: number
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           cash_date?: string
@@ -192,8 +225,17 @@ export type Database = {
           total_penalty_received?: number
           total_received?: number
           user_id?: string | null
+          worker_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "daily_cash_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_events: {
         Row: {
@@ -210,6 +252,7 @@ export type Database = {
           observation: string | null
           origin: string | null
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           amount_in?: number
@@ -225,6 +268,7 @@ export type Database = {
           observation?: string | null
           origin?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           amount_in?: number
@@ -240,6 +284,7 @@ export type Database = {
           observation?: string | null
           origin?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -268,6 +313,13 @@ export type Database = {
             columns: ["loan_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_events_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
             referencedColumns: ["id"]
           },
         ]
@@ -341,6 +393,7 @@ export type Database = {
           status: string
           total_amount: number
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           amount: number
@@ -360,6 +413,7 @@ export type Database = {
           status?: string
           total_amount: number
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           amount?: number
@@ -379,6 +433,7 @@ export type Database = {
           status?: string
           total_amount?: number
           user_id?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -402,6 +457,13 @@ export type Database = {
             referencedRelation: "routes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "loans_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       not_paid_marks: {
@@ -414,6 +476,7 @@ export type Database = {
           mark_date: string
           observation: string | null
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           client_id: string
@@ -424,6 +487,7 @@ export type Database = {
           mark_date: string
           observation?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           client_id?: string
@@ -434,6 +498,7 @@ export type Database = {
           mark_date?: string
           observation?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -457,6 +522,13 @@ export type Database = {
             referencedRelation: "loans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "not_paid_marks_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       penalties: {
@@ -468,6 +540,7 @@ export type Database = {
           loan_id: string
           observation: string | null
           user_id: string | null
+          worker_id: string | null
         }
         Insert: {
           amount: number
@@ -477,6 +550,7 @@ export type Database = {
           loan_id: string
           observation?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Update: {
           amount?: number
@@ -486,6 +560,7 @@ export type Database = {
           loan_id?: string
           observation?: string | null
           user_id?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -500,6 +575,13 @@ export type Database = {
             columns: ["loan_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "penalties_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
             referencedColumns: ["id"]
           },
         ]
@@ -562,6 +644,7 @@ export type Database = {
           route_number: string
           status: string
           user_id: string | null
+          worker_id: string | null
           worker_name: string
         }
         Insert: {
@@ -570,6 +653,7 @@ export type Database = {
           route_number: string
           status?: string
           user_id?: string | null
+          worker_id?: string | null
           worker_name: string
         }
         Update: {
@@ -578,9 +662,18 @@ export type Database = {
           route_number?: string
           status?: string
           user_id?: string | null
+          worker_id?: string | null
           worker_name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "routes_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -603,6 +696,110 @@ export type Database = {
         }
         Relationships: []
       }
+      worker_credentials_log: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          login_codigo: string
+          reason: string
+          temp_password: string
+          worker_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          login_codigo: string
+          reason?: string
+          temp_password: string
+          worker_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          login_codigo?: string
+          reason?: string
+          temp_password?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_credentials_log_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      worker_password_reset_requests: {
+        Row: {
+          created_at: string
+          id: string
+          identifier: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          identifier: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          identifier?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      workers: {
+        Row: {
+          active: boolean
+          auth_user_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          login_codigo: string
+          nome: string
+          notas: string | null
+          synthetic_email: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          auth_user_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          login_codigo: string
+          nome: string
+          notas?: string | null
+          synthetic_email: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          auth_user_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          login_codigo?: string
+          nome?: string
+          notas?: string | null
+          synthetic_email?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -611,6 +808,16 @@ export type Database = {
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_recalculate_installments: { Args: never; Returns: number }
       admin_recalculate_loans: { Args: never; Returns: number }
+      admin_register_worker: {
+        Args: {
+          p_auth_user_id: string
+          p_login_codigo: string
+          p_nome: string
+          p_notas?: string
+          p_synthetic_email: string
+        }
+        Returns: string
+      }
       apply_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
@@ -637,6 +844,11 @@ export type Database = {
           status: string
         }[]
       }
+      get_synthetic_email_by_login: {
+        Args: { p_login: string }
+        Returns: string
+      }
+      get_worker_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -659,7 +871,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "operador"
+      app_role: "admin" | "operador" | "trabalhador"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -787,7 +999,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "operador"],
+      app_role: ["admin", "operador", "trabalhador"],
     },
   },
 } as const
