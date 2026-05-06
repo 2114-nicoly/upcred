@@ -467,30 +467,9 @@ export async function editPayment(params: {
   const { loanId, clientId, clientName, cashDate, oldAmount, newAmount, origin, movementId, eventId } = params;
   if (newAmount <= 0) throw new Error("Valor deve ser maior que zero");
 
-  // 1. Reverse old payment from remaining_balance
-  if (oldAmount > 0) {
-    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: oldAmount });
-  }
+  // Reverse only the selected financial movement, then create a fresh linked movement/event.
+  await reversePayment({ movementId });
 
-  // 2. Reset all installments that were paid from this movement's cash_date
-  const { data: movs } = await supabase.from("cash_movements")
-    .select("installment_id")
-    .eq("loan_id", loanId)
-    .eq("cash_date", cashDate)
-    .eq("type", "recebimento_normal");
-
-  const affectedInstIds = [...new Set((movs || []).map((m: any) => m.installment_id).filter(Boolean))];
-  for (const instId of affectedInstIds) {
-    await supabase.from("installments").update({
-      status: "pending", paid_at: null, paid_amount: 0,
-    }).eq("id", instId);
-  }
-
-  // 3. Delete old cash_movement and daily_event
-  await supabase.from("cash_movements").delete().eq("id", movementId);
-  await supabase.from("daily_events" as any).delete().eq("id", eventId);
-
-  // 4. Apply new payment
   const result = await registerPayment({
     loanId, amount: newAmount,
     clientId, clientName,
