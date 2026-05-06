@@ -32,6 +32,10 @@ export default function NewLoanPage() {
   const [fixedDates, setFixedDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Renewal data
+  const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
+  const [renewPaidAmount, setRenewPaidAmount] = useState<string>("");
+
   useEffect(() => {
     const fetchClient = async () => {
       const { data } = await supabase.from("clients").select("name").eq("id", clientId!).single();
@@ -40,17 +44,22 @@ export default function NewLoanPage() {
     fetchClient();
   }, [clientId]);
 
-  // Pre-fill from renewal loan
+  // Pre-fill from renewal loan + fetch remaining_balance for "Falta para quitar"
   useEffect(() => {
     if (!renewFromLoanId) return;
     const fetchRenewalLoan = async () => {
-      const { data } = await supabase.from("loans").select("amount, interest_type, interest_value, payment_type, installment_count").eq("id", renewFromLoanId).single();
+      const { data } = await supabase
+        .from("loans")
+        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance")
+        .eq("id", renewFromLoanId)
+        .single();
       if (data) {
         setAmount(String(data.amount));
         setInterestType(data.interest_type as "percentage" | "fixed");
         setInterestValue(String(data.interest_value));
         setPaymentType(data.payment_type as typeof paymentType);
         setInstallmentCount(String(data.installment_count));
+        setRenewOldRemaining(Number(data.remaining_balance) || 0);
       }
     };
     fetchRenewalLoan();
