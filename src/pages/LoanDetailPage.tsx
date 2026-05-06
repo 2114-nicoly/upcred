@@ -25,8 +25,7 @@ import {
   calculateLoanProgress,
 } from "@/lib/loan-utils";
 import { updateCashBalance, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { registerPayment, registerPenaltyPayment, settleLoan, reverseInstallmentPayment, editPayment, recalculateInstallments } from "@/lib/payment-utils";
-import { deleteDailyEvent } from "@/lib/daily-events";
+import { registerPayment, registerPenaltyPayment, settleLoan, editPayment, recalculateInstallments, reversePayment } from "@/lib/payment-utils";
 import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -155,20 +154,20 @@ export default function LoanDetailPage() {
 
       // Fetch payment history: join cash_movements with daily_events
       const { data: movs } = await supabase.from("cash_movements")
-        .select("id, amount, cash_date, observation, created_at")
+        .select("id, amount, cash_date, observation, created_at, daily_event_id")
         .eq("loan_id", loanId!)
         .eq("type", "recebimento_normal")
         .order("cash_date", { ascending: false });
 
       const { data: events } = await (supabase.from("daily_events" as any)
-        .select("id, cash_date, amount_in, observation")
+        .select("id, cash_date, amount_in, observation, cash_movement_id")
         .eq("loan_id", loanId!)
         .eq("event_type", "pagamento")
         .order("cash_date", { ascending: false }) as any);
 
-      // Match movements with events by cash_date
+      // Match movements with events by the unique financial movement id.
       const history: PaymentHistoryEntry[] = (movs || []).map((m: any) => {
-        const matchingEvent = (events || []).find((e: any) => e.cash_date === m.cash_date);
+        const matchingEvent = (events || []).find((e: any) => e.id === m.daily_event_id || e.cash_movement_id === m.id);
         return {
           movementId: m.id,
           eventId: matchingEvent?.id || "",
