@@ -47,6 +47,7 @@ export type Database = {
           cash_date: string
           client_id: string | null
           created_at: string
+          daily_event_id: string | null
           id: string
           installment_id: string | null
           loan_id: string | null
@@ -59,6 +60,7 @@ export type Database = {
           cash_date?: string
           client_id?: string | null
           created_at?: string
+          daily_event_id?: string | null
           id?: string
           installment_id?: string | null
           loan_id?: string | null
@@ -71,6 +73,7 @@ export type Database = {
           cash_date?: string
           client_id?: string | null
           created_at?: string
+          daily_event_id?: string | null
           id?: string
           installment_id?: string | null
           loan_id?: string | null
@@ -84,6 +87,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_daily_event_id_fkey"
+            columns: ["daily_event_id"]
+            isOneToOne: false
+            referencedRelation: "daily_events"
             referencedColumns: ["id"]
           },
           {
@@ -190,6 +200,7 @@ export type Database = {
           amount_in: number
           amount_out: number
           cash_date: string
+          cash_movement_id: string | null
           client_id: string | null
           created_at: string
           event_type: string
@@ -204,6 +215,7 @@ export type Database = {
           amount_in?: number
           amount_out?: number
           cash_date?: string
+          cash_movement_id?: string | null
           client_id?: string | null
           created_at?: string
           event_type: string
@@ -218,6 +230,7 @@ export type Database = {
           amount_in?: number
           amount_out?: number
           cash_date?: string
+          cash_movement_id?: string | null
           client_id?: string | null
           created_at?: string
           event_type?: string
@@ -229,6 +242,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "daily_events_cash_movement_id_fkey"
+            columns: ["cash_movement_id"]
+            isOneToOne: false
+            referencedRelation: "cash_movements"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "daily_events_client_id_fkey"
             columns: ["client_id"]
