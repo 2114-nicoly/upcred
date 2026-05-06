@@ -19,6 +19,7 @@ export type DailyEvent = {
   client_id: string | null;
   loan_id: string | null;
   installment_id: string | null;
+  cash_movement_id?: string | null;
   amount_in: number;
   amount_out: number;
   observation: string | null;
@@ -36,6 +37,7 @@ export async function createDailyEvent(event: {
   amount_out?: number;
   observation?: string | null;
   origin?: string;
+  cash_movement_id?: string | null;
 }) {
   const userId = await getCurrentUserId();
   const { data, error } = await supabase.from("daily_events" as any).insert({
@@ -48,6 +50,7 @@ export async function createDailyEvent(event: {
     amount_out: event.amount_out ?? 0,
     observation: event.observation || null,
     origin: event.origin || "rota",
+    cash_movement_id: event.cash_movement_id || null,
     user_id: userId,
   }).select().single();
   if (error) {

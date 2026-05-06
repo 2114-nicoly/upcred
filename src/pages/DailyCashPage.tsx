@@ -82,6 +82,7 @@ type NewLoanInfo = {
 type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } | null }>;
 
 type CashMovementPaymentRow = {
+  id: string;
   loan_id: string | null;
   amount: number;
 };
@@ -160,6 +161,7 @@ const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => (
 
 // Paid group for display
 type PaidGroup = {
+  movementId: string;
   clientName: string;
   clientId: string;
   loanId: string;
@@ -270,7 +272,7 @@ export default function DailyCashPage() {
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
-          .select("loan_id, amount")
+          .select("id, loan_id, amount")
           .eq("cash_date", selectedDate)
           .eq("type", "recebimento_normal") as unknown as QueryResult<CashMovementPaymentRow>,
       ]);
@@ -296,11 +298,12 @@ export default function DailyCashPage() {
           paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
         }
       }
-      const paidMovementsByLoan = new Map<string, number>();
-      for (const mov of (paidMovementsData || []) as { loan_id: string | null; amount: number }[]) {
-        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, (paidMovementsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
+      const paidMovementsByLoan = new Map<string, CashMovementPaymentRow[]>();
+      for (const mov of (paidMovementsData || []) as CashMovementPaymentRow[]) {
+        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, [...(paidMovementsByLoan.get(mov.loan_id) || []), mov]);
       }
-      for (const [loanId, total] of paidMovementsByLoan) {
+      for (const [loanId, movements] of paidMovementsByLoan) {
+        const total = movements.reduce((sum, mov) => sum + Number(mov.amount), 0);
         if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
         paidLoanIds.add(loanId);
       }
@@ -321,16 +324,21 @@ export default function DailyCashPage() {
 
         for (const loan of (paidLoansData || [])) {
           const client = loan.clients;
-          paidGroupsList.push({
+          const movements = paidMovementsByLoan.get(loan.id) || [];
+          const base = {
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
             loanId: loan.id,
-            totalPaid: paidEventsByLoan.get(loan.id) || 0,
             accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
             remainingBalance: Number(loan.remaining_balance),
             instAmount: Number(loan.total_amount) / Number(loan.installment_count),
-            installmentIds: [], // populated below if needed for undo
-          });
+            installmentIds: [],
+          };
+          if (movements.length > 0) {
+            movements.forEach((mov) => paidGroupsList.push({ ...base, movementId: mov.id, totalPaid: Number(mov.amount) }));
+          } else {
+            paidGroupsList.push({ ...base, movementId: "", totalPaid: paidEventsByLoan.get(loan.id) || 0 });
+          }
         }
 
         // Get installment IDs for undo capability
@@ -473,6 +481,7 @@ export default function DailyCashPage() {
         );
       }
       return [...prev, {
+        movementId: "",
         clientName: inst.loans.clients.name,
         clientId: inst.loans.client_id,
         loanId: inst.loan_id,
@@ -699,9 +708,10 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleUndoPayment = async (loanId: string, installmentIds: string[]) => {
+  const handleUndoPayment = async (loanId: string, movementId: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
     setIsSubmitting(true);
 
     // Optimistic: remove from paid
@@ -710,7 +720,7 @@ export default function DailyCashPage() {
     toast.success("Pagamento desfeito!");
 
     try {
-      await reversePayment({ loanId, cashDate: selectedDate });
+      await reversePayment({ movementId });
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -772,6 +782,7 @@ export default function DailyCashPage() {
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
     const currentBalance = Number(inst.loans.remaining_balance);
     setPaidGroups(prev => [...prev, {
+      movementId: "",
       clientName: inst.loans.clients.name,
       clientId: inst.loans.client_id,
       loanId: inst.loan_id,
@@ -981,7 +992,7 @@ export default function DailyCashPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleUndoPayment(group.loanId, group.installmentIds)} className="text-destructive">
+                  <DropdownMenuItem onClick={() => handleUndoPayment(group.loanId, group.movementId)} className="text-destructive">
                     Desfazer pagamento
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>

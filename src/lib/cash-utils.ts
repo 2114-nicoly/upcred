@@ -17,6 +17,8 @@ export type CashMovement = {
   loan_id: string | null;
   installment_id: string | null;
   observation: string | null;
+  cash_date?: string;
+  daily_event_id?: string | null;
   created_at: string;
 };
 
@@ -56,9 +58,10 @@ export async function createCashMovement(movement: {
   installment_id?: string | null;
   observation?: string | null;
   cash_date?: string | null;
+  daily_event_id?: string | null;
 }) {
   const userId = await getCurrentUserId();
-  const { data } = await supabase.from("cash_movements").insert({
+  const { data, error } = await supabase.from("cash_movements").insert({
     type: movement.type,
     amount: movement.amount,
     client_id: movement.client_id || null,
@@ -66,9 +69,15 @@ export async function createCashMovement(movement: {
     installment_id: movement.installment_id || null,
     observation: movement.observation || null,
     cash_date: movement.cash_date || new Date().toISOString().slice(0, 10),
+    daily_event_id: movement.daily_event_id || null,
     user_id: userId,
   } as any).select().single();
+  if (error) throw error;
   return data;
+}
+
+export async function linkCashMovementToDailyEvent(movementId: string, eventId: string) {
+  await supabase.from("cash_movements").update({ daily_event_id: eventId } as any).eq("id", movementId);
 }
 
 export async function deleteCashMovement(id: string) {

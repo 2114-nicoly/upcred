@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 
@@ -23,6 +23,7 @@ export async function recalculateInstallments(loanId: string) {
   if (!loan) return;
 
   const totalPaid = Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance));
+  const today = new Date().toISOString().split("T")[0];
 
   const { data: insts } = await supabase
     .from("installments")
@@ -50,21 +51,18 @@ export async function recalculateInstallments(loanId: string) {
       }
       remaining -= instAmount;
     } else if (remaining > 0.01) {
-      // Any value received counts as treated/paid for the route day.
-      // remaining_balance stays the financial source of truth for what is still owed.
+      // Partially paid: never mark as paid until paid_amount reaches amount.
       const newPaid = remaining;
       await supabase.from("installments").update({
         paid_amount: newPaid,
-        status: "paid",
+        status: "partial",
         paid_at: new Date().toISOString(),
       }).eq("id", inst.id);
       remaining = 0;
     } else {
-      // Not paid - check if overdue
-      const isOverdue = new Date(inst.due_date) < new Date(new Date().toISOString().split("T")[0]);
+      const isOverdue = inst.due_date < today;
       const newStatus = isOverdue ? "overdue" : "pending";
-      const needsUpdate = Number(inst.paid_amount) !== 0 || (inst.status !== newStatus && inst.status !== "pending" && inst.status !== "overdue");
-      if (needsUpdate || Number(inst.paid_amount) !== 0) {
+      if (Number(inst.paid_amount) !== 0 || inst.status !== newStatus || inst.paid_at) {
         await supabase.from("installments").update({
           paid_amount: 0,
           status: newStatus,
@@ -94,98 +92,69 @@ export async function registerPayment(params: {
   /** Starting installment number for overflow */
   startInstNumber?: number;
 }) {
-  const { loanId, amount, clientId, clientName, cashDate, origin, installmentId, startInstNumber } = params;
+  const { loanId, amount, clientId, clientName, cashDate, origin, installmentId } = params;
   if (amount <= 0) return { applied: 0, newBalance: 0 };
+
+  const { data: loanData } = await supabase
+    .from("loans")
+    .select("amount, total_amount, remaining_balance")
+    .eq("id", loanId)
+    .single();
+
+  if (!loanData) throw new Error("Empréstimo não encontrado");
+
+  const applied = Math.min(amount, Math.max(0, Number(loanData.remaining_balance)));
+  if (applied <= 0.01) return { applied: 0, newBalance: Number(loanData.remaining_balance) };
 
   // 1. Atomic RPC: update remaining_balance
   const { data: newBalance, error: rpcError } = await supabase.rpc("apply_loan_payment", {
     p_loan_id: loanId,
-    p_amount: amount,
+    p_amount: applied,
   });
   if (rpcError) throw rpcError;
 
-  // 2. Update installment records (informational tracking)
-  const { data: unpaidInsts } = await supabase
-    .from("installments")
-    .select("*")
-    .eq("loan_id", loanId)
-    .neq("status", "paid")
-    .eq("is_penalty", false)
-    .order("number");
-
-  let remaining = amount;
-  const toProcess = startInstNumber
-    ? (unpaidInsts || []).filter((i: any) => i.number >= startInstNumber)
-    : unpaidInsts || [];
-
-  for (const inst of toProcess) {
-    if (remaining <= 0.01) break;
-    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-    const applying = Math.min(remaining, instRemaining);
-    const newPaidAmount = Number(inst.paid_amount) + applying;
-    const fullyPaid = newPaidAmount >= Number(inst.amount) - 0.01;
-    await supabase.from("installments").update({
-      paid_amount: newPaidAmount,
-      status: fullyPaid ? "paid" : "partial",
-      paid_at: new Date(cashDate + "T12:00:00").toISOString(),
-    }).eq("id", inst.id);
-    remaining -= applying;
-  }
-
-  // 3. Cash balance: interest first, then principal
-  const { data: loanData } = await supabase
-    .from("loans")
-    .select("amount, total_amount")
-    .eq("id", loanId)
-    .single();
-
+  // 2. Cash balance: interest first, then principal
   if (loanData) {
     const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
-    const { data: allInsts } = await supabase
-      .from("installments")
-      .select("paid_amount")
-      .eq("loan_id", loanId)
-      .eq("is_penalty", false);
-    const totalPaidNow = (allInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-    const totalPaidBefore = totalPaidNow - amount;
+    const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
     const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-    const toInterest = Math.min(amount, interestRemaining);
-    const toPrincipal = amount - toInterest;
+    const toInterest = Math.min(applied, interestRemaining);
+    const toPrincipal = applied - toInterest;
 
     await updateCashBalance({
-      available_cash: amount,
+      available_cash: applied,
       interest_receivable: -toInterest,
       money_lent: -toPrincipal,
     });
   }
 
-  // 4. Cash movement
-  await createCashMovement({
+  // 3. Linked cash movement + daily event
+  const movement = await createCashMovement({
     type: "recebimento_normal",
-    amount,
+    amount: applied,
     client_id: clientId,
     loan_id: loanId,
     installment_id: installmentId || null,
     observation: `Pagamento - ${clientName}`,
     cash_date: cashDate,
-  });
-
-  // 5. Daily event
-  await createDailyEvent({
+  }) as any;
+  const event = await createDailyEvent({
     cash_date: cashDate,
     event_type: "pagamento",
     client_id: clientId,
     loan_id: loanId,
     installment_id: installmentId || null,
-    amount_in: amount,
+    amount_in: applied,
     observation: `Pagamento - ${clientName}`,
     origin,
-  });
+    cash_movement_id: movement?.id || null,
+  } as any) as any;
+  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
 
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
 
-  return { applied: amount, newBalance: Number(newBalance) };
+  return { applied, newBalance: Number(newBalance) };
 }
 
 /**
@@ -220,15 +189,15 @@ export async function registerPenaltyPayment(params: {
   }).eq("id", penaltyInst.id);
 
   await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
-  await createCashMovement({
+  const movement = await createCashMovement({
     type: "recebimento_multa",
     amount,
     client_id: clientId,
     loan_id: loanId,
     observation: `Pagamento de multa - ${clientName}`,
     cash_date: cashDate,
-  });
-  await createDailyEvent({
+  }) as any;
+  const event = await createDailyEvent({
     cash_date: cashDate,
     event_type: "recebimento_multa",
     client_id: clientId,
@@ -236,7 +205,9 @@ export async function registerPenaltyPayment(params: {
     amount_in: amount,
     observation: `Multa - ${clientName}`,
     origin,
-  });
+    cash_movement_id: movement?.id || null,
+  } as any) as any;
+  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
 }
 
 /**
@@ -372,57 +343,35 @@ export async function settleLoan(params: {
  * Uses reverse_loan_payment RPC to restore remaining_balance.
  */
 export async function reversePayment(params: {
-  loanId: string;
-  cashDate: string;
-  installmentIds?: string[];
+  movementId: string;
 }) {
-  const { loanId, cashDate, installmentIds } = params;
+  const { movementId } = params;
 
-  // Get total from cash_movements
-  const { data: movs } = await supabase
+  const { data: movement, error } = await supabase
     .from("cash_movements")
-    .select("amount, installment_id")
+    .select("id, amount, loan_id, installment_id, daily_event_id")
+    .eq("id", movementId)
     .eq("type", "recebimento_normal")
-    .eq("cash_date", cashDate)
-    .eq("loan_id", loanId);
+    .single();
 
-  const totalReversed = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
-  const affectedInstIds = [...new Set((movs || []).map((m: any) => m.installment_id).filter(Boolean))];
+  if (error || !movement?.loan_id) throw new Error("Lançamento de pagamento não encontrado");
+  const loanId = movement.loan_id;
+  const totalReversed = Number(movement.amount);
 
-  // Reverse remaining_balance via RPC
   if (totalReversed > 0) {
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
   }
 
-  // Delete cash_movements
-  await supabase.from("cash_movements").delete()
-    .eq("loan_id", loanId)
-    .eq("cash_date", cashDate)
-    .eq("type", "recebimento_normal");
+  await supabase.from("cash_movements").delete().eq("id", movementId);
 
-  // Reset installments
-  for (const instId of affectedInstIds) {
-    await supabase.from("installments").update({
-      status: "pending",
-      paid_at: null,
-      paid_amount: 0,
-    }).eq("id", instId);
-  }
-
-  // Delete daily_events
   const { data: events } = await (supabase.from("daily_events" as any)
     .select("id")
-    .eq("event_type", "pagamento")
-    .eq("loan_id", loanId)
-    .eq("cash_date", cashDate) as any);
+    .or(`id.eq.${(movement as any).daily_event_id || "00000000-0000-0000-0000-000000000000"},cash_movement_id.eq.${movementId}`) as any);
   for (const ev of (events || [])) {
     await deleteDailyEvent(ev.id);
   }
 
-  // Recalculate cash balance
   await recalculateCashBalanceFromLedger();
-
-  // Recalculate installment distribution and loan status
   await recalculateInstallments(loanId);
 
   return totalReversed;
