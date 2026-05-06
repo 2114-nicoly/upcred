@@ -59,12 +59,14 @@ type Client = {
 export default function ClientDetailPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [installmentsByLoan, setInstallmentsByLoan] = useState<Record<string, Installment[]>>({});
   const [renewedFromIds, setRenewedFromIds] = useState<Set<string>>(new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
