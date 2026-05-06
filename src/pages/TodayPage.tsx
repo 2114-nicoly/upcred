@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
-import { registerPayment, registerPenaltyPayment, reverseInstallmentPayment } from "@/lib/payment-utils";
+import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -203,21 +203,6 @@ export default function TodayPage() {
     } catch (err) {
       console.error(err);
       toast.error("Erro ao restaurar status");
-    } finally {
-      fetchInstallments();
-    }
-  };
-
-  const handleUndoPayment = async (id: string) => {
-    const allInsts = [...installments, ...overdueInstallments];
-    const inst = allInsts.find((i) => i.id === id);
-    if (!inst) return;
-    try {
-      await reverseInstallmentPayment({ installmentId: id, loanId: inst.loan_id });
-      toast.success("Pagamento desfeito!");
-    } catch (err: any) {
-      console.error("handleUndoPayment error:", err);
-      toast.error(err?.message || "Erro ao desfazer pagamento");
     } finally {
       fetchInstallments();
     }
