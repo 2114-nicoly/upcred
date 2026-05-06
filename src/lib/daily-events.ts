@@ -97,51 +97,20 @@ export async function undoDailyEvent(event: DailyEvent) {
   }
 
   const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
-  const { recalculateInstallments } = await import("@/lib/payment-utils");
+  const { recalculateInstallments, reversePayment } = await import("@/lib/payment-utils");
 
   if (event.event_type === "pagamento") {
-    if (event.loan_id) {
-      const { data: movements } = await supabase.from("cash_movements")
-        .select("id, amount, installment_id")
-        .eq("loan_id", event.loan_id)
-        .eq("cash_date", event.cash_date)
-        .eq("type", "recebimento_normal");
-
-      const totalReversed = (movements || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
-
-      for (const mov of (movements || [])) {
-        await supabase.from("cash_movements").delete().eq("id", mov.id);
-      }
-
-      if (totalReversed > 0) {
-        await supabase.rpc("reverse_loan_payment", {
-          p_loan_id: event.loan_id,
-          p_amount: totalReversed,
-        });
-      }
-
-      await recalculateInstallments(event.loan_id);
+    if (!event.cash_movement_id) {
+      throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
     }
-    await recalculateCashBalanceFromLedger();
+    await reversePayment({ movementId: event.cash_movement_id });
+    return;
   } else if (event.event_type === "recebimento_multa") {
-    if (event.loan_id) {
-      const { data: penaltyInsts } = await supabase.from("installments")
-        .select("id, amount, paid_amount")
-        .eq("loan_id", event.loan_id).eq("is_penalty", true);
-      for (const pi of (penaltyInsts || [])) {
-        const newPaid = Math.max(0, Number(pi.paid_amount) - Number(event.amount_in));
-        await supabase.from("installments").update({
-          paid_amount: newPaid,
-          status: newPaid < Number(pi.amount) - 0.01 ? "pending" : "paid",
-          paid_at: newPaid < Number(pi.amount) - 0.01 ? null : undefined,
-        }).eq("id", pi.id);
-      }
-      await supabase.from("cash_movements").delete()
-        .eq("loan_id", event.loan_id)
-        .eq("cash_date", event.cash_date)
-        .eq("type", "recebimento_multa");
+    if (!event.cash_movement_id) {
+      throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
     }
-    await recalculateCashBalanceFromLedger();
+    await reversePayment({ movementId: event.cash_movement_id });
+    return;
   } else if (event.event_type === "nao_pagou") {
     if (event.installment_id) {
       await supabase.from("not_paid_marks").delete()
