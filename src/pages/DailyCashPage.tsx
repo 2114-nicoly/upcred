@@ -429,8 +429,14 @@ export default function DailyCashPage() {
       refreshTimerRef.current = window.setTimeout(() => fetchData({ silent: true }), 250);
     };
 
+    // Use an opaque, per-session random channel topic so other authenticated
+    // users cannot guess and subscribe to this client's realtime topic.
+    // Row-level data is already protected by RLS; this hardens topic naming.
+    const opaque = (typeof crypto !== "undefined" && "randomUUID" in crypto)
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
     const channel = supabase
-      .channel(`rota-${selectedDate}`)
+      .channel(`rota-${opaque}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_events" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "not_paid_marks" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "installments" }, scheduleRefresh)
