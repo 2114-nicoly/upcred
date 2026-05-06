@@ -132,6 +132,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <span className="text-base font-bold text-foreground">
           {getRouteLabel(location.pathname)}
         </span>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-1.5">
+            {selectedWorkerId ? (
+              <button
+                onClick={() => setSelectedWorkerId(null)}
+                className="flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20"
+                title="Limpar filtro"
+              >
+                <Eye className="h-3 w-3" />
+                <span className="truncate max-w-[120px]">{selectedWorkerName}</span>
+                <X className="h-3 w-3" />
+              </button>
+            ) : (
+              <Badge variant="outline" className="text-[10px] h-5">Consolidado</Badge>
+            )}
+            <Badge className="text-[10px] h-5">Admin</Badge>
+          </div>
+        )}
       </header>
 
       <main className="flex-1 overflow-auto pb-20">{children}</main>
