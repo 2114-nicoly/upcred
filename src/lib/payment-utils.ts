@@ -410,46 +410,6 @@ export async function reversePayment(params: {
 }
 
 /**
- * Reverse a single installment payment (used in LoanDetail).
- */
-export async function reverseInstallmentPayment(params: {
-  installmentId: string;
-  loanId: string;
-}) {
-  const { installmentId, loanId } = params;
-
-  // Get the paid amount for this installment before resetting
-  const { data: instData } = await supabase
-    .from("installments")
-    .select("paid_amount")
-    .eq("id", installmentId)
-    .single();
-
-  const paidAmount = Number(instData?.paid_amount || 0);
-
-  // Delete cash_movements for this installment
-  await supabase.from("cash_movements").delete().eq("installment_id", installmentId);
-
-  // Revert installment
-  await supabase.from("installments").update({
-    status: "pending",
-    paid_at: null,
-    paid_amount: 0,
-  }).eq("id", installmentId);
-
-  // Reverse remaining_balance via RPC
-  if (paidAmount > 0) {
-    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: paidAmount });
-  }
-
-  // Recalculate cash balance
-  await recalculateCashBalanceFromLedger();
-
-  // Recalculate installment distribution and loan status
-  await recalculateInstallments(loanId);
-}
-
-/**
  * Edit a payment: reverse the old amount and apply the new amount.
  * Updates remaining_balance, installments, cash movements, and daily events.
  */
@@ -458,11 +418,9 @@ export async function editPayment(params: {
   clientId: string;
   clientName: string;
   cashDate: string;
-  oldAmount: number;
   newAmount: number;
   origin: string;
   movementId: string;
-  eventId: string;
 }) {
   const { loanId, clientId, clientName, cashDate, newAmount, origin, movementId } = params;
   if (newAmount <= 0) throw new Error("Valor deve ser maior que zero");
