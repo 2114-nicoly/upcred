@@ -61,6 +61,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin"];
   const isMainPage = mainPages.includes(location.pathname);
+  const sidebarItems = isAdmin ? [...baseSidebarItems, adminSidebarItem] : baseSidebarItems;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
