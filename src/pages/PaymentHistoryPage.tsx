@@ -127,11 +127,9 @@ export default function PaymentHistoryPage() {
         clientId: editPaymentEntry.clientId,
         clientName: editPaymentEntry.clientName,
         cashDate: editPaymentEntry.cashDate,
-        oldAmount: editPaymentEntry.amount,
         newAmount,
         origin: "historico_pagamentos",
         movementId: editPaymentEntry.movementId,
-        eventId: editPaymentEntry.eventId,
       });
       toast.success("Pagamento atualizado!");
       setEditPaymentEntry(null);
