@@ -281,7 +281,7 @@ export async function settleLoan(params: {
       interest_receivable: -toInterest,
       money_lent: -toPrincipal,
     });
-    await createCashMovement({
+    const movement = await createCashMovement({
       type: "recebimento_normal",
       amount: realBalance,
       client_id: clientId,
@@ -289,7 +289,19 @@ export async function settleLoan(params: {
       installment_id: installmentId || null,
       observation: `Quitação empréstimo - ${clientName}`,
       cash_date: cashDate,
-    });
+    }) as any;
+    const event = await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "pagamento",
+      client_id: clientId,
+      loan_id: loanId,
+      installment_id: installmentId || null,
+      amount_in: realBalance,
+      observation: `Quitação empréstimo - ${clientName}`,
+      origin,
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
   } else {
     // Balance already zero, just mark as paid
     await supabase.from("loans").update({ status: "paid" }).eq("id", loanId);
@@ -310,32 +322,29 @@ export async function settleLoan(params: {
 
   if (totalPenaltyPaying > 0) {
     await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-    await createCashMovement({
+    const movement = await createCashMovement({
       type: "recebimento_multa",
       amount: totalPenaltyPaying,
       client_id: clientId,
       loan_id: loanId,
       observation: `Quitação multa - ${clientName}`,
       cash_date: cashDate,
-    });
-  }
-
-  // Daily event for the full payoff
-  const totalPaying = realBalance + totalPenaltyPaying;
-  if (totalPaying > 0) {
-    await createDailyEvent({
+    }) as any;
+    const event = await createDailyEvent({
       cash_date: cashDate,
-      event_type: "pagamento",
+      event_type: "recebimento_multa",
       client_id: clientId,
       loan_id: loanId,
-      installment_id: installmentId || null,
-      amount_in: totalPaying,
-      observation: `Quitação - ${clientName}`,
+      amount_in: totalPenaltyPaying,
+      observation: `Quitação multa - ${clientName}`,
       origin,
-    });
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
   }
 
   await recalculateInstallments(loanId);
+  await recalculateCashBalanceFromLedger();
 
   return { regularPaid: realBalance, penaltyPaid: totalPenaltyPaying };
 }
