@@ -15,6 +15,8 @@ import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 
 type InstallmentWithLoan = {
   id: string;
