@@ -121,7 +121,9 @@ const App = () => (
       <BrowserRouter>
         <ErrorBoundary>
           <AuthProvider>
-            <AppRoutes />
+            <WorkerFilterProvider>
+              <AppRoutes />
+            </WorkerFilterProvider>
           </AuthProvider>
         </ErrorBoundary>
       </BrowserRouter>
