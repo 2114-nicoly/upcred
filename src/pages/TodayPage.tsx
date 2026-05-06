@@ -67,24 +67,26 @@ export default function TodayPage() {
     try {
       const { data } = await supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, clients(id, name))")
         .eq("due_date", today)
         .neq("status", "paid")
         .eq("is_penalty", false)
         .order("number");
 
-      const todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
+      let todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
+      if (selectedWorkerId) todayInsts = todayInsts.filter((i) => i.loans?.worker_id === selectedWorkerId);
       setInstallments(todayInsts);
 
       const { data: overdueData } = await supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, clients(id, name))")
         .lt("due_date", today)
         .neq("status", "paid")
         .eq("is_penalty", false)
         .order("due_date");
 
-      const overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
+      let overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
+      if (selectedWorkerId) overdueInsts = overdueInsts.filter((i) => i.loans?.worker_id === selectedWorkerId);
       setOverdueInstallments(overdueInsts);
 
       const allInsts = [...todayInsts, ...overdueInsts];
