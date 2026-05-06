@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
+import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -131,30 +132,20 @@ export default function OverdueLoansPage() {
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
-    // Handle penalty
-    if (multaValue > 0) {
-      const { data: penaltyInsts } = await supabase
-        .from("installments")
-        .select("*")
-        .eq("loan_id", inst.loan_id)
-        .eq("is_penalty", true);
-      const penaltyInst = penaltyInsts?.[0];
-      if (penaltyInst) {
-        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
-        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-          status: fullyPaid ? "paid" : penaltyInst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-        }).eq("id", penaltyInst.id);
+    try {
+      if (multaValue > 0) {
+        await registerPenaltyPayment({
+          loanId: inst.loan_id,
+          amount: multaValue,
+          clientId: inst.loans.client_id,
+          clientName: inst.loans.clients.name,
+          cashDate: payDate,
+          origin: "atrasadas",
+        });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-      } else {
-        toast.error("Nenhuma multa registrada para abater");
       }
-    }
 
-    // Handle regular payment (sequential)
-    if (parcValue !== null || !payPenaltyAmount) {
+      if (parcValue !== null || !payPenaltyAmount) {
       const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
       const paidValue = parcValue ?? instRemaining;
       if (paidValue <= 0) {
@@ -165,33 +156,21 @@ export default function OverdueLoansPage() {
         toast.error("Valor inválido"); return;
       }
 
-      // Sequential abatement
-      const { data: allUnpaid } = await supabase
-        .from("installments")
-        .select("*")
-        .eq("loan_id", inst.loan_id)
-        .neq("status", "paid")
-        .eq("is_penalty", false)
-        .order("number");
-
-      let remaining = paidValue;
-      const toProcess = (allUnpaid || []).filter((i: any) => i.number >= inst.number);
-      for (const i of toProcess) {
-        if (remaining <= 0) break;
-        const iRemaining = Number(i.amount) - Number(i.paid_amount);
-        const applying = Math.min(remaining, iRemaining);
-        const newPaidAmount = Number(i.paid_amount) + applying;
-        const fullyPaid = newPaidAmount >= Number(i.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : i.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
-        }).eq("id", i.id);
-        remaining -= applying;
+        const { applied } = await registerPayment({
+          loanId: inst.loan_id,
+          amount: paidValue,
+          clientId: inst.loans.client_id,
+          clientName: inst.loans.clients.name,
+          cashDate: payDate,
+          origin: "atrasadas",
+          installmentId: inst.id,
+          startInstNumber: inst.number,
+        });
+        toast.success(`Parcela: ${formatCurrency(applied)} registrado!`);
       }
-      const totalApplied = paidValue - remaining;
-      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
-      if (remaining > 0) toast.info(`Sobra de ${formatCurrency(remaining)}`);
+    } catch (err: any) {
+      console.error("Overdue handlePay error:", err);
+      toast.error(err?.message || "Erro ao registrar pagamento");
     }
 
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
