@@ -20,6 +20,9 @@ import {
 import { Plus, ChevronDown, History, Clock, Pencil, DollarSign, RefreshCw, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import TransferClientDialog from "@/components/TransferClientDialog";
+import { ArrowRightLeft } from "lucide-react";
 
 type Loan = {
   id: string;
