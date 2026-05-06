@@ -481,6 +481,7 @@ export default function DailyCashPage() {
         );
       }
       return [...prev, {
+        movementId: "",
         clientName: inst.loans.clients.name,
         clientId: inst.loans.client_id,
         loanId: inst.loan_id,
@@ -707,9 +708,10 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleUndoPayment = async (loanId: string, installmentIds: string[]) => {
+  const handleUndoPayment = async (loanId: string, movementId: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
     setIsSubmitting(true);
 
     // Optimistic: remove from paid
@@ -718,7 +720,7 @@ export default function DailyCashPage() {
     toast.success("Pagamento desfeito!");
 
     try {
-      await reversePayment({ loanId, cashDate: selectedDate });
+      await reversePayment({ movementId });
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -780,6 +782,7 @@ export default function DailyCashPage() {
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
     const currentBalance = Number(inst.loans.remaining_balance);
     setPaidGroups(prev => [...prev, {
+      movementId: "",
       clientName: inst.loans.clients.name,
       clientId: inst.loans.client_id,
       loanId: inst.loan_id,
