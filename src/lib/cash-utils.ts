@@ -32,7 +32,13 @@ export type CashBalance = {
 };
 
 export async function getCashBalance(): Promise<CashBalance | null> {
-  const { data } = await supabase.from("cash_balance").select("*").limit(1).single();
+  // For workers RLS returns only their row. For admin, prefer the admin row (worker_id IS NULL).
+  const { data } = await supabase
+    .from("cash_balance")
+    .select("*")
+    .order("worker_id", { ascending: true, nullsFirst: true })
+    .limit(1)
+    .maybeSingle();
   return data as unknown as CashBalance;
 }
 
