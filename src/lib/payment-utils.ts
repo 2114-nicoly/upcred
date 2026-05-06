@@ -343,57 +343,35 @@ export async function settleLoan(params: {
  * Uses reverse_loan_payment RPC to restore remaining_balance.
  */
 export async function reversePayment(params: {
-  loanId: string;
-  cashDate: string;
-  installmentIds?: string[];
+  movementId: string;
 }) {
-  const { loanId, cashDate, installmentIds } = params;
+  const { movementId } = params;
 
-  // Get total from cash_movements
-  const { data: movs } = await supabase
+  const { data: movement, error } = await supabase
     .from("cash_movements")
-    .select("amount, installment_id")
+    .select("id, amount, loan_id, installment_id, daily_event_id")
+    .eq("id", movementId)
     .eq("type", "recebimento_normal")
-    .eq("cash_date", cashDate)
-    .eq("loan_id", loanId);
+    .single();
 
-  const totalReversed = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
-  const affectedInstIds = [...new Set((movs || []).map((m: any) => m.installment_id).filter(Boolean))];
+  if (error || !movement?.loan_id) throw new Error("Lançamento de pagamento não encontrado");
+  const loanId = movement.loan_id;
+  const totalReversed = Number(movement.amount);
 
-  // Reverse remaining_balance via RPC
   if (totalReversed > 0) {
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
   }
 
-  // Delete cash_movements
-  await supabase.from("cash_movements").delete()
-    .eq("loan_id", loanId)
-    .eq("cash_date", cashDate)
-    .eq("type", "recebimento_normal");
+  await supabase.from("cash_movements").delete().eq("id", movementId);
 
-  // Reset installments
-  for (const instId of affectedInstIds) {
-    await supabase.from("installments").update({
-      status: "pending",
-      paid_at: null,
-      paid_amount: 0,
-    }).eq("id", instId);
-  }
-
-  // Delete daily_events
   const { data: events } = await (supabase.from("daily_events" as any)
     .select("id")
-    .eq("event_type", "pagamento")
-    .eq("loan_id", loanId)
-    .eq("cash_date", cashDate) as any);
+    .or(`id.eq.${(movement as any).daily_event_id || "00000000-0000-0000-0000-000000000000"},cash_movement_id.eq.${movementId}`) as any);
   for (const ev of (events || [])) {
     await deleteDailyEvent(ev.id);
   }
 
-  // Recalculate cash balance
   await recalculateCashBalanceFromLedger();
-
-  // Recalculate installment distribution and loan status
   await recalculateInstallments(loanId);
 
   return totalReversed;
