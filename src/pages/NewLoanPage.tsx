@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
-import { settleLoan } from "@/lib/payment-utils";
+import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
-import { ArrowLeft, Calculator, RefreshCw } from "lucide-react";
+import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -32,6 +32,10 @@ export default function NewLoanPage() {
   const [fixedDates, setFixedDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Renewal data
+  const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
+  const [renewPaidAmount, setRenewPaidAmount] = useState<string>("");
+
   useEffect(() => {
     const fetchClient = async () => {
       const { data } = await supabase.from("clients").select("name").eq("id", clientId!).single();
@@ -40,17 +44,22 @@ export default function NewLoanPage() {
     fetchClient();
   }, [clientId]);
 
-  // Pre-fill from renewal loan
+  // Pre-fill from renewal loan + fetch remaining_balance for "Falta para quitar"
   useEffect(() => {
     if (!renewFromLoanId) return;
     const fetchRenewalLoan = async () => {
-      const { data } = await supabase.from("loans").select("amount, interest_type, interest_value, payment_type, installment_count").eq("id", renewFromLoanId).single();
+      const { data } = await supabase
+        .from("loans")
+        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance")
+        .eq("id", renewFromLoanId)
+        .single();
       if (data) {
         setAmount(String(data.amount));
         setInterestType(data.interest_type as "percentage" | "fixed");
         setInterestValue(String(data.interest_value));
         setPaymentType(data.payment_type as typeof paymentType);
         setInstallmentCount(String(data.installment_count));
+        setRenewOldRemaining(Number(data.remaining_balance) || 0);
       }
     };
     fetchRenewalLoan();
@@ -87,10 +96,26 @@ export default function NewLoanPage() {
     }
   }, [numInstallments, paymentType]);
 
+  // Renewal computed values
+  const renewPaid = parseFloat(renewPaidAmount) || 0;
+  const faltaQuitar = renewOldRemaining;
+  // Quanto do principal do novo empréstimo será absorvido para quitar o antigo
+  const absorvidoDoNovo = renewFromLoanId ? Math.max(0, faltaQuitar - renewPaid) : 0;
+  // Dinheiro real liberado ao cliente
+  const valorLiberado = renewFromLoanId ? Math.max(0, numAmount - absorvidoDoNovo) : numAmount;
+  // Quanto a renovação consegue cobrir do antigo
+  const cobreAntigo = renewPaid + numAmount;
+  const renovacaoQuita = renewFromLoanId ? cobreAntigo + 0.01 >= faltaQuitar : true;
+
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error("Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
+
+    if (renewFromLoanId && !renovacaoQuita) {
+      toast.error(`Renovação insuficiente. Faltam ${formatCurrency(faltaQuitar - cobreAntigo)} para quitar o empréstimo atual.`);
+      return;
+    }
 
     setSaving(true);
 
@@ -107,6 +132,26 @@ export default function NewLoanPage() {
     const userId = session?.user?.id;
     if (!userId) { toast.error("Sessão expirada"); setSaving(false); return; }
 
+    // ===== RENOVAÇÃO: registrar pagamento em dinheiro do cliente no antigo (se houver) =====
+    if (renewFromLoanId && renewPaid > 0) {
+      try {
+        await registerPayment({
+          loanId: renewFromLoanId,
+          amount: Math.min(renewPaid, faltaQuitar),
+          clientId: clientId!,
+          clientName: clientName,
+          cashDate: loanDate,
+          origin: "renovacao",
+        });
+      } catch (err) {
+        console.error("Erro ao registrar pagamento da renovação:", err);
+        toast.error("Erro ao registrar pagamento da renovação");
+        setSaving(false);
+        return;
+      }
+    }
+
+    // ===== Criar novo empréstimo =====
     const { data: loan, error: loanError } = await supabase
       .from("loans")
       .insert({
@@ -138,44 +183,61 @@ export default function NewLoanPage() {
     const { error: instError } = await supabase.from("installments").insert(installments);
     if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
 
-    // Update cash balance
+    // Cash balance: empréstimo novo sai numAmount em caixa.
+    // Renovação: o que sai do caixa real é apenas valorLiberado.
     const interest = calc.totalAmount - numAmount;
+    const cashOut = renewFromLoanId ? valorLiberado : numAmount;
     await updateCashBalance({
-      available_cash: -numAmount,
+      available_cash: -cashOut,
       money_lent: numAmount,
       interest_receivable: interest,
     });
 
-    // Create cash movement
-    await createCashMovement({
-      type: "emprestimo",
-      amount: -numAmount,
-      client_id: clientId!,
-      loan_id: loan.id,
-      observation: `${renewFromLoanId ? "Renovação" : "Empréstimo"} de ${formatCurrency(numAmount)} para ${clientName}`,
-      cash_date: loanDate,
-    });
+    if (cashOut > 0) {
+      await createCashMovement({
+        type: "emprestimo",
+        amount: -cashOut,
+        client_id: clientId!,
+        loan_id: loan.id,
+        observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
+        cash_date: loanDate,
+      });
+    }
 
-    // Register daily event
+    const renewObs = renewFromLoanId
+      ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
+      : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+
     await createDailyEvent({
       cash_date: loanDate,
       event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
       client_id: clientId!,
       loan_id: loan.id,
-      amount_out: numAmount,
-      observation: `${renewFromLoanId ? "Renovação" : "Novo empréstimo"} - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`,
+      amount_in: 0,
+      amount_out: cashOut,
+      observation: renewObs,
       origin: "novo_emprestimo",
     });
 
-    // If renewal, close old loan using centralized logic
+    // Se ainda restou saldo no antigo após o pagamento, quitar (absorvido pelo novo)
     if (renewFromLoanId) {
-      await settleLoan({
-        loanId: renewFromLoanId,
-        clientId: clientId!,
-        clientName: clientName,
-        cashDate: loanDate,
-        origin: "renovacao",
-      });
+      const { data: oldLoanState } = await supabase
+        .from("loans")
+        .select("remaining_balance")
+        .eq("id", renewFromLoanId)
+        .single();
+      const stillOwed = Number(oldLoanState?.remaining_balance) || 0;
+      if (stillOwed > 0.01) {
+        await settleLoan({
+          loanId: renewFromLoanId,
+          clientId: clientId!,
+          clientName: clientName,
+          cashDate: loanDate,
+          origin: "renovacao",
+        });
+      } else {
+        await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
+      }
       toast.success("Empréstimo renovado com sucesso!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
@@ -186,9 +248,14 @@ export default function NewLoanPage() {
   return (
     <div className="mx-auto max-w-lg p-4">
       {renewFromLoanId && (
-        <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">Renovação de Empréstimo</span>
+        <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <RefreshCw className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold text-primary">Renovação de Empréstimo</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Falta para quitar empréstimo atual: <span className="font-bold text-foreground">{formatCurrency(faltaQuitar)}</span>
+          </p>
         </div>
       )}
       {clientName && <p className="mb-4 text-sm text-muted-foreground">Cliente: <span className="font-medium text-foreground">{clientName}</span></p>}
@@ -259,6 +326,53 @@ export default function NewLoanPage() {
           </div>
         )}
 
+
+        {renewFromLoanId && (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center text-base">
+                <RefreshCw className="mr-2 h-4 w-4 text-warning" /> Pagamento na Renovação
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Falta para quitar:</span>
+                <span className="font-bold">{formatCurrency(faltaQuitar)}</span>
+              </div>
+              <div>
+                <Label>Valor pago na renovação (R$)</Label>
+                <Input
+                  type="number"
+                  value={renewPaidAmount}
+                  onChange={(e) => setRenewPaidAmount(e.target.value)}
+                  placeholder="0,00"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Quanto o cliente está pagando agora para abater o empréstimo atual.
+                </p>
+              </div>
+
+              <div className="border-t pt-2 space-y-1">
+                <div className="flex justify-between"><span>Pago agora:</span><span>{formatCurrency(renewPaid)}</span></div>
+                <div className="flex justify-between"><span>Novo empréstimo:</span><span>{formatCurrency(numAmount)}</span></div>
+                <div className="flex justify-between"><span>Absorvido p/ quitar antigo:</span><span>{formatCurrency(absorvidoDoNovo)}</span></div>
+                <div className="flex justify-between font-bold">
+                  <span>Liberado ao cliente:</span>
+                  <span className={valorLiberado > 0 ? "text-success" : "text-muted-foreground"}>{formatCurrency(valorLiberado)}</span>
+                </div>
+                {!renovacaoQuita && (
+                  <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      Pago + novo empréstimo não cobrem o saldo de {formatCurrency(faltaQuitar)}. Faltam {formatCurrency(faltaQuitar - cobreAntigo)}.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {calc && (
           <Card className="border-primary/30 bg-accent">
             <CardHeader className="pb-2">
@@ -284,7 +398,7 @@ export default function NewLoanPage() {
         )}
 
         <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-          {saving ? "Processando..." : renewFromLoanId ? "Renovar Empréstimo" : "Criar Empréstimo"}
+          {saving ? "Processando..." : renewFromLoanId ? "Renovar" : "Criar Empréstimo"}
         </Button>
       </div>
     </div>

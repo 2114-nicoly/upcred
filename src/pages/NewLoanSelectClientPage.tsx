@@ -180,7 +180,7 @@ export default function NewLoanSelectClientPage() {
                 navigate(`/clients/${activeBlockDialog.clientId}/new-loan?renewFrom=${activeBlockDialog.activeLoanId}`);
               }}
             >
-              Renovar empréstimo
+              Renovar
             </Button>
             <Button variant="ghost" className="w-full" onClick={() => setActiveBlockDialog(null)}>Cancelar</Button>
           </DialogFooter>

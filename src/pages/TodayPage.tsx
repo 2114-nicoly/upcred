@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
 import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
-import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2 } from "lucide-react";
+import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -288,6 +288,14 @@ export default function TodayPage() {
               <Undo2 className="mr-1 h-3 w-3" /> Desfazer "Não Pagou"
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full mt-1"
+            onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}
+          >
+            <RefreshCw className="mr-1 h-3 w-3" /> Renovar
+          </Button>
         </CardContent>
       </Card>
     );
