@@ -189,12 +189,6 @@ export default function OverdueLoansPage() {
     fetchData();
   };
 
-  const handleUndoPayment = async (id: string) => {
-    await supabase.from("installments").update({ status: "pending", paid_at: null, paid_amount: 0 }).eq("id", id);
-    toast.success("Pagamento desfeito!");
-    fetchData();
-  };
-
   const handleAddPenalty = async (inst: InstallmentWithLoan) => {
     const amount = parseFloat(penaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
