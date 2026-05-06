@@ -326,6 +326,53 @@ export default function NewLoanPage() {
           </div>
         )}
 
+
+        {renewFromLoanId && (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center text-base">
+                <RefreshCw className="mr-2 h-4 w-4 text-warning" /> Pagamento na Renovação
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Falta para quitar:</span>
+                <span className="font-bold">{formatCurrency(faltaQuitar)}</span>
+              </div>
+              <div>
+                <Label>Valor pago na renovação (R$)</Label>
+                <Input
+                  type="number"
+                  value={renewPaidAmount}
+                  onChange={(e) => setRenewPaidAmount(e.target.value)}
+                  placeholder="0,00"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Quanto o cliente está pagando agora para abater o empréstimo atual.
+                </p>
+              </div>
+
+              <div className="border-t pt-2 space-y-1">
+                <div className="flex justify-between"><span>Pago agora:</span><span>{formatCurrency(renewPaid)}</span></div>
+                <div className="flex justify-between"><span>Novo empréstimo:</span><span>{formatCurrency(numAmount)}</span></div>
+                <div className="flex justify-between"><span>Absorvido p/ quitar antigo:</span><span>{formatCurrency(absorvidoDoNovo)}</span></div>
+                <div className="flex justify-between font-bold">
+                  <span>Liberado ao cliente:</span>
+                  <span className={valorLiberado > 0 ? "text-success" : "text-muted-foreground"}>{formatCurrency(valorLiberado)}</span>
+                </div>
+                {!renovacaoQuita && (
+                  <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      Pago + novo empréstimo não cobrem o saldo de {formatCurrency(faltaQuitar)}. Faltam {formatCurrency(faltaQuitar - cobreAntigo)}.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {calc && (
           <Card className="border-primary/30 bg-accent">
             <CardHeader className="pb-2">
@@ -351,7 +398,7 @@ export default function NewLoanPage() {
         )}
 
         <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-          {saving ? "Processando..." : renewFromLoanId ? "Renovar Empréstimo" : "Criar Empréstimo"}
+          {saving ? "Processando..." : renewFromLoanId ? "Renovar" : "Criar Empréstimo"}
         </Button>
       </div>
     </div>
