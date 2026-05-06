@@ -285,6 +285,7 @@ export default function DailyCashPage() {
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
 
       const allEvents = (eventsData || []) as DailyEventRow[];
+      setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
       // Build sets of loan IDs that already have payment or nao_pagou events today
