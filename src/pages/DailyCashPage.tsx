@@ -298,12 +298,13 @@ export default function DailyCashPage() {
           paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
         }
       }
-      const paidMovementsByLoan = new Map<string, { movementId: string; amount: number }>();
+      const paidMovementsByLoan = new Map<string, CashMovementPaymentRow[]>();
       for (const mov of (paidMovementsData || []) as CashMovementPaymentRow[]) {
-        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, (paidMovementsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
+        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, [...(paidMovementsByLoan.get(mov.loan_id) || []), mov]);
       }
-      for (const [loanId, total] of paidMovementsByLoan) {
-        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total.amount);
+      for (const [loanId, movements] of paidMovementsByLoan) {
+        const total = movements.reduce((sum, mov) => sum + Number(mov.amount), 0);
+        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
         paidLoanIds.add(loanId);
       }
       for (const m of npMarks) {
@@ -323,17 +324,21 @@ export default function DailyCashPage() {
 
         for (const loan of (paidLoansData || [])) {
           const client = loan.clients;
-          paidGroupsList.push({
-            movementId: paidMovementsByLoan.get(loan.id)?.movementId || "",
+          const movements = paidMovementsByLoan.get(loan.id) || [];
+          const base = {
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
             loanId: loan.id,
-            totalPaid: paidMovementsByLoan.get(loan.id)?.amount || paidEventsByLoan.get(loan.id) || 0,
             accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
             remainingBalance: Number(loan.remaining_balance),
             instAmount: Number(loan.total_amount) / Number(loan.installment_count),
-            installmentIds: [], // populated below if needed for undo
-          });
+            installmentIds: [],
+          };
+          if (movements.length > 0) {
+            movements.forEach((mov) => paidGroupsList.push({ ...base, movementId: mov.id, totalPaid: Number(mov.amount) }));
+          } else {
+            paidGroupsList.push({ ...base, movementId: "", totalPaid: paidEventsByLoan.get(loan.id) || 0 });
+          }
         }
 
         // Get installment IDs for undo capability
