@@ -1,9 +1,11 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft, LogOut } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft, LogOut, Eye } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 const bottomNavItems = [
