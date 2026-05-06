@@ -22,8 +22,8 @@ const baseSidebarItems = [
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
 ];
 const adminSidebarItems = [
-  { path: "/workers", label: "Trabalhadores", icon: Users },
-  { path: "/admin", label: "Administrador", icon: Shield },
+  { path: "/admin", label: "Painel Admin", icon: Shield },
+  { path: "/admin-tools", label: "Manutenção", icon: Shield },
 ];
 
 // Extended route labels for header (includes sub-pages)
