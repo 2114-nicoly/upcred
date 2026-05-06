@@ -82,6 +82,7 @@ type NewLoanInfo = {
 type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } | null }>;
 
 type CashMovementPaymentRow = {
+  id: string;
   loan_id: string | null;
   amount: number;
 };
@@ -160,6 +161,7 @@ const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => (
 
 // Paid group for display
 type PaidGroup = {
+  movementId: string;
   clientName: string;
   clientId: string;
   loanId: string;
@@ -270,7 +272,7 @@ export default function DailyCashPage() {
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
-          .select("loan_id, amount")
+          .select("id, loan_id, amount")
           .eq("cash_date", selectedDate)
           .eq("type", "recebimento_normal") as unknown as QueryResult<CashMovementPaymentRow>,
       ]);
@@ -296,12 +298,12 @@ export default function DailyCashPage() {
           paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
         }
       }
-      const paidMovementsByLoan = new Map<string, number>();
-      for (const mov of (paidMovementsData || []) as { loan_id: string | null; amount: number }[]) {
+      const paidMovementsByLoan = new Map<string, { movementId: string; amount: number }>();
+      for (const mov of (paidMovementsData || []) as CashMovementPaymentRow[]) {
         if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, (paidMovementsByLoan.get(mov.loan_id) || 0) + Number(mov.amount));
       }
       for (const [loanId, total] of paidMovementsByLoan) {
-        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
+        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total.amount);
         paidLoanIds.add(loanId);
       }
       for (const m of npMarks) {
@@ -322,10 +324,11 @@ export default function DailyCashPage() {
         for (const loan of (paidLoansData || [])) {
           const client = loan.clients;
           paidGroupsList.push({
+            movementId: paidMovementsByLoan.get(loan.id)?.movementId || "",
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
             loanId: loan.id,
-            totalPaid: paidEventsByLoan.get(loan.id) || 0,
+            totalPaid: paidMovementsByLoan.get(loan.id)?.amount || paidEventsByLoan.get(loan.id) || 0,
             accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
             remainingBalance: Number(loan.remaining_balance),
             instAmount: Number(loan.total_amount) / Number(loan.installment_count),
