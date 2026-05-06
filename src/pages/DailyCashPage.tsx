@@ -992,7 +992,7 @@ export default function DailyCashPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleUndoPayment(group.loanId, group.installmentIds)} className="text-destructive">
+                  <DropdownMenuItem onClick={() => handleUndoPayment(group.loanId, group.movementId)} className="text-destructive">
                     Desfazer pagamento
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
