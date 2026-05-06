@@ -185,7 +185,7 @@ export async function registerPenaltyPayment(params: {
   const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
   await supabase.from("installments").update({
     paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-    status: fullyPaid ? "paid" : penaltyInst.status,
+    status: fullyPaid ? "paid" : newPaid > 0.01 ? "partial" : penaltyInst.status,
     paid_at: fullyPaid ? new Date(cashDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
   }).eq("id", penaltyInst.id);
 
@@ -373,7 +373,7 @@ export async function reversePayment(params: {
   } else if (movement.type === "recebimento_multa" && totalReversed > 0) {
     const { data: penaltyInsts } = await supabase
       .from("installments")
-      .select("id, amount, paid_amount, due_date")
+      .select("id, amount, paid_amount, due_date, paid_at")
       .eq("loan_id", loanId)
       .eq("is_penalty", true)
       .order("number");
@@ -386,7 +386,7 @@ export async function reversePayment(params: {
       await supabase.from("installments").update({
         paid_amount: newPaid,
         status: newPaid >= Number(inst.amount) - 0.01 ? "paid" : newPaid > 0.01 ? "partial" : (inst.due_date < new Date().toISOString().split("T")[0] ? "overdue" : "pending"),
-        paid_at: newPaid >= Number(inst.amount) - 0.01 ? new Date().toISOString() : null,
+        paid_at: newPaid >= Number(inst.amount) - 0.01 ? inst.paid_at : null,
       }).eq("id", inst.id);
       remainingToReverse -= subtracting;
     }
