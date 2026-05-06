@@ -276,34 +276,13 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
-  // --- Undo payment on a specific installment ---
-  const handleUndoPayment = async (instId: string) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      await reverseInstallmentPayment({ installmentId: instId, loanId: loanId! });
-      toast.success("Pagamento desfeito!");
-    } catch {
-      toast.error("Erro ao desfazer pagamento");
-    }
-    setIsSubmitting(false);
-    fetchData();
-  };
-
   // --- Undo payment from history ---
   const handleUndoHistoryPayment = async (entry: PaymentHistoryEntry) => {
     if (isSubmitting || !loan) return;
     if (!confirm(`Desfazer pagamento de ${formatCurrency(entry.amount)}?`)) return;
     setIsSubmitting(true);
     try {
-      await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId!, p_amount: entry.amount });
-      // Delete the cash movement
-      await supabase.from("cash_movements").delete().eq("id", entry.movementId);
-      // Delete the daily event
-      if (entry.eventId) await deleteDailyEvent(entry.eventId);
-      // Recalculate everything from remaining_balance
-      await recalculateCashBalanceFromLedger();
-      await recalculateInstallments(loanId!);
+      await reversePayment({ movementId: entry.movementId });
       toast.success("Pagamento desfeito!");
     } catch { toast.error("Erro ao desfazer pagamento"); }
     setIsSubmitting(false);
