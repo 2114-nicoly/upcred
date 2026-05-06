@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
+import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { ArrowLeft, Plus, XCircle, Undo2, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ type Installment = {
 
 type Loan = {
   id: string;
+  client_id: string;
   total_amount: number;
   clients: { name: string };
 };
@@ -46,7 +48,7 @@ export default function UnpaidInstallmentsPage() {
   const [editInstDueDate, setEditInstDueDate] = useState("");
 
   const fetchData = async () => {
-    const { data: l } = await supabase.from("loans").select("id, total_amount, clients(name)").eq("id", loanId!).single();
+    const { data: l } = await supabase.from("loans").select("id, client_id, total_amount, clients(name)").eq("id", loanId!).single();
     setLoan(l as unknown as Loan);
 
     const { data: insts } = await supabase
@@ -87,45 +89,41 @@ export default function UnpaidInstallmentsPage() {
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
 
-    if (multaValue > 0) {
-      const { data: penaltyInsts } = await supabase.from("installments").select("*").eq("loan_id", loanId!).eq("is_penalty", true);
-      const penaltyInst = penaltyInsts?.[0];
-      if (penaltyInst) {
-        const newPaid = Number(penaltyInst.paid_amount) + multaValue;
-        const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-          status: fullyPaid ? "paid" : penaltyInst.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-        }).eq("id", penaltyInst.id);
+    try {
+      if (multaValue > 0 && loan) {
+        await registerPenaltyPayment({
+          loanId: loanId!,
+          amount: multaValue,
+          clientId: loan.client_id,
+          clientName: loan.clients.name,
+          cashDate: payDate,
+          origin: "parcelas_pendentes",
+        });
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       }
-    }
 
-    if (parcValue !== null || !payPenaltyAmount) {
+      if (parcValue !== null || !payPenaltyAmount) {
       const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
       const paidValue = parcValue ?? instRemaining;
-      const { data: allUnpaid } = await supabase.from("installments").select("*").eq("loan_id", loanId!).neq("status", "paid").eq("is_penalty", false).order("number");
-      let remaining = paidValue;
-      const toProcess = (allUnpaid || []).filter((i: any) => i.number >= inst.number);
-      for (const i of toProcess) {
-        if (remaining <= 0) break;
-        const iRemaining = Number(i.amount) - Number(i.paid_amount);
-        const applying = Math.min(remaining, iRemaining);
-        const newPaidAmount = Number(i.paid_amount) + applying;
-        const fullyPaid = newPaidAmount >= Number(i.amount) - 0.01;
-        await supabase.from("installments").update({
-          paid_amount: newPaidAmount,
-          status: fullyPaid ? "paid" : i.status,
-          paid_at: fullyPaid ? new Date(payDate + "T12:00:00").toISOString() : i.paid_at,
-        }).eq("id", i.id);
-        remaining -= applying;
+        if (paidValue > 0 && loan) {
+          const { applied } = await registerPayment({
+            loanId: loanId!,
+            amount: paidValue,
+            clientId: loan.client_id,
+            clientName: loan.clients.name,
+            cashDate: payDate,
+            origin: "parcelas_pendentes",
+            installmentId: inst.id,
+            startInstNumber: inst.number,
+          });
+          toast.success(`Parcela: ${formatCurrency(applied)} registrado!`);
+        }
       }
-      const totalApplied = paidValue - remaining;
-      toast.success(`Parcela: ${formatCurrency(totalApplied)} registrado!`);
+    } catch (err: any) {
+      console.error("Unpaid handlePay error:", err);
+      toast.error(err?.message || "Erro ao registrar pagamento");
     }
 
-    await updateLoanStatus();
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
     fetchData();
   };
