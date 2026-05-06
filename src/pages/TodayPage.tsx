@@ -309,9 +309,12 @@ export default function TodayPage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <p className="mb-4 text-sm text-muted-foreground">
-        {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        </p>
+        <WorkerFilterSelect className="max-w-[200px]" />
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3">
         <Card className="text-center">
