@@ -167,15 +167,33 @@ export default function ClientDetailPage() {
           {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
           {client.notes && <p className="text-xs text-muted-foreground mt-1">{client.notes}</p>}
         </div>
-        <Button size="sm" variant="outline" onClick={() => {
-          setEditName(client.name);
-          setEditPhone(client.phone || "");
-          setEditNotes(client.notes || "");
-          setEditOpen(true);
-        }}>
-          <Pencil className="mr-1 h-3 w-3" /> Editar
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button size="sm" variant="outline" onClick={() => {
+            setEditName(client.name);
+            setEditPhone(client.phone || "");
+            setEditNotes(client.notes || "");
+            setEditOpen(true);
+          }}>
+            <Pencil className="mr-1 h-3 w-3" /> Editar
+          </Button>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setTransferOpen(true)}>
+              <ArrowRightLeft className="mr-1 h-3 w-3" /> Transferir
+            </Button>
+          )}
+        </div>
       </div>
+
+      {isAdmin && client && (
+        <TransferClientDialog
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          clientId={client.id}
+          clientName={client.name}
+          currentWorkerId={(client as any).worker_id ?? null}
+          onTransferred={fetchData}
+        />
+      )}
 
       {/* Active Loan section */}
       <div>
