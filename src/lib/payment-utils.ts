@@ -360,17 +360,38 @@ export async function reversePayment(params: {
 
   const { data: movement, error } = await supabase
     .from("cash_movements")
-    .select("id, amount, loan_id, installment_id, daily_event_id")
+    .select("id, type, amount, loan_id, installment_id, daily_event_id")
     .eq("id", movementId)
-    .eq("type", "recebimento_normal")
     .single();
 
   if (error || !movement?.loan_id) throw new Error("Lançamento de pagamento não encontrado");
   const loanId = movement.loan_id;
   const totalReversed = Number(movement.amount);
 
-  if (totalReversed > 0) {
+  if (movement.type === "recebimento_normal" && totalReversed > 0) {
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
+  } else if (movement.type === "recebimento_multa" && totalReversed > 0) {
+    const { data: penaltyInsts } = await supabase
+      .from("installments")
+      .select("id, amount, paid_amount, due_date")
+      .eq("loan_id", loanId)
+      .eq("is_penalty", true)
+      .order("number");
+    let remainingToReverse = totalReversed;
+    for (const inst of (penaltyInsts || [])) {
+      if (remainingToReverse <= 0.01) break;
+      const currentPaid = Number(inst.paid_amount);
+      const subtracting = Math.min(currentPaid, remainingToReverse);
+      const newPaid = Math.max(0, currentPaid - subtracting);
+      await supabase.from("installments").update({
+        paid_amount: newPaid,
+        status: newPaid >= Number(inst.amount) - 0.01 ? "paid" : newPaid > 0.01 ? "partial" : (inst.due_date < new Date().toISOString().split("T")[0] ? "overdue" : "pending"),
+        paid_at: newPaid >= Number(inst.amount) - 0.01 ? undefined : null,
+      }).eq("id", inst.id);
+      remainingToReverse -= subtracting;
+    }
+  } else {
+    throw new Error("Tipo de lançamento não pode ser desfeito automaticamente");
   }
 
   await supabase.from("cash_movements").delete().eq("id", movementId);
