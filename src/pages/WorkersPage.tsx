@@ -42,6 +42,7 @@ export default function WorkersPage() {
   const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const [openCreate, setOpenCreate] = useState(false);
   const [nome, setNome] = useState("");
