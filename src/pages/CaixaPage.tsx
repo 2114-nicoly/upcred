@@ -147,6 +147,18 @@ export default function CaixaPage() {
   };
 
   const handleUndoEvent = async (event: DailyEvent) => {
+    const valor = Number(event.amount_in) || Number(event.amount_out) || 0;
+    const ok = await confirm({
+      title: "Desfazer lançamento?",
+      description: "O saldo do caixa será revertido conforme este evento.",
+      affected: [
+        { label: "Tipo", value: getEventTypeLabel(event.event_type) },
+        ...(valor > 0 ? [{ label: "Valor", value: formatCurrency(valor) }] : []),
+        ...(event.client_id && clientNames[event.client_id] ? [{ label: "Cliente", value: clientNames[event.client_id] }] : []),
+      ],
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     try {
       await undoDailyEvent(event);
       toast.success("Lançamento desfeito!");
