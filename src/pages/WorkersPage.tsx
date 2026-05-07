@@ -15,6 +15,7 @@ import { Loader2, Plus, KeyRound, RefreshCw, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
+import { EmptyState } from "@/components/LoadingSkeleton";
 
 type Worker = {
   id: string;
