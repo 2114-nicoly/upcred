@@ -758,6 +758,18 @@ export default function DailyCashPage() {
 
   const handleCloseCash = async () => {
     const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
+    const ok = await confirm({
+      title: "Fechar caixa do dia?",
+      description: "Após o fechamento, lançamentos do dia ficam bloqueados. Você poderá reabrir se precisar.",
+      affected: [
+        { label: "Data", value: format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy") },
+        { label: "Total recebido", value: formatCurrency(totalReceived) },
+        { label: "Não pagos", value: String(notPaidMarks.length) },
+        { label: "Itens tratados", value: String(paidGroups.length + notPaidMarks.length) },
+      ],
+      confirmText: "Fechar caixa",
+    });
+    if (!ok) return;
 
     const { data: penaltyMovements } = await (supabase
       .from("cash_movements")
