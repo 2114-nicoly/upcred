@@ -14,9 +14,49 @@ export type Database = {
   }
   public: {
     Tables: {
+      admins: {
+        Row: {
+          active: boolean
+          auth_user_id: string | null
+          created_at: string
+          created_by: string | null
+          email_real: string
+          id: string
+          login_codigo: string | null
+          nome: string
+          notas: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          auth_user_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          email_real: string
+          id?: string
+          login_codigo?: string | null
+          nome: string
+          notas?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          auth_user_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          email_real?: string
+          id?: string
+          login_codigo?: string | null
+          nome?: string
+          notas?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action_type: string
+          admin_id: string | null
           created_at: string
           entity_id: string | null
           entity_type: string
@@ -30,6 +70,7 @@ export type Database = {
         }
         Insert: {
           action_type: string
+          admin_id?: string | null
           created_at?: string
           entity_id?: string | null
           entity_type: string
@@ -43,6 +84,7 @@ export type Database = {
         }
         Update: {
           action_type?: string
+          admin_id?: string | null
           created_at?: string
           entity_id?: string | null
           entity_type?: string
@@ -58,6 +100,7 @@ export type Database = {
       }
       cash_balance: {
         Row: {
+          admin_id: string | null
           available_cash: number
           id: string
           interest_receivable: number
@@ -67,6 +110,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           available_cash?: number
           id?: string
           interest_receivable?: number
@@ -76,6 +120,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           available_cash?: number
           id?: string
           interest_receivable?: number
@@ -96,6 +141,7 @@ export type Database = {
       }
       cash_movements: {
         Row: {
+          admin_id: string | null
           amount: number
           cash_date: string
           client_id: string | null
@@ -110,6 +156,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           amount: number
           cash_date?: string
           client_id?: string | null
@@ -124,6 +171,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           amount?: number
           cash_date?: string
           client_id?: string | null
@@ -210,6 +258,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          admin_id: string | null
           client_code: number | null
           created_at: string
           id: string
@@ -221,6 +270,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           client_code?: number | null
           created_at?: string
           id?: string
@@ -232,6 +282,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           client_code?: number | null
           created_at?: string
           id?: string
@@ -261,6 +312,7 @@ export type Database = {
       }
       daily_cash: {
         Row: {
+          admin_id: string | null
           cash_date: string
           closed_at: string | null
           created_at: string
@@ -275,6 +327,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           cash_date: string
           closed_at?: string | null
           created_at?: string
@@ -289,6 +342,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           cash_date?: string
           closed_at?: string | null
           created_at?: string
@@ -314,6 +368,7 @@ export type Database = {
       }
       daily_events: {
         Row: {
+          admin_id: string | null
           amount_in: number
           amount_out: number
           cash_date: string
@@ -330,6 +385,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           amount_in?: number
           amount_out?: number
           cash_date?: string
@@ -346,6 +402,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           amount_in?: number
           amount_out?: number
           cash_date?: string
@@ -451,6 +508,7 @@ export type Database = {
       }
       loans: {
         Row: {
+          admin_id: string | null
           amount: number
           client_id: string
           created_at: string
@@ -471,6 +529,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           amount: number
           client_id: string
           created_at?: string
@@ -491,6 +550,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           amount?: number
           client_id?: string
           created_at?: string
@@ -543,6 +603,7 @@ export type Database = {
       }
       not_paid_marks: {
         Row: {
+          admin_id: string | null
           client_id: string
           created_at: string
           id: string
@@ -554,6 +615,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           client_id: string
           created_at?: string
           id?: string
@@ -565,6 +627,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           client_id?: string
           created_at?: string
           id?: string
@@ -608,6 +671,7 @@ export type Database = {
       }
       penalties: {
         Row: {
+          admin_id: string | null
           amount: number
           created_at: string
           id: string
@@ -618,6 +682,7 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
           amount: number
           created_at?: string
           id?: string
@@ -628,6 +693,7 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
           amount?: number
           created_at?: string
           id?: string
@@ -714,6 +780,7 @@ export type Database = {
       }
       routes: {
         Row: {
+          admin_id: string | null
           created_at: string
           id: string
           route_number: string
@@ -723,6 +790,7 @@ export type Database = {
           worker_name: string
         }
         Insert: {
+          admin_id?: string | null
           created_at?: string
           id?: string
           route_number: string
@@ -732,6 +800,7 @@ export type Database = {
           worker_name: string
         }
         Update: {
+          admin_id?: string | null
           created_at?: string
           id?: string
           route_number?: string
@@ -846,6 +915,7 @@ export type Database = {
           login_codigo: string
           nome: string
           notas: string | null
+          parent_admin_id: string | null
           synthetic_email: string
           updated_at: string
         }
@@ -858,6 +928,7 @@ export type Database = {
           login_codigo: string
           nome: string
           notas?: string | null
+          parent_admin_id?: string | null
           synthetic_email: string
           updated_at?: string
         }
@@ -870,10 +941,19 @@ export type Database = {
           login_codigo?: string
           nome?: string
           notas?: string | null
+          parent_admin_id?: string | null
           synthetic_email?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workers_parent_admin_id_fkey"
+            columns: ["parent_admin_id"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -914,6 +994,7 @@ export type Database = {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
       }
+      get_admin_id: { Args: { _user_id: string }; Returns: string }
       get_route_installments: {
         Args: { p_cash_date: string }
         Returns: {
@@ -948,6 +1029,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       log_audit: {
         Args: {
           p_action: string
@@ -964,6 +1046,26 @@ export type Database = {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
       }
+      super_admin_list_admins: {
+        Args: never
+        Returns: {
+          active: boolean
+          created_at: string
+          email_real: string
+          id: string
+          login_codigo: string
+          nome: string
+        }[]
+      }
+      super_admin_register_admin: {
+        Args: {
+          p_auth_user_id: string
+          p_email_real: string
+          p_login_codigo: string
+          p_nome: string
+        }
+        Returns: string
+      }
       update_cash_balance_atomic: {
         Args: {
           p_available_cash?: number
@@ -975,7 +1077,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "operador" | "trabalhador"
+      app_role: "admin" | "operador" | "trabalhador" | "super_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1103,7 +1205,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "operador", "trabalhador"],
+      app_role: ["admin", "operador", "trabalhador", "super_admin"],
     },
   },
 } as const
