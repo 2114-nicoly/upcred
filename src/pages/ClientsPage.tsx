@@ -194,6 +194,22 @@ export default function ClientsPage() {
         <Input className="pl-9" placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
+      {isAdmin && (
+        <Card className="mb-3">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
+              <div className="flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-[11px]">Agrupar por trabalhador</span>
+                <Switch checked={groupByWorker} onCheckedChange={setGroupByWorker} />
+              </div>
+            </div>
+            <WorkerFilterSelect />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="mb-4 flex gap-3">
         <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2">
           <ArrowDownAZ className="h-4 w-4 text-muted-foreground" />
