@@ -730,6 +730,17 @@ export default function DailyCashPage() {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
+    const group = paidGroups.find(g => g.loanId === loanId);
+    const ok = await confirm({
+      title: "Desfazer pagamento?",
+      description: "O valor sairá do caixa e a parcela voltará a ficar pendente.",
+      affected: group ? [
+        { label: "Cliente", value: (group as any).clientName || "—" },
+        { label: "Valor", value: formatCurrency(group.totalPaid) },
+      ] : undefined,
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
 
     // Optimistic: remove from paid
