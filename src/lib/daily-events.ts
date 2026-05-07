@@ -25,6 +25,8 @@ export type DailyEvent = {
   observation: string | null;
   origin: string | null;
   created_at: string;
+  worker_id?: string | null;
+  admin_id?: string | null;
 };
 
 export async function createDailyEvent(event: {

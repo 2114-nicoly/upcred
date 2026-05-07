@@ -9,10 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter } from "lucide-react";
+import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter, Layers } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type Client = {
   id: string;
@@ -20,6 +23,8 @@ type Client = {
   phone: string | null;
   notes: string | null;
   client_code: number | null;
+  worker_id: string | null;
+  admin_id: string | null;
 };
 
 type LoanSummary = {
@@ -29,11 +34,14 @@ type LoanSummary = {
 };
 
 export default function ClientsPage() {
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [groupByWorker, setGroupByWorker] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [name, setName] = useState("");
@@ -136,9 +144,31 @@ export default function ClientsPage() {
     filtered = filtered.filter((c) => loanSummaries[c.id]?.count > 0);
   }
 
+  // Hierarchical scope filter (admin → worker)
+  if (isAdmin && selectedAdminId) {
+    filtered = filtered.filter((c) => c.admin_id === selectedAdminId);
+  }
+  if (isAdmin && selectedWorkerId) {
+    filtered = filtered.filter((c) => c.worker_id === selectedWorkerId);
+  }
+
   if (sortAlpha) {
     filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }
+
+  const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "Sem trabalhador";
+  const adminName = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
+
+  // Group by worker
+  const grouped: Record<string, Client[]> = {};
+  if (groupByWorker) {
+    for (const c of filtered) {
+      const k = c.worker_id || "__none__";
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(c);
+    }
+  }
+  const groupKeys = Object.keys(grouped).sort((a, b) => workerName(a === "__none__" ? null : a).localeCompare(workerName(b === "__none__" ? null : b)));
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -164,6 +194,22 @@ export default function ClientsPage() {
         <Input className="pl-9" placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
+      {isAdmin && (
+        <Card className="mb-3">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
+              <div className="flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-[11px]">Agrupar por trabalhador</span>
+                <Switch checked={groupByWorker} onCheckedChange={setGroupByWorker} />
+              </div>
+            </div>
+            <WorkerFilterSelect />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="mb-4 flex gap-3">
         <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2">
           <ArrowDownAZ className="h-4 w-4 text-muted-foreground" />
@@ -188,38 +234,57 @@ export default function ClientsPage() {
             onAction={!search ? () => setOpen(true) : undefined}
           />
         ) : (
-          filtered.map((client) => {
-            const summary = loanSummaries[client.id];
-            return (
-              <Card key={client.id} className="overflow-hidden">
-                <CardContent className="flex items-center justify-between p-4">
-                  <Link to={`/clients/${client.id}`} className="flex-1">
-                    <div>
-                      <p className="font-semibold">{client.name}</p>
-                      {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
-                      {summary && (
-                        <p className="text-xs text-primary">
-                          {summary.count} ativo{summary.count > 1 ? "s" : ""} • {formatCurrency(summary.total)}
-                        </p>
-                      )}
-                    </div>
-                  </Link>
-                  <div className="flex items-center gap-1">
-                    {summary && <Badge className="mr-1">{summary.count}</Badge>}
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => handleDelete(client.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <Link to={`/clients/${client.id}`}>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          (() => {
+            const renderClient = (client: Client) => {
+              const summary = loanSummaries[client.id];
+              return (
+                <Card key={client.id} className="overflow-hidden">
+                  <CardContent className="flex items-center justify-between p-4">
+                    <Link to={`/clients/${client.id}`} className="flex-1">
+                      <div>
+                        <p className="font-semibold">{client.name}</p>
+                        {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
+                        {isAdmin && !groupByWorker && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Trab.: {workerName(client.worker_id)}
+                            {isSuperAdmin && <> · Admin: {adminName(client.admin_id)}</>}
+                          </p>
+                        )}
+                        {summary && (
+                          <p className="text-xs text-primary">
+                            {summary.count} ativo{summary.count > 1 ? "s" : ""} • {formatCurrency(summary.total)}
+                          </p>
+                        )}
+                      </div>
                     </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
+                    <div className="flex items-center gap-1">
+                      {summary && <Badge className="mr-1">{summary.count}</Badge>}
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => handleDelete(client.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Link to={`/clients/${client.id}`}>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            };
+            if (groupByWorker && isAdmin) {
+              return groupKeys.map((k) => (
+                <div key={k} className="space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase mt-2 px-1">
+                    {workerName(k === "__none__" ? null : k)} ({grouped[k].length})
+                  </p>
+                  {grouped[k].map(renderClient)}
+                </div>
+              ));
+            }
+            return filtered.map(renderClient);
+          })()
         )}
       </div>
 

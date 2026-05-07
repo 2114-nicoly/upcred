@@ -19,6 +19,9 @@ import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan } from "@/lib/payment-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type LoanWithClient = {
   id: string;
@@ -31,6 +34,9 @@ type LoanWithClient = {
   loan_date: string;
   installment_count: number;
   is_cravo: boolean;
+  worker_id: string | null;
+  admin_id: string | null;
+  renewed_from_loan_id: string | null;
   clients: { id: string; name: string };
 };
 
@@ -45,10 +51,13 @@ type LoanProgress = {
 
 export default function ActiveLoansPage() {
   const navigate = useNavigate();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [loans, setLoans] = useState<LoanWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterToday, setFilterToday] = useState(false);
   const [filterPaymentType, setFilterPaymentType] = useState("all");
+  const [filterOrigin, setFilterOrigin] = useState<"all" | "novo" | "renovacao">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showCravos, setShowCravos] = useState(false);
   const [todayLoanIds, setTodayLoanIds] = useState<Set<string>>(new Set());
@@ -308,6 +317,13 @@ export default function ActiveLoansPage() {
   if (filterToday && !showCravos) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
   if (filterPaymentType !== "all" && !showCravos) displayedLoans = displayedLoans.filter((l) => l.payment_type === filterPaymentType);
   if (searchQuery.trim()) displayedLoans = displayedLoans.filter((l) => l.clients.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  if (isAdmin && selectedAdminId) displayedLoans = displayedLoans.filter((l) => l.admin_id === selectedAdminId);
+  if (isAdmin && selectedWorkerId) displayedLoans = displayedLoans.filter((l) => l.worker_id === selectedWorkerId);
+  if (filterOrigin === "novo") displayedLoans = displayedLoans.filter((l) => !l.renewed_from_loan_id);
+  if (filterOrigin === "renovacao") displayedLoans = displayedLoans.filter((l) => !!l.renewed_from_loan_id);
+
+  const workerLabel = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "—";
+  const adminLabel = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
 
   // Separate loans into sections
   const dueTodayLoans: LoanWithClient[] = [];
@@ -395,6 +411,23 @@ export default function ActiveLoansPage() {
                 </span>
               )}
             </div>
+            {isAdmin && (
+              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none">
+                  Trab: {workerLabel(loan.worker_id)}
+                </Badge>
+                {isSuperAdmin && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none">
+                    Adm: {adminLabel(loan.admin_id)}
+                  </Badge>
+                )}
+                {loan.renewed_from_loan_id && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none border-primary/40 text-primary">
+                    Renovação
+                  </Badge>
+                )}
+              </div>
+            )}
 
             {/* Progress bar */}
             <div className="flex items-center gap-2 mt-1.5">
@@ -507,6 +540,24 @@ export default function ActiveLoansPage() {
       {/* Filters (only when not showing cravos) */}
       {!showCravos && (
         <div className="mb-4 space-y-2">
+          {isAdmin && (
+            <div className="rounded-lg bg-accent p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
+              <WorkerFilterSelect />
+              <div className="flex items-center gap-2 pt-1">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs flex-1">Origem</span>
+                <Select value={filterOrigin} onValueChange={(v) => setFilterOrigin(v as any)}>
+                  <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="novo">Novos</SelectItem>
+                    <SelectItem value="renovacao">Renovações</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between rounded-lg bg-accent p-3">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />

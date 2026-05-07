@@ -14,6 +14,9 @@ import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "luc
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type InstallmentWithLoan = {
   id: string;
@@ -33,6 +36,8 @@ type InstallmentWithLoan = {
     total_amount: number;
     installment_count: number;
     payment_type: string;
+    worker_id: string | null;
+    admin_id: string | null;
     clients: { id: string; name: string };
   };
 };
@@ -42,6 +47,8 @@ type LoanGroup = {
   clientName: string;
   paymentType: string;
   totalAmount: number;
+  workerId: string | null;
+  adminId: string | null;
   installments: InstallmentWithLoan[];
   totalOverdue: number;
   overdueDays: number;
@@ -51,6 +58,8 @@ type LoanGroup = {
 
 export default function OverdueLoansPage() {
   const navigate = useNavigate();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [groups, setGroups] = useState<LoanGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedLoan, setExpandedLoan] = useState<string | null>(null);
@@ -68,7 +77,7 @@ export default function OverdueLoansPage() {
     try {
       const { data } = await supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, clients(id, name))")
         .lt("due_date", today)
         .neq("status", "paid")
         .eq("is_penalty", false)
@@ -100,6 +109,8 @@ export default function OverdueLoansPage() {
             clientName: inst.loans.clients.name,
             paymentType: inst.loans.payment_type,
             totalAmount: Number(inst.loans.total_amount),
+            workerId: (inst.loans as any).worker_id ?? null,
+            adminId: (inst.loans as any).admin_id ?? null,
             installments: [],
             totalOverdue: 0,
             overdueDays: calculateOverdueDays(oldestDueDate, inst.loans.payment_type),
@@ -239,12 +250,27 @@ export default function OverdueLoansPage() {
     fetchData();
   };
 
+  let displayed = groups;
+  if (isAdmin && selectedAdminId) displayed = displayed.filter((g) => g.adminId === selectedAdminId);
+  if (isAdmin && selectedWorkerId) displayed = displayed.filter((g) => g.workerId === selectedWorkerId);
+
+  const workerLabel = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "—";
+  const adminLabel = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
+
   return (
     <div className="mx-auto max-w-lg p-4">
+      {isAdmin && (
+        <Card className="mb-3">
+          <CardContent className="p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
+            <WorkerFilterSelect />
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
-      ) : groups.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center p-8">
             <p className="text-lg font-semibold">Nenhuma parcela atrasada! 🎉</p>
@@ -252,7 +278,7 @@ export default function OverdueLoansPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {groups.map((group) => (
+          {displayed.map((group) => (
             <Collapsible
               key={group.loanId}
               open={expandedLoan === group.loanId}
@@ -277,6 +303,12 @@ export default function OverdueLoansPage() {
                           <p className="text-xs text-destructive">
                             Multa: {formatCurrency(group.penaltyTotal)}
                             {group.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(group.penaltyPaid)})</span>}
+                          </p>
+                        )}
+                        {isAdmin && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Trab.: {workerLabel(group.workerId)}
+                            {isSuperAdmin && <> · Adm.: {adminLabel(group.adminId)}</>}
                           </p>
                         )}
                       </div>
