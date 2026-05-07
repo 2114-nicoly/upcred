@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, KeyRound, RefreshCw, Inbox } from "lucide-react";
+import { Loader2, Plus, KeyRound, RefreshCw, Inbox, Archive, ArchiveRestore, Trash2, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -27,6 +27,7 @@ type Worker = {
   parent_admin_id: string | null;
   created_at: string;
   auth_user_id: string | null;
+  archived_at: string | null;
 };
 
 type AdminOption = { id: string; nome: string };
@@ -41,6 +42,7 @@ export default function WorkersPage() {
   const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const [openCreate, setOpenCreate] = useState(false);
   const [nome, setNome] = useState("");
@@ -55,7 +57,9 @@ export default function WorkersPage() {
 
   async function load() {
     setLoading(true);
-    const wRes = await supabase.from("workers").select("*").order("created_at", { ascending: false });
+    let q = supabase.from("workers").select("*").order("created_at", { ascending: false });
+    if (!showArchived) q = q.is("archived_at", null);
+    const wRes = await q;
     const rRes = await supabase.from("password_recovery_requests" as any).select("*").eq("status", "open").order("requested_at", { ascending: false });
     setWorkers((wRes.data as any) || []);
     setRecoveryRequests((rRes.data as any) || []);
@@ -68,7 +72,7 @@ export default function WorkersPage() {
 
   useEffect(() => {
     if (isAdmin) load();
-  }, [isAdmin, isSuperAdmin]);
+  }, [isAdmin, isSuperAdmin, showArchived]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -155,6 +159,41 @@ export default function WorkersPage() {
     load();
   }
 
+  async function handleArchive(w: Worker) {
+    const ok = await confirm({
+      title: "Arquivar trabalhador?",
+      description: "O trabalhador sairá da operação ativa. Histórico, clientes, empréstimos, caixa e auditoria são preservados. Você pode desarquivar depois.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Arquivar", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("archive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador arquivado" });
+    load();
+  }
+
+  async function handleUnarchive(w: Worker) {
+    const { error } = await supabase.rpc("unarchive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador desarquivado" });
+    load();
+  }
+
+  async function handleDeleteForever(w: Worker) {
+    const ok = await confirm({
+      title: "Excluir definitivamente?",
+      description: "Esta ação é irreversível e só funciona se o trabalhador não tiver clientes, empréstimos ou movimentações.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Excluir definitivamente", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("delete_worker_if_empty" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Não foi possível excluir", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador excluído" });
+    load();
+  }
+
   if (authLoading || loading) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
@@ -190,8 +229,16 @@ export default function WorkersPage() {
         </Card>
       )}
 
+      <div className="flex items-center justify-between text-xs">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+          <span>Mostrar arquivados</span>
+        </label>
+        <span className="text-muted-foreground">{workers.length} trabalhador(es)</span>
+      </div>
+
       <Card>
-        <CardContent className="p-2 space-y-1">
+        <CardContent className="p-2 space-y-2">
           {workers.length === 0 ? (
             <EmptyState
               icon={Inbox}
@@ -202,21 +249,58 @@ export default function WorkersPage() {
               compact
             />
           ) : (
-            workers.map((w) => (
-              <div key={w.id} className="flex items-center gap-2 border rounded p-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate">{w.nome}</span>
-                    {!w.active && <Badge variant="secondary" className="text-xs">Inativo</Badge>}
+            workers.map((w) => {
+              const adminName = isSuperAdmin
+                ? (admins.find((a) => a.id === w.parent_admin_id)?.nome ?? "—")
+                : null;
+              const isArchived = !!w.archived_at;
+              return (
+                <div key={w.id} className="border rounded p-2 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-sm truncate">{w.nome}</span>
+                        {isArchived
+                          ? <Badge variant="outline" className="text-[9px] h-4">Arquivado</Badge>
+                          : w.active
+                            ? <Badge className="text-[9px] h-4">Ativo</Badge>
+                            : <Badge variant="secondary" className="text-[9px] h-4">Inativo</Badge>}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Login <span className="font-mono">{w.login_codigo}</span>
+                        {adminName && <> · Admin: <span className="font-medium">{adminName}</span></>}
+                      </div>
+                    </div>
+                    {!isArchived && (
+                      <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground">Login: <span className="font-mono">{w.login_codigo}</span></div>
+                  <div className="flex flex-wrap gap-1">
+                    <Button size="sm" variant="default" className="h-7 text-xs flex-1" onClick={() => navigate(isSuperAdmin ? `/super-admin/worker/${w.id}` : `/admin/worker/${w.id}`)}>
+                      <Eye className="h-3.5 w-3.5 mr-1" /> Ver trabalhador
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                    {!isArchived && !w.active && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleArchive(w)}>
+                        <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
+                      </Button>
+                    )}
+                    {isArchived && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleUnarchive(w)}>
+                        <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
+                      </Button>
+                    )}
+                    {isSuperAdmin && isArchived && (
+                      <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => handleDeleteForever(w)}>
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
-                <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
-                  <KeyRound className="h-4 w-4" />
-                </Button>
-              </div>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>

@@ -8,10 +8,12 @@ export type AuditAction =
   | "pagamento" | "editar_pagamento" | "desfazer_pagamento" | "nao_pagou"
   | "editar_parcela" | "alterar_data_parcela"
   | "aporte" | "retirada" | "ajuste_caixa" | "fechar_caixa"
-  | "criar_trabalhador" | "reset_senha_trabalhador" | "ativar_trabalhador" | "desativar_trabalhador";
+  | "criar_trabalhador" | "reset_senha_trabalhador" | "ativar_trabalhador" | "desativar_trabalhador"
+  | "arquivar_trabalhador" | "desarquivar_trabalhador" | "excluir_trabalhador"
+  | "ativar_admin" | "desativar_admin";
 
 export type AuditEntity =
-  | "client" | "loan" | "installment" | "payment" | "cash" | "worker" | "transfer";
+  | "client" | "loan" | "installment" | "payment" | "cash" | "worker" | "transfer" | "admin";
 
 /**
  * Logs an action. Never throws — auditing must not block the UI flow.

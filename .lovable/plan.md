@@ -1,178 +1,104 @@
+## Reorganização da Interface Super Admin / Admin
 
-# Hierarquia profissional Super Admin / Admin / Trabalhador
-
-Esse é um trabalho grande. Vou entregar em **fases incrementais**, cada uma testável isoladamente, sem quebrar a lógica financeira atual (`remaining_balance`, `cash_date`, parcelas, renovação, desfazer, 1 empréstimo ativo por cliente).
-
----
-
-## Fase 1 — Base de contexto e navegação (sem mudar dados)
-
-Objetivo: dar ao Super Admin/Admin a sensação de "entrar" em outro escopo, com indicador visual e breadcrumb, reusando as telas que já existem.
-
-**Frontend**
-- Novo `ScopeContext` (extensão de `useWorkerFilter`) com:
-  - `viewingAdminId`, `viewingAdminName`
-  - `viewingWorkerId`, `viewingWorkerName`
-  - `clearScope()`
-- Novo componente `ScopeBanner` fixo no topo (abaixo do header) com:
-  - "Visualizando Administrador: Maria" / "Visualizando Trabalhador: João"
-  - Botão "Sair desta visão"
-- Novo componente `Breadcrumb` simples (Super Admin > Maria > João > Rota).
-- `AppLayout` injeta `ScopeBanner` quando há escopo ativo.
-- Menu lateral muda conforme role (já existe parcialmente):
-  - Trabalhador: Rota, Geral, Clientes, Ativos, Histórico, Relatórios
-  - Admin: Dashboard, Trabalhadores, Clientes, Empréstimos, Caixa, Relatórios, Auditoria
-  - Super Admin: Dashboard, Administradores, Trabalhadores, Clientes, Empréstimos, Caixa, Relatórios, Auditoria, Manutenção
-- Rota não aparece como item operacional de Admin/Super Admin — só dentro do painel do trabalhador.
-
-**Backend**: nenhum.
+Objetivo: tornar visíveis e óbvios todos os controles de hierarquia já existentes (Super Admin → Admin → Trabalhador → operação), adicionando o que falta (arquivar trabalhador, filtros agrupados, breadcrumbs ativos, menus por role) sem quebrar lógica financeira nem RLS.
 
 ---
 
-## Fase 2 — Painel do Trabalhador (visão profunda)
+### Fase A — Backend mínimo (1 migration)
 
-Reaproveita `AdminWorkerDetailPage` e expande.
+Adicionar suporte a "arquivado" sem quebrar nada existente:
 
-**Página `/admin/worker/:id`** (Admin) e **`/super-admin/worker/:id`** (Super Admin), com abas:
-- Resumo (KPIs do trabalhador)
-- Rota (lê-only, com confirmação se for atuar em nome dele)
-- Caixa/Geral
-- Clientes
-- Empréstimos Ativos
-- Histórico (pagamentos, não pagos, renovações, novos, retiradas, aportes)
-- Relatórios
-- Auditoria
+- `workers.archived_at timestamptz NULL` (nulo = não arquivado)
+- RPC `archive_worker(p_worker_id uuid)` — só Super Admin ou Admin dono; exige `active=false`; seta `archived_at=now()`.
+- RPC `unarchive_worker(p_worker_id uuid)` — limpa `archived_at`.
+- RPC `delete_worker_if_empty(p_worker_id uuid)` — só Super Admin; falha se houver clients/loans/daily_events; remove worker + role + auth user link.
+- Atualizar `admin_list_workers` e `list_workers_by_admin` aceitando flag `p_include_archived boolean default false`.
 
-Cabeçalho mostra: nome, login, status, criado em, **administrador responsável**.
-
-Setando `viewingWorkerId` no contexto, todas as queries das abas filtram por esse worker via filtro já existente.
-
-**Backend**: RPC novo `worker_full_summary(p_worker_id)` retorna KPIs (clientes ativos, empréstimos ativos, total emprestado, recebido período, atrasos). RLS já cobre escopo.
+RLS já cobre tudo (parent_admin_id). Nenhuma mudança em policies.
 
 ---
 
-## Fase 3 — Painel do Administrador (visão da equipe)
+### Fase B — Navegação por role (menu lateral)
 
-Expandir `SuperAdminDetailPage` para abas idênticas ao painel do admin real:
-- Resumo da equipe
-- Trabalhadores (lista clicável → painel do trabalhador)
-- Clientes da equipe (com agrupamento por trabalhador)
-- Empréstimos da equipe (com agrupamento por trabalhador, filtro status)
-- Caixa da equipe
-- Relatórios da equipe
-- Auditoria da equipe
+Editar `AppLayout.tsx` para que o menu lateral mostre exatamente os itens descritos no item 11 do briefing, em função de `useAuth().role`:
 
-Setando `viewingAdminId`, todas as telas existentes (Clientes, Empréstimos, Caixa, Relatórios, Auditoria) passam a filtrar por esse admin automaticamente — reaproveitamento total.
+- **Trabalhador**: Rota, Geral/Caixa, Clientes, Empréstimos Ativos, Histórico, Relatórios, Minha Conta.
+- **Admin**: Dashboard Admin, Trabalhadores, Clientes da Equipe, Empréstimos da Equipe, Caixa da Equipe, Relatórios, Auditoria, Configurações.
+- **Super Admin**: Dashboard Geral, Administradores, Trabalhadores, Clientes, Empréstimos, Caixa Geral, Relatórios Gerais, Auditoria Geral, Manutenção, Configurações.
 
-Auditoria registra `super_admin_view_admin_panel`.
+Rota deixa de ser item de topo para Admin/Super Admin (acessada via painel do trabalhador).
+
+Breadcrumb (`Breadcrumb.tsx`) já existe — estender labels para novas rotas e garantir botão "voltar" no header das telas internas.
 
 ---
 
-## Fase 4 — Listas hierárquicas (Clientes & Empréstimos)
+### Fase C — Tela Super Admin (Dashboard Geral)
 
-**Clientes (`ClientsPage`)**
-- Super Admin: filtro por administrador → dentro, agrupamento por trabalhador (collapsible).
-- Admin: agrupamento por trabalhador (collapsible).
-- Cada card de cliente mostra "Trabalhador: X" e (Super Admin) "Admin: Y".
+Reorganizar `SuperAdminPage.tsx`:
 
-**Empréstimos (`ActiveLoansPage`, `OverdueLoansPage`)**
-- Mesma lógica: filtro admin (Super), agrupamento por trabalhador (Super/Admin).
-- Cada card mostra cliente, trabalhador, admin (Super), saldo, total pago, status, dias atraso.
+- Aba **Dashboard** vira a landing: cards de KPIs globais (admins ativos, trabalhadores ativos, clientes ativos, empréstimos ativos, previsto/recebido hoje/semana/mês, saldo líquido, atrasados, não pagos).
+- Aba **Administradores**: lista em cards ricos (não só switch). Cada card mostra nome, email, login, status, contagem de trabalhadores, clientes ativos, empréstimos ativos, recebido hoje/semana/mês, saldo, atrasados, não pagos. Botões: **Ver equipe**, **Relatórios**, **Editar**, **Desativar/Reativar**.
+- Aba **Ranking** mantém a tabela atual.
 
-**Caixa**
-- Super Admin: consolidado + filtro admin + filtro trabalhador.
-- Admin: consolidado equipe + filtro trabalhador.
-- Já temos boa parte via `WorkerFilterSelect`; só adicionar agrupamento.
+Novos helpers em `consolidated-stats.ts` para agregar por admin nos múltiplos períodos numa só chamada.
 
 ---
 
-## Fase 5 — Relatórios hierárquicos
+### Fase D — Tela "Equipe de [Admin]"
 
-`ReportsPage` ganha 3 níveis:
-- Geral / Por Administrador / Por Trabalhador
-- Períodos: dia, semana seg–dom, mês, custom
-- Indicadores já listados (previsto, recebido, falta, %, emprestado, retirado, aportado, líquido, não pagos, atrasados, renovações, novos, clientes ativos, ativos)
+Refatorar `AdminFullPanel.tsx` (já existe) para bater com o briefing:
 
-Implementar novo RPC `report_consolidated(p_scope, p_admin_id, p_worker_id, p_start, p_end)` que centraliza todos os indicadores a partir de `daily_events` + `loans` + `installments`.
-
----
-
-## Fase 6 — Gestão de trabalhadores: arquivar / excluir / transferir
-
-**Backend (migration)**:
-- Coluna `workers.archived_at timestamptz`.
-- RPC `archive_worker(p_worker_id)` — desativa + marca arquivado, mantém histórico.
-- RPC `delete_worker_safe(p_worker_id)`:
-  - exige Super Admin
-  - exige `active = false`
-  - se tiver clientes/empréstimos/eventos → recusa, sugere "arquivar"
-  - só apaga se totalmente sem dados
-  - registra auditoria
-- RPC `transfer_worker_to_admin(p_worker_id, p_to_admin_id)` — só Super Admin; atualiza `parent_admin_id` do worker, e `admin_id` dos seus clientes/empréstimos ativos; preserva histórico; auditoria.
-- RPC `set_worker_active` já existe — mantém.
-- Filtros em todas as listagens excluem workers arquivados por padrão (toggle "mostrar arquivados").
-
-**Frontend**:
-- Botões em `WorkersPage` e painel do trabalhador: Ativar/Desativar, Arquivar, Excluir (Super), Transferir para outro admin (Super).
-- Confirmações fortes (já existe `useConfirm`).
+- Header: Administrador, email, status, totais (trabalhadores, clientes, empréstimos, recebido hoje/semana/mês).
+- Abas: Resumo, **Trabalhadores**, Clientes, Empréstimos, Caixa, Relatórios, Auditoria.
+- Aba **Trabalhadores**: cards de cada trabalhador da equipe com nome, login, status, admin responsável, clientes ativos, empréstimos ativos, previsto hoje, recebido hoje, não pagos hoje, atrasados, recebido semana/mês, saldo. Botões: **Ver trabalhador**, **Rota**, **Caixa**, **Clientes**, **Empréstimos**, **Relatórios**, **Editar**, **Desativar/Reativar**, **Arquivar** (só se inativo).
+- Toggle "Mostrar arquivados".
+- Botões "Rota/Caixa/Clientes" aplicam scope (`setSelectedWorkerId`) e navegam para a tela correspondente.
 
 ---
 
-## Fase 7 — Confirmação ao agir "em nome de" trabalhador
+### Fase E — Painel do Trabalhador
 
-Quando Admin/Super Admin estiver com `viewingWorkerId` ativo e disparar uma ação operacional (pagamento, novo empréstimo, retirada, aporte, renovação, marcar não pago):
-- `useConfirm`: "Você está registrando uma ação em nome de João. Continuar?"
-- Auditoria salva: `action_by`, `user_role`, `worker_id` afetado, `admin_id`, antes/depois, observação "ação em nome de".
+Refatorar `WorkerFullPanel.tsx`:
 
-Isso usa o `logAction` já existente, só adicionando o flag de impersonação.
-
----
-
-## Fase 8 — RLS / segurança
-
-Revisar e (se necessário) endurecer:
-- Workers só veem o que é deles (RLS atual cobre).
-- Admin não pode mudar `parent_admin_id` de worker (trigger).
-- Trabalhador não pode mudar `worker_id`/`admin_id` (trigger).
-- Apenas Super Admin executa `transfer_worker_to_admin` e `delete_worker_safe`.
-- `Admin manage own workers` — restringir UPDATE para não permitir mudar `parent_admin_id` (trigger `workers_protect_fields` já existe; estender).
+- Header completo conforme briefing.
+- Abas: Resumo, **Rota**, Geral/Caixa, Clientes, Empréstimos, Histórico, Relatórios, Auditoria. Cada aba renderiza embed (link ou componente) com scope já fixado nesse trabalhador.
 
 ---
 
-## Detalhes técnicos
+### Fase F — Filtros nas listas (Clientes / Empréstimos / Caixa)
 
-```text
-Rotas novas
-/admin                  Painel Admin (já existe — abas)
-/admin/worker/:id       Painel Trabalhador (já existe — expandir abas)
-/super-admin            Lista de Admins (já existe)
-/super-admin/:adminId   Painel Admin do ponto de vista do Super Admin (expandir abas)
-/super-admin/worker/:id Painel Trabalhador (Super Admin)
-```
-
-```text
-Componentes novos
-src/components/ScopeBanner.tsx
-src/components/Breadcrumb.tsx
-src/components/HierarchyClientList.tsx   (agrupado por admin/worker)
-src/components/HierarchyLoanList.tsx
-src/components/WorkerFullPanel.tsx       (abas reutilizáveis)
-src/components/AdminFullPanel.tsx        (abas reutilizáveis)
-```
-
-```text
-Migrations novas
-- workers.archived_at + índice
-- RPC archive_worker / delete_worker_safe / transfer_worker_to_admin
-- RPC worker_full_summary / report_consolidated
-- Trigger reforçando workers_protect_fields para parent_admin_id
-```
+- `ClientsPage.tsx`: para Admin/Super Admin, adicionar barra de filtros (Admin, Trabalhador, Status, Atrasados/Ativos) + agrupamento por trabalhador. Cada card exibe "Trabalhador: X" e (Super Admin) "Admin: Y".
+- `ActiveLoansPage.tsx` / `OverdueLoansPage.tsx`: mesmos filtros + colunas trabalhador/admin + origem (novo/renovação via `renewed_from_loan_id`).
+- `CaixaPage.tsx`: filtros equivalentes para Super Admin/Admin.
 
 ---
 
-## Como propus entregar
+### Fase G — Arquivamento na lista de Trabalhadores
 
-Por causa do tamanho, sugiro fazer **uma fase por mensagem**, na ordem 1 → 8, cada uma com build verde antes de seguir. Isso evita um PR gigante difícil de revisar e mantém o app sempre utilizável.
+Em `WorkersPage.tsx` e na aba Trabalhadores do AdminFullPanel:
 
-**Confirma se posso começar pela Fase 1 (contexto + banner + breadcrumb + menus por role)?**  
-Se preferir outra ordem ou agrupar fases, me diga.
+- Botão "Desativar" quando ativo; "Arquivar" quando inativo; "Excluir definitivamente" (Super Admin, com confirmação) se sem dados.
+- Filtro "Mostrar arquivados".
+- Badge visual: Ativo / Inativo / Arquivado.
+
+---
+
+### Critério de aceite (item 13 do briefing)
+
+Após a entrega, o usuário deve conseguir, sem adivinhar:
+1. Super Admin → ver lista de admins → clicar → ver equipe, trabalhadores, clientes agrupados, arquivar trabalhador inativo.
+2. Admin → ver só sua equipe → drill-down em trabalhador → rota/caixa/clientes/empréstimos.
+3. Trabalhador → ver apenas seus dados.
+Tudo com breadcrumb e botão voltar visíveis, e sem quebrar pagamentos / `remaining_balance` / RLS.
+
+---
+
+### Detalhes técnicos
+
+- **Arquivos novos**: 1 migration; nada além disso (reaproveitar componentes).
+- **Arquivos editados**: `AppLayout.tsx`, `Breadcrumb.tsx`, `SuperAdminPage.tsx`, `AdminFullPanel.tsx`, `WorkerFullPanel.tsx`, `WorkersPage.tsx`, `ClientsPage.tsx`, `ActiveLoansPage.tsx`, `OverdueLoansPage.tsx`, `CaixaPage.tsx`, `consolidated-stats.ts`, `worker-utils.ts`.
+- **Não tocar**: `loans.remaining_balance`, RPC `apply_loan_payment`/`reverse_loan_payment`, ledger `daily_events`, geração de parcelas, lógica de cravo/renovação.
+- **RLS**: mantido — toda agregação por admin/worker passa por `is_super_admin` / `has_role` / `get_admin_id` / `get_worker_id` já existentes.
+- **Entrega faseada**: vou pedir aprovação da migration (Fase A) e em seguida aplico B→G numa sequência. Se preferir, posso fatiar em mais turnos (B+C, depois D+E, depois F+G).
+
+Devo seguir? Posso começar pela migration da Fase A e pelas Fases B+C (menus + Dashboard Super Admin) no mesmo turno?
