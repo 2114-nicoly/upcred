@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
+import { EmptyState } from "@/components/LoadingSkeleton";
 import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, ArrowUpDown,
   TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target, TrendingDown } from "lucide-react";
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
