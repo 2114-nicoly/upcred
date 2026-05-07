@@ -177,6 +177,7 @@ type PendingFilter = "all" | "overdue" | "today";
 
 export default function DailyCashPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
