@@ -12,6 +12,7 @@ import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { ArrowLeft, Plus, XCircle, Undo2, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type Installment = {
   id: string;
