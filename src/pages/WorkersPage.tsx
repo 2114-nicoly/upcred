@@ -33,6 +33,7 @@ type AdminOption = { id: string; nome: string };
 export default function WorkersPage() {
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
+  const confirm = useConfirm();
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [admins, setAdmins] = useState<AdminOption[]>([]);
