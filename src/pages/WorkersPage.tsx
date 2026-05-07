@@ -52,17 +52,14 @@ export default function WorkersPage() {
 
   async function load() {
     setLoading(true);
-    const promises: Promise<any>[] = [
-      supabase.from("workers").select("*").order("created_at", { ascending: false }),
-      supabase.from("password_recovery_requests" as any).select("*").eq("status", "open").order("requested_at", { ascending: false }),
-    ];
+    const wRes = await supabase.from("workers").select("*").order("created_at", { ascending: false });
+    const rRes = await supabase.from("password_recovery_requests" as any).select("*").eq("status", "open").order("requested_at", { ascending: false });
+    setWorkers((wRes.data as any) || []);
+    setRecoveryRequests((rRes.data as any) || []);
     if (isSuperAdmin) {
-      promises.push(supabase.rpc("super_admin_list_admins" as any));
+      const aRes = await supabase.rpc("super_admin_list_admins" as any);
+      setAdmins(((aRes.data as any) || []).map((a: any) => ({ id: a.id, nome: a.nome })));
     }
-    const results = await Promise.all(promises);
-    setWorkers((results[0].data as any) || []);
-    setRecoveryRequests((results[1].data as any) || []);
-    if (isSuperAdmin) setAdmins(((results[2].data as any) || []).map((a: any) => ({ id: a.id, nome: a.nome })));
     setLoading(false);
   }
 
