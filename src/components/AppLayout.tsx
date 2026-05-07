@@ -214,6 +214,22 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         )}
       </header>
 
+      {isAdmin && selectedWorkerId && selectedWorkerName && (
+        <div className="sticky top-14 z-30 flex items-center justify-between gap-2 border-b bg-warning/15 px-3 py-1.5 text-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Eye className="h-3.5 w-3.5 text-warning shrink-0" />
+            <span className="truncate">
+              Agindo em nome de <strong className="text-foreground">{selectedWorkerName}</strong>
+            </span>
+          </div>
+          <button
+            onClick={() => { setSelectedWorkerId(null); toast.success("Filtro limpo"); }}
+            className="shrink-0 rounded-full bg-background/60 px-2 py-0.5 font-medium hover:bg-background"
+          >
+            Sair
+          </button>
+        </div>
+      )}
       <main className="flex-1 overflow-auto pb-20">{children}</main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card shadow-lg">

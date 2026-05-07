@@ -50,7 +50,11 @@ export default function AdminWorkerDetailPage() {
   }, [id, range]);
 
   function viewAsWorker() {
-    if (!id) return;
+    if (!id || !worker) return;
+    const ok = window.confirm(
+      `Você passará a registrar ações em nome de ${worker.nome}.\n\nQualquer pagamento, empréstimo ou movimento será atribuído a este trabalhador. Continuar?`
+    );
+    if (!ok) return;
     setSelectedWorkerId(id);
     navigate("/");
   }
