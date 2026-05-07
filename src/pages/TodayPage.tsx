@@ -50,7 +50,7 @@ type LoanProgress = {
 
 export default function TodayPage() {
   const navigate = useNavigate();
-  const { selectedWorkerId } = useWorkerFilter();
+  const { selectedWorkerId, selectedAdminId, workers } = useWorkerFilter();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
