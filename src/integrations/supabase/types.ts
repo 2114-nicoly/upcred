@@ -1123,6 +1123,7 @@ export type Database = {
         }
         Returns: string
       }
+      redact_old_credentials_log: { Args: never; Returns: number }
       register_recovery_request: {
         Args: { p_email: string; p_login: string; p_nome: string }
         Returns: string
