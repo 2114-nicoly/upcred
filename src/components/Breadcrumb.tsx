@@ -55,7 +55,7 @@ export default function Breadcrumb() {
   if (!current) {
     if (path.startsWith("/clients/")) current = "Cliente";
     else if (path.startsWith("/loans/")) current = "Empréstimo";
-    else if (path.startsWith("/admin/worker/")) current = selectedWorkerName ?? "Trabalhador";
+    else if (path.startsWith("/admin/worker/") || path.startsWith("/super-admin/worker/")) current = selectedWorkerName ?? "Trabalhador";
     else if (path.startsWith("/super-admin/")) current = selectedAdminName ?? "Administrador";
   }
   if (current) crumbs.push({ label: current });
