@@ -974,6 +974,7 @@ export type Database = {
       workers: {
         Row: {
           active: boolean
+          archived_at: string | null
           auth_user_id: string | null
           created_at: string
           created_by: string | null
@@ -988,6 +989,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          archived_at?: string | null
           auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1002,6 +1004,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          archived_at?: string | null
           auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1030,15 +1033,27 @@ export type Database = {
     }
     Functions: {
       admin_assign_client_codes: { Args: never; Returns: number }
-      admin_list_workers: {
-        Args: never
-        Returns: {
-          active: boolean
-          id: string
-          login_codigo: string
-          nome: string
-        }[]
-      }
+      admin_list_workers:
+        | {
+            Args: never
+            Returns: {
+              active: boolean
+              id: string
+              login_codigo: string
+              nome: string
+            }[]
+          }
+        | {
+            Args: { p_include_archived?: boolean }
+            Returns: {
+              active: boolean
+              archived_at: string
+              id: string
+              login_codigo: string
+              nome: string
+              parent_admin_id: string
+            }[]
+          }
       admin_recalculate_installments: { Args: never; Returns: number }
       admin_recalculate_loans: { Args: never; Returns: number }
       admin_register_worker: {
@@ -1062,6 +1077,11 @@ export type Database = {
       apply_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
+      }
+      archive_worker: { Args: { p_worker_id: string }; Returns: undefined }
+      delete_worker_if_empty: {
+        Args: { p_worker_id: string }
+        Returns: undefined
       }
       generate_admin_login_codigo: { Args: never; Returns: string }
       generate_worker_login_codigo: { Args: never; Returns: string }
@@ -1101,16 +1121,28 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
-      list_workers_by_admin: {
-        Args: { p_admin_id?: string }
-        Returns: {
-          active: boolean
-          id: string
-          login_codigo: string
-          nome: string
-          parent_admin_id: string
-        }[]
-      }
+      list_workers_by_admin:
+        | {
+            Args: { p_admin_id?: string }
+            Returns: {
+              active: boolean
+              id: string
+              login_codigo: string
+              nome: string
+              parent_admin_id: string
+            }[]
+          }
+        | {
+            Args: { p_admin_id?: string; p_include_archived?: boolean }
+            Returns: {
+              active: boolean
+              archived_at: string
+              id: string
+              login_codigo: string
+              nome: string
+              parent_admin_id: string
+            }[]
+          }
       log_audit: {
         Args: {
           p_action: string
@@ -1176,6 +1208,7 @@ export type Database = {
         Args: { p_admin_id: string; p_nome: string; p_notas?: string }
         Returns: undefined
       }
+      unarchive_worker: { Args: { p_worker_id: string }; Returns: undefined }
       update_cash_balance_atomic: {
         Args: {
           p_available_cash?: number
