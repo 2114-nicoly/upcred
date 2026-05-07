@@ -200,6 +200,19 @@ export default function CaixaPage() {
 
   return (
     <div className="mx-auto max-w-lg p-3 pb-36 space-y-3">
+      {isAdmin && (
+        <Card>
+          <CardContent className="p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
+            <WorkerFilterSelect />
+            {(selectedAdminId || selectedWorkerId) && (
+              <p className="text-[10px] text-muted-foreground">
+                Mostrando {scopedEvents.length} de {events.length} eventos do dia
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {/* Date navigation */}
       <div className="flex items-center gap-2">
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(-1)}>
