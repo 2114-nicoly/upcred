@@ -148,16 +148,27 @@ function DMini({ label, value, cls }: { label: string; value: number; cls?: stri
 
 /* ============ ADMINS TAB ============ */
 function AdminsTab() {
+  const navigate = useNavigate();
   const [list, setList] = useState<AdminRow[]>([]);
+  const [statsByAdmin, setStatsByAdmin] = useState<Record<string, AdminStat>>({});
   const [loading, setLoading] = useState(true);
   const [openCreate, setOpenCreate] = useState(false);
   const [creds, setCreds] = useState<Creds | null>(null);
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase.rpc("super_admin_list_admins" as any);
+    const today = new Date().toISOString().slice(0, 10);
+    const monthStart = new Date(); monthStart.setDate(1);
+    const ms = monthStart.toISOString().slice(0, 10);
+    const [{ data: admins, error }, { data: stats }] = await Promise.all([
+      supabase.rpc("super_admin_list_admins" as any),
+      supabase.rpc("super_admin_stats_by_admin" as any, { p_start: ms, p_end: today }),
+    ]);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-    setList((data as AdminRow[]) || []);
+    setList((admins as AdminRow[]) || []);
+    const map: Record<string, AdminStat> = {};
+    ((stats as AdminStat[]) || []).forEach((s) => { map[s.admin_id] = s; });
+    setStatsByAdmin(map);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -168,7 +179,7 @@ function AdminsTab() {
     });
     if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
     toast({ title: a.active ? "Desativado" : "Ativado" });
-    await logAction(a.active ? "desativar_trabalhador" : "ativar_trabalhador", "worker", a.id, { active: a.active }, { active: !a.active });
+    await logAction(a.active ? "desativar_admin" : "ativar_admin", "admin", a.id, { active: a.active }, { active: !a.active });
     load();
   }
 
@@ -183,20 +194,44 @@ function AdminsTab() {
       ) : list.length === 0 ? (
         <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Nenhum administrador.</CardContent></Card>
       ) : (
-        list.map((a) => (
-          <Card key={a.id}>
-            <CardContent className="p-3 flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-sm truncate">{a.nome}</p>
-                  {!a.active && <Badge variant="outline" className="text-[10px]">Inativo</Badge>}
+        list.map((a) => {
+          const s = statsByAdmin[a.id];
+          return (
+            <Card key={a.id}>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm truncate">{a.nome}</p>
+                      {a.active
+                        ? <Badge className="text-[9px] h-4">Ativo</Badge>
+                        : <Badge variant="secondary" className="text-[9px] h-4">Inativo</Badge>}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground truncate">{a.email_real}</p>
+                    {a.login_codigo && <p className="text-[10px] text-muted-foreground">Login <span className="font-mono">{a.login_codigo}</span></p>}
+                  </div>
+                  <Switch checked={a.active} onCheckedChange={() => toggleActive(a)} />
                 </div>
-                <p className="text-xs text-muted-foreground truncate">{a.email_real}</p>
-              </div>
-              <Switch checked={a.active} onCheckedChange={() => toggleActive(a)} />
-            </CardContent>
-          </Card>
-        ))
+
+                <div className="grid grid-cols-4 gap-1 text-center">
+                  <MiniStat label="Trab" value={s?.workers_count ?? 0} />
+                  <MiniStat label="Empr" value={s?.active_loans ?? 0} />
+                  <MiniStat label="Receb." value={formatCurrency(s?.total_received ?? 0)} small />
+                  <MiniStat label="Empr.$" value={formatCurrency(s?.total_lent ?? 0)} small />
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button size="sm" variant="default" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
+                    <Users className="h-3.5 w-3.5 mr-1" /> Ver equipe
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
+                    <BarChart3 className="h-3.5 w-3.5 mr-1" /> Relatórios
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })
       )}
 
       <CreateAdminDialog
@@ -221,6 +256,15 @@ function AdminsTab() {
           <DialogFooter><Button onClick={() => setCreds(null)}>Fechar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, small }: { label: string; value: string | number; small?: boolean }) {
+  return (
+    <div className="rounded border p-1">
+      <p className="text-[9px] text-muted-foreground leading-none">{label}</p>
+      <p className={`${small ? "text-[10px]" : "text-sm"} font-bold leading-tight mt-0.5`}>{value}</p>
     </div>
   );
 }
