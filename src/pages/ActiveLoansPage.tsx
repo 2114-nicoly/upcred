@@ -317,6 +317,13 @@ export default function ActiveLoansPage() {
   if (filterToday && !showCravos) displayedLoans = displayedLoans.filter((l) => todayLoanIds.has(l.id));
   if (filterPaymentType !== "all" && !showCravos) displayedLoans = displayedLoans.filter((l) => l.payment_type === filterPaymentType);
   if (searchQuery.trim()) displayedLoans = displayedLoans.filter((l) => l.clients.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  if (isAdmin && selectedAdminId) displayedLoans = displayedLoans.filter((l) => l.admin_id === selectedAdminId);
+  if (isAdmin && selectedWorkerId) displayedLoans = displayedLoans.filter((l) => l.worker_id === selectedWorkerId);
+  if (filterOrigin === "novo") displayedLoans = displayedLoans.filter((l) => !l.renewed_from_loan_id);
+  if (filterOrigin === "renovacao") displayedLoans = displayedLoans.filter((l) => !!l.renewed_from_loan_id);
+
+  const workerLabel = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "—";
+  const adminLabel = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
 
   // Separate loans into sections
   const dueTodayLoans: LoanWithClient[] = [];
