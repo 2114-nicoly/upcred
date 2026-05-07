@@ -229,8 +229,16 @@ export default function WorkersPage() {
         </Card>
       )}
 
+      <div className="flex items-center justify-between text-xs">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+          <span>Mostrar arquivados</span>
+        </label>
+        <span className="text-muted-foreground">{workers.length} trabalhador(es)</span>
+      </div>
+
       <Card>
-        <CardContent className="p-2 space-y-1">
+        <CardContent className="p-2 space-y-2">
           {workers.length === 0 ? (
             <EmptyState
               icon={Inbox}
@@ -241,21 +249,58 @@ export default function WorkersPage() {
               compact
             />
           ) : (
-            workers.map((w) => (
-              <div key={w.id} className="flex items-center gap-2 border rounded p-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate">{w.nome}</span>
-                    {!w.active && <Badge variant="secondary" className="text-xs">Inativo</Badge>}
+            workers.map((w) => {
+              const adminName = isSuperAdmin
+                ? (admins.find((a) => a.id === w.parent_admin_id)?.nome ?? "—")
+                : null;
+              const isArchived = !!w.archived_at;
+              return (
+                <div key={w.id} className="border rounded p-2 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-sm truncate">{w.nome}</span>
+                        {isArchived
+                          ? <Badge variant="outline" className="text-[9px] h-4">Arquivado</Badge>
+                          : w.active
+                            ? <Badge className="text-[9px] h-4">Ativo</Badge>
+                            : <Badge variant="secondary" className="text-[9px] h-4">Inativo</Badge>}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Login <span className="font-mono">{w.login_codigo}</span>
+                        {adminName && <> · Admin: <span className="font-medium">{adminName}</span></>}
+                      </div>
+                    </div>
+                    {!isArchived && (
+                      <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground">Login: <span className="font-mono">{w.login_codigo}</span></div>
+                  <div className="flex flex-wrap gap-1">
+                    <Button size="sm" variant="default" className="h-7 text-xs flex-1" onClick={() => navigate(isSuperAdmin ? `/super-admin/worker/${w.id}` : `/admin/worker/${w.id}`)}>
+                      <Eye className="h-3.5 w-3.5 mr-1" /> Ver trabalhador
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                    {!isArchived && !w.active && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleArchive(w)}>
+                        <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
+                      </Button>
+                    )}
+                    {isArchived && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleUnarchive(w)}>
+                        <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
+                      </Button>
+                    )}
+                    {isSuperAdmin && isArchived && (
+                      <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => handleDeleteForever(w)}>
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
-                <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
-                  <KeyRound className="h-4 w-4" />
-                </Button>
-              </div>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>
