@@ -960,7 +960,7 @@ export default function LoanDetailPage() {
               <p className="text-sm font-medium mb-2">Histórico de Multas ({penalties.length})</p>
               <div className="space-y-2">
                 {penalties.length === 0 ? (
-                  <p className="py-2 text-center text-sm text-muted-foreground">Nenhuma multa registrada.</p>
+                  <EmptyState icon={AlertTriangle} message="Nenhuma multa registrada" compact />
                 ) : penalties.map((p) => (
                   <div key={p.id} className="rounded-lg border p-3">
                     {editingPenalty === p.id ? (
