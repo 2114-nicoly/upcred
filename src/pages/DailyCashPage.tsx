@@ -693,6 +693,14 @@ export default function DailyCashPage() {
   const handleUndoNotPaid = async (markId: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    const mark = notPaidMarks.find(m => m.id === markId);
+    const ok = await confirm({
+      title: 'Desfazer marcação "não pagou"?',
+      description: "A parcela voltará a aparecer como pendente na rota.",
+      affected: mark ? [{ label: "Cliente", value: (mark as any).installment?.loans?.clients?.name || "—" }] : undefined,
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
 
     const mark = notPaidMarks.find(m => m.id === markId);
