@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { useAuth } from "@/hooks/useAuth";
 import { AlertCircle } from "lucide-react";
 
 type Props = {
