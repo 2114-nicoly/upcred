@@ -7,6 +7,7 @@ import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ScopeIndicator from "@/components/ScopeIndicator";
+import Breadcrumb from "@/components/Breadcrumb";
 import { toast } from "sonner";
 
 type NavItem = { path: string; label: string; icon: any };
@@ -225,6 +226,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </header>
 
       <ScopeIndicator />
+      <Breadcrumb />
       <main className="flex-1 overflow-auto pb-20">{children}</main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card shadow-lg">
