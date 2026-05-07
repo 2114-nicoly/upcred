@@ -34,7 +34,9 @@ type ActiveLoan = {
 export default function TransferClientDialog({
   open, onOpenChange, clientId, clientName, currentWorkerId, onTransferred,
 }: Props) {
-  const { workers, refresh } = useWorkerFilter();
+  const { isSuperAdmin } = useAuth();
+  const { workers, admins, selectedAdminId, setSelectedAdminId, refresh } = useWorkerFilter();
+  const [destAdmin, setDestAdmin] = useState<string>("");
   const [toWorker, setToWorker] = useState<string>("");
   const [obs, setObs] = useState("");
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
