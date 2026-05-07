@@ -168,29 +168,12 @@ function CreateAdminDialog({
     if (!nome.trim() || !email.trim()) return toast({ title: "Preencha nome e email", variant: "destructive" });
     setSubmitting(true);
     try {
-      const password = generateTempPassword();
-      const loginCodigo = generateLoginCodigo().padEnd(5, "0");
-
-      // 1) cria conta auth
-      const { data: signUp, error: signUpErr } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/` },
+      const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        body: { kind: "admin", nome: nome.trim(), email_real: email.trim(), notas: notas.trim() || null },
       });
-      if (signUpErr || !signUp.user) throw signUpErr || new Error("Falha ao criar usuário");
-
-      // 2) registra no schema admins via RPC
-      const { error: regErr } = await supabase.rpc("super_admin_register_admin" as any, {
-        p_nome: nome.trim(),
-        p_email_real: email.trim(),
-        p_login_codigo: loginCodigo,
-        p_auth_user_id: signUp.user.id,
-      });
-      if (regErr) throw regErr;
-
-      await logAction("criar_trabalhador", "worker", signUp.user.id, null, { nome, email, role: "admin" }, "Admin criado");
-
-      onCreated({ nome: nome.trim(), email: email.trim(), password });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao criar admin");
+      onCreated({ nome: data.nome, email: data.login, password: data.password });
       setNome(""); setEmail(""); setNotas("");
       onOpenChange(false);
     } catch (err: any) {
