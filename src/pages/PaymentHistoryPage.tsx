@@ -13,6 +13,7 @@ import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-re
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 
 type PaymentMovement = {
