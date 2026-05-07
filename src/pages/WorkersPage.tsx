@@ -57,7 +57,9 @@ export default function WorkersPage() {
 
   async function load() {
     setLoading(true);
-    const wRes = await supabase.from("workers").select("*").order("created_at", { ascending: false });
+    let q = supabase.from("workers").select("*").order("created_at", { ascending: false });
+    if (!showArchived) q = q.is("archived_at", null);
+    const wRes = await q;
     const rRes = await supabase.from("password_recovery_requests" as any).select("*").eq("status", "open").order("requested_at", { ascending: false });
     setWorkers((wRes.data as any) || []);
     setRecoveryRequests((rRes.data as any) || []);
@@ -70,7 +72,7 @@ export default function WorkersPage() {
 
   useEffect(() => {
     if (isAdmin) load();
-  }, [isAdmin, isSuperAdmin]);
+  }, [isAdmin, isSuperAdmin, showArchived]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
