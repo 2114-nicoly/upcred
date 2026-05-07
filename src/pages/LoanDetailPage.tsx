@@ -287,7 +287,7 @@ export default function LoanDetailPage() {
       affected: [
         { label: "Cliente", value: loan.clients?.name || "—" },
         { label: "Valor", value: formatCurrency(entry.amount) },
-        { label: "Data", value: format(new Date(entry.cash_date + "T12:00:00"), "dd/MM/yyyy") },
+        { label: "Data", value: format(new Date(entry.cashDate + "T12:00:00"), "dd/MM/yyyy") },
       ],
       confirmText: "Desfazer", destructive: true,
     });
