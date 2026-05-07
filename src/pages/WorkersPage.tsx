@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Plus, KeyRound, RefreshCw, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type Worker = {
   id: string;
