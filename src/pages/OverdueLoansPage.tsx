@@ -250,12 +250,27 @@ export default function OverdueLoansPage() {
     fetchData();
   };
 
+  let displayed = groups;
+  if (isAdmin && selectedAdminId) displayed = displayed.filter((g) => g.adminId === selectedAdminId);
+  if (isAdmin && selectedWorkerId) displayed = displayed.filter((g) => g.workerId === selectedWorkerId);
+
+  const workerLabel = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "—";
+  const adminLabel = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
+
   return (
     <div className="mx-auto max-w-lg p-4">
+      {isAdmin && (
+        <Card className="mb-3">
+          <CardContent className="p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
+            <WorkerFilterSelect />
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <p className="text-center text-muted-foreground">Carregando...</p>
-      ) : groups.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center p-8">
             <p className="text-lg font-semibold">Nenhuma parcela atrasada! 🎉</p>
@@ -263,7 +278,7 @@ export default function OverdueLoansPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {groups.map((group) => (
+          {displayed.map((group) => (
             <Collapsible
               key={group.loanId}
               open={expandedLoan === group.loanId}
