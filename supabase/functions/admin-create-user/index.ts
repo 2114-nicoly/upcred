@@ -13,8 +13,19 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
 function gen(n: number) {
+  const buf = new Uint8Array(n);
+  crypto.getRandomValues(buf);
+  // Rejection sampling to avoid modulo bias (256 % 10 = 6)
   let s = "";
-  for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 10).toString();
+  for (let i = 0; i < n; i++) {
+    let b = buf[i];
+    while (b >= 250) {
+      const extra = new Uint8Array(1);
+      crypto.getRandomValues(extra);
+      b = extra[0];
+    }
+    s += (b % 10).toString();
+  }
   return s;
 }
 
