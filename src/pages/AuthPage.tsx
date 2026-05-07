@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { isLoginCodigo } from "@/lib/worker-utils";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -14,12 +13,12 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // Login state
-  const [identifier, setIdentifier] = useState(""); // email OU 4 dígitos
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
-  // Forgot state
-  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [forgotLogin, setForgotLogin] = useState("");
+  const [forgotNome, setForgotNome] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -28,11 +27,13 @@ export default function AuthPage() {
     try {
       let emailToUse = identifier.trim();
 
-      if (isLoginCodigo(emailToUse)) {
-        const { data, error } = await supabase.rpc("get_synthetic_email_by_login", { p_login: emailToUse });
+      if (!emailToUse.includes("@")) {
+        const { data, error } = await supabase.functions.invoke("auth-resolve-login", {
+          body: { login: emailToUse },
+        });
         if (error) throw error;
-        if (!data) throw new Error("Login não encontrado ou trabalhador inativo.");
-        emailToUse = data as unknown as string;
+        if (!data?.email) throw new Error("Login não encontrado.");
+        emailToUse = data.email as string;
       }
 
       const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
@@ -50,14 +51,17 @@ export default function AuthPage() {
     e.preventDefault();
     setForgotLoading(true);
     try {
-      const value = forgotIdentifier.trim();
-      if (!value) throw new Error("Informe nome ou login.");
-      const { error } = await supabase
-        .from("worker_password_reset_requests")
-        .insert({ identifier: value, status: "pending" } as any);
+      if (!forgotLogin && !forgotNome && !forgotEmail) {
+        throw new Error("Informe pelo menos um campo.");
+      }
+      const { error } = await supabase.rpc("register_recovery_request" as any, {
+        p_login: forgotLogin || null,
+        p_nome: forgotNome || null,
+        p_email: forgotEmail || null,
+      });
       if (error) throw error;
-      toast.success("Solicitação enviada à administradora.");
-      setForgotIdentifier("");
+      toast.success("Solicitação enviada. Aguarde contato do administrador.");
+      setForgotLogin(""); setForgotNome(""); setForgotEmail("");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao enviar solicitação");
     } finally {
@@ -70,19 +74,19 @@ export default function AuthPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">UpCred</CardTitle>
-          <CardDescription>Entrar com login ou email</CardDescription>
+          <CardDescription>Acesso seguro</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login">
             <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="login">Entrar</TabsTrigger>
-              <TabsTrigger value="forgot">Esqueci senha</TabsTrigger>
+              <TabsTrigger value="forgot">Esqueci</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-3">
                 <div>
-                  <Label htmlFor="identifier">Login (4 dígitos) ou email</Label>
+                  <Label htmlFor="identifier">Login</Label>
                   <Input
                     id="identifier"
                     inputMode="text"
@@ -90,7 +94,7 @@ export default function AuthPage() {
                     required
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Ex.: 1234 ou seu@email.com"
+                    placeholder="email, 4 ou 5 dígitos"
                   />
                 </div>
                 <div>
@@ -113,17 +117,19 @@ export default function AuthPage() {
             <TabsContent value="forgot">
               <form onSubmit={handleForgot} className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Sua solicitação será enviada à administradora, que poderá redefinir sua senha.
+                  Sua solicitação será enviada ao administrador responsável, que poderá redefinir sua senha.
                 </p>
                 <div>
-                  <Label htmlFor="forgot-id">Seu nome ou login</Label>
-                  <Input
-                    id="forgot-id"
-                    required
-                    value={forgotIdentifier}
-                    onChange={(e) => setForgotIdentifier(e.target.value)}
-                    placeholder="Nome ou login de 4 dígitos"
-                  />
+                  <Label className="text-xs">Login (se souber)</Label>
+                  <Input value={forgotLogin} onChange={(e) => setForgotLogin(e.target.value)} placeholder="4 ou 5 dígitos" />
+                </div>
+                <div>
+                  <Label className="text-xs">Nome</Label>
+                  <Input value={forgotNome} onChange={(e) => setForgotNome(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">Email (se aplicável)</Label>
+                  <Input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} />
                 </div>
                 <Button type="submit" className="w-full" disabled={forgotLoading}>
                   {forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Solicitar"}
