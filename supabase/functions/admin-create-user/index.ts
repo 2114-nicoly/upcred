@@ -63,20 +63,21 @@ Deno.serve(async (req) => {
       if (createErr || !created.user) return json(400, { error: createErr?.message || "Falha ao criar usuário" });
       const newUserId = created.user.id;
 
-      const { data: adminId, error: regErr } = await admin.rpc("super_admin_register_admin", {
-        p_nome: nome,
-        p_email_real: emailReal,
-        p_login_codigo: loginCodigo,
-        p_auth_user_id: newUserId,
-      });
+      const { data: adminRow, error: regErr } = await admin.from("admins").insert({
+        auth_user_id: newUserId,
+        nome,
+        email_real: emailReal,
+        login_codigo: loginCodigo,
+        active: true,
+        created_by: callerId,
+        notas,
+      } as any).select("id").single();
       if (regErr) {
         await admin.auth.admin.deleteUser(newUserId).catch(() => {});
         return json(400, { error: regErr.message });
       }
-
-      if (notas) {
-        await admin.from("admins").update({ notas }).eq("id", adminId as any);
-      }
+      const adminId = adminRow.id;
+      await admin.from("user_roles").insert({ user_id: newUserId, role: "admin" }).select();
 
       await admin.from("worker_credentials_log").insert({
         worker_id: null,
