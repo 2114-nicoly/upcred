@@ -351,10 +351,7 @@ export default function CaixaPage() {
             <Plus className="h-3 w-3" /> Empréstimos Novos / Renovações
           </h2>
           {novos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhum empréstimo neste dia</p>
-            </div>
+            <EmptyState icon={DollarSign} message="Nenhum empréstimo neste dia" description="Empréstimos novos e renovações aparecerão aqui." compact />
           ) : (
             novos.map(ev => {
               const isRenewal = ev.event_type === "renovacao";
