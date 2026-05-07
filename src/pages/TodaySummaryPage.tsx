@@ -141,8 +141,14 @@ export default function TodaySummaryPage() {
 
           {paidToday.length === 0 && notPaidToday.length === 0 && (
             <Card>
-              <CardContent className="flex flex-col items-center p-8">
-                <p className="text-muted-foreground">Nenhuma movimentação registrada hoje.</p>
+              <CardContent className="p-2">
+                <EmptyState
+                  icon={CalendarDays}
+                  message="Nenhuma movimentação registrada hoje"
+                  description="Assim que você registrar pagamentos, eles aparecerão aqui."
+                  actionLabel="Ir para a rota"
+                  onAction={() => navigate("/")}
+                />
               </CardContent>
             </Card>
           )}
