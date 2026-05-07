@@ -143,7 +143,9 @@ const App = () => (
         <ErrorBoundary>
           <AuthProvider>
             <WorkerFilterProvider>
-              <AppRoutes />
+              <ConfirmProvider>
+                <AppRoutes />
+              </ConfirmProvider>
             </WorkerFilterProvider>
           </AuthProvider>
         </ErrorBoundary>
