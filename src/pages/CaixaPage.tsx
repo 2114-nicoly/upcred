@@ -85,15 +85,20 @@ export default function CaixaPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Apply hierarchical scope filter to events list
+  let scopedEvents = events;
+  if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
+  if (isAdmin && selectedWorkerId) scopedEvents = scopedEvents.filter((e: any) => e.worker_id === selectedWorkerId);
+
   // Computed totals from daily_events
-  const totalIn = events.reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalOut = events.reduce((s, e) => s + Number(e.amount_out), 0);
+  const totalIn = scopedEvents.reduce((s, e) => s + Number(e.amount_in), 0);
+  const totalOut = scopedEvents.reduce((s, e) => s + Number(e.amount_out), 0);
   const saldoDia = totalIn - totalOut;
 
-  const pagamentos = events.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
-  const naoPagos = events.filter(e => e.event_type === "nao_pagou");
-  const novos = events.filter(e => e.event_type === "emprestimo_novo" || e.event_type === "renovacao");
-  const movimentos = events.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
+  const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
+  const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
+  const novos = scopedEvents.filter(e => e.event_type === "emprestimo_novo" || e.event_type === "renovacao");
+  const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
 
   const handleManualMovement = async () => {
     if (!manualType) return;
