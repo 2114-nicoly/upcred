@@ -37,6 +37,7 @@ function getDayLabel(dateStr: string): string {
 }
 
 export default function PaymentHistoryPage() {
+  const confirm = useConfirm();
   const [paymentsByDay, setPaymentsByDay] = useState<Record<string, PaymentMovement[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
