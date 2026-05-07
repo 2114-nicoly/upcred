@@ -5,14 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox } from "lucide-react";
-import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
+import { Loader2, Plus, KeyRound, RefreshCw, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 
 type Worker = {
   id: string;
@@ -21,26 +22,29 @@ type Worker = {
   synthetic_email: string;
   active: boolean;
   notas: string | null;
+  parent_admin_id: string | null;
   created_at: string;
   auth_user_id: string | null;
 };
 
-type CredsToShow = { nome: string; login: string; password: string };
+type AdminOption = { id: string; nome: string };
 
 export default function WorkersPage() {
   const navigate = useNavigate();
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
 
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [resetRequests, setResetRequests] = useState<any[]>([]);
+  const [admins, setAdmins] = useState<AdminOption[]>([]);
+  const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const [openCreate, setOpenCreate] = useState(false);
   const [nome, setNome] = useState("");
   const [notas, setNotas] = useState("");
+  const [parentAdminId, setParentAdminId] = useState<string>("");
 
-  const [creds, setCreds] = useState<CredsToShow | null>(null);
+  const [creds, setCreds] = useState<GeneratedCreds | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/");
@@ -48,28 +52,20 @@ export default function WorkersPage() {
 
   async function load() {
     setLoading(true);
-    const [{ data: w }, { data: r }] = await Promise.all([
-      supabase.from("workers").select("*").order("created_at", { ascending: false }),
-      supabase.from("worker_password_reset_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-    ]);
-    setWorkers((w as any) || []);
-    setResetRequests((r as any) || []);
+    const wRes = await supabase.from("workers").select("*").order("created_at", { ascending: false });
+    const rRes = await supabase.from("password_recovery_requests" as any).select("*").eq("status", "open").order("requested_at", { ascending: false });
+    setWorkers((wRes.data as any) || []);
+    setRecoveryRequests((rRes.data as any) || []);
+    if (isSuperAdmin) {
+      const aRes = await supabase.rpc("super_admin_list_admins" as any);
+      setAdmins(((aRes.data as any) || []).map((a: any) => ({ id: a.id, nome: a.nome })));
+    }
     setLoading(false);
   }
 
   useEffect(() => {
     if (isAdmin) load();
-  }, [isAdmin]);
-
-  // pick a unique 4-digit login code
-  async function pickUniqueLogin(): Promise<string> {
-    for (let i = 0; i < 20; i++) {
-      const code = generateLoginCodigo();
-      const { data } = await supabase.from("workers").select("id").eq("login_codigo", code).maybeSingle();
-      if (!data) return code;
-    }
-    throw new Error("Não foi possível gerar um login único. Tente novamente.");
-  }
+  }, [isAdmin, isSuperAdmin]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -77,70 +73,41 @@ export default function WorkersPage() {
       toast({ title: "Nome obrigatório", variant: "destructive" });
       return;
     }
+    if (isSuperAdmin && !parentAdminId) {
+      toast({ title: "Selecione a equipe (admin)", variant: "destructive" });
+      return;
+    }
     setCreating(true);
-
-    // 1) snapshot current admin session — we'll restore it after signUp
-    const { data: { session: adminSession } } = await supabase.auth.getSession();
-
     try {
-      const login = await pickUniqueLogin();
-      const password = generateTempPassword();
-      const email = syntheticEmailFor(login);
-
-      // 2) create the auth user via signUp (this REPLACES the current session)
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: { display_name: nome.trim() },
+      const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        body: {
+          kind: "worker",
+          nome: nome.trim(),
+          notas: notas.trim() || null,
+          parent_admin_id: isSuperAdmin ? parentAdminId : undefined,
         },
       });
-      if (signUpError) throw signUpError;
-      const newUserId = signUpData.user?.id;
-      if (!newUserId) throw new Error("Falha ao criar usuário.");
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao criar trabalhador");
 
-      // 3) restore admin session immediately
-      if (adminSession) {
-        await supabase.auth.setSession({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-        });
-      }
-
-      // 4) register worker + role via admin RPC
-      const { data: workerId, error: rpcError } = await supabase.rpc("admin_register_worker", {
-        p_nome: nome.trim(),
-        p_login_codigo: login,
-        p_synthetic_email: email,
-        p_auth_user_id: newUserId,
-        p_notas: notas.trim() || null,
+      setCreds({
+        nome: data.nome, role: data.role, login: data.login,
+        password: data.password, created_at: data.created_at,
       });
-      if (rpcError) throw rpcError;
-
-      // 5) save credentials log
-      await supabase.from("worker_credentials_log").insert({
-        worker_id: workerId as string,
-        login_codigo: login,
-        temp_password: password,
-        reason: "created",
-      } as any);
-
-      setCreds({ nome: nome.trim(), login, password });
-      setNome("");
-      setNotas("");
+      setNome(""); setNotas(""); setParentAdminId("");
       setOpenCreate(false);
       load();
-      toast({ title: "Trabalhador criado", description: "Anote o login e a senha temporária." });
     } catch (err: any) {
-      toast({ title: "Erro ao criar trabalhador", description: err.message, variant: "destructive" });
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setCreating(false);
     }
   }
 
   async function handleToggleActive(w: Worker) {
-    const { error } = await supabase.from("workers").update({ active: !w.active } as any).eq("id", w.id);
+    const { error } = await supabase.rpc("set_worker_active" as any, {
+      p_worker_id: w.id, p_active: !w.active,
+    });
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
       return;
@@ -151,48 +118,21 @@ export default function WorkersPage() {
 
   async function handleResetPassword(w: Worker) {
     if (!confirm(`Gerar nova senha temporária para ${w.nome}?`)) return;
-
-    const adminSession = (await supabase.auth.getSession()).data.session;
-    try {
-      const password = generateTempPassword();
-      // We can't reset password without service role from client.
-      // Workaround: only log the new desired password and ask admin to use Cloud panel,
-      // OR use updateUser by re-signing-in as the worker. Simpler approach:
-      // store in log + show — admin must use the existing password. For now, just store request.
-      await supabase.from("worker_credentials_log").insert({
-        worker_id: w.id,
-        login_codigo: w.login_codigo,
-        temp_password: password,
-        reason: "reset_pending",
-      } as any);
-      setCreds({ nome: w.nome, login: w.login_codigo, password });
-      toast({
-        title: "Nova senha gerada",
-        description: "Atenção: a senha real só será trocada quando o trabalhador entrar com ela. Use o painel Cloud → Users para forçar a alteração se necessário.",
-      });
-    } finally {
-      if (adminSession) {
-        await supabase.auth.setSession({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-        });
-      }
+    const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+      body: { target_kind: "worker", target_id: w.id },
+    });
+    if (error || !data?.ok) {
+      toast({ title: "Erro", description: error?.message || data?.error, variant: "destructive" });
+      return;
     }
+    setCreds({ nome: data.nome, role: data.role, login: data.login, password: data.password, created_at: data.created_at });
   }
 
-  async function resolveResetRequest(id: string) {
-    await supabase
-      .from("worker_password_reset_requests")
-      .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
+  async function resolveRecovery(id: string) {
+    await supabase.from("password_recovery_requests" as any)
+      .update({ status: "resolved", resolved_at: new Date().toISOString() })
       .eq("id", id);
     load();
-  }
-
-  function copyCreds() {
-    if (!creds) return;
-    const text = `Trabalhador: ${creds.nome}\nLogin: ${creds.login}\nSenha: ${creds.password}`;
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copiado!" });
   }
 
   if (authLoading || loading) {
@@ -200,7 +140,7 @@ export default function WorkersPage() {
   }
 
   return (
-    <div className="p-4 space-y-4 max-w-lg mx-auto">
+    <div className="p-4 space-y-4 max-w-lg mx-auto pb-24">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Trabalhadores</h1>
         <Button size="sm" onClick={() => setOpenCreate(true)}>
@@ -208,19 +148,22 @@ export default function WorkersPage() {
         </Button>
       </div>
 
-      {resetRequests.length > 0 && (
+      {recoveryRequests.length > 0 && (
         <Card className="border-warning">
           <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-sm flex items-center gap-2"><Inbox className="h-4 w-4" /> Pedidos de senha</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2"><Inbox className="h-4 w-4" /> Solicitações de acesso</CardTitle>
           </CardHeader>
           <CardContent className="p-3 pt-1 space-y-2">
-            {resetRequests.map((r) => (
+            {recoveryRequests.map((r) => (
               <div key={r.id} className="flex items-center justify-between text-sm border rounded p-2">
-                <div>
-                  <div className="font-medium">{r.identifier}</div>
-                  <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{r.nome_informado || r.login_informado || r.email_informado}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {r.login_informado && <span>Login: {r.login_informado} · </span>}
+                    {new Date(r.requested_at).toLocaleString()}
+                  </div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => resolveResetRequest(r.id)}>Resolver</Button>
+                <Button size="sm" variant="outline" onClick={() => resolveRecovery(r.id)}>Resolver</Button>
               </div>
             ))}
           </CardContent>
@@ -255,12 +198,11 @@ export default function WorkersPage() {
         <RefreshCw className="h-4 w-4 mr-1" /> Atualizar
       </Button>
 
-      {/* Create dialog */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Novo trabalhador</DialogTitle>
-            <DialogDescription>Login e senha serão gerados automaticamente.</DialogDescription>
+            <DialogDescription>Login de 4 dígitos e senha de 8 números gerados automaticamente.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             <div>
@@ -271,6 +213,17 @@ export default function WorkersPage() {
               <Label htmlFor="notas">Observação (opcional)</Label>
               <Textarea id="notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} />
             </div>
+            {isSuperAdmin && (
+              <div>
+                <Label>Equipe (admin)</Label>
+                <Select value={parentAdminId} onValueChange={setParentAdminId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a equipe" /></SelectTrigger>
+                  <SelectContent>
+                    {admins.map((a) => (<SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <DialogFooter>
               <Button type="submit" disabled={creating} className="w-full">
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar"}
@@ -280,26 +233,7 @@ export default function WorkersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Show credentials */}
-      <Dialog open={!!creds} onOpenChange={(o) => !o && setCreds(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Credenciais geradas</DialogTitle>
-            <DialogDescription>Anote ou copie agora — você pode consultar depois no log.</DialogDescription>
-          </DialogHeader>
-          {creds && (
-            <div className="space-y-2 font-mono text-sm bg-muted p-3 rounded">
-              <div>Nome: <span className="font-bold">{creds.nome}</span></div>
-              <div>Login: <span className="font-bold text-primary">{creds.login}</span></div>
-              <div>Senha: <span className="font-bold text-primary">{creds.password}</span></div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={copyCreds}><Copy className="h-4 w-4 mr-1" /> Copiar</Button>
-            <Button onClick={() => setCreds(null)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CredentialsDialog creds={creds} onClose={() => setCreds(null)} />
     </div>
   );
 }

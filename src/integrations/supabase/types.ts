@@ -25,6 +25,7 @@ export type Database = {
           login_codigo: string | null
           nome: string
           notas: string | null
+          temporary_password: boolean
           updated_at: string
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           login_codigo?: string | null
           nome: string
           notas?: string | null
+          temporary_password?: boolean
           updated_at?: string
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           login_codigo?: string | null
           nome?: string
           notas?: string | null
+          temporary_password?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -669,6 +672,51 @@ export type Database = {
           },
         ]
       }
+      password_recovery_requests: {
+        Row: {
+          email_informado: string | null
+          id: string
+          login_informado: string | null
+          nome_informado: string | null
+          notas: string | null
+          requested_at: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          target_admin_id: string | null
+          target_role: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          email_informado?: string | null
+          id?: string
+          login_informado?: string | null
+          nome_informado?: string | null
+          notas?: string | null
+          requested_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          target_admin_id?: string | null
+          target_role?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          email_informado?: string | null
+          id?: string
+          login_informado?: string | null
+          nome_informado?: string | null
+          notas?: string | null
+          requested_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          target_admin_id?: string | null
+          target_role?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       penalties: {
         Row: {
           admin_id: string | null
@@ -842,31 +890,49 @@ export type Database = {
       }
       worker_credentials_log: {
         Row: {
+          admin_id: string | null
+          auth_user_id: string | null
           created_at: string
           created_by: string | null
           id: string
           login_codigo: string
+          nome: string | null
           reason: string
+          role: string | null
+          status: string
           temp_password: string
-          worker_id: string
+          viewed_at: string | null
+          worker_id: string | null
         }
         Insert: {
+          admin_id?: string | null
+          auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           login_codigo: string
+          nome?: string | null
           reason?: string
+          role?: string | null
+          status?: string
           temp_password: string
-          worker_id: string
+          viewed_at?: string | null
+          worker_id?: string | null
         }
         Update: {
+          admin_id?: string | null
+          auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           login_codigo?: string
+          nome?: string | null
           reason?: string
+          role?: string | null
+          status?: string
           temp_password?: string
-          worker_id?: string
+          viewed_at?: string | null
+          worker_id?: string | null
         }
         Relationships: [
           {
@@ -917,6 +983,7 @@ export type Database = {
           notas: string | null
           parent_admin_id: string | null
           synthetic_email: string
+          temporary_password: boolean
           updated_at: string
         }
         Insert: {
@@ -930,6 +997,7 @@ export type Database = {
           notas?: string | null
           parent_admin_id?: string | null
           synthetic_email: string
+          temporary_password?: boolean
           updated_at?: string
         }
         Update: {
@@ -943,6 +1011,7 @@ export type Database = {
           notas?: string | null
           parent_admin_id?: string | null
           synthetic_email?: string
+          temporary_password?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -994,6 +1063,8 @@ export type Database = {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
       }
+      generate_admin_login_codigo: { Args: never; Returns: string }
+      generate_worker_login_codigo: { Args: never; Returns: string }
       get_admin_id: { Args: { _user_id: string }; Returns: string }
       get_route_installments: {
         Args: { p_cash_date: string }
@@ -1050,6 +1121,10 @@ export type Database = {
           p_old?: Json
           p_worker_id?: string
         }
+        Returns: string
+      }
+      register_recovery_request: {
+        Args: { p_email: string; p_login: string; p_nome: string }
         Returns: string
       }
       reverse_loan_payment: {
