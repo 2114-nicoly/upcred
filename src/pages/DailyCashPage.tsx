@@ -703,7 +703,7 @@ export default function DailyCashPage() {
     if (!ok) return;
     setIsSubmitting(true);
 
-    const mark = notPaidMarks.find(m => m.id === markId);
+    // 'mark' já calculado acima
     // Optimistic: remove from not-paid (will come back to pending on refresh)
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
     if (mark) localActionedLoanIds.current.delete(mark.loan_id);
