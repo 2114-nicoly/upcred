@@ -77,7 +77,7 @@ export default function OverdueLoansPage() {
     try {
       const { data } = await supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, clients(id, name))")
+        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, clients(id, name))")
         .lt("due_date", today)
         .neq("status", "paid")
         .eq("is_penalty", false)
