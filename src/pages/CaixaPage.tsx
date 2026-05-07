@@ -25,6 +25,7 @@ import {
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
 
