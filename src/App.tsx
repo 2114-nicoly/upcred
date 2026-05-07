@@ -46,6 +46,17 @@ function WrappedRoute({ element }: { element: React.ReactNode }) {
   return <PageErrorBoundary>{element}</PageErrorBoundary>;
 }
 
+/** Trabalhador-only: admin/super_admin é redirecionado para seu dashboard. */
+function WorkerOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { isAdmin, isSuperAdmin, loading } = useAuth();
+  if (loading) {
+    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
+  }
+  if (isSuperAdmin) return <Navigate to="/super-admin" replace />;
+  if (isAdmin) return <Navigate to="/admin" replace />;
+  return <>{children}</>;
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
@@ -90,7 +101,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <Routes>
-                <Route path="/" element={<WrappedRoute element={<DailyCashPage />} />} />
+                <Route path="/" element={<WorkerOnlyRoute><WrappedRoute element={<DailyCashPage />} /></WorkerOnlyRoute>} />
                 <Route path="/daily-cash-history" element={<WrappedRoute element={<DailyCashHistoryPage />} />} />
                 <Route path="/clients" element={<WrappedRoute element={<ClientsPage />} />} />
                 <Route path="/clients/:clientId" element={<WrappedRoute element={<ClientDetailPage />} />} />
