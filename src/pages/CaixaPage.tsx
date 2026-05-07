@@ -27,6 +27,9 @@ import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
 
