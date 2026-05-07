@@ -15,6 +15,7 @@ import { Loader2, Plus, KeyRound, RefreshCw, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
+import { EmptyState } from "@/components/LoadingSkeleton";
 
 type Worker = {
   id: string;
@@ -192,7 +193,14 @@ export default function WorkersPage() {
       <Card>
         <CardContent className="p-2 space-y-1">
           {workers.length === 0 ? (
-            <p className="text-sm text-muted-foreground p-3 text-center">Nenhum trabalhador cadastrado.</p>
+            <EmptyState
+              icon={Inbox}
+              message="Nenhum trabalhador cadastrado"
+              description="Crie um trabalhador para começar a operar a rota."
+              actionLabel="Cadastrar trabalhador"
+              onAction={() => setOpenCreate(true)}
+              compact
+            />
           ) : (
             workers.map((w) => (
               <div key={w.id} className="flex items-center gap-2 border rounded p-2">

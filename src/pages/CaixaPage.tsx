@@ -22,6 +22,7 @@ import {
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
   DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2
 } from "lucide-react";
+import { EmptyState } from "@/components/LoadingSkeleton";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -291,10 +292,7 @@ export default function CaixaPage() {
             <CheckCircle className="h-3 w-3" /> Pagos do Dia
           </h2>
           {pagamentos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhum pagamento neste dia</p>
-            </div>
+            <EmptyState icon={DollarSign} message="Nenhum pagamento neste dia" description="Os pagamentos do dia aparecerão aqui." compact />
           ) : (
             pagamentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">
@@ -325,10 +323,7 @@ export default function CaixaPage() {
             <XCircle className="h-3 w-3" /> Não Pagos do Dia
           </h2>
           {naoPagos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <CheckCircle className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhuma marcação neste dia</p>
-            </div>
+            <EmptyState icon={CheckCircle} message="Nenhuma marcação neste dia" description="Nenhum cliente foi marcado como não pago." compact />
           ) : (
             naoPagos.map(ev => (
               <div key={ev.id} className="rounded-lg border border-destructive/30 bg-card p-2.5">
@@ -356,10 +351,7 @@ export default function CaixaPage() {
             <Plus className="h-3 w-3" /> Empréstimos Novos / Renovações
           </h2>
           {novos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhum empréstimo neste dia</p>
-            </div>
+            <EmptyState icon={DollarSign} message="Nenhum empréstimo neste dia" description="Empréstimos novos e renovações aparecerão aqui." compact />
           ) : (
             novos.map(ev => {
               const isRenewal = ev.event_type === "renovacao";
@@ -397,10 +389,7 @@ export default function CaixaPage() {
             Movimentações Manuais
           </h2>
           {movimentos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <Settings className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhuma movimentação manual</p>
-            </div>
+            <EmptyState icon={Settings} message="Nenhuma movimentação manual" description="Aportes, retiradas e ajustes manuais aparecerão aqui." compact />
           ) : (
             movimentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">

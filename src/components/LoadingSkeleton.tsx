@@ -50,22 +50,33 @@ export function SummarySkeleton() {
 export function EmptyState({
   icon: Icon,
   message,
+  description,
   actionLabel,
   onAction,
+  compact,
 }: {
   icon?: React.ComponentType<{ className?: string }>;
   message: string;
+  description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center py-12 text-center">
-      {Icon && <Icon className="mb-3 h-10 w-10 text-muted-foreground/50" />}
-      <p className="text-sm text-muted-foreground mb-3">{message}</p>
+    <div className={`flex flex-col items-center text-center ${compact ? "py-6" : "py-12"}`}>
+      {Icon && (
+        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted/40">
+          <Icon className="h-7 w-7 text-muted-foreground/70" />
+        </div>
+      )}
+      <p className="text-sm font-medium text-foreground mb-1">{message}</p>
+      {description && (
+        <p className="text-xs text-muted-foreground mb-3 max-w-xs">{description}</p>
+      )}
       {actionLabel && onAction && (
         <button
           onClick={onAction}
-          className="text-sm font-medium text-primary hover:underline"
+          className="mt-2 inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
         >
           {actionLabel}
         </button>

@@ -26,7 +26,8 @@ import {
 } from "@/lib/loan-utils";
 import { updateCashBalance, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { registerPayment, registerPenaltyPayment, settleLoan, editPayment, recalculateInstallments, reversePayment } from "@/lib/payment-utils";
-import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History } from "lucide-react";
+import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History, Receipt } from "lucide-react";
+import { EmptyState } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -849,7 +850,7 @@ export default function LoanDetailPage() {
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2 space-y-2">
           {paymentHistory.length === 0 ? (
-            <p className="py-3 text-center text-sm text-muted-foreground">Nenhum pagamento registrado.</p>
+            <EmptyState icon={Receipt} message="Nenhum pagamento registrado" description="Os pagamentos aparecem aqui assim que forem lançados." compact />
           ) : paymentHistory.map((entry) => (
             <Card key={entry.movementId}>
               <CardContent className="p-3">
@@ -959,7 +960,7 @@ export default function LoanDetailPage() {
               <p className="text-sm font-medium mb-2">Histórico de Multas ({penalties.length})</p>
               <div className="space-y-2">
                 {penalties.length === 0 ? (
-                  <p className="py-2 text-center text-sm text-muted-foreground">Nenhuma multa registrada.</p>
+                  <EmptyState icon={AlertTriangle} message="Nenhuma multa registrada" compact />
                 ) : penalties.map((p) => (
                   <div key={p.id} className="rounded-lg border p-3">
                     {editingPenalty === p.id ? (

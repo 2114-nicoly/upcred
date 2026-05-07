@@ -6,8 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, getStatusColor, getStatusLabel } from "@/lib/loan-utils";
-import { ArrowLeft, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { EmptyState } from "@/components/LoadingSkeleton";
 
 type InstallmentWithLoan = {
   id: string;
@@ -140,8 +141,14 @@ export default function TodaySummaryPage() {
 
           {paidToday.length === 0 && notPaidToday.length === 0 && (
             <Card>
-              <CardContent className="flex flex-col items-center p-8">
-                <p className="text-muted-foreground">Nenhuma movimentação registrada hoje.</p>
+              <CardContent className="p-2">
+                <EmptyState
+                  icon={CalendarDays}
+                  message="Nenhuma movimentação registrada hoje"
+                  description="Assim que você registrar pagamentos, eles aparecerão aqui."
+                  actionLabel="Ir para a rota"
+                  onAction={() => navigate("/")}
+                />
               </CardContent>
             </Card>
           )}

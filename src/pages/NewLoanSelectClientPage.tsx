@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Search, ChevronRight, AlertTriangle } from "lucide-react";
+import { Search, ChevronRight, AlertTriangle, Users } from "lucide-react";
+import { EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 
@@ -130,7 +131,11 @@ export default function NewLoanSelectClientPage() {
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="py-8 text-center text-muted-foreground">Nenhum cliente encontrado</p>
+          <EmptyState
+            icon={Users}
+            message={search ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+            description={search ? "Tente outro nome ou código." : "Cadastre um cliente para começar."}
+          />
         ) : (
           filtered.map((client) => (
             <Card

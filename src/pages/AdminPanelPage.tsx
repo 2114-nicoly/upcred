@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
+import { EmptyState } from "@/components/LoadingSkeleton";
 import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, ArrowUpDown,
   TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target, TrendingDown } from "lucide-react";
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
@@ -457,7 +458,14 @@ function WorkersTab() {
 
       <div className="space-y-2">
         {workers.length === 0 ? (
-          <p className="text-sm text-muted-foreground p-3 text-center">Nenhum trabalhador cadastrado.</p>
+          <EmptyState
+            icon={Inbox}
+            message="Nenhum trabalhador cadastrado"
+            description="Cadastre um trabalhador para começar."
+            actionLabel="Cadastrar trabalhador"
+            onAction={() => setOpenCreate(true)}
+            compact
+          />
         ) : (
           workers.map((w) => {
             const s = stats[w.id];
