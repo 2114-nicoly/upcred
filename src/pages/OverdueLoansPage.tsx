@@ -47,6 +47,8 @@ type LoanGroup = {
   clientName: string;
   paymentType: string;
   totalAmount: number;
+  workerId: string | null;
+  adminId: string | null;
   installments: InstallmentWithLoan[];
   totalOverdue: number;
   overdueDays: number;
@@ -56,6 +58,8 @@ type LoanGroup = {
 
 export default function OverdueLoansPage() {
   const navigate = useNavigate();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [groups, setGroups] = useState<LoanGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedLoan, setExpandedLoan] = useState<string | null>(null);
