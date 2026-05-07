@@ -194,7 +194,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </Sheet>
         ) : (
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
+            aria-label="Voltar"
             className="mr-4 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-6 w-6" />
