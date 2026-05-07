@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
+import { EmptyState } from "@/components/LoadingSkeleton";
+import { FileSearch } from "lucide-react";
 
 type Log = {
   id: string;
