@@ -36,6 +36,8 @@ type InstallmentWithLoan = {
     total_amount: number;
     installment_count: number;
     payment_type: string;
+    worker_id: string | null;
+    admin_id: string | null;
     clients: { id: string; name: string };
   };
 };
