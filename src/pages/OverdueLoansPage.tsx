@@ -305,6 +305,12 @@ export default function OverdueLoansPage() {
                             {group.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(group.penaltyPaid)})</span>}
                           </p>
                         )}
+                        {isAdmin && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Trab.: {workerLabel(group.workerId)}
+                            {isSuperAdmin && <> · Adm.: {adminLabel(group.adminId)}</>}
+                          </p>
+                        )}
                       </div>
                       <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${expandedLoan === group.loanId ? "rotate-180" : ""}`} />
                     </div>
