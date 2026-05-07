@@ -19,6 +19,9 @@ import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan } from "@/lib/payment-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type LoanWithClient = {
   id: string;
