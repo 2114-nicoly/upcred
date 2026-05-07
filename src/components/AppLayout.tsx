@@ -60,7 +60,7 @@ function getRouteLabel(pathname: string): string {
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isSuperAdmin, signOut } = useAuth();
   const { selectedWorkerId, selectedWorkerName, setSelectedWorkerId } = useWorkerFilter();
   const [open, setOpen] = useState(false);
 
@@ -70,9 +70,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navigate("/auth", { replace: true });
   };
 
-  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/admin-tools", "/workers"];
+  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/admin-tools", "/workers", "/super-admin"];
   const isMainPage = mainPages.includes(location.pathname);
-  const sidebarItems = isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
+  const sidebarItems = isSuperAdmin
+    ? [...baseSidebarItems, ...adminSidebarItems, ...superAdminSidebarItems]
+    : isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
