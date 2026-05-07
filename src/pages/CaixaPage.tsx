@@ -37,6 +37,8 @@ export default function CaixaPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const confirm = useConfirm();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const { selectedAdminId, selectedWorkerId, workers } = useWorkerFilter();
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
   const [balance, setBalance] = useState<CashBalance | null>(null);
