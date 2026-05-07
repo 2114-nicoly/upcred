@@ -31,6 +31,9 @@ type LoanWithClient = {
   loan_date: string;
   installment_count: number;
   is_cravo: boolean;
+  worker_id: string | null;
+  admin_id: string | null;
+  renewed_from_loan_id: string | null;
   clients: { id: string; name: string };
 };
 
