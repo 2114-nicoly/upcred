@@ -51,10 +51,13 @@ type LoanProgress = {
 
 export default function ActiveLoansPage() {
   const navigate = useNavigate();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [loans, setLoans] = useState<LoanWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterToday, setFilterToday] = useState(false);
   const [filterPaymentType, setFilterPaymentType] = useState("all");
+  const [filterOrigin, setFilterOrigin] = useState<"all" | "novo" | "renovacao">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showCravos, setShowCravos] = useState(false);
   const [todayLoanIds, setTodayLoanIds] = useState<Set<string>>(new Set());
