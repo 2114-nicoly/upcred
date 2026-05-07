@@ -101,7 +101,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <Routes>
-                <Route path="/" element={<WrappedRoute element={<DailyCashPage />} />} />
+                <Route path="/" element={<WorkerOnlyRoute><WrappedRoute element={<DailyCashPage />} /></WorkerOnlyRoute>} />
                 <Route path="/daily-cash-history" element={<WrappedRoute element={<DailyCashHistoryPage />} />} />
                 <Route path="/clients" element={<WrappedRoute element={<ClientsPage />} />} />
                 <Route path="/clients/:clientId" element={<WrappedRoute element={<ClientDetailPage />} />} />
