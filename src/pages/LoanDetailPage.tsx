@@ -281,7 +281,17 @@ export default function LoanDetailPage() {
   // --- Undo payment from history ---
   const handleUndoHistoryPayment = async (entry: PaymentHistoryEntry) => {
     if (isSubmitting || !loan) return;
-    if (!confirm(`Desfazer pagamento de ${formatCurrency(entry.amount)}?`)) return;
+    const ok = await confirm({
+      title: "Desfazer pagamento?",
+      description: "O valor sai do caixa e a parcela volta a ficar em aberto.",
+      affected: [
+        { label: "Cliente", value: loan.clients?.name || "—" },
+        { label: "Valor", value: formatCurrency(entry.amount) },
+        { label: "Data", value: format(new Date(entry.cash_date + "T12:00:00"), "dd/MM/yyyy") },
+      ],
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
     try {
       await reversePayment({ movementId: entry.movementId });
