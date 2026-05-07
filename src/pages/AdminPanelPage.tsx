@@ -296,6 +296,7 @@ function CompareTab() {
 /* ============= WORKERS TAB ============= */
 function WorkersTab() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
