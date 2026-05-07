@@ -138,11 +138,27 @@ export default function TransferClientDialog({
             <span>Histórico antigo (pagamentos, empréstimos quitados, eventos de caixa) permanece com o trabalhador atual.</span>
           </div>
 
+          {isSuperAdmin && (
+            <div>
+              <Label className="text-xs">Equipe (admin) destino</Label>
+              <Select value={destAdmin} onValueChange={setDestAdmin}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolher equipe…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {admins.filter(a => a.active).map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label className="text-xs">Trabalhador destino</Label>
-            <Select value={toWorker} onValueChange={setToWorker}>
+            <Select value={toWorker} onValueChange={setToWorker} disabled={isSuperAdmin && !destAdmin}>
               <SelectTrigger>
-                <SelectValue placeholder="Escolher trabalhador…" />
+                <SelectValue placeholder={isSuperAdmin && !destAdmin ? "Escolha a equipe primeiro" : "Escolher trabalhador…"} />
               </SelectTrigger>
               <SelectContent>
                 {eligible.map((w) => (
