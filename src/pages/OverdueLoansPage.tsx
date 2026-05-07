@@ -109,6 +109,8 @@ export default function OverdueLoansPage() {
             clientName: inst.loans.clients.name,
             paymentType: inst.loans.payment_type,
             totalAmount: Number(inst.loans.total_amount),
+            workerId: (inst.loans as any).worker_id ?? null,
+            adminId: (inst.loans as any).admin_id ?? null,
             installments: [],
             totalOverdue: 0,
             overdueDays: calculateOverdueDays(oldestDueDate, inst.loans.payment_type),
