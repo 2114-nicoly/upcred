@@ -292,10 +292,7 @@ export default function CaixaPage() {
             <CheckCircle className="h-3 w-3" /> Pagos do Dia
           </h2>
           {pagamentos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <DollarSign className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhum pagamento neste dia</p>
-            </div>
+            <EmptyState icon={DollarSign} message="Nenhum pagamento neste dia" description="Os pagamentos do dia aparecerão aqui." compact />
           ) : (
             pagamentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">
