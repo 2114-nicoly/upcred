@@ -38,6 +38,7 @@ type Loan = {
 export default function LoanOverdueDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [loading, setLoading] = useState(true);
