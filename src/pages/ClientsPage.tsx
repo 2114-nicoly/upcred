@@ -234,38 +234,57 @@ export default function ClientsPage() {
             onAction={!search ? () => setOpen(true) : undefined}
           />
         ) : (
-          filtered.map((client) => {
-            const summary = loanSummaries[client.id];
-            return (
-              <Card key={client.id} className="overflow-hidden">
-                <CardContent className="flex items-center justify-between p-4">
-                  <Link to={`/clients/${client.id}`} className="flex-1">
-                    <div>
-                      <p className="font-semibold">{client.name}</p>
-                      {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
-                      {summary && (
-                        <p className="text-xs text-primary">
-                          {summary.count} ativo{summary.count > 1 ? "s" : ""} • {formatCurrency(summary.total)}
-                        </p>
-                      )}
-                    </div>
-                  </Link>
-                  <div className="flex items-center gap-1">
-                    {summary && <Badge className="mr-1">{summary.count}</Badge>}
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => handleDelete(client.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <Link to={`/clients/${client.id}`}>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          (() => {
+            const renderClient = (client: Client) => {
+              const summary = loanSummaries[client.id];
+              return (
+                <Card key={client.id} className="overflow-hidden">
+                  <CardContent className="flex items-center justify-between p-4">
+                    <Link to={`/clients/${client.id}`} className="flex-1">
+                      <div>
+                        <p className="font-semibold">{client.name}</p>
+                        {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
+                        {isAdmin && !groupByWorker && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Trab.: {workerName(client.worker_id)}
+                            {isSuperAdmin && <> · Admin: {adminName(client.admin_id)}</>}
+                          </p>
+                        )}
+                        {summary && (
+                          <p className="text-xs text-primary">
+                            {summary.count} ativo{summary.count > 1 ? "s" : ""} • {formatCurrency(summary.total)}
+                          </p>
+                        )}
+                      </div>
                     </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
+                    <div className="flex items-center gap-1">
+                      {summary && <Badge className="mr-1">{summary.count}</Badge>}
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => handleDelete(client.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Link to={`/clients/${client.id}`}>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            };
+            if (groupByWorker && isAdmin) {
+              return groupKeys.map((k) => (
+                <div key={k} className="space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase mt-2 px-1">
+                    {workerName(k === "__none__" ? null : k)} ({grouped[k].length})
+                  </p>
+                  {grouped[k].map(renderClient)}
+                </div>
+              ));
+            }
+            return filtered.map(renderClient);
+          })()
         )}
       </div>
 
