@@ -94,7 +94,17 @@ export default function PaymentHistoryPage() {
 
   const handleUndoPayment = async (entry: PaymentMovement) => {
     if (isSubmitting) return;
-    if (!confirm(`Desfazer lançamento de ${formatCurrency(entry.amount)}?`)) return;
+    const ok = await confirm({
+      title: "Desfazer lançamento?",
+      description: "O valor será removido do caixa e o pagamento revertido.",
+      affected: [
+        { label: "Cliente", value: entry.clientName },
+        { label: "Valor", value: formatCurrency(entry.amount) },
+        { label: "Data", value: format(new Date(entry.cashDate + "T12:00:00"), "dd/MM/yyyy") },
+      ],
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
     try {
       await reversePayment({ movementId: entry.movementId });
