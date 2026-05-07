@@ -18,6 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction } from "@/lib/audit-utils";
+import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
+import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 
 type AdminRow = {
   id: string;
