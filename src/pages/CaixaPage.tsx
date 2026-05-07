@@ -389,10 +389,7 @@ export default function CaixaPage() {
             Movimentações Manuais
           </h2>
           {movimentos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <Settings className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhuma movimentação manual</p>
-            </div>
+            <EmptyState icon={Settings} message="Nenhuma movimentação manual" description="Aportes, retiradas e ajustes manuais aparecerão aqui." compact />
           ) : (
             movimentos.map(ev => (
               <div key={ev.id} className="rounded-lg border bg-card p-2.5">
