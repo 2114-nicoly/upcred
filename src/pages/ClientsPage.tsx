@@ -9,10 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter } from "lucide-react";
+import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter, Layers } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type Client = {
   id: string;
@@ -20,6 +23,8 @@ type Client = {
   phone: string | null;
   notes: string | null;
   client_code: number | null;
+  worker_id: string | null;
+  admin_id: string | null;
 };
 
 type LoanSummary = {
