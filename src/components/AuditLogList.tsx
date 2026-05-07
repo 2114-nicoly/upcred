@@ -151,7 +151,7 @@ export default function AuditLogList({ workerId, limit = 100 }: Props) {
       {loading ? (
         <p className="text-xs text-muted-foreground">Carregando…</p>
       ) : logs.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nenhum registro encontrado.</p>
+        <EmptyState icon={FileSearch} message="Nenhum registro encontrado" description="Ajuste os filtros de data ou tipo para tentar novamente." compact />
       ) : (
         <div className="space-y-2">
           {logs.map((l) => (
