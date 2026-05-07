@@ -29,6 +29,7 @@ import { registerPayment, registerPenaltyPayment, settleLoan, editPayment, recal
 import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type Loan = {
   id: string;
@@ -80,6 +81,7 @@ type PaymentHistoryEntry = {
 export default function LoanDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [loan, setLoan] = useState<Loan | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
@@ -279,7 +281,17 @@ export default function LoanDetailPage() {
   // --- Undo payment from history ---
   const handleUndoHistoryPayment = async (entry: PaymentHistoryEntry) => {
     if (isSubmitting || !loan) return;
-    if (!confirm(`Desfazer pagamento de ${formatCurrency(entry.amount)}?`)) return;
+    const ok = await confirm({
+      title: "Desfazer pagamento?",
+      description: "O valor sai do caixa e a parcela volta a ficar em aberto.",
+      affected: [
+        { label: "Cliente", value: loan.clients?.name || "—" },
+        { label: "Valor", value: formatCurrency(entry.amount) },
+        { label: "Data", value: format(new Date(entry.cashDate + "T12:00:00"), "dd/MM/yyyy") },
+      ],
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
     try {
       await reversePayment({ movementId: entry.movementId });
@@ -531,7 +543,18 @@ export default function LoanDetailPage() {
   };
 
   const handleDeleteInstallment = async (id: string) => {
-    if (!confirm("Excluir esta parcela?")) return;
+    const inst = installments.find((i) => i.id === id);
+    const ok = await confirm({
+      title: "Excluir parcela?",
+      description: "Esta ação não pode ser desfeita. Multas associadas a esta parcela também serão removidas.",
+      affected: [
+        { label: "Parcela", value: inst ? `#${inst.number}` : "—" },
+        { label: "Valor", value: inst ? formatCurrency(Number(inst.amount)) : "—" },
+        { label: "Vencimento", value: inst ? format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy") : "—" },
+      ],
+      confirmText: "Excluir", destructive: true,
+    });
+    if (!ok) return;
     const relatedPenalties = penalties.filter(p => p.installment_id === id);
     const totalPenaltyRemoved = relatedPenalties.reduce((s, p) => s + Number(p.amount), 0);
     await supabase.from("penalties").delete().eq("installment_id", id);
@@ -546,7 +569,18 @@ export default function LoanDetailPage() {
   };
 
   const handleDeleteLoan = async () => {
-    if (!confirm("Excluir este empréstimo e todas as parcelas?")) return;
+    const ok = await confirm({
+      title: "Excluir empréstimo?",
+      description: "Todas as parcelas, pagamentos, multas e movimentações deste empréstimo serão removidos. Esta ação é irreversível.",
+      affected: [
+        { label: "Cliente", value: loan?.clients?.name || "—" },
+        { label: "Total", value: loan ? formatCurrency(Number(loan.total_amount)) : "—" },
+        { label: "Parcelas", value: String(installments.length) },
+        { label: "Pagamentos", value: String(paymentHistory.length) },
+      ],
+      confirmText: "Excluir tudo", destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("not_paid_marks").delete().eq("loan_id", loanId!);
     await supabase.from("cash_movements").delete().eq("loan_id", loanId!);
     await supabase.from("penalties").delete().eq("loan_id", loanId!);

@@ -12,6 +12,7 @@ import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { ArrowLeft, Plus, XCircle, Undo2, Pencil, Trash2, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type Installment = {
   id: string;
@@ -37,6 +38,7 @@ type Loan = {
 export default function LoanOverdueDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,13 @@ export default function LoanOverdueDetailPage() {
   };
 
   const handleDeleteInstallment = async (id: string) => {
-    if (!confirm("Excluir esta parcela?")) return;
+    const inst = installments.find((i) => i.id === id);
+    const ok = await confirm({
+      title: "Excluir parcela?",
+      affected: inst ? [{ label: "Parcela", value: `#${inst.number}` }, { label: "Valor", value: formatCurrency(Number(inst.amount)) }] : undefined,
+      confirmText: "Excluir", destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("penalties").delete().eq("installment_id", id);
     await supabase.from("installments").delete().eq("id", id);
     toast.success("Parcela excluída!");

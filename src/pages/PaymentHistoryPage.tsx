@@ -13,6 +13,7 @@ import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-re
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 
 type PaymentMovement = {
@@ -36,6 +37,7 @@ function getDayLabel(dateStr: string): string {
 }
 
 export default function PaymentHistoryPage() {
+  const confirm = useConfirm();
   const [paymentsByDay, setPaymentsByDay] = useState<Record<string, PaymentMovement[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,7 +94,17 @@ export default function PaymentHistoryPage() {
 
   const handleUndoPayment = async (entry: PaymentMovement) => {
     if (isSubmitting) return;
-    if (!confirm(`Desfazer lançamento de ${formatCurrency(entry.amount)}?`)) return;
+    const ok = await confirm({
+      title: "Desfazer lançamento?",
+      description: "O valor será removido do caixa e o pagamento revertido.",
+      affected: [
+        { label: "Cliente", value: entry.clientName },
+        { label: "Valor", value: formatCurrency(entry.amount) },
+        { label: "Data", value: format(new Date(entry.cashDate + "T12:00:00"), "dd/MM/yyyy") },
+      ],
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
     try {
       await reversePayment({ movementId: entry.movementId });

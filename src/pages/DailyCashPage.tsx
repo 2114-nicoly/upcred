@@ -23,6 +23,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type InstallmentWithLoan = {
   id: string;
@@ -176,6 +177,7 @@ type PendingFilter = "all" | "overdue" | "today";
 
 export default function DailyCashPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
@@ -691,9 +693,17 @@ export default function DailyCashPage() {
   const handleUndoNotPaid = async (markId: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    const mark = notPaidMarks.find(m => m.id === markId);
+    const ok = await confirm({
+      title: 'Desfazer marcação "não pagou"?',
+      description: "A parcela voltará a aparecer como pendente na rota.",
+      affected: mark ? [{ label: "Cliente", value: (mark as any).installment?.loans?.clients?.name || "—" }] : undefined,
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
 
-    const mark = notPaidMarks.find(m => m.id === markId);
+    // 'mark' já calculado acima
     // Optimistic: remove from not-paid (will come back to pending on refresh)
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
     if (mark) localActionedLoanIds.current.delete(mark.loan_id);
@@ -720,6 +730,17 @@ export default function DailyCashPage() {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
+    const group = paidGroups.find(g => g.loanId === loanId);
+    const ok = await confirm({
+      title: "Desfazer pagamento?",
+      description: "O valor sairá do caixa e a parcela voltará a ficar pendente.",
+      affected: group ? [
+        { label: "Cliente", value: (group as any).clientName || "—" },
+        { label: "Valor", value: formatCurrency(group.totalPaid) },
+      ] : undefined,
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
     setIsSubmitting(true);
 
     // Optimistic: remove from paid
@@ -737,6 +758,18 @@ export default function DailyCashPage() {
 
   const handleCloseCash = async () => {
     const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
+    const ok = await confirm({
+      title: "Fechar caixa do dia?",
+      description: "Após o fechamento, lançamentos do dia ficam bloqueados. Você poderá reabrir se precisar.",
+      affected: [
+        { label: "Data", value: format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy") },
+        { label: "Total recebido", value: formatCurrency(totalReceived) },
+        { label: "Não pagos", value: String(notPaidMarks.length) },
+        { label: "Itens tratados", value: String(paidGroups.length + notPaidMarks.length) },
+      ],
+      confirmText: "Fechar caixa",
+    });
+    if (!ok) return;
 
     const { data: penaltyMovements } = await (supabase
       .from("cash_movements")

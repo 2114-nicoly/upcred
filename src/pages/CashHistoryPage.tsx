@@ -21,6 +21,7 @@ import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 function getDayLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -39,6 +40,7 @@ type GroupedDay = {
 
 export default function CashHistoryPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
@@ -88,7 +90,17 @@ export default function CashHistoryPage() {
   })();
 
   const handleDelete = async (mov: MovementWithClient) => {
-    if (!confirm("Excluir movimentação e reverter saldo?")) return;
+    const ok = await confirm({
+      title: "Excluir movimentação?",
+      description: "O saldo do caixa será revertido conforme o tipo do lançamento.",
+      affected: [
+        { label: "Tipo", value: getMovementTypeLabel(mov.type) },
+        { label: "Valor", value: formatCurrency(Math.abs(Number(mov.amount))) },
+        { label: "Data", value: format(new Date(mov.cash_date + "T12:00:00"), "dd/MM/yyyy") },
+      ],
+      confirmText: "Excluir", destructive: true,
+    });
+    if (!ok) return;
     const reverseMap: Record<string, any> = {
       emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
       recebimento_normal: { available_cash: -Number(mov.amount) },

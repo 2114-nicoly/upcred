@@ -31,6 +31,7 @@ import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
 import SuperAdminDetailPage from "@/pages/SuperAdminDetailPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
+import { ConfirmProvider } from "@/hooks/useConfirm";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -142,7 +143,9 @@ const App = () => (
         <ErrorBoundary>
           <AuthProvider>
             <WorkerFilterProvider>
-              <AppRoutes />
+              <ConfirmProvider>
+                <AppRoutes />
+              </ConfirmProvider>
             </WorkerFilterProvider>
           </AuthProvider>
         </ErrorBoundary>

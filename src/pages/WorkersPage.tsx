@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Plus, KeyRound, RefreshCw, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type Worker = {
   id: string;
@@ -32,6 +33,7 @@ type AdminOption = { id: string; nome: string };
 export default function WorkersPage() {
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
+  const confirm = useConfirm();
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [admins, setAdmins] = useState<AdminOption[]>([]);
@@ -105,6 +107,17 @@ export default function WorkersPage() {
   }
 
   async function handleToggleActive(w: Worker) {
+    const desativando = w.active;
+    const ok = await confirm({
+      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
+      description: desativando
+        ? "O trabalhador perderá acesso ao sistema. Os dados (clientes, empréstimos, caixa) permanecem preservados."
+        : "O trabalhador voltará a poder acessar o sistema.",
+      affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
+      confirmText: desativando ? "Desativar" : "Ativar",
+      destructive: desativando,
+    });
+    if (!ok) return;
     const { error } = await supabase.rpc("set_worker_active" as any, {
       p_worker_id: w.id, p_active: !w.active,
     });
@@ -117,7 +130,13 @@ export default function WorkersPage() {
   }
 
   async function handleResetPassword(w: Worker) {
-    if (!confirm(`Gerar nova senha temporária para ${w.nome}?`)) return;
+    const ok = await confirm({
+      title: "Resetar senha?",
+      description: "Uma nova senha temporária de 8 dígitos será gerada. A senha anterior deixará de funcionar.",
+      affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
+      confirmText: "Gerar nova senha", destructive: true,
+    });
+    if (!ok) return;
     const { data, error } = await supabase.functions.invoke("admin-reset-password", {
       body: { target_kind: "worker", target_id: w.id },
     });
