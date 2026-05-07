@@ -29,6 +29,7 @@ import { registerPayment, registerPenaltyPayment, settleLoan, editPayment, recal
 import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type Loan = {
   id: string;
