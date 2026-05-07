@@ -1030,6 +1030,16 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      list_workers_by_admin: {
+        Args: { p_admin_id?: string }
+        Returns: {
+          active: boolean
+          id: string
+          login_codigo: string
+          nome: string
+          parent_admin_id: string
+        }[]
+      }
       log_audit: {
         Args: {
           p_action: string
@@ -1045,6 +1055,10 @@ export type Database = {
       reverse_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
+      }
+      set_worker_active: {
+        Args: { p_active: boolean; p_worker_id: string }
+        Returns: undefined
       }
       super_admin_list_admins: {
         Args: never
@@ -1065,6 +1079,26 @@ export type Database = {
           p_nome: string
         }
         Returns: string
+      }
+      super_admin_set_admin_active: {
+        Args: { p_active: boolean; p_admin_id: string }
+        Returns: undefined
+      }
+      super_admin_stats_by_admin: {
+        Args: { p_end: string; p_start: string }
+        Returns: {
+          active: boolean
+          active_loans: number
+          admin_id: string
+          admin_nome: string
+          total_lent: number
+          total_received: number
+          workers_count: number
+        }[]
+      }
+      super_admin_update_admin: {
+        Args: { p_admin_id: string; p_nome: string; p_notas?: string }
+        Returns: undefined
       }
       update_cash_balance_atomic: {
         Args: {

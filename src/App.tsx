@@ -28,6 +28,8 @@ import AdminPage from "@/pages/AdminPage";
 import WorkersPage from "@/pages/WorkersPage";
 import AdminPanelPage from "@/pages/AdminPanelPage";
 import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
+import SuperAdminPage from "@/pages/SuperAdminPage";
+import SuperAdminDetailPage from "@/pages/SuperAdminDetailPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { Loader2 } from "lucide-react";
 
@@ -63,13 +65,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAdmin, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
+    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
   }
   if (!isAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isSuperAdmin, loading } = useAuth();
+  if (loading) {
+    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
+  }
+  if (!isSuperAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -103,6 +110,8 @@ function AppRoutes() {
                 <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
+                <Route path="/super-admin" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminPage />} /></SuperAdminRoute>} />
+                <Route path="/super-admin/:adminId" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminDetailPage />} /></SuperAdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>

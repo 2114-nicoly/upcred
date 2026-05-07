@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Home, ArrowLeft, LogOut, Eye } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Crown, Home, ArrowLeft, LogOut, Eye } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
@@ -24,6 +24,9 @@ const baseSidebarItems = [
 const adminSidebarItems = [
   { path: "/admin", label: "Painel Admin", icon: Shield },
   { path: "/admin-tools", label: "Manutenção", icon: Shield },
+];
+const superAdminSidebarItems = [
+  { path: "/super-admin", label: "Super Admin", icon: Crown },
 ];
 
 // Extended route labels for header (includes sub-pages)
@@ -57,7 +60,7 @@ function getRouteLabel(pathname: string): string {
 export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isSuperAdmin, signOut } = useAuth();
   const { selectedWorkerId, selectedWorkerName, setSelectedWorkerId } = useWorkerFilter();
   const [open, setOpen] = useState(false);
 
@@ -67,9 +70,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navigate("/auth", { replace: true });
   };
 
-  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/admin-tools", "/workers"];
+  const mainPages = ["/", "/caixa", "/clients", "/active-loans", "/daily-cash-history", "/reports", "/admin", "/admin-tools", "/workers", "/super-admin"];
   const isMainPage = mainPages.includes(location.pathname);
-  const sidebarItems = isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
+  const sidebarItems = isSuperAdmin
+    ? [...baseSidebarItems, ...adminSidebarItems, ...superAdminSidebarItems]
+    : isAdmin ? [...baseSidebarItems, ...adminSidebarItems] : baseSidebarItems;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -111,7 +116,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                   {user && (
                     <div className="px-2 py-1 text-xs text-muted-foreground">
                       <p className="truncate font-medium text-foreground">{user.email}</p>
-                      {isAdmin && <p className="text-primary">Administrador</p>}
+                      {isSuperAdmin ? <p className="text-primary">Super Admin</p> : isAdmin && <p className="text-primary">Administrador</p>}
                     </div>
                   )}
                   <Button variant="outline" size="sm" className="w-full" onClick={handleSignOut}>
