@@ -411,6 +411,23 @@ export default function ActiveLoansPage() {
                 </span>
               )}
             </div>
+            {isAdmin && (
+              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none">
+                  Trab: {workerLabel(loan.worker_id)}
+                </Badge>
+                {isSuperAdmin && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none">
+                    Adm: {adminLabel(loan.admin_id)}
+                  </Badge>
+                )}
+                {loan.renewed_from_loan_id && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none border-primary/40 text-primary">
+                    Renovação
+                  </Badge>
+                )}
+              </div>
+            )}
 
             {/* Progress bar */}
             <div className="flex items-center gap-2 mt-1.5">
