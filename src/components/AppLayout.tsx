@@ -25,6 +25,9 @@ const adminSidebarItems = [
   { path: "/admin", label: "Painel Admin", icon: Shield },
   { path: "/admin-tools", label: "Manutenção", icon: Shield },
 ];
+const superAdminSidebarItems = [
+  { path: "/super-admin", label: "Super Admin", icon: Crown },
+];
 
 // Extended route labels for header (includes sub-pages)
 const routeLabels: Record<string, string> = {
