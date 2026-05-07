@@ -323,10 +323,7 @@ export default function CaixaPage() {
             <XCircle className="h-3 w-3" /> Não Pagos do Dia
           </h2>
           {naoPagos.length === 0 ? (
-            <div className="flex flex-col items-center py-8">
-              <CheckCircle className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Nenhuma marcação neste dia</p>
-            </div>
+            <EmptyState icon={CheckCircle} message="Nenhuma marcação neste dia" description="Nenhum cliente foi marcado como não pago." compact />
           ) : (
             naoPagos.map(ev => (
               <div key={ev.id} className="rounded-lg border border-destructive/30 bg-card p-2.5">
