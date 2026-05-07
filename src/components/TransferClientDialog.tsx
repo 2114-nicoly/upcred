@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { useAuth } from "@/hooks/useAuth";
 import { AlertCircle } from "lucide-react";
 
 type Props = {
@@ -33,7 +34,9 @@ type ActiveLoan = {
 export default function TransferClientDialog({
   open, onOpenChange, clientId, clientName, currentWorkerId, onTransferred,
 }: Props) {
-  const { workers, refresh } = useWorkerFilter();
+  const { isSuperAdmin } = useAuth();
+  const { workers, admins, selectedAdminId, setSelectedAdminId, refresh } = useWorkerFilter();
+  const [destAdmin, setDestAdmin] = useState<string>("");
   const [toWorker, setToWorker] = useState<string>("");
   const [obs, setObs] = useState("");
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
@@ -70,10 +73,16 @@ export default function TransferClientDialog({
     }
     refresh();
     load();
+    setDestAdmin("");
     setToWorker("");
     setObs("");
     return () => { cancel = true; };
   }, [open, clientId, refresh]);
+
+  // Quando super_admin escolhe admin destino, refresca a lista de workers
+  useEffect(() => {
+    if (isSuperAdmin && destAdmin) setSelectedAdminId(destAdmin);
+  }, [destAdmin, isSuperAdmin, setSelectedAdminId]);
 
   const eligible = workers.filter((w) => w.active && w.id !== currentWorkerId);
 
@@ -129,11 +138,27 @@ export default function TransferClientDialog({
             <span>Histórico antigo (pagamentos, empréstimos quitados, eventos de caixa) permanece com o trabalhador atual.</span>
           </div>
 
+          {isSuperAdmin && (
+            <div>
+              <Label className="text-xs">Equipe (admin) destino</Label>
+              <Select value={destAdmin} onValueChange={setDestAdmin}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolher equipe…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {admins.filter(a => a.active).map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label className="text-xs">Trabalhador destino</Label>
-            <Select value={toWorker} onValueChange={setToWorker}>
+            <Select value={toWorker} onValueChange={setToWorker} disabled={isSuperAdmin && !destAdmin}>
               <SelectTrigger>
-                <SelectValue placeholder="Escolher trabalhador…" />
+                <SelectValue placeholder={isSuperAdmin && !destAdmin ? "Escolha a equipe primeiro" : "Escolher trabalhador…"} />
               </SelectTrigger>
               <SelectContent>
                 {eligible.map((w) => (

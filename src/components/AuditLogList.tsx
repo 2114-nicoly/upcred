@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useAuth } from "@/hooks/useAuth";
 
 type Log = {
   id: string;
   user_id: string | null;
   user_role: string | null;
   worker_id: string | null;
+  admin_id: string | null;
   action_type: string;
   entity_type: string;
   entity_id: string | null;
@@ -25,60 +27,55 @@ type Log = {
 
 const ACTION_LABELS: Record<string, string> = {
   transferencia_cliente: "Transferência de cliente",
-  criar_cliente: "Criar cliente",
-  editar_cliente: "Editar cliente",
-  excluir_cliente: "Excluir cliente",
-  criar_emprestimo: "Criar empréstimo",
-  editar_emprestimo: "Editar empréstimo",
-  excluir_emprestimo: "Excluir empréstimo",
-  renovar_emprestimo: "Renovar empréstimo",
-  quitar_emprestimo: "Quitar empréstimo",
-  pagamento: "Pagamento",
-  editar_pagamento: "Editar pagamento",
-  desfazer_pagamento: "Desfazer pagamento",
-  nao_pagou: "Não pagou",
-  editar_parcela: "Editar parcela",
-  alterar_data_parcela: "Alterar data parcela",
-  aporte: "Aporte na rota",
-  retirada: "Retirada da rota",
-  ajuste_caixa: "Ajuste de caixa",
-  fechar_caixa: "Fechar caixa",
-  criar_trabalhador: "Criar trabalhador",
-  reset_senha_trabalhador: "Reset senha",
-  ativar_trabalhador: "Ativar trabalhador",
-  desativar_trabalhador: "Desativar trabalhador",
+  criar_cliente: "Criar cliente", editar_cliente: "Editar cliente", excluir_cliente: "Excluir cliente",
+  criar_emprestimo: "Criar empréstimo", editar_emprestimo: "Editar empréstimo", excluir_emprestimo: "Excluir empréstimo",
+  renovar_emprestimo: "Renovar empréstimo", quitar_emprestimo: "Quitar empréstimo",
+  pagamento: "Pagamento", editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
+  editar_parcela: "Editar parcela", alterar_data_parcela: "Alterar data parcela",
+  aporte: "Aporte na rota", retirada: "Retirada da rota", ajuste_caixa: "Ajuste de caixa", fechar_caixa: "Fechar caixa",
+  criar_trabalhador: "Criar trabalhador", reset_senha_trabalhador: "Reset senha",
+  ativar_trabalhador: "Ativar trabalhador", desativar_trabalhador: "Desativar trabalhador",
 };
 
-type Props = {
-  workerId?: string | null;
-  limit?: number;
-};
+type Props = { workerId?: string | null; limit?: number };
 
 export default function AuditLogList({ workerId, limit = 100 }: Props) {
+  const { isSuperAdmin } = useAuth();
   const [logs, setLogs] = useState<Log[]>([]);
-  const [workers, setWorkers] = useState<{ id: string; nome: string }[]>([]);
+  const [workers, setWorkers] = useState<{ id: string; nome: string; parent_admin_id?: string | null }[]>([]);
+  const [admins, setAdmins] = useState<{ id: string; nome: string }[]>([]);
   const [filterAction, setFilterAction] = useState<string>("__all__");
+  const [filterAdmin, setFilterAdmin] = useState<string>("__all__");
   const [filterWorker, setFilterWorker] = useState<string>(workerId ?? "__all__");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
+  // Carrega admins (super_admin) e workers escopados
   useEffect(() => {
-    supabase.rpc("admin_list_workers" as any).then(({ data }) => {
+    if (isSuperAdmin) {
+      supabase.rpc("super_admin_list_admins" as any).then(({ data }) => setAdmins((data as any[]) || []));
+    }
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    const adminParam = isSuperAdmin && filterAdmin !== "__all__" ? filterAdmin : null;
+    supabase.rpc("list_workers_by_admin" as any, { p_admin_id: adminParam }).then(({ data }) => {
       setWorkers((data as any[]) || []);
     });
-  }, []);
+  }, [isSuperAdmin, filterAdmin]);
+
+  // Reseta worker quando admin muda
+  useEffect(() => { if (!workerId) setFilterWorker("__all__"); }, [filterAdmin, workerId]);
 
   useEffect(() => {
     let cancel = false;
     async function load() {
       setLoading(true);
-      let q = supabase
-        .from("audit_logs" as any)
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(limit);
+      let q = supabase.from("audit_logs" as any)
+        .select("*").order("created_at", { ascending: false }).limit(limit);
       if (filterAction !== "__all__") q = q.eq("action_type", filterAction);
+      if (isSuperAdmin && filterAdmin !== "__all__") q = q.eq("admin_id", filterAdmin);
       const wid = workerId ?? (filterWorker !== "__all__" ? filterWorker : null);
       if (wid) q = q.eq("worker_id", wid);
       if (from) q = q.gte("created_at", from + "T00:00:00");
@@ -91,13 +88,14 @@ export default function AuditLogList({ workerId, limit = 100 }: Props) {
     }
     load();
     return () => { cancel = true; };
-  }, [filterAction, filterWorker, from, to, workerId, limit]);
+  }, [filterAction, filterAdmin, filterWorker, from, to, workerId, limit, isSuperAdmin]);
 
   const workerName = (id: string | null) => id ? (workers.find((w) => w.id === id)?.nome ?? "—") : "Admin";
+  const adminName = (id: string | null) => id ? (admins.find((a) => a.id === id)?.nome ?? "—") : null;
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <div>
           <Label className="text-[10px]">Ação</Label>
           <Select value={filterAction} onValueChange={setFilterAction}>
@@ -110,6 +108,20 @@ export default function AuditLogList({ workerId, limit = 100 }: Props) {
             </SelectContent>
           </Select>
         </div>
+        {isSuperAdmin && !workerId && (
+          <div>
+            <Label className="text-[10px]">Admin</Label>
+            <Select value={filterAdmin} onValueChange={setFilterAdmin}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos</SelectItem>
+                {admins.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {!workerId && (
           <div>
             <Label className="text-[10px]">Trabalhador</Label>
@@ -150,7 +162,12 @@ export default function AuditLogList({ workerId, limit = 100 }: Props) {
                       <span className="ml-1 text-muted-foreground font-normal">· {l.entity_type}</span>
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {l.user_role === "admin" ? "Admin" : workerName(l.worker_id)}
+                      {l.user_role === "super_admin" ? "Super Admin"
+                        : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` · ${adminName(l.admin_id)}` : ""}`
+                        : workerName(l.worker_id)}
+                      {isSuperAdmin && l.user_role === "trabalhador" && adminName(l.admin_id) && (
+                        <span className="ml-1">· {adminName(l.admin_id)}</span>
+                      )}
                       {" · "}
                       {format(parseISO(l.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
                     </p>

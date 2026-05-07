@@ -50,7 +50,7 @@ type LoanProgress = {
 
 export default function TodayPage() {
   const navigate = useNavigate();
-  const { selectedWorkerId } = useWorkerFilter();
+  const { selectedWorkerId, selectedAdminId, workers } = useWorkerFilter();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
@@ -73,8 +73,15 @@ export default function TodayPage() {
         .eq("is_penalty", false)
         .order("number");
 
+      const adminWorkerIds = selectedAdminId ? new Set(workers.map((w) => w.id)) : null;
+      const matchesScope = (wid: string | null | undefined) => {
+        if (selectedWorkerId) return wid === selectedWorkerId;
+        if (adminWorkerIds) return wid ? adminWorkerIds.has(wid) : false;
+        return true;
+      };
+
       let todayInsts = (data as unknown as InstallmentWithLoan[]) || [];
-      if (selectedWorkerId) todayInsts = todayInsts.filter((i) => i.loans?.worker_id === selectedWorkerId);
+      todayInsts = todayInsts.filter((i) => matchesScope(i.loans?.worker_id));
       setInstallments(todayInsts);
 
       const { data: overdueData } = await supabase
@@ -86,7 +93,7 @@ export default function TodayPage() {
         .order("due_date");
 
       let overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
-      if (selectedWorkerId) overdueInsts = overdueInsts.filter((i) => i.loans?.worker_id === selectedWorkerId);
+      overdueInsts = overdueInsts.filter((i) => matchesScope(i.loans?.worker_id));
       setOverdueInstallments(overdueInsts);
 
       const allInsts = [...todayInsts, ...overdueInsts];
@@ -131,7 +138,7 @@ export default function TodayPage() {
     }
   };
 
-  useEffect(() => { fetchInstallments(); }, [selectedWorkerId]);
+  useEffect(() => { fetchInstallments(); }, [selectedWorkerId, selectedAdminId]);
 
   const handlePay = async (id: string) => {
     const allInsts = [...installments, ...overdueInstallments];
