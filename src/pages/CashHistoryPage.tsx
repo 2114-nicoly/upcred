@@ -90,7 +90,17 @@ export default function CashHistoryPage() {
   })();
 
   const handleDelete = async (mov: MovementWithClient) => {
-    if (!confirm("Excluir movimentação e reverter saldo?")) return;
+    const ok = await confirm({
+      title: "Excluir movimentação?",
+      description: "O saldo do caixa será revertido conforme o tipo do lançamento.",
+      affected: [
+        { label: "Tipo", value: getMovementTypeLabel(mov.type) },
+        { label: "Valor", value: formatCurrency(Math.abs(Number(mov.amount))) },
+        { label: "Data", value: format(new Date(mov.cash_date + "T12:00:00"), "dd/MM/yyyy") },
+      ],
+      confirmText: "Excluir", destructive: true,
+    });
+    if (!ok) return;
     const reverseMap: Record<string, any> = {
       emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
       recebimento_normal: { available_cash: -Number(mov.amount) },
