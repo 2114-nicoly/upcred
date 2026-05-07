@@ -144,9 +144,31 @@ export default function ClientsPage() {
     filtered = filtered.filter((c) => loanSummaries[c.id]?.count > 0);
   }
 
+  // Hierarchical scope filter (admin → worker)
+  if (isAdmin && selectedAdminId) {
+    filtered = filtered.filter((c) => c.admin_id === selectedAdminId);
+  }
+  if (isAdmin && selectedWorkerId) {
+    filtered = filtered.filter((c) => c.worker_id === selectedWorkerId);
+  }
+
   if (sortAlpha) {
     filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }
+
+  const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "Sem trabalhador";
+  const adminName = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
+
+  // Group by worker
+  const grouped: Record<string, Client[]> = {};
+  if (groupByWorker) {
+    for (const c of filtered) {
+      const k = c.worker_id || "__none__";
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(c);
+    }
+  }
+  const groupKeys = Object.keys(grouped).sort((a, b) => workerName(a === "__none__" ? null : a).localeCompare(workerName(b === "__none__" ? null : b)));
 
   return (
     <div className="mx-auto max-w-lg p-4">
