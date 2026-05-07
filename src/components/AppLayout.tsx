@@ -116,7 +116,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                   {user && (
                     <div className="px-2 py-1 text-xs text-muted-foreground">
                       <p className="truncate font-medium text-foreground">{user.email}</p>
-                      {isAdmin && <p className="text-primary">Administrador</p>}
+                      {isSuperAdmin ? <p className="text-primary">Super Admin</p> : isAdmin && <p className="text-primary">Administrador</p>}
                     </div>
                   )}
                   <Button variant="outline" size="sm" className="w-full" onClick={handleSignOut}>
