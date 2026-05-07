@@ -81,6 +81,7 @@ type PaymentHistoryEntry = {
 export default function LoanDetailPage() {
   const { loanId } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [loan, setLoan] = useState<Loan | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
