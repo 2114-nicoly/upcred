@@ -385,6 +385,14 @@ function WorkersTab() {
   }
 
   async function handleToggleActive(w: Worker) {
+    const desativando = w.active;
+    const ok = await confirm({
+      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
+      description: desativando ? "O trabalhador perderá acesso ao sistema." : "O trabalhador voltará a poder acessar o sistema.",
+      affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
+      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("workers").update({ active: !w.active } as any).eq("id", w.id);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     await logAction(w.active ? "desativar_trabalhador" : "ativar_trabalhador", "worker", w.id, { active: w.active }, { active: !w.active });
@@ -393,7 +401,13 @@ function WorkersTab() {
   }
 
   async function handleResetPassword(w: Worker) {
-    if (!confirm(`Gerar nova senha temporária para ${w.nome}?`)) return;
+    const ok = await confirm({
+      title: "Resetar senha?",
+      description: "Uma nova senha temporária de 8 dígitos será gerada. A senha anterior deixará de funcionar.",
+      affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
+      confirmText: "Gerar nova senha", destructive: true,
+    });
+    if (!ok) return;
     const password = generateTempPassword();
     await supabase.from("worker_credentials_log").insert({
       worker_id: w.id, login_codigo: w.login_codigo, temp_password: password, reason: "reset_pending",
