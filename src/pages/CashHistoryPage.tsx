@@ -40,6 +40,7 @@ type GroupedDay = {
 
 export default function CashHistoryPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
