@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import ScopeIndicator from "@/components/ScopeIndicator";
 import { toast } from "sonner";
 
 type NavItem = { path: string; label: string; icon: any };
