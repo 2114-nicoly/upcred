@@ -131,7 +131,11 @@ export default function NewLoanSelectClientPage() {
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="py-8 text-center text-muted-foreground">Nenhum cliente encontrado</p>
+          <EmptyState
+            icon={Users}
+            message={search ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+            description={search ? "Tente outro nome ou código." : "Cadastre um cliente para começar."}
+          />
         ) : (
           filtered.map((client) => (
             <Card
