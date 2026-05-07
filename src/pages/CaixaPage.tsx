@@ -95,6 +95,23 @@ export default function CaixaPage() {
     if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
     if (manualType !== "ajuste_manual" && amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
 
+    const labelMap = { entrada_manual: "Aportar dinheiro na rota?", saida_manual: "Retirar dinheiro da rota?", ajuste_manual: "Ajustar saldo do caixa?" } as const;
+    const descMap = {
+      entrada_manual: "O valor será somado ao caixa disponível.",
+      saida_manual: "O valor será descontado do caixa disponível.",
+      ajuste_manual: "O saldo do caixa será definido para o valor informado, gerando um lançamento de ajuste.",
+    } as const;
+    const ok = await confirm({
+      title: labelMap[manualType],
+      description: descMap[manualType],
+      affected: [
+        { label: "Valor", value: formatCurrency(Math.abs(amount)) },
+        ...(manualObs ? [{ label: "Obs.", value: manualObs }] : []),
+      ],
+      confirmText: "Confirmar", destructive: manualType === "saida_manual",
+    });
+    if (!ok) return;
+
     if (manualType === "ajuste_manual") {
       const current = await getCashBalance();
       if (!current) { toast.error("Erro ao obter saldo"); return; }
