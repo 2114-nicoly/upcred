@@ -14,6 +14,9 @@ import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "luc
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 
 type InstallmentWithLoan = {
   id: string;
