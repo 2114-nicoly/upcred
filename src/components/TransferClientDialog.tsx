@@ -73,10 +73,16 @@ export default function TransferClientDialog({
     }
     refresh();
     load();
+    setDestAdmin("");
     setToWorker("");
     setObs("");
     return () => { cancel = true; };
   }, [open, clientId, refresh]);
+
+  // Quando super_admin escolhe admin destino, refresca a lista de workers
+  useEffect(() => {
+    if (isSuperAdmin && destAdmin) setSelectedAdminId(destAdmin);
+  }, [destAdmin, isSuperAdmin, setSelectedAdminId]);
 
   const eligible = workers.filter((w) => w.active && w.id !== currentWorkerId);
 
