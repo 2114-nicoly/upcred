@@ -30,6 +30,7 @@ import AdminPanelPage from "@/pages/AdminPanelPage";
 import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
 import SuperAdminDetailPage from "@/pages/SuperAdminDetailPage";
+import SuperAdminWorkerDetailPage from "@/pages/SuperAdminWorkerDetailPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { ConfirmProvider } from "@/hooks/useConfirm";
 import { Loader2 } from "lucide-react";
@@ -123,6 +124,7 @@ function AppRoutes() {
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
                 <Route path="/super-admin" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminPage />} /></SuperAdminRoute>} />
+                <Route path="/super-admin/worker/:id" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminWorkerDetailPage />} /></SuperAdminRoute>} />
                 <Route path="/super-admin/:adminId" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminDetailPage />} /></SuperAdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
