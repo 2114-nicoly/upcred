@@ -56,16 +56,94 @@ export default function SuperAdminPage() {
   return (
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Super Admin</h1>
-      <Tabs defaultValue="admins">
-        <TabsList className="grid grid-cols-2 w-full">
+      <Tabs defaultValue="dashboard">
+        <TabsList className="grid grid-cols-3 w-full">
+          <TabsTrigger value="dashboard" className="text-xs">Dashboard</TabsTrigger>
           <TabsTrigger value="admins" className="text-xs">Administradores</TabsTrigger>
           <TabsTrigger value="ranking" className="text-xs">Ranking</TabsTrigger>
         </TabsList>
+        <TabsContent value="dashboard" className="mt-3"><DashboardTab /></TabsContent>
         <TabsContent value="admins" className="mt-3"><AdminsTab /></TabsContent>
         <TabsContent value="ranking" className="mt-3"><RankingTab /></TabsContent>
       </Tabs>
     </div>
   );
+}
+
+/* ============ DASHBOARD TAB ============ */
+function DashboardTab() {
+  const [mode, setMode] = useState<PeriodMode>("day");
+  const [customStart, setCustomStart] = useState(new Date().toISOString().slice(0, 10));
+  const [customEnd, setCustomEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [stats, setStats] = useState<WorkerStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const range = useMemo(() => getPeriodRange(mode, customStart, customEnd), [mode, customStart, customEnd]);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      const list = await loadWorkersStats(range);
+      if (cancel) return;
+      setStats(consolidate(list));
+      setLoading(false);
+    })();
+    return () => { cancel = true; };
+  }, [range]);
+
+  return (
+    <div>
+      <Tabs value={mode} onValueChange={(v) => setMode(v as PeriodMode)} className="mb-3">
+        <TabsList className="grid grid-cols-4 w-full">
+          <TabsTrigger value="day" className="text-xs">Dia</TabsTrigger>
+          <TabsTrigger value="week" className="text-xs">Semana</TabsTrigger>
+          <TabsTrigger value="month" className="text-xs">Mês</TabsTrigger>
+          <TabsTrigger value="custom" className="text-xs">Período</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {mode === "custom" && (
+        <Card className="mb-3"><CardContent className="p-2 grid grid-cols-2 gap-2">
+          <div><Label className="text-[10px]">Início</Label><Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="h-8 text-xs" /></div>
+          <div><Label className="text-[10px]">Fim</Label><Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="h-8 text-xs" /></div>
+        </CardContent></Card>
+      )}
+      <p className="text-xs text-muted-foreground mb-2">{range.label} · Sistema inteiro</p>
+      {loading || !stats ? (
+        <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <DKpi icon={<Target className="h-4 w-4 text-primary" />} label="Previsto" value={formatCurrency(stats.previsto)} />
+            <DKpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} cls="text-success" />
+            <DKpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Falta receber" value={formatCurrency(stats.faltaReceber)} cls="text-destructive" />
+            <DKpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="% Recebido" value={`${stats.percentual.toFixed(1)}%`} />
+            <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado" value={formatCurrency(stats.emprestado)} />
+            <DKpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Retirado" value={formatCurrency(stats.retirada)} cls="text-destructive" />
+            <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Aporte" value={formatCurrency(stats.aporte)} cls="text-success" />
+            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Saldo líquido" value={formatCurrency(stats.saldoLiquido)} cls={stats.saldoLiquido >= 0 ? "text-success" : "text-destructive"} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <DMini label="Clientes" value={stats.clientesAtivos} />
+            <DMini label="Empr.Ativos" value={stats.emprestimosAtivos} />
+            <DMini label="Atrasados" value={stats.atrasados} cls="text-destructive" />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+function DKpi({ icon, label, value, cls }: { icon: React.ReactNode; label: string; value: string; cls?: string }) {
+  return (<Card><CardContent className="p-2.5">
+    <div className="flex items-center gap-1.5 mb-0.5">{icon}<p className="text-[11px] text-muted-foreground">{label}</p></div>
+    <p className={`text-sm font-bold ${cls || ""}`}>{value}</p>
+  </CardContent></Card>);
+}
+function DMini({ label, value, cls }: { label: string; value: number; cls?: string }) {
+  return (<Card><CardContent className="p-2 text-center">
+    <p className="text-[10px] text-muted-foreground">{label}</p>
+    <p className={`text-base font-bold ${cls || ""}`}>{value}</p>
+  </CardContent></Card>);
 }
 
 /* ============ ADMINS TAB ============ */
