@@ -28,6 +28,8 @@ import AdminPage from "@/pages/AdminPage";
 import WorkersPage from "@/pages/WorkersPage";
 import AdminPanelPage from "@/pages/AdminPanelPage";
 import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
+import SuperAdminPage from "@/pages/SuperAdminPage";
+import SuperAdminDetailPage from "@/pages/SuperAdminDetailPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { Loader2 } from "lucide-react";
 
