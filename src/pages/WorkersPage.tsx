@@ -27,6 +27,7 @@ type Worker = {
   parent_admin_id: string | null;
   created_at: string;
   auth_user_id: string | null;
+  archived_at: string | null;
 };
 
 type AdminOption = { id: string; nome: string };
