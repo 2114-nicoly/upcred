@@ -850,7 +850,7 @@ export default function LoanDetailPage() {
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2 space-y-2">
           {paymentHistory.length === 0 ? (
-            <p className="py-3 text-center text-sm text-muted-foreground">Nenhum pagamento registrado.</p>
+            <EmptyState icon={Receipt} message="Nenhum pagamento registrado" description="Os pagamentos aparecem aqui assim que forem lançados." compact />
           ) : paymentHistory.map((entry) => (
             <Card key={entry.movementId}>
               <CardContent className="p-3">
