@@ -110,6 +110,8 @@ function AppRoutes() {
                 <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
+                <Route path="/super-admin" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminPage />} /></SuperAdminRoute>} />
+                <Route path="/super-admin/:adminId" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminDetailPage />} /></SuperAdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
