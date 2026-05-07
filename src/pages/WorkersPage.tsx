@@ -159,6 +159,41 @@ export default function WorkersPage() {
     load();
   }
 
+  async function handleArchive(w: Worker) {
+    const ok = await confirm({
+      title: "Arquivar trabalhador?",
+      description: "O trabalhador sairá da operação ativa. Histórico, clientes, empréstimos, caixa e auditoria são preservados. Você pode desarquivar depois.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Arquivar", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("archive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador arquivado" });
+    load();
+  }
+
+  async function handleUnarchive(w: Worker) {
+    const { error } = await supabase.rpc("unarchive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador desarquivado" });
+    load();
+  }
+
+  async function handleDeleteForever(w: Worker) {
+    const ok = await confirm({
+      title: "Excluir definitivamente?",
+      description: "Esta ação é irreversível e só funciona se o trabalhador não tiver clientes, empréstimos ou movimentações.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Excluir definitivamente", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("delete_worker_if_empty" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Não foi possível excluir", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador excluído" });
+    load();
+  }
+
   if (authLoading || loading) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
