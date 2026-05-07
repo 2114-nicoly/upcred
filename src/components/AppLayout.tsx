@@ -123,9 +123,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navigate("/auth", { replace: true });
   };
 
-  // Main pages that should show menu (not back button)
-  const mainPaths = new Set<string>([...bottomNav, ...sidebarItems].map((i) => i.path));
-  const isMainPage = mainPaths.has(location.pathname);
+  // Root pages per role: where back falls back to and where menu shows instead of back
+  const rootPath = role === "super_admin" ? "/super-admin" : role === "admin" ? "/admin" : "/";
+  const rootPaths = new Set<string>([rootPath, ...bottomNav.map((i) => i.path)]);
+  const isMainPage = rootPaths.has(location.pathname);
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate(rootPath, { replace: true });
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -185,7 +194,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </Sheet>
         ) : (
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
+            aria-label="Voltar"
             className="mr-4 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-6 w-6" />
