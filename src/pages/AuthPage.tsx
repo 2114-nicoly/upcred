@@ -25,19 +25,28 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      let emailToUse = identifier.trim();
+      const loginValue = identifier.trim().toLowerCase();
+      let emailToUse = loginValue;
 
       if (!emailToUse.includes("@")) {
         const { data, error } = await supabase.functions.invoke("auth-resolve-login", {
-          body: { login: emailToUse },
+          body: { login: loginValue },
         });
-        if (error) throw error;
+        if (error) throw new Error((error as any)?.context?.error || error.message || "Login não encontrado.");
         if (!data?.email) throw new Error("Login não encontrado.");
         emailToUse = data.email as string;
       }
 
       const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
-      if (error) throw error;
+      if (error) {
+        if (error.message?.toLowerCase().includes("email not confirmed")) {
+          throw new Error("Conta ainda não confirmada. O app corrigiu o login numérico; peça ao administrador para redefinir a senha se continuar.");
+        }
+        if (error.message?.toLowerCase().includes("invalid login credentials")) {
+          throw new Error("Login ou senha inválidos. Confira o código numérico e a senha de 8 dígitos.");
+        }
+        throw error;
+      }
       toast.success("Bem-vindo!");
       navigate("/", { replace: true });
     } catch (err: any) {
@@ -94,7 +103,7 @@ export default function AuthPage() {
                     required
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="email, 4 ou 5 dígitos"
+                    placeholder="4 dígitos, 5 dígitos ou email"
                   />
                 </div>
                 <div>
