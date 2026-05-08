@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, RefreshCw, Users, Landmark, FileText, Shield, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Users, Landmark, FileText, Shield, Loader2, AlertTriangle } from "lucide-react";
 
 type TaskStatus = "idle" | "running" | "done" | "error";
+type Orphan = { entity_type: string; entity_id: string; label: string; missing: string; created_at: string };
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -14,9 +15,29 @@ export default function AdminPage() {
   const [loansStatus, setLoansStatus] = useState<TaskStatus>("idle");
   const [clientsStatus, setClientsStatus] = useState<TaskStatus>("idle");
   const [fullStatus, setFullStatus] = useState<TaskStatus>("idle");
+  const [orphansStatus, setOrphansStatus] = useState<TaskStatus>("idle");
+  const [orphans, setOrphans] = useState<Orphan[]>([]);
   const [log, setLog] = useState<string[]>([]);
 
   const addLog = (msg: string) => setLog((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
+
+  async function checkOrphans() {
+    setOrphansStatus("running");
+    addLog("Verificando registros sem vínculo...");
+    try {
+      const { data, error } = await supabase.rpc("admin_find_orphans" as any);
+      if (error) throw error;
+      const list = (data as Orphan[]) || [];
+      setOrphans(list);
+      addLog(`${list.length} registro(s) sem vínculo.`);
+      setOrphansStatus("done");
+      toast({ title: "Verificação concluída", description: `${list.length} registro(s) sem vínculo.` });
+    } catch (e: any) {
+      addLog(`Erro: ${e.message}`);
+      setOrphansStatus("error");
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  }
 
   // 1) Update installments statuses (server-enforced admin RPC)
   async function updateInstallments() {
@@ -154,6 +175,19 @@ export default function AdminPage() {
             </Button>
           </div>
 
+          <div className="pt-2 border-t">
+            <Button
+              className="w-full justify-start gap-2"
+              variant="outline"
+              disabled={orphansStatus === "running"}
+              onClick={checkOrphans}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Verificar registros sem vínculo
+              {statusIcon(orphansStatus)}
+            </Button>
+          </div>
+
           <Button
             className="w-full"
             variant="secondary"
@@ -163,6 +197,29 @@ export default function AdminPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {orphans.length > 0 && (
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm">Registros sem vínculo ({orphans.length})</CardTitle>
+            <CardDescription className="text-xs">Clientes/empréstimos sem trabalhador ou administrador. Edite ou transfira para corrigir.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-1.5">
+            {orphans.map((o) => (
+              <div key={`${o.entity_type}-${o.entity_id}`} className="flex items-center justify-between text-xs border rounded p-2">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{o.entity_type === "client" ? "Cliente" : "Empréstimo"}: {o.label}</p>
+                  <p className="text-[10px] text-muted-foreground">Faltando: {o.missing}</p>
+                </div>
+                <Button
+                  size="sm" variant="outline" className="h-7 text-xs ml-2"
+                  onClick={() => navigate(o.entity_type === "client" ? `/clients/${o.entity_id}` : `/loans/${o.entity_id}`)}
+                >Abrir</Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {log.length > 0 && (
         <Card>

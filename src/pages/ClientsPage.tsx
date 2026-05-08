@@ -174,7 +174,7 @@ export default function ClientsPage() {
   const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "Sem trabalhador";
   const adminName = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
 
-  // Group by worker
+  // Group by worker (and admin for super_admin)
   const grouped: Record<string, Client[]> = {};
   if (groupByWorker) {
     for (const c of filtered) {
@@ -184,6 +184,19 @@ export default function ClientsPage() {
     }
   }
   const groupKeys = Object.keys(grouped).sort((a, b) => workerName(a === "__none__" ? null : a).localeCompare(workerName(b === "__none__" ? null : b)));
+
+  // 2-level grouping for super_admin: Admin > Worker
+  const groupedByAdmin: Record<string, Record<string, Client[]>> = {};
+  if (groupByWorker && isSuperAdmin) {
+    for (const c of filtered) {
+      const ak = c.admin_id || "__none__";
+      const wk = c.worker_id || "__none__";
+      if (!groupedByAdmin[ak]) groupedByAdmin[ak] = {};
+      if (!groupedByAdmin[ak][wk]) groupedByAdmin[ak][wk] = [];
+      groupedByAdmin[ak][wk].push(c);
+    }
+  }
+  const adminKeys = Object.keys(groupedByAdmin).sort((a, b) => adminName(a === "__none__" ? null : a).localeCompare(adminName(b === "__none__" ? null : b)));
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -309,6 +322,27 @@ export default function ClientsPage() {
                 </Card>
               );
             };
+            if (groupByWorker && isSuperAdmin) {
+              return adminKeys.map((ak) => {
+                const totalAdmin = Object.values(groupedByAdmin[ak]).reduce((s, arr) => s + arr.length, 0);
+                const wKeys = Object.keys(groupedByAdmin[ak]).sort((a, b) => workerName(a === "__none__" ? null : a).localeCompare(workerName(b === "__none__" ? null : b)));
+                return (
+                  <div key={ak} className="space-y-2">
+                    <p className="text-xs font-bold text-primary uppercase mt-3 px-1 border-b pb-1">
+                      Admin: {adminName(ak === "__none__" ? null : ak)} ({totalAdmin})
+                    </p>
+                    {wKeys.map((wk) => (
+                      <div key={wk} className="space-y-2 pl-2">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase mt-1 px-1">
+                          ↳ {workerName(wk === "__none__" ? null : wk)} ({groupedByAdmin[ak][wk].length})
+                        </p>
+                        {groupedByAdmin[ak][wk].map(renderClient)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              });
+            }
             if (groupByWorker && isAdmin) {
               return groupKeys.map((k) => (
                 <div key={k} className="space-y-2">
