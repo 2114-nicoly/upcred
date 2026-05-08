@@ -184,6 +184,16 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <Stat label="Novos" value={String(total.emprestimosNovos)} />
           </div>
 
+          {isSuperAdmin && (
+            <AccessSection
+              targetKind="admin"
+              targetId={admin.id}
+              loginCodigo={admin.login_codigo}
+              nome={admin.nome}
+              active={admin.active}
+            />
+          )}
+
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (escopo deste admin)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 p-3">
