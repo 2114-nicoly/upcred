@@ -1042,6 +1042,16 @@ export type Database = {
         }
         Returns: string
       }
+      admin_find_orphans: {
+        Args: never
+        Returns: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          label: string
+          missing: string
+        }[]
+      }
       admin_list_workers:
         | {
             Args: never
