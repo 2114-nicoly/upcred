@@ -46,7 +46,8 @@ type Loan = {
   status: string;
   client_id: string;
   is_cravo: boolean;
-  clients: { name: string };
+  observation: string | null;
+  clients: { name: string; full_name: string | null; phone: string | null };
 };
 
 type Installment = {
@@ -143,7 +144,7 @@ export default function LoanDetailPage() {
 
   const fetchData = async () => {
     try {
-      const { data: l, error: lErr } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
+      const { data: l, error: lErr } = await supabase.from("loans").select("*, clients(name, full_name, phone)").eq("id", loanId!).single();
       if (lErr || !l) {
         console.error("Error fetching loan:", lErr);
         setLoadingPage(false);
