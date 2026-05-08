@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Shield, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, ClipboardList, Wrench } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
@@ -24,6 +24,7 @@ const workerSidebar: NavItem[] = [
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
   { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
+  { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
 const adminBottomNav: NavItem[] = [
@@ -36,21 +37,24 @@ const adminSidebar: NavItem[] = [
   { path: "/active-loans", label: "Empréstimos da Equipe", icon: Landmark },
   { path: "/caixa", label: "Caixa da Equipe", icon: Wallet },
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
+  { path: "/audit", label: "Auditoria da Equipe", icon: FileSearch },
   { path: "/admin-tools", label: "Manutenção", icon: Wrench },
+  { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
 const superAdminBottomNav: NavItem[] = [
   { path: "/super-admin", label: "Geral", icon: Crown },
-  { path: "/caixa", label: "Caixa Geral", icon: Wallet },
+  { path: "/audit", label: "Auditoria", icon: FileSearch },
 ];
 const superAdminSidebar: NavItem[] = [
   { path: "/super-admin", label: "Dashboard Geral", icon: Crown },
-  { path: "/workers", label: "Todos os Trabalhadores", icon: Users },
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos", icon: Landmark },
   { path: "/caixa", label: "Caixa Geral", icon: Wallet },
   { path: "/reports", label: "Relatórios Gerais", icon: BarChart3 },
+  { path: "/audit", label: "Auditoria Geral", icon: FileSearch },
   { path: "/admin-tools", label: "Manutenção", icon: Wrench },
+  { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
 // ============= HEADER LABELS PER ROLE =============
@@ -61,6 +65,8 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
     "/daily-cash-history": "Histórico",
     "/reports": "Relatórios",
     "/admin-tools": "Manutenção",
+    "/audit": "Auditoria",
+    "/account": "Minha Conta",
     "/workers": "Trabalhadores",
     "/overdue": "Parcelas Atrasadas",
     "/today-summary": "Resumo do Dia",
@@ -75,7 +81,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
       "/active-loans": "Empréstimos",
       "/clients": "Clientes",
       "/reports": "Relatórios Gerais",
-      "/admin": "Painel Admin",
+      "/audit": "Auditoria Geral",
       "/super-admin": "Dashboard Geral",
     };
   }
@@ -85,11 +91,9 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
       "/caixa": "Caixa da Equipe",
       "/active-loans": "Empréstimos da Equipe",
       "/clients": "Clientes da Equipe",
-      "/admin": "Dashboard Admin",
+      "/admin": "Painel da Equipe",
+      "/audit": "Auditoria da Equipe",
     };
-  }
-  return { ...base, "/caixa": "Geral", "/active-loans": "Empréstimos Ativos" };
-}
 
 function getRouteLabel(pathname: string, labels: Record<string, string>): string {
   if (labels[pathname]) return labels[pathname];
