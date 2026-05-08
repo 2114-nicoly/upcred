@@ -14,6 +14,7 @@ import {
 import { formatCurrency } from "@/lib/loan-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
+import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
 
 type Worker = {
