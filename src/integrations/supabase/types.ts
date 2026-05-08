@@ -1177,6 +1177,17 @@ export type Database = {
       generate_admin_login_codigo: { Args: never; Returns: string }
       generate_worker_login_codigo: { Args: never; Returns: string }
       get_admin_id: { Args: { _user_id: string }; Returns: string }
+      get_latest_credential: {
+        Args: { p_kind: string; p_target_id: string }
+        Returns: {
+          created_at: string
+          created_by: string
+          login_codigo: string
+          reason: string
+          status: string
+          temp_password: string
+        }[]
+      }
       get_route_installments: {
         Args: { p_cash_date: string }
         Returns: {
@@ -1212,6 +1223,18 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      list_password_recovery_alerts: {
+        Args: never
+        Returns: {
+          email_informado: string
+          id: string
+          login_informado: string
+          nome_informado: string
+          requested_at: string
+          target_admin_id: string
+          target_role: string
+        }[]
+      }
       list_workers_by_admin:
         | {
             Args: { p_admin_id?: string }
@@ -1308,6 +1331,20 @@ export type Database = {
           p_penalty_receivable?: number
         }
         Returns: undefined
+      }
+      worker_create_client: {
+        Args: {
+          p_address?: string
+          p_doc_primary_number?: string
+          p_doc_primary_type?: string
+          p_doc_secondary_number?: string
+          p_doc_secondary_type?: string
+          p_full_name?: string
+          p_name: string
+          p_notes?: string
+          p_phone?: string
+        }
+        Returns: string
       }
     }
     Enums: {

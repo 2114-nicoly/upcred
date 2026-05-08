@@ -13,13 +13,15 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3 } from "lucide-react";
+import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3, KeyRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction } from "@/lib/audit-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
+import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type AdminRow = {
   id: string;
@@ -149,11 +151,12 @@ function DMini({ label, value, cls }: { label: string; value: number; cls?: stri
 /* ============ ADMINS TAB ============ */
 function AdminsTab() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [list, setList] = useState<AdminRow[]>([]);
   const [statsByAdmin, setStatsByAdmin] = useState<Record<string, AdminStat>>({});
   const [loading, setLoading] = useState(true);
   const [openCreate, setOpenCreate] = useState(false);
-  const [creds, setCreds] = useState<Creds | null>(null);
+  const [creds, setCreds] = useState<GeneratedCreds | null>(null);
 
   async function load() {
     setLoading(true);
@@ -183,11 +186,32 @@ function AdminsTab() {
     load();
   }
 
+  async function resetAdminPassword(a: AdminRow) {
+    const ok = await confirm({
+      title: "Gerar nova senha?",
+      description: "Uma nova senha temporária de 8 dígitos será criada e a senha anterior deixará de funcionar.",
+      affected: [{ label: "Administrador", value: a.nome }, { label: "Email", value: a.email_real }],
+      confirmText: "Gerar nova senha", destructive: true,
+    });
+    if (!ok) return;
+    const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+      body: { target_kind: "admin", target_id: a.id },
+    });
+    if (error || !data?.ok) {
+      toast({ title: "Erro", description: error?.message || data?.error, variant: "destructive" });
+      return;
+    }
+    setCreds({ nome: data.nome, role: data.role, login: data.login, password: data.password, created_at: data.created_at });
+  }
+
   return (
     <div className="space-y-2">
       <Button onClick={() => setOpenCreate(true)} className="w-full" size="sm">
         <Plus className="h-4 w-4 mr-1" /> Criar administrador
       </Button>
+      <p className="text-[10px] text-muted-foreground text-center">
+        Lista exibe apenas administradores comuns (responsáveis por equipes). Super Admin não aparece aqui.
+      </p>
 
       {loading ? (
         <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
@@ -220,12 +244,15 @@ function AdminsTab() {
                   <MiniStat label="Empr.$" value={formatCurrency(s?.total_lent ?? 0)} small />
                 </div>
 
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   <Button size="sm" variant="default" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
-                    <Users className="h-3.5 w-3.5 mr-1" /> Ver equipe
+                    <Users className="h-3.5 w-3.5 mr-1" /> Equipe
                   </Button>
                   <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
-                    <BarChart3 className="h-3.5 w-3.5 mr-1" /> Relatórios
+                    <BarChart3 className="h-3.5 w-3.5 mr-1" /> Relat.
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => resetAdminPassword(a)}>
+                    <KeyRound className="h-3.5 w-3.5 mr-1" /> Senha
                   </Button>
                 </div>
               </CardContent>
@@ -240,22 +267,7 @@ function AdminsTab() {
         onCreated={(c) => { setCreds(c); load(); }}
       />
 
-      <Dialog open={!!creds} onOpenChange={() => setCreds(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Credenciais do administrador</DialogTitle>
-            <DialogDescription>Anote agora — não será exibido novamente.</DialogDescription>
-          </DialogHeader>
-          {creds && (
-            <div className="space-y-2 text-sm">
-              <CredRow label="Nome" value={creds.nome} />
-              <CredRow label="Email" value={creds.email} />
-              <CredRow label="Senha" value={creds.password} />
-            </div>
-          )}
-          <DialogFooter><Button onClick={() => setCreds(null)}>Fechar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CredentialsDialog creds={creds} onClose={() => setCreds(null)} />
     </div>
   );
 }
@@ -282,7 +294,7 @@ function CredRow({ label, value }: { label: string; value: string }) {
 
 function CreateAdminDialog({
   open, onOpenChange, onCreated,
-}: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (c: Creds) => void }) {
+}: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (c: GeneratedCreds) => void }) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [notas, setNotas] = useState("");
@@ -297,7 +309,7 @@ function CreateAdminDialog({
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "Falha ao criar admin");
-      onCreated({ nome: data.nome, email: data.login, password: data.password });
+      onCreated({ nome: data.nome, role: data.role, login: data.login, password: data.password, created_at: data.created_at });
       setNome(""); setEmail(""); setNotas("");
       onOpenChange(false);
     } catch (err: any) {
