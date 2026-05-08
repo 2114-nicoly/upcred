@@ -79,7 +79,6 @@ Deno.serve(async (req) => {
     const { error: upErr } = await admin.auth.admin.updateUserById(authUserId, {
       password,
       email_confirm: true,
-      email_confirmed_at: new Date().toISOString(),
     });
     if (upErr) return json(400, { error: upErr.message });
 
