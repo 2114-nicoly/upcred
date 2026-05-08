@@ -69,7 +69,6 @@ Deno.serve(async (req) => {
         email: emailReal,
         password,
         email_confirm: true,
-        email_confirmed_at: new Date().toISOString(),
         user_metadata: { display_name: nome },
       });
       if (createErr || !created.user) return json(400, { error: createErr?.message || "Falha ao criar usuário" });
@@ -137,7 +136,6 @@ Deno.serve(async (req) => {
         email: syntheticEmail,
         password,
         email_confirm: true,
-        email_confirmed_at: new Date().toISOString(),
         user_metadata: { display_name: nome },
       });
       if (createErr || !created.user) return json(400, { error: createErr?.message || "Falha ao criar usuário" });
