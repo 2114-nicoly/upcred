@@ -16,6 +16,7 @@ import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
 } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
+import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
 
 type Admin = {
