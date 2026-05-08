@@ -653,12 +653,18 @@ export default function LoanDetailPage() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">
-              <button className="hover:underline text-primary cursor-pointer" onClick={() => navigate(`/clients/${loan.client_id}`)}>
+              <button className="hover:underline text-primary cursor-pointer text-left" onClick={() => navigate(`/clients/${loan.client_id}`)}>
                 {loan.clients.name}
               </button>
             </CardTitle>
             <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
           </div>
+          {(loan.clients.full_name || loan.clients.phone) && (
+            <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+              {loan.clients.full_name && <p>{loan.clients.full_name}</p>}
+              {loan.clients.phone && <p>📞 {loan.clients.phone}</p>}
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Emprestado:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
