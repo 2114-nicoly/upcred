@@ -25,7 +25,7 @@ type Admin = {
   id: string; nome: string; email_real: string; login_codigo: string | null;
   active: boolean; created_at: string; notas: string | null;
 };
-type Worker = { id: string; nome: string; login_codigo: string; active: boolean; parent_admin_id?: string | null };
+type Worker = { id: string; nome: string; login_codigo: string; active: boolean; parent_admin_id?: string | null; archived_at?: string | null };
 type ClientRow = { id: string; name: string; phone: string | null; client_code: number | null; worker_id: string | null };
 type LoanRow = {
   id: string; status: string; amount: number; total_amount: number;
