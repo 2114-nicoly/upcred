@@ -33,22 +33,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [adminId, setAdminId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const clearUserContext = () => {
+    setIsAdmin(false);
+    setIsSuperAdmin(false);
+    setWorkerId(null);
+    setAdminId(null);
+  };
+
   const loadUserContext = (uid: string) => {
+    setLoading(true);
     setTimeout(async () => {
-      const [{ data: roles }, { data: workerData }, { data: adminData }] = await Promise.all([
-        supabase.from("user_roles").select("role").eq("user_id", uid),
-        supabase.from("workers").select("id, parent_admin_id").eq("auth_user_id", uid).maybeSingle(),
-        supabase.from("admins" as any).select("id").eq("auth_user_id", uid).maybeSingle(),
-      ]);
-      const roleNames = (roles ?? []).map((r: any) => r.role);
-      setIsSuperAdmin(roleNames.includes("super_admin"));
-      setIsAdmin(roleNames.includes("admin") || roleNames.includes("super_admin"));
-      setWorkerId(workerData?.id ?? null);
-      setAdminId(
-        ((adminData as any)?.id as string) ??
-          ((workerData as any)?.parent_admin_id as string) ??
-          null
-      );
+      try {
+        const [{ data: roles }, { data: workerData }, { data: adminData }] = await Promise.all([
+          supabase.from("user_roles").select("role").eq("user_id", uid),
+          supabase.from("workers").select("id, parent_admin_id").eq("auth_user_id", uid).maybeSingle(),
+          supabase.from("admins" as any).select("id").eq("auth_user_id", uid).maybeSingle(),
+        ]);
+        const roleNames = (roles ?? []).map((r: any) => r.role);
+        setIsSuperAdmin(roleNames.includes("super_admin"));
+        setIsAdmin(roleNames.includes("admin") || roleNames.includes("super_admin"));
+        setWorkerId(workerData?.id ?? null);
+        setAdminId(
+          ((adminData as any)?.id as string) ??
+            ((workerData as any)?.parent_admin_id as string) ??
+            null
+        );
+      } finally {
+        setLoading(false);
+      }
     }, 0);
   };
 
@@ -59,18 +71,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newSession?.user) {
         loadUserContext(newSession.user.id);
       } else {
-        setIsAdmin(false);
-        setIsSuperAdmin(false);
-        setWorkerId(null);
-        setAdminId(null);
+        clearUserContext();
+        setLoading(false);
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) loadUserContext(session.user.id);
-      setLoading(false);
+      if (session?.user) {
+        loadUserContext(session.user.id);
+      } else {
+        clearUserContext();
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
