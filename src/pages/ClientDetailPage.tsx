@@ -406,15 +406,16 @@ export default function ClientDetailPage() {
         </Collapsible>
       )}
 
+      {/* Anexos */}
+      <ClientAttachments clientId={client.id} adminId={client.admin_id ?? null} />
+
+      {/* Histórico de alterações */}
+      <ClientHistory clientId={client.id} />
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Nome *</Label><Input value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
-            <div><Label>Telefone</Label><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></div>
-            <div><Label>Observações</Label><Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} /></div>
-            <Button onClick={handleEditClient} className="w-full">Salvar</Button>
-          </div>
+          <ClientForm value={form} onChange={setForm} submitLabel="Salvar" onSubmit={handleEditClient} />
         </DialogContent>
       </Dialog>
     </div>
