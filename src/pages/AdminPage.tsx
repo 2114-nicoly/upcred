@@ -175,6 +175,19 @@ export default function AdminPage() {
             </Button>
           </div>
 
+          <div className="pt-2 border-t">
+            <Button
+              className="w-full justify-start gap-2"
+              variant="outline"
+              disabled={orphansStatus === "running"}
+              onClick={checkOrphans}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Verificar registros sem vínculo
+              {statusIcon(orphansStatus)}
+            </Button>
+          </div>
+
           <Button
             className="w-full"
             variant="secondary"
@@ -184,6 +197,29 @@ export default function AdminPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {orphans.length > 0 && (
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm">Registros sem vínculo ({orphans.length})</CardTitle>
+            <CardDescription className="text-xs">Clientes/empréstimos sem trabalhador ou administrador. Edite ou transfira para corrigir.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-1.5">
+            {orphans.map((o) => (
+              <div key={`${o.entity_type}-${o.entity_id}`} className="flex items-center justify-between text-xs border rounded p-2">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{o.entity_type === "client" ? "Cliente" : "Empréstimo"}: {o.label}</p>
+                  <p className="text-[10px] text-muted-foreground">Faltando: {o.missing}</p>
+                </div>
+                <Button
+                  size="sm" variant="outline" className="h-7 text-xs ml-2"
+                  onClick={() => navigate(o.entity_type === "client" ? `/clients/${o.entity_id}` : `/loans/${o.entity_id}`)}
+                >Abrir</Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {log.length > 0 && (
         <Card>
