@@ -76,7 +76,10 @@ Deno.serve(async (req) => {
     if (!authUserId) return json(400, { error: "Usuário sem conta de acesso" });
 
     const password = gen(8);
-    const { error: upErr } = await admin.auth.admin.updateUserById(authUserId, { password });
+    const { error: upErr } = await admin.auth.admin.updateUserById(authUserId, {
+      password,
+      email_confirm: true,
+    });
     if (upErr) return json(400, { error: upErr.message });
 
     if (target_kind === "admin") {
