@@ -294,12 +294,13 @@ function CompareTab() {
 function WorkersTab() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [workers, setWorkers] = useState<(Worker & { archived_at?: string | null })[]>([]);
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [nome, setNome] = useState("");
   const [notas, setNotas] = useState("");
   const [creds, setCreds] = useState<CredsToShow | null>(null);
@@ -309,7 +310,7 @@ function WorkersTab() {
     const today = new Date().toISOString().slice(0, 10);
     const range = getPeriodRange("day", today, today);
     const [{ data: w }, { data: r }, statsList] = await Promise.all([
-      supabase.from("workers").select("*").order("created_at", { ascending: false }),
+      supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
       supabase.from("worker_password_reset_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       loadWorkersStats(range),
     ]);
@@ -321,7 +322,25 @@ function WorkersTab() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [showArchived]);
+
+  async function handleArchive(w: Worker & { archived_at?: string | null }) {
+    const isArchived = !!w.archived_at;
+    const ok = await confirm({
+      title: isArchived ? "Desarquivar trabalhador?" : "Arquivar trabalhador?",
+      description: isArchived
+        ? "O trabalhador voltará a aparecer na lista padrão."
+        : "O trabalhador some da lista padrão. Histórico financeiro é preservado.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: isArchived ? "Desarquivar" : "Arquivar",
+      destructive: !isArchived,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc((isArchived ? "unarchive_worker" : "archive_worker") as any, { p_worker_id: w.id });
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    toast({ title: isArchived ? "Desarquivado" : "Arquivado" });
+    load();
+  }
 
   async function pickUniqueLogin(): Promise<string> {
     for (let i = 0; i < 20; i++) {
