@@ -188,7 +188,10 @@ export default function ClientsPage() {
   return (
     <div className="mx-auto max-w-lg p-4">
       <div className="mb-4 flex items-center justify-end">
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(o) => {
+          setOpen(o);
+          if (o && isAdmin && !newClientWorkerId && selectedWorkerId) setNewClientWorkerId(selectedWorkerId);
+        }}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
           </DialogTrigger>
@@ -197,6 +200,24 @@ export default function ClientsPage() {
             <div className="space-y-4">
               <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
               <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
+              {isAdmin && (
+                <div>
+                  <Label>Trabalhador responsável *</Label>
+                  <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
+                    <SelectContent>
+                      {workers.filter((w) => w.active).map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.nome} · {w.login_codigo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {workers.filter((w) => w.active).length === 0 && (
+                    <p className="text-xs text-destructive mt-1">Nenhum trabalhador ativo. Cadastre um trabalhador antes.</p>
+                  )}
+                </div>
+              )}
               <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações..." /></div>
               <Button onClick={() => handleCreate()} className="w-full">Cadastrar</Button>
             </div>
