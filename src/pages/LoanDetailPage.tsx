@@ -31,6 +31,7 @@ import { EmptyState } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
+import { logAction } from "@/lib/audit-utils";
 
 type Loan = {
   id: string;
@@ -141,6 +142,23 @@ export default function LoanDetailPage() {
   const [editPayNewAmount, setEditPayNewAmount] = useState("");
 
   const [loadingPage, setLoadingPage] = useState(true);
+
+  // Edit observation
+  const [obsOpen, setObsOpen] = useState(false);
+  const [obsValue, setObsValue] = useState("");
+
+  const handleSaveObservation = async () => {
+    if (!loan) return;
+    const oldObs = loan.observation || null;
+    const newObs = obsValue.trim() || null;
+    if (oldObs === newObs) { setObsOpen(false); return; }
+    const { error } = await supabase.from("loans").update({ observation: newObs } as any).eq("id", loan.id);
+    if (error) { toast.error("Erro ao salvar observação"); return; }
+    logAction("editar_observacao_emprestimo", "loan", loan.id, { observation: oldObs }, { observation: newObs });
+    toast.success("Observação atualizada!");
+    setObsOpen(false);
+    fetchData();
+  };
 
   const fetchData = async () => {
     try {
