@@ -376,6 +376,16 @@ export default function NewLoanPage() {
           </Card>
         )}
 
+        <div>
+          <Label>Observação (opcional)</Label>
+          <Textarea
+            value={observation}
+            onChange={(e) => setObservation(e.target.value)}
+            placeholder="Anote condições, garantias, contexto do empréstimo..."
+            rows={3}
+          />
+        </div>
+
         {calc && (
           <Card className="border-primary/30 bg-accent">
             <CardHeader className="pb-2">

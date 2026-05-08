@@ -292,7 +292,7 @@ export default function WorkersPage() {
                         <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
                       </Button>
                     )}
-                    {isSuperAdmin && isArchived && (
+                    {isArchived && (
                       <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => handleDeleteForever(w)}>
                         <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
                       </Button>

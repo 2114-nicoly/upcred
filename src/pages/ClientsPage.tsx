@@ -332,12 +332,10 @@ export default function ClientsPage() {
                       <div>
                         <p className="font-semibold">{client.name}</p>
                         {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
-                        {isAdmin && !groupByWorker && (
-                          <p className="text-[10px] text-muted-foreground">
-                            Trab.: {workerName(client.worker_id)}
-                            {isSuperAdmin && <> · Admin: {adminName(client.admin_id)}</>}
-                          </p>
-                        )}
+                        <p className="text-[10px] text-muted-foreground">
+                          Trab.: {workerName(client.worker_id)}
+                          {isSuperAdmin && <> · Admin: {adminName(client.admin_id)}</>}
+                        </p>
                         {summary && (
                           <p className="text-xs text-primary">
                             {summary.count} ativo{summary.count > 1 ? "s" : ""} • {formatCurrency(summary.total)}
