@@ -39,7 +39,7 @@ export default function ScopeIndicator() {
       {consolidated ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 font-medium">
           <Layers className="h-3 w-3" />
-          Modo: Consolidado {isSuperAdmin ? "(sistema)" : "(equipe)"}
+          {isSuperAdmin ? "Visão Geral do Sistema" : "Visão consolidada da equipe"}
         </span>
       ) : (
         <>

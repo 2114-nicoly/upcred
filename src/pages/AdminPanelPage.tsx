@@ -21,7 +21,7 @@ import { formatCurrency } from "@/lib/loan-utils";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
 } from "@/lib/consolidated-stats";
-import AuditLogList from "@/components/AuditLogList";
+
 import { logAction } from "@/lib/audit-utils";
 
 type Worker = {
@@ -52,11 +52,10 @@ export default function AdminPanelPage() {
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
       <Tabs defaultValue="overview">
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="overview" className="text-xs">Visão Geral</TabsTrigger>
           <TabsTrigger value="workers" className="text-xs">Trabalhadores</TabsTrigger>
           <TabsTrigger value="compare" className="text-xs">Comparativo</TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs">Auditoria</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-3">
@@ -67,9 +66,6 @@ export default function AdminPanelPage() {
         </TabsContent>
         <TabsContent value="compare" className="mt-3">
           <CompareTab />
-        </TabsContent>
-        <TabsContent value="audit" className="mt-3">
-          <AuditLogList />
         </TabsContent>
       </Tabs>
     </div>
@@ -298,12 +294,13 @@ function CompareTab() {
 function WorkersTab() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [workers, setWorkers] = useState<(Worker & { archived_at?: string | null })[]>([]);
   const [resetRequests, setResetRequests] = useState<any[]>([]);
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [nome, setNome] = useState("");
   const [notas, setNotas] = useState("");
   const [creds, setCreds] = useState<CredsToShow | null>(null);
@@ -313,7 +310,7 @@ function WorkersTab() {
     const today = new Date().toISOString().slice(0, 10);
     const range = getPeriodRange("day", today, today);
     const [{ data: w }, { data: r }, statsList] = await Promise.all([
-      supabase.from("workers").select("*").order("created_at", { ascending: false }),
+      supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
       supabase.from("worker_password_reset_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       loadWorkersStats(range),
     ]);
@@ -325,7 +322,25 @@ function WorkersTab() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [showArchived]);
+
+  async function handleArchive(w: Worker & { archived_at?: string | null }) {
+    const isArchived = !!w.archived_at;
+    const ok = await confirm({
+      title: isArchived ? "Desarquivar trabalhador?" : "Arquivar trabalhador?",
+      description: isArchived
+        ? "O trabalhador voltará a aparecer na lista padrão."
+        : "O trabalhador some da lista padrão. Histórico financeiro é preservado.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: isArchived ? "Desarquivar" : "Arquivar",
+      destructive: !isArchived,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc((isArchived ? "unarchive_worker" : "archive_worker") as any, { p_worker_id: w.id });
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    toast({ title: isArchived ? "Desarquivado" : "Arquivado" });
+    load();
+  }
 
   async function pickUniqueLogin(): Promise<string> {
     for (let i = 0; i < 20; i++) {
@@ -432,9 +447,15 @@ function WorkersTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-muted-foreground">{workers.length} trabalhador(es)</p>
-        <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+            <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+            Mostrar arquivados
+          </label>
+          <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+        </div>
       </div>
 
       {resetRequests.length > 0 && (
@@ -476,12 +497,25 @@ function WorkersTab() {
                     <button onClick={() => navigate(`/admin/worker/${w.id}`)} className="flex-1 text-left min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm truncate">{w.nome}</span>
-                        {!w.active && <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
+                        {w.archived_at ? (
+                          <Badge variant="outline" className="text-[10px]">Arquivado</Badge>
+                        ) : !w.active ? (
+                          <Badge variant="secondary" className="text-[10px]">Inativo</Badge>
+                        ) : null}
                       </div>
                       <div className="text-[11px] text-muted-foreground">Login <span className="font-mono">{w.login_codigo}</span></div>
                     </button>
-                    <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
-                    <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha"><KeyRound className="h-4 w-4" /></Button>
+                    {!w.archived_at && (
+                      <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
+                    )}
+                    {!w.archived_at && (
+                      <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha"><KeyRound className="h-4 w-4" /></Button>
+                    )}
+                    {(!w.active || w.archived_at) && (
+                      <Button size="sm" variant="outline" className="h-8 text-[10px] px-2" onClick={() => handleArchive(w)}>
+                        {w.archived_at ? "Desarquivar" : "Arquivar"}
+                      </Button>
+                    )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
                   </div>
                   {s && (

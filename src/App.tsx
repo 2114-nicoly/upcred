@@ -31,6 +31,8 @@ import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
 import SuperAdminDetailPage from "@/pages/SuperAdminDetailPage";
 import SuperAdminWorkerDetailPage from "@/pages/SuperAdminWorkerDetailPage";
+import AuditPage from "@/pages/AuditPage";
+import AccountPage from "@/pages/AccountPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { ConfirmProvider } from "@/hooks/useConfirm";
 import { Loader2 } from "lucide-react";
@@ -120,6 +122,8 @@ function AppRoutes() {
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
                 <Route path="/reports" element={<WrappedRoute element={<ReportsPage />} />} />
                 <Route path="/admin-tools" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
+                <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
+                <Route path="/account" element={<WrappedRoute element={<AccountPage />} />} />
                 <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
