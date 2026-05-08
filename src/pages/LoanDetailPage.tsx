@@ -31,6 +31,7 @@ import { EmptyState } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
+import { logAction } from "@/lib/audit-utils";
 
 type Loan = {
   id: string;
@@ -46,7 +47,8 @@ type Loan = {
   status: string;
   client_id: string;
   is_cravo: boolean;
-  clients: { name: string };
+  observation: string | null;
+  clients: { name: string; full_name: string | null; phone: string | null };
 };
 
 type Installment = {
@@ -141,9 +143,26 @@ export default function LoanDetailPage() {
 
   const [loadingPage, setLoadingPage] = useState(true);
 
+  // Edit observation
+  const [obsOpen, setObsOpen] = useState(false);
+  const [obsValue, setObsValue] = useState("");
+
+  const handleSaveObservation = async () => {
+    if (!loan) return;
+    const oldObs = loan.observation || null;
+    const newObs = obsValue.trim() || null;
+    if (oldObs === newObs) { setObsOpen(false); return; }
+    const { error } = await supabase.from("loans").update({ observation: newObs } as any).eq("id", loan.id);
+    if (error) { toast.error("Erro ao salvar observação"); return; }
+    logAction("editar_observacao_emprestimo", "loan", loan.id, { observation: oldObs }, { observation: newObs });
+    toast.success("Observação atualizada!");
+    setObsOpen(false);
+    fetchData();
+  };
+
   const fetchData = async () => {
     try {
-      const { data: l, error: lErr } = await supabase.from("loans").select("*, clients(name)").eq("id", loanId!).single();
+      const { data: l, error: lErr } = await supabase.from("loans").select("*, clients(name, full_name, phone)").eq("id", loanId!).single();
       if (lErr || !l) {
         console.error("Error fetching loan:", lErr);
         setLoadingPage(false);
@@ -634,12 +653,18 @@ export default function LoanDetailPage() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">
-              <button className="hover:underline text-primary cursor-pointer" onClick={() => navigate(`/clients/${loan.client_id}`)}>
+              <button className="hover:underline text-primary cursor-pointer text-left" onClick={() => navigate(`/clients/${loan.client_id}`)}>
                 {loan.clients.name}
               </button>
             </CardTitle>
             <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
           </div>
+          {(loan.clients.full_name || loan.clients.phone) && (
+            <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+              {loan.clients.full_name && <p>{loan.clients.full_name}</p>}
+              {loan.clients.phone && <p>📞 {loan.clients.phone}</p>}
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Emprestado:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
@@ -675,7 +700,36 @@ export default function LoanDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Progress */}
+      {/* Observation Card */}
+      <Card className="mb-4">
+        <CardContent className="p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Observação</p>
+              {loan.observation ? (
+                <p className="text-sm whitespace-pre-wrap">{loan.observation}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Sem observação</p>
+              )}
+            </div>
+            <Button size="sm" variant="ghost" className="h-7" onClick={() => { setObsValue(loan.observation || ""); setObsOpen(true); }}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={obsOpen} onOpenChange={setObsOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar observação</DialogTitle></DialogHeader>
+          <Textarea rows={5} value={obsValue} onChange={(e) => setObsValue(e.target.value)} placeholder="Anote condições, garantias, contexto..." />
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="ghost" onClick={() => setObsOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveObservation}>Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="mb-4">
         <CardContent className="p-4">
           <div className="mb-2 flex items-center justify-between text-sm">
