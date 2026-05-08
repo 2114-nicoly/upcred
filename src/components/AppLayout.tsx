@@ -31,8 +31,7 @@ const adminBottomNav: NavItem[] = [
   { path: "/caixa", label: "Caixa Equipe", icon: Wallet },
 ];
 const adminSidebar: NavItem[] = [
-  { path: "/admin", label: "Dashboard Admin", icon: LayoutDashboard },
-  { path: "/workers", label: "Trabalhadores", icon: Users },
+  { path: "/admin", label: "Painel (equipe)", icon: LayoutDashboard },
   { path: "/clients", label: "Clientes da Equipe", icon: Users },
   { path: "/active-loans", label: "Empréstimos da Equipe", icon: Landmark },
   { path: "/caixa", label: "Caixa da Equipe", icon: Wallet },
@@ -46,13 +45,11 @@ const superAdminBottomNav: NavItem[] = [
 ];
 const superAdminSidebar: NavItem[] = [
   { path: "/super-admin", label: "Dashboard Geral", icon: Crown },
-  { path: "/super-admin", label: "Administradores", icon: Shield },
-  { path: "/workers", label: "Trabalhadores", icon: Users },
+  { path: "/workers", label: "Todos os Trabalhadores", icon: Users },
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos", icon: Landmark },
   { path: "/caixa", label: "Caixa Geral", icon: Wallet },
   { path: "/reports", label: "Relatórios Gerais", icon: BarChart3 },
-  { path: "/admin", label: "Auditoria Geral", icon: ClipboardList },
   { path: "/admin-tools", label: "Manutenção", icon: Wrench },
 ];
 
