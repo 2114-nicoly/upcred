@@ -107,29 +107,21 @@ export default function NewLoanSelectClientPage() {
       if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
       createdId = data as any;
     } else {
-      const { data: maxCode } = await supabase
-        .from("clients")
-        .select("client_code")
-        .order("client_code", { ascending: false })
-        .limit(1);
-      const nextCode = (maxCode && maxCode[0]?.client_code ? Number(maxCode[0].client_code) : 0) + 1;
-      const { data: { session } } = await supabase.auth.getSession();
-      const { data, error } = await supabase.from("clients").insert({
-        name: form.name.trim(),
-        phone: form.phone || null,
-        notes: form.notes || null,
-        client_code: nextCode,
-        full_name: form.full_name || null,
-        address: form.address || null,
-        doc_primary_type: form.doc_primary_type || null,
-        doc_primary_number: form.doc_primary_number || null,
-        doc_secondary_type: form.doc_secondary_type || null,
-        doc_secondary_number: form.doc_secondary_number || null,
-        user_id: session?.user?.id,
-      } as any).select().single();
+      // trabalhador: vincula automaticamente a si próprio + admin responsável
+      const { data, error } = await supabase.rpc("worker_create_client" as any, {
+        p_name: form.name.trim(),
+        p_phone: form.phone || null,
+        p_notes: form.notes || null,
+        p_full_name: form.full_name || null,
+        p_address: form.address || null,
+        p_doc_primary_type: form.doc_primary_type || null,
+        p_doc_primary_number: form.doc_primary_number || null,
+        p_doc_secondary_type: form.doc_secondary_type || null,
+        p_doc_secondary_number: form.doc_secondary_number || null,
+      });
       setSaving(false);
-      if (error || !data) { toast.error("Erro ao cadastrar cliente"); return; }
-      createdId = (data as any).id;
+      if (error || !data) { toast.error(error?.message || "Erro ao cadastrar cliente"); return; }
+      createdId = data as any;
     }
 
     if (createdId) {
