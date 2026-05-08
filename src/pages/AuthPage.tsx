@@ -21,6 +21,15 @@ export default function AuthPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  const getFunctionErrorMessage = async (error: any) => {
+    try {
+      const body = error?.context ? await error.context.json() : null;
+      return body?.error || body?.message || error?.message;
+    } catch {
+      return error?.message;
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -32,7 +41,7 @@ export default function AuthPage() {
         const { data, error } = await supabase.functions.invoke("auth-resolve-login", {
           body: { login: loginValue },
         });
-        if (error) throw new Error((error as any)?.context?.error || error.message || "Login não encontrado.");
+        if (error) throw new Error(await getFunctionErrorMessage(error) || "Login não encontrado.");
         if (!data?.email) throw new Error("Login não encontrado.");
         emailToUse = data.email as string;
       }
