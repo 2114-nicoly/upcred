@@ -210,6 +210,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <span className="text-base font-bold text-foreground">{getRouteLabel(location.pathname, labels)}</span>
         {isAdmin && (
           <div className="ml-auto flex items-center gap-1.5">
+            <PasswordRecoveryBell />
             {selectedWorkerId ? (
               <button
                 onClick={() => setSelectedWorkerId(null)}
