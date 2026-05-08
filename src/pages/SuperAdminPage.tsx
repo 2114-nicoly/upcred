@@ -13,13 +13,15 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3 } from "lucide-react";
+import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3, KeyRound } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction } from "@/lib/audit-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
+import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
+import { useConfirm } from "@/hooks/useConfirm";
 
 type AdminRow = {
   id: string;
