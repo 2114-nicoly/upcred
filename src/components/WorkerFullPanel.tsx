@@ -14,6 +14,7 @@ import {
 import { formatCurrency } from "@/lib/loan-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
+import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
 
 type Worker = {
@@ -176,6 +177,14 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
           ) : (
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Sem dados no período.</CardContent></Card>
           )}
+
+          <AccessSection
+            targetKind="worker"
+            targetId={worker.id}
+            loginCodigo={worker.login_codigo}
+            nome={worker.nome}
+            active={worker.active}
+          />
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (filtrados por este trabalhador)</CardTitle></CardHeader>

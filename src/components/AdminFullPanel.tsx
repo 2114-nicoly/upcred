@@ -16,6 +16,7 @@ import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
 } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
+import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
 
 type Admin = {
@@ -182,6 +183,16 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <Stat label="Renovações" value={String(total.renovacoes)} />
             <Stat label="Novos" value={String(total.emprestimosNovos)} />
           </div>
+
+          {isSuperAdmin && (
+            <AccessSection
+              targetKind="admin"
+              targetId={admin.id}
+              loginCodigo={admin.login_codigo}
+              nome={admin.nome}
+              active={admin.active}
+            />
+          )}
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (escopo deste admin)</CardTitle></CardHeader>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ScopeIndicator from "@/components/ScopeIndicator";
 import Breadcrumb from "@/components/Breadcrumb";
+import PasswordRecoveryBell from "@/components/PasswordRecoveryBell";
 import { toast } from "sonner";
 
 type NavItem = { path: string; label: string; icon: any };
@@ -209,6 +210,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <span className="text-base font-bold text-foreground">{getRouteLabel(location.pathname, labels)}</span>
         {isAdmin && (
           <div className="ml-auto flex items-center gap-1.5">
+            <PasswordRecoveryBell />
             {selectedWorkerId ? (
               <button
                 onClick={() => setSelectedWorkerId(null)}
