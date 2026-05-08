@@ -21,14 +21,6 @@ export default function AuthPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  const getFunctionErrorMessage = async (error: any) => {
-    try {
-      const body = error?.context ? await error.context.json() : null;
-      return body?.error || body?.message || error?.message;
-    } catch {
-      return error?.message;
-    }
-  };
 
   const trySignIn = async (email: string, pwd: string) => {
     return await supabase.auth.signInWithPassword({ email, password: pwd });
