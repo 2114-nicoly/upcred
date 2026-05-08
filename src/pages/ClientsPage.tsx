@@ -84,9 +84,12 @@ export default function ClientsPage() {
 
   const handleCreate = async (force = false) => {
     if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
+    if (isAdmin && !newClientWorkerId) {
+      toast.error("Selecione o trabalhador responsável");
+      return;
+    }
 
     if (!force) {
-      // Dedupe: same name (case-insensitive) or same phone
       const trimmedName = name.trim();
       const { data: dupes } = await supabase
         .from("clients")
@@ -98,15 +101,25 @@ export default function ClientsPage() {
       }
     }
 
-    const nextCode = await getNextClientCode();
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase.from("clients").insert({
-      name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
-      user_id: session?.user?.id,
-    } as any);
-    if (error) { toast.error("Erro ao cadastrar cliente"); return; }
+    if (isAdmin) {
+      const { error } = await supabase.rpc("admin_create_client" as any, {
+        p_name: name.trim(),
+        p_phone: phone || null,
+        p_notes: notes || null,
+        p_worker_id: newClientWorkerId,
+      });
+      if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
+    } else {
+      const nextCode = await getNextClientCode();
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.from("clients").insert({
+        name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
+        user_id: session?.user?.id,
+      } as any);
+      if (error) { toast.error("Erro ao cadastrar cliente"); return; }
+    }
     toast.success("Cliente cadastrado!");
-    setName(""); setPhone(""); setNotes(""); setOpen(false);
+    setName(""); setPhone(""); setNotes(""); setNewClientWorkerId(""); setOpen(false);
     fetchClients();
   };
 
