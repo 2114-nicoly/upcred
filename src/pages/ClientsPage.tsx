@@ -322,6 +322,27 @@ export default function ClientsPage() {
                 </Card>
               );
             };
+            if (groupByWorker && isSuperAdmin) {
+              return adminKeys.map((ak) => {
+                const totalAdmin = Object.values(groupedByAdmin[ak]).reduce((s, arr) => s + arr.length, 0);
+                const wKeys = Object.keys(groupedByAdmin[ak]).sort((a, b) => workerName(a === "__none__" ? null : a).localeCompare(workerName(b === "__none__" ? null : b)));
+                return (
+                  <div key={ak} className="space-y-2">
+                    <p className="text-xs font-bold text-primary uppercase mt-3 px-1 border-b pb-1">
+                      Admin: {adminName(ak === "__none__" ? null : ak)} ({totalAdmin})
+                    </p>
+                    {wKeys.map((wk) => (
+                      <div key={wk} className="space-y-2 pl-2">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase mt-1 px-1">
+                          ↳ {workerName(wk === "__none__" ? null : wk)} ({groupedByAdmin[ak][wk].length})
+                        </p>
+                        {groupedByAdmin[ak][wk].map(renderClient)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              });
+            }
             if (groupByWorker && isAdmin) {
               return groupKeys.map((k) => (
                 <div key={k} className="space-y-2">
