@@ -48,6 +48,7 @@ export default function ClientsPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [sortAlpha, setSortAlpha] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
 
