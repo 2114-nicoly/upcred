@@ -700,7 +700,36 @@ export default function LoanDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Progress */}
+      {/* Observation Card */}
+      <Card className="mb-4">
+        <CardContent className="p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Observação</p>
+              {loan.observation ? (
+                <p className="text-sm whitespace-pre-wrap">{loan.observation}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">Sem observação</p>
+              )}
+            </div>
+            <Button size="sm" variant="ghost" className="h-7" onClick={() => { setObsValue(loan.observation || ""); setObsOpen(true); }}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={obsOpen} onOpenChange={setObsOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar observação</DialogTitle></DialogHeader>
+          <Textarea rows={5} value={obsValue} onChange={(e) => setObsValue(e.target.value)} placeholder="Anote condições, garantias, contexto..." />
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="ghost" onClick={() => setObsOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveObservation}>Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="mb-4">
         <CardContent className="p-4">
           <div className="mb-2 flex items-center justify-between text-sm">
