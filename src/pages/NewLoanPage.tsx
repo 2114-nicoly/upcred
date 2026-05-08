@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
@@ -31,6 +32,7 @@ export default function NewLoanPage() {
   const [firstDueDate, setFirstDueDate] = useState("");
   const [fixedDates, setFixedDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [observation, setObservation] = useState("");
 
   // Renewal data
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
@@ -165,6 +167,7 @@ export default function NewLoanPage() {
         loan_date: loanDate,
         first_due_date: paymentType !== "fixed_dates" ? firstDueDate : null,
         renewed_from_loan_id: renewFromLoanId || null,
+        observation: observation || null,
         user_id: userId,
       } as any)
       .select()

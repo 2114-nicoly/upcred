@@ -226,6 +226,51 @@ export type Database = {
           },
         ]
       }
+      client_attachments: {
+        Row: {
+          admin_id: string | null
+          client_id: string
+          deleted_at: string | null
+          deleted_by: string | null
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
+          worker_id: string | null
+        }
+        Insert: {
+          admin_id?: string | null
+          client_id: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          worker_id?: string | null
+        }
+        Update: {
+          admin_id?: string | null
+          client_id?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
       client_transfers: {
         Row: {
           client_id: string
@@ -261,9 +306,15 @@ export type Database = {
       }
       clients: {
         Row: {
+          address: string | null
           admin_id: string | null
           client_code: number | null
           created_at: string
+          doc_primary_number: string | null
+          doc_primary_type: string | null
+          doc_secondary_number: string | null
+          doc_secondary_type: string | null
+          full_name: string | null
           id: string
           name: string
           notes: string | null
@@ -273,9 +324,15 @@ export type Database = {
           worker_id: string | null
         }
         Insert: {
+          address?: string | null
           admin_id?: string | null
           client_code?: number | null
           created_at?: string
+          doc_primary_number?: string | null
+          doc_primary_type?: string | null
+          doc_secondary_number?: string | null
+          doc_secondary_type?: string | null
+          full_name?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -285,9 +342,15 @@ export type Database = {
           worker_id?: string | null
         }
         Update: {
+          address?: string | null
           admin_id?: string | null
           client_code?: number | null
           created_at?: string
+          doc_primary_number?: string | null
+          doc_primary_type?: string | null
+          doc_secondary_number?: string | null
+          doc_secondary_type?: string | null
+          full_name?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -522,6 +585,7 @@ export type Database = {
           interest_value: number
           is_cravo: boolean
           loan_date: string
+          observation: string | null
           payment_type: string
           remaining_balance: number
           renewed_from_loan_id: string | null
@@ -543,6 +607,7 @@ export type Database = {
           interest_value: number
           is_cravo?: boolean
           loan_date?: string
+          observation?: string | null
           payment_type: string
           remaining_balance?: number
           renewed_from_loan_id?: string | null
@@ -564,6 +629,7 @@ export type Database = {
           interest_value?: number
           is_cravo?: boolean
           loan_date?: string
+          observation?: string | null
           payment_type?: string
           remaining_balance?: number
           renewed_from_loan_id?: string | null
@@ -1035,6 +1101,12 @@ export type Database = {
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_create_client: {
         Args: {
+          p_address?: string
+          p_doc_primary_number?: string
+          p_doc_primary_type?: string
+          p_doc_secondary_number?: string
+          p_doc_secondary_type?: string
+          p_full_name?: string
           p_name: string
           p_notes?: string
           p_phone?: string
