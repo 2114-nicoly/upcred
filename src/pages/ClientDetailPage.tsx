@@ -4,9 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -17,12 +14,16 @@ import {
   getPaymentTypeLabel,
   calculateLoanProgress,
 } from "@/lib/loan-utils";
-import { Plus, ChevronDown, History, Clock, Pencil, DollarSign, RefreshCw, Eye } from "lucide-react";
+import { Plus, ChevronDown, History, Clock, Pencil, DollarSign, RefreshCw, Eye, FileText, MapPin, Phone, User } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import TransferClientDialog from "@/components/TransferClientDialog";
 import { ArrowRightLeft } from "lucide-react";
+import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
+import ClientAttachments from "@/components/ClientAttachments";
+import ClientHistory from "@/components/ClientHistory";
+import { logAction } from "@/lib/audit-utils";
 
 type Loan = {
   id: string;
