@@ -147,15 +147,43 @@ export default function ClientDetailPage() {
   };
 
   const handleEditClient = async () => {
-    const { error } = await supabase.from("clients").update({
-      name: editName.trim(),
-      phone: editPhone || null,
-      notes: editNotes || null,
-    }).eq("id", clientId!);
+    if (!client) return;
+    const err = validateClientForm(form);
+    if (err) { toast.error(err); return; }
+    const oldVal = {
+      name: client.name, phone: client.phone, notes: client.notes,
+      full_name: client.full_name, address: client.address,
+      doc_primary_type: client.doc_primary_type, doc_primary_number: client.doc_primary_number,
+      doc_secondary_type: client.doc_secondary_type, doc_secondary_number: client.doc_secondary_number,
+    };
+    const newVal = {
+      name: form.name.trim(), phone: form.phone || null, notes: form.notes || null,
+      full_name: form.full_name || null, address: form.address || null,
+      doc_primary_type: form.doc_primary_type || null, doc_primary_number: form.doc_primary_number || null,
+      doc_secondary_type: form.doc_secondary_type || null, doc_secondary_number: form.doc_secondary_number || null,
+    };
+    const { error } = await supabase.from("clients").update(newVal as any).eq("id", clientId!);
     if (error) { toast.error("Erro ao editar"); return; }
+    logAction("editar_cliente", "client", clientId!, oldVal, newVal);
     toast.success("Cliente atualizado!");
     setEditOpen(false);
     fetchData();
+  };
+
+  const openEdit = () => {
+    if (!client) return;
+    setForm({
+      name: client.name || "",
+      full_name: client.full_name || "",
+      phone: client.phone || "",
+      address: client.address || "",
+      doc_primary_type: (client.doc_primary_type as any) || "CPF",
+      doc_primary_number: client.doc_primary_number || "",
+      doc_secondary_type: (client.doc_secondary_type as any) || "",
+      doc_secondary_number: client.doc_secondary_number || "",
+      notes: client.notes || "",
+    });
+    setEditOpen(true);
   };
 
   const activeLoans = loans.filter((l) => l.status !== "paid");
@@ -165,22 +193,18 @@ export default function ClientDetailPage() {
   if (loading || !client) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
   return (
-    <div className="mx-auto max-w-lg p-4 space-y-4">
+    <div className="mx-auto max-w-lg p-4 space-y-4 pb-24">
 
       {/* Header: Client info */}
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold truncate">{client.name}</h1>
-          {client.phone && <p className="text-sm text-muted-foreground">{client.phone}</p>}
-          {client.notes && <p className="text-xs text-muted-foreground mt-1">{client.notes}</p>}
+          {client.full_name && client.full_name !== client.name && (
+            <p className="text-sm text-muted-foreground">{client.full_name}</p>
+          )}
         </div>
         <div className="flex flex-col gap-1">
-          <Button size="sm" variant="outline" onClick={() => {
-            setEditName(client.name);
-            setEditPhone(client.phone || "");
-            setEditNotes(client.notes || "");
-            setEditOpen(true);
-          }}>
+          <Button size="sm" variant="outline" onClick={openEdit}>
             <Pencil className="mr-1 h-3 w-3" /> Editar
           </Button>
           {isAdmin && (
@@ -191,13 +215,49 @@ export default function ClientDetailPage() {
         </div>
       </div>
 
+      {/* Documentos */}
+      {(client.doc_primary_number || client.doc_secondary_number) && (
+        <Card>
+          <CardContent className="p-3 space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Documentos
+            </p>
+            {client.doc_primary_number && (
+              <p className="text-sm"><span className="text-muted-foreground">{client.doc_primary_type}:</span> <span className="font-medium">{client.doc_primary_number}</span></p>
+            )}
+            {client.doc_secondary_number && (
+              <p className="text-sm"><span className="text-muted-foreground">{client.doc_secondary_type}:</span> <span className="font-medium">{client.doc_secondary_number}</span></p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Endereço e contato */}
+      {(client.phone || client.address) && (
+        <Card>
+          <CardContent className="p-3 space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase">Endereço e contato</p>
+            {client.phone && (
+              <p className="text-sm flex items-start gap-1.5"><Phone className="h-3.5 w-3.5 mt-0.5 text-muted-foreground" /> {client.phone}</p>
+            )}
+            {client.address && (
+              <p className="text-sm flex items-start gap-1.5"><MapPin className="h-3.5 w-3.5 mt-0.5 text-muted-foreground" /> {client.address}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {client.notes && (
+        <Card><CardContent className="p-3 text-xs text-muted-foreground">{client.notes}</CardContent></Card>
+      )}
+
       {isAdmin && client && (
         <TransferClientDialog
           open={transferOpen}
           onOpenChange={setTransferOpen}
           clientId={client.id}
           clientName={client.name}
-          currentWorkerId={(client as any).worker_id ?? null}
+          currentWorkerId={client.worker_id ?? null}
           onTransferred={fetchData}
         />
       )}
