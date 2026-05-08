@@ -21,7 +21,7 @@ import { formatCurrency } from "@/lib/loan-utils";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
 } from "@/lib/consolidated-stats";
-import AuditLogList from "@/components/AuditLogList";
+
 import { logAction } from "@/lib/audit-utils";
 
 type Worker = {
