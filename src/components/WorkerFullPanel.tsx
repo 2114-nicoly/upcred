@@ -178,6 +178,14 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Sem dados no período.</CardContent></Card>
           )}
 
+          <AccessSection
+            targetKind="worker"
+            targetId={worker.id}
+            loginCodigo={worker.login_codigo}
+            nome={worker.nome}
+            active={worker.active}
+          />
+
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (filtrados por este trabalhador)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 p-3">
