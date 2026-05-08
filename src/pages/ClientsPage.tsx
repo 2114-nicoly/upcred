@@ -47,9 +47,7 @@ export default function ClientsPage() {
   const [groupByWorker, setGroupByWorker] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
+  const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
   const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [sortAlpha, setSortAlpha] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
@@ -85,70 +83,111 @@ export default function ClientsPage() {
   };
 
   const handleCreate = async (force = false) => {
-    if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
+    const err = validateClientForm(form);
+    if (err) { toast.error(err); return; }
     if (isAdmin && !newClientWorkerId) {
       toast.error("Selecione o trabalhador responsável");
       return;
     }
 
     if (!force) {
-      const trimmedName = name.trim();
+      const trimmedName = form.name.trim();
       const { data: dupes } = await supabase
         .from("clients")
         .select("id, name, phone")
-        .or(phone ? `name.ilike.${trimmedName},phone.eq.${phone}` : `name.ilike.${trimmedName}`);
+        .or(form.phone ? `name.ilike.${trimmedName},phone.eq.${form.phone}` : `name.ilike.${trimmedName}`);
       if (dupes && dupes.length > 0) {
         const ok = confirm(`Cliente parecido encontrado: ${dupes[0].name}${dupes[0].phone ? ` (${dupes[0].phone})` : ""}.\n\nDeseja criar mesmo assim?`);
         if (!ok) return;
       }
     }
 
+    let createdId: string | null = null;
     if (isAdmin) {
-      const { error } = await supabase.rpc("admin_create_client" as any, {
-        p_name: name.trim(),
-        p_phone: phone || null,
-        p_notes: notes || null,
+      const { data, error } = await supabase.rpc("admin_create_client" as any, {
+        p_name: form.name.trim(),
+        p_phone: form.phone || null,
+        p_notes: form.notes || null,
         p_worker_id: newClientWorkerId,
+        p_full_name: form.full_name || null,
+        p_address: form.address || null,
+        p_doc_primary_type: form.doc_primary_type || null,
+        p_doc_primary_number: form.doc_primary_number || null,
+        p_doc_secondary_type: form.doc_secondary_type || null,
+        p_doc_secondary_number: form.doc_secondary_number || null,
       });
       if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
+      createdId = data as any;
     } else {
       const nextCode = await getNextClientCode();
       const { data: { session } } = await supabase.auth.getSession();
-      const { error } = await supabase.from("clients").insert({
-        name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
+      const { data, error } = await supabase.from("clients").insert({
+        name: form.name.trim(), phone: form.phone || null, notes: form.notes || null, client_code: nextCode,
+        full_name: form.full_name || null, address: form.address || null,
+        doc_primary_type: form.doc_primary_type || null, doc_primary_number: form.doc_primary_number || null,
+        doc_secondary_type: form.doc_secondary_type || null, doc_secondary_number: form.doc_secondary_number || null,
         user_id: session?.user?.id,
-      } as any);
+      } as any).select().single();
       if (error) { toast.error("Erro ao cadastrar cliente"); return; }
+      createdId = (data as any)?.id ?? null;
     }
+    if (createdId) logAction("criar_cliente", "client", createdId, null, { name: form.name, full_name: form.full_name });
     toast.success("Cliente cadastrado!");
-    setName(""); setPhone(""); setNotes(""); setNewClientWorkerId(""); setOpen(false);
+    setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     fetchClients();
   };
 
   const handleEdit = async () => {
     if (!editingClient) return;
-    const { error } = await supabase.from("clients").update({
-      name: name.trim(), phone: phone || null, notes: notes || null,
-    }).eq("id", editingClient.id);
+    const err = validateClientForm(form);
+    if (err) { toast.error(err); return; }
+    const oldVal = {
+      name: editingClient.name,
+      phone: editingClient.phone,
+      notes: editingClient.notes,
+      full_name: (editingClient as any).full_name,
+      address: (editingClient as any).address,
+      doc_primary_type: (editingClient as any).doc_primary_type,
+      doc_primary_number: (editingClient as any).doc_primary_number,
+      doc_secondary_type: (editingClient as any).doc_secondary_type,
+      doc_secondary_number: (editingClient as any).doc_secondary_number,
+    };
+    const newVal = {
+      name: form.name.trim(), phone: form.phone || null, notes: form.notes || null,
+      full_name: form.full_name || null, address: form.address || null,
+      doc_primary_type: form.doc_primary_type || null, doc_primary_number: form.doc_primary_number || null,
+      doc_secondary_type: form.doc_secondary_type || null, doc_secondary_number: form.doc_secondary_number || null,
+    };
+    const { error } = await supabase.from("clients").update(newVal as any).eq("id", editingClient.id);
     if (error) { toast.error("Erro ao editar"); return; }
+    logAction("editar_cliente", "client", editingClient.id, oldVal, newVal);
     toast.success("Cliente atualizado!");
     setEditOpen(false); setEditingClient(null);
-    setName(""); setPhone(""); setNotes("");
+    setForm(emptyClientForm);
     fetchClients();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este cliente? Todos os empréstimos serão removidos.")) return;
     await supabase.from("clients").delete().eq("id", id);
+    logAction("excluir_cliente", "client", id);
     toast.success("Cliente excluído!");
     fetchClients();
   };
 
   const openEdit = (client: Client) => {
     setEditingClient(client);
-    setName(client.name);
-    setPhone(client.phone || "");
-    setNotes(client.notes || "");
+    setForm({
+      name: client.name || "",
+      full_name: (client as any).full_name || "",
+      phone: client.phone || "",
+      address: (client as any).address || "",
+      doc_primary_type: ((client as any).doc_primary_type as any) || "CPF",
+      doc_primary_number: (client as any).doc_primary_number || "",
+      doc_secondary_type: ((client as any).doc_secondary_type as any) || "",
+      doc_secondary_number: (client as any).doc_secondary_number || "",
+      notes: client.notes || "",
+    });
     setEditOpen(true);
   };
 
