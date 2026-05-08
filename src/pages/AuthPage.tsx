@@ -21,12 +21,18 @@ export default function AuthPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  const getFunctionErrorMessage = async (error: any) => {
+
+  const trySignIn = async (email: string, pwd: string) => {
+    return await supabase.auth.signInWithPassword({ email, password: pwd });
+  };
+
+  const resolveEmailViaFn = async (login: string): Promise<string | null> => {
     try {
-      const body = error?.context ? await error.context.json() : null;
-      return body?.error || body?.message || error?.message;
+      const { data, error } = await supabase.functions.invoke("auth-resolve-login", { body: { login } });
+      if (error || !data?.email) return null;
+      return data.email as string;
     } catch {
-      return error?.message;
+      return null;
     }
   };
 
@@ -34,30 +40,61 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const loginValue = identifier.trim().toLowerCase();
-      let emailToUse = loginValue;
+      const raw = identifier.trim().toLowerCase();
+      const pwd = password.trim();
+      if (!raw || !pwd) throw new Error("Informe login e senha.");
 
-      if (!emailToUse.includes("@")) {
-        const { data, error } = await supabase.functions.invoke("auth-resolve-login", {
-          body: { login: loginValue },
-        });
-        if (error) throw new Error(await getFunctionErrorMessage(error) || "Login não encontrado.");
-        if (!data?.email) throw new Error("Login não encontrado.");
-        emailToUse = data.email as string;
+      const candidates: string[] = [];
+      if (raw.includes("@")) {
+        candidates.push(raw);
+      } else {
+        const digits = raw.replace(/\D/g, "");
+        if (/^\d{4}$/.test(digits)) {
+          // Trabalhador — tenta padrões deterministas, sem precisar consultar o DB antes
+          candidates.push(`w${digits}@upcred.local`);
+          candidates.push(`worker_${digits}@upcred.local`);
+        } else if (/^\d{5}$/.test(digits)) {
+          // Admin — padrão novo determinístico + fallback para email_real via edge function
+          candidates.push(`admin_${digits}@upcred.local`);
+        } else {
+          throw new Error("Formato de login inválido. Use 4 dígitos (trabalhador), 5 dígitos (admin) ou email.");
+        }
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
-      if (error) {
-        if (error.message?.toLowerCase().includes("email not confirmed")) {
-          throw new Error("Conta ainda não confirmada. O app corrigiu o login numérico; peça ao administrador para redefinir a senha se continuar.");
+      let lastError: any = null;
+      for (const email of candidates) {
+        const { error } = await trySignIn(email, pwd);
+        if (!error) {
+          toast.success("Bem-vindo!");
+          navigate("/", { replace: true });
+          return;
         }
-        if (error.message?.toLowerCase().includes("invalid login credentials")) {
-          throw new Error("Login ou senha inválidos. Confira o código numérico e a senha de 8 dígitos.");
-        }
-        throw error;
+        lastError = error;
+        // Se for "email not confirmed" tenta próximo candidato
       }
-      toast.success("Bem-vindo!");
-      navigate("/", { replace: true });
+
+      // Fallback: se nenhum padrão deu certo e for numérico, resolver via edge function (admins legados com email_real)
+      if (!raw.includes("@")) {
+        const resolved = await resolveEmailViaFn(raw);
+        if (resolved && !candidates.includes(resolved)) {
+          const { error } = await trySignIn(resolved, pwd);
+          if (!error) {
+            toast.success("Bem-vindo!");
+            navigate("/", { replace: true });
+            return;
+          }
+          lastError = error;
+        }
+      }
+
+      const msg = (lastError?.message || "").toLowerCase();
+      if (msg.includes("email not confirmed")) {
+        throw new Error("Conta ainda não confirmada. Peça ao administrador para gerar uma nova senha.");
+      }
+      if (msg.includes("invalid login credentials")) {
+        throw new Error("Login ou senha incorretos. Confira o código numérico e a senha de 8 dígitos.");
+      }
+      throw new Error(lastError?.message || "Login não encontrado.");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao entrar");
     } finally {
