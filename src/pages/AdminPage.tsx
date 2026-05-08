@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, RefreshCw, Users, Landmark, FileText, Shield, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Users, Landmark, FileText, Shield, Loader2, AlertTriangle } from "lucide-react";
 
 type TaskStatus = "idle" | "running" | "done" | "error";
+type Orphan = { entity_type: string; entity_id: string; label: string; missing: string; created_at: string };
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -14,9 +15,29 @@ export default function AdminPage() {
   const [loansStatus, setLoansStatus] = useState<TaskStatus>("idle");
   const [clientsStatus, setClientsStatus] = useState<TaskStatus>("idle");
   const [fullStatus, setFullStatus] = useState<TaskStatus>("idle");
+  const [orphansStatus, setOrphansStatus] = useState<TaskStatus>("idle");
+  const [orphans, setOrphans] = useState<Orphan[]>([]);
   const [log, setLog] = useState<string[]>([]);
 
   const addLog = (msg: string) => setLog((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
+
+  async function checkOrphans() {
+    setOrphansStatus("running");
+    addLog("Verificando registros sem vínculo...");
+    try {
+      const { data, error } = await supabase.rpc("admin_find_orphans" as any);
+      if (error) throw error;
+      const list = (data as Orphan[]) || [];
+      setOrphans(list);
+      addLog(`${list.length} registro(s) sem vínculo.`);
+      setOrphansStatus("done");
+      toast({ title: "Verificação concluída", description: `${list.length} registro(s) sem vínculo.` });
+    } catch (e: any) {
+      addLog(`Erro: ${e.message}`);
+      setOrphansStatus("error");
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  }
 
   // 1) Update installments statuses (server-enforced admin RPC)
   async function updateInstallments() {
