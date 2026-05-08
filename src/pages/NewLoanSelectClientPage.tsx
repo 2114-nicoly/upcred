@@ -5,12 +5,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Search, ChevronRight, AlertTriangle, Users } from "lucide-react";
 import { EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
+import { logAction } from "@/lib/audit-utils";
 
 type Client = {
   id: string;
@@ -23,15 +27,16 @@ export default function NewLoanSelectClientPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const showNewClient = searchParams.get("new_client") === "true";
+  const { isAdmin } = useAuth();
+  const { workers } = useWorkerFilter();
 
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
 
   // New client form
   const [newClientMode, setNewClientMode] = useState(showNewClient);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
+  const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
+  const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   // Active-loan blocking dialog
@@ -64,14 +69,19 @@ export default function NewLoanSelectClientPage() {
   };
 
   const handleCreateClient = async (force = false) => {
-    if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
+    const err = validateClientForm(form);
+    if (err) { toast.error(err); return; }
+    if (isAdmin && !newClientWorkerId) {
+      toast.error("Selecione o trabalhador responsável");
+      return;
+    }
 
     if (!force) {
-      const trimmedName = name.trim();
+      const trimmedName = form.name.trim();
       const { data: dupes } = await supabase
         .from("clients")
         .select("id, name, phone")
-        .or(phone ? `name.ilike.${trimmedName},phone.eq.${phone}` : `name.ilike.${trimmedName}`);
+        .or(form.phone ? `name.ilike.${trimmedName},phone.eq.${form.phone}` : `name.ilike.${trimmedName}`);
       if (dupes && dupes.length > 0) {
         const ok = confirm(`Cliente parecido encontrado: ${dupes[0].name}${dupes[0].phone ? ` (${dupes[0].phone})` : ""}.\n\nDeseja criar mesmo assim?`);
         if (!ok) return;
@@ -79,36 +89,84 @@ export default function NewLoanSelectClientPage() {
     }
 
     setSaving(true);
-    const { data: maxCode } = await supabase
-      .from("clients")
-      .select("client_code")
-      .order("client_code", { ascending: false })
-      .limit(1);
-    const nextCode = (maxCode && maxCode[0]?.client_code ? Number(maxCode[0].client_code) : 0) + 1;
+    let createdId: string | null = null;
+    if (isAdmin) {
+      const { data, error } = await supabase.rpc("admin_create_client" as any, {
+        p_name: form.name.trim(),
+        p_phone: form.phone || null,
+        p_notes: form.notes || null,
+        p_worker_id: newClientWorkerId,
+        p_full_name: form.full_name || null,
+        p_address: form.address || null,
+        p_doc_primary_type: form.doc_primary_type || null,
+        p_doc_primary_number: form.doc_primary_number || null,
+        p_doc_secondary_type: form.doc_secondary_type || null,
+        p_doc_secondary_number: form.doc_secondary_number || null,
+      });
+      setSaving(false);
+      if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
+      createdId = data as any;
+    } else {
+      const { data: maxCode } = await supabase
+        .from("clients")
+        .select("client_code")
+        .order("client_code", { ascending: false })
+        .limit(1);
+      const nextCode = (maxCode && maxCode[0]?.client_code ? Number(maxCode[0].client_code) : 0) + 1;
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.from("clients").insert({
+        name: form.name.trim(),
+        phone: form.phone || null,
+        notes: form.notes || null,
+        client_code: nextCode,
+        full_name: form.full_name || null,
+        address: form.address || null,
+        doc_primary_type: form.doc_primary_type || null,
+        doc_primary_number: form.doc_primary_number || null,
+        doc_secondary_type: form.doc_secondary_type || null,
+        doc_secondary_number: form.doc_secondary_number || null,
+        user_id: session?.user?.id,
+      } as any).select().single();
+      setSaving(false);
+      if (error || !data) { toast.error("Erro ao cadastrar cliente"); return; }
+      createdId = (data as any).id;
+    }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data, error } = await supabase.from("clients").insert({
-      name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
-      user_id: session?.user?.id,
-    } as any).select().single();
-
-    setSaving(false);
-    if (error || !data) { toast.error("Erro ao cadastrar cliente"); return; }
-    toast.success("Cliente cadastrado!");
-    navigate(`/clients/${data.id}/new-loan`);
+    if (createdId) {
+      logAction("criar_cliente", "client", createdId, null, { name: form.name, full_name: form.full_name, origin: "novo_emprestimo" });
+      toast.success("Cliente cadastrado!");
+      navigate(`/clients/${createdId}/new-loan`);
+    }
   };
 
   if (newClientMode) {
     return (
       <div className="mx-auto max-w-lg p-4">
-        <div className="space-y-4">
-          <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
-          <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
-          <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações..." /></div>
-          <Button onClick={() => handleCreateClient()} disabled={saving} className="w-full">
-            {saving ? "Salvando..." : "Cadastrar e Criar Empréstimo"}
-          </Button>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Novo cliente</h2>
+          <Button variant="ghost" size="sm" onClick={() => setNewClientMode(false)}>Voltar</Button>
         </div>
+        <ClientForm
+          value={form}
+          onChange={setForm}
+          submitLabel={saving ? "Salvando..." : "Cadastrar e Criar Empréstimo"}
+          onSubmit={() => handleCreateClient()}
+          extra={
+            isAdmin ? (
+              <div>
+                <Label>Trabalhador responsável *</Label>
+                <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o trabalhador" /></SelectTrigger>
+                  <SelectContent>
+                    {workers.filter((w) => w.active).map((w) => (
+                      <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null
+          }
+        />
       </div>
     );
   }
