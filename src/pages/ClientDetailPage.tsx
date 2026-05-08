@@ -52,9 +52,17 @@ type Installment = {
 type Client = {
   id: string;
   name: string;
+  full_name: string | null;
   phone: string | null;
   notes: string | null;
   client_code: number | null;
+  address: string | null;
+  doc_primary_type: string | null;
+  doc_primary_number: string | null;
+  doc_secondary_type: string | null;
+  doc_secondary_number: string | null;
+  worker_id?: string | null;
+  admin_id?: string | null;
 };
 
 export default function ClientDetailPage() {
@@ -68,9 +76,7 @@ export default function ClientDetailPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editNotes, setEditNotes] = useState("");
+  const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
 
   const [loading, setLoading] = useState(true);
 
