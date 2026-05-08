@@ -398,14 +398,9 @@ export default function ClientsPage() {
       </div>
 
       <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingClient(null); }}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-            <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-            <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
-            <Button onClick={handleEdit} className="w-full">Salvar</Button>
-          </div>
+          <ClientForm value={form} onChange={setForm} submitLabel="Salvar" onSubmit={handleEdit} />
         </DialogContent>
       </Dialog>
     </div>
