@@ -249,21 +249,21 @@ export default function ClientsPage() {
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Novo Cliente</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
-              <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
-              {isAdmin && (
+            <ClientForm
+              value={form}
+              onChange={setForm}
+              submitLabel="Cadastrar"
+              onSubmit={() => handleCreate()}
+              extra={isAdmin && (
                 <div>
                   <Label>Trabalhador responsável *</Label>
                   <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
                     <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
                     <SelectContent>
                       {workers.filter((w) => w.active).map((w) => (
-                        <SelectItem key={w.id} value={w.id}>
-                          {w.nome} · {w.login_codigo}
-                        </SelectItem>
+                        <SelectItem key={w.id} value={w.id}>{w.nome} · {w.login_codigo}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -272,9 +272,7 @@ export default function ClientsPage() {
                   )}
                 </div>
               )}
-              <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações..." /></div>
-              <Button onClick={() => handleCreate()} className="w-full">Cadastrar</Button>
-            </div>
+            />
           </DialogContent>
         </Dialog>
       </div>
