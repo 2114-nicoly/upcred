@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 export type AuditAction =
   | "transferencia_cliente"
   | "criar_cliente" | "editar_cliente" | "excluir_cliente"
-  | "criar_emprestimo" | "editar_emprestimo" | "excluir_emprestimo"
+  | "criar_emprestimo" | "editar_emprestimo" | "excluir_emprestimo" | "editar_observacao_emprestimo"
   | "renovar_emprestimo" | "quitar_emprestimo"
+  | "anexar_arquivo" | "excluir_anexo"
   | "pagamento" | "editar_pagamento" | "desfazer_pagamento" | "nao_pagou"
   | "editar_parcela" | "alterar_data_parcela"
   | "aporte" | "retirada" | "ajuste_caixa" | "fechar_caixa"
