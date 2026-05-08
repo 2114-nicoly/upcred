@@ -32,6 +32,7 @@ export default function NewLoanPage() {
   const [firstDueDate, setFirstDueDate] = useState("");
   const [fixedDates, setFixedDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [observation, setObservation] = useState("");
 
   // Renewal data
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
