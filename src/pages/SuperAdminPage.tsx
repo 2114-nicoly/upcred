@@ -294,7 +294,7 @@ function CredRow({ label, value }: { label: string; value: string }) {
 
 function CreateAdminDialog({
   open, onOpenChange, onCreated,
-}: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (c: Creds) => void }) {
+}: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (c: GeneratedCreds) => void }) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [notas, setNotas] = useState("");
@@ -309,7 +309,7 @@ function CreateAdminDialog({
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "Falha ao criar admin");
-      onCreated({ nome: data.nome, email: data.login, password: data.password });
+      onCreated({ nome: data.nome, role: data.role, login: data.login, password: data.password, created_at: data.created_at });
       setNome(""); setEmail(""); setNotas("");
       onOpenChange(false);
     } catch (err: any) {
