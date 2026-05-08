@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter, Layers } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
@@ -47,6 +48,7 @@ export default function ClientsPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [sortAlpha, setSortAlpha] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
 
@@ -82,9 +84,12 @@ export default function ClientsPage() {
 
   const handleCreate = async (force = false) => {
     if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
+    if (isAdmin && !newClientWorkerId) {
+      toast.error("Selecione o trabalhador responsável");
+      return;
+    }
 
     if (!force) {
-      // Dedupe: same name (case-insensitive) or same phone
       const trimmedName = name.trim();
       const { data: dupes } = await supabase
         .from("clients")
@@ -96,15 +101,25 @@ export default function ClientsPage() {
       }
     }
 
-    const nextCode = await getNextClientCode();
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase.from("clients").insert({
-      name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
-      user_id: session?.user?.id,
-    } as any);
-    if (error) { toast.error("Erro ao cadastrar cliente"); return; }
+    if (isAdmin) {
+      const { error } = await supabase.rpc("admin_create_client" as any, {
+        p_name: name.trim(),
+        p_phone: phone || null,
+        p_notes: notes || null,
+        p_worker_id: newClientWorkerId,
+      });
+      if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
+    } else {
+      const nextCode = await getNextClientCode();
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.from("clients").insert({
+        name: name.trim(), phone: phone || null, notes: notes || null, client_code: nextCode,
+        user_id: session?.user?.id,
+      } as any);
+      if (error) { toast.error("Erro ao cadastrar cliente"); return; }
+    }
     toast.success("Cliente cadastrado!");
-    setName(""); setPhone(""); setNotes(""); setOpen(false);
+    setName(""); setPhone(""); setNotes(""); setNewClientWorkerId(""); setOpen(false);
     fetchClients();
   };
 
@@ -173,7 +188,10 @@ export default function ClientsPage() {
   return (
     <div className="mx-auto max-w-lg p-4">
       <div className="mb-4 flex items-center justify-end">
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(o) => {
+          setOpen(o);
+          if (o && isAdmin && !newClientWorkerId && selectedWorkerId) setNewClientWorkerId(selectedWorkerId);
+        }}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
           </DialogTrigger>
@@ -182,6 +200,24 @@ export default function ClientsPage() {
             <div className="space-y-4">
               <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
               <div><Label>Telefone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" /></div>
+              {isAdmin && (
+                <div>
+                  <Label>Trabalhador responsável *</Label>
+                  <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
+                    <SelectContent>
+                      {workers.filter((w) => w.active).map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.nome} · {w.login_codigo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {workers.filter((w) => w.active).length === 0 && (
+                    <p className="text-xs text-destructive mt-1">Nenhum trabalhador ativo. Cadastre um trabalhador antes.</p>
+                  )}
+                </div>
+              )}
               <div><Label>Observações</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações..." /></div>
               <Button onClick={() => handleCreate()} className="w-full">Cadastrar</Button>
             </div>

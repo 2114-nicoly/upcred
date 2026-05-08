@@ -1,104 +1,64 @@
-## Reorganização da Interface Super Admin / Admin
+## Objetivo
 
-Objetivo: tornar visíveis e óbvios todos os controles de hierarquia já existentes (Super Admin → Admin → Trabalhador → operação), adicionando o que falta (arquivar trabalhador, filtros agrupados, breadcrumbs ativos, menus por role) sem quebrar lógica financeira nem RLS.
+Garantir que Super Admin, Admin e Trabalhador vejam exatamente os dados certos, com vínculos corretos (`worker_id`, `admin_id`), agrupamento por responsável, e remoção de telas duplicadas/vazias.
 
----
+## Diagnóstico atual
 
-### Fase A — Backend mínimo (1 migration)
+Pelo código e schema:
+- **Triggers `auto_set_worker_id` / `auto_set_admin_id` existem** mas não estão registrados como triggers ativos no banco (a seção `<db-triggers>` está vazia). Isso explica clientes/loans criados sem vínculo.
+- **`ClientsPage.handleCreate`** insere cliente sem `worker_id`/`admin_id` quando o admin está com filtro de trabalhador ativo — ou seja, o admin não consegue criar cliente "para um trabalhador".
+- **`AdminPanelPage` / equipe**: provavelmente usa `admin_list_workers` que já existe; precisa validar que retorna dados.
+- **Hierarquia visual** (breadcrumb de escopo) não está consistente entre telas.
 
-Adicionar suporte a "arquivado" sem quebrar nada existente:
+## Mudanças
 
-- `workers.archived_at timestamptz NULL` (nulo = não arquivado)
-- RPC `archive_worker(p_worker_id uuid)` — só Super Admin ou Admin dono; exige `active=false`; seta `archived_at=now()`.
-- RPC `unarchive_worker(p_worker_id uuid)` — limpa `archived_at`.
-- RPC `delete_worker_if_empty(p_worker_id uuid)` — só Super Admin; falha se houver clients/loans/daily_events; remove worker + role + auth user link.
-- Atualizar `admin_list_workers` e `list_workers_by_admin` aceitando flag `p_include_archived boolean default false`.
+### 1. Banco — vínculos automáticos garantidos
+Criar migração que:
+- Reaplica triggers `BEFORE INSERT` em `clients`, `loans`, `daily_events`, `cash_movements`, `not_paid_marks`, `penalties` chamando `auto_set_worker_id` + `auto_set_admin_id`.
+- Adiciona trigger `loans_inherit_from_client` que, no INSERT de loan, copia `worker_id`/`admin_id` do `client` se não informados.
+- Backfill: UPDATE em `clients`, `loans`, `daily_events`, `cash_movements` preenchendo `admin_id` a partir de `worker.parent_admin_id` quando NULL.
+- Nova RPC `admin_create_client(p_name, p_phone, p_notes, p_worker_id)` que valida que o worker pertence ao admin (ou super_admin) e insere com vínculos corretos.
 
-RLS já cobre tudo (parent_admin_id). Nenhuma mudança em policies.
+### 2. Frontend — criação de cliente com worker selecionado
 
----
+**`ClientsPage.tsx`**:
+- Adicionar campo "Trabalhador responsável" no diálogo de novo cliente quando o usuário é admin/super_admin.
+- Pré-selecionar com `selectedWorkerId` do filtro hierárquico.
+- Bloquear criação sem worker quando admin/super_admin.
+- Usar nova RPC `admin_create_client`.
 
-### Fase B — Navegação por role (menu lateral)
+**`ClientDetailPage` / criação inline**: mesma regra.
 
-Editar `AppLayout.tsx` para que o menu lateral mostre exatamente os itens descritos no item 11 do briefing, em função de `useAuth().role`:
+### 3. Equipe — Admin e Super Admin
 
-- **Trabalhador**: Rota, Geral/Caixa, Clientes, Empréstimos Ativos, Histórico, Relatórios, Minha Conta.
-- **Admin**: Dashboard Admin, Trabalhadores, Clientes da Equipe, Empréstimos da Equipe, Caixa da Equipe, Relatórios, Auditoria, Configurações.
-- **Super Admin**: Dashboard Geral, Administradores, Trabalhadores, Clientes, Empréstimos, Caixa Geral, Relatórios Gerais, Auditoria Geral, Manutenção, Configurações.
+**`AdminPanelPage.tsx`** (Admin → Equipe):
+- Garantir que usa `admin_list_workers()` e mostra estado vazio com botão "Criar trabalhador" quando lista vazia.
+- Para cada trabalhador: clientes ativos, empréstimos ativos, recebido hoje, atrasados — via RPC nova `admin_team_stats()` ou agregação client-side.
 
-Rota deixa de ser item de topo para Admin/Super Admin (acessada via painel do trabalhador).
+**`SuperAdminDetailPage.tsx`** (Super Admin → Admin selecionado):
+- Mostrar equipe daquele admin via `list_workers_by_admin(p_admin_id)`.
+- Estado vazio claro com CTA.
 
-Breadcrumb (`Breadcrumb.tsx`) já existe — estender labels para novas rotas e garantir botão "voltar" no header das telas internas.
+### 4. Agrupamento de clientes/empréstimos
+- `ClientsPage` já tem toggle "Agrupar por trabalhador". Garantir que aparece label do trabalhador/admin responsável em cada card mesmo sem agrupamento (já tem).
+- `ActiveLoansPage`, `OverdueLoansPage`: idem (já implementado em Fase F).
 
----
+### 5. Indicador de escopo (`ScopeIndicator`)
+- Garantir que aparece no topo das telas Clientes, Empréstimos, Caixa, Rota, Relatórios mostrando: "Visão: Geral / Admin: X / Trabalhador: Y".
 
-### Fase C — Tela Super Admin (Dashboard Geral)
+### 6. Limpeza de telas
+Identificar e esconder/remover do menu:
+- Páginas duplicadas (ex.: `DailyCashPage` vs `CaixaPage` vs `DailyCashHistoryPage` vs `CashHistoryPage`) — manter apenas `CaixaPage` + `CashHistoryPage`.
+- Confirmar antes de deletar.
 
-Reorganizar `SuperAdminPage.tsx`:
+## Detalhes técnicos (resumo)
 
-- Aba **Dashboard** vira a landing: cards de KPIs globais (admins ativos, trabalhadores ativos, clientes ativos, empréstimos ativos, previsto/recebido hoje/semana/mês, saldo líquido, atrasados, não pagos).
-- Aba **Administradores**: lista em cards ricos (não só switch). Cada card mostra nome, email, login, status, contagem de trabalhadores, clientes ativos, empréstimos ativos, recebido hoje/semana/mês, saldo, atrasados, não pagos. Botões: **Ver equipe**, **Relatórios**, **Editar**, **Desativar/Reativar**.
-- Aba **Ranking** mantém a tabela atual.
+- Migração SQL com triggers + backfill + RPC nova.
+- RLS já cobre o cenário (políticas `Scoped access` em todas as tabelas) — não mexer.
+- Nenhuma alteração de lógica financeira (`remaining_balance`, `apply_loan_payment`, `reverse_loan_payment` permanecem).
 
-Novos helpers em `consolidated-stats.ts` para agregar por admin nos múltiplos períodos numa só chamada.
+## Pergunta antes de executar
 
----
+Esse trabalho é grande (DB + várias telas + limpeza de menu). Posso começar pelas **partes 1+2 (vínculos automáticos + admin cria cliente para trabalhador)**, que resolvem o problema central que você descreveu? As outras partes (limpeza de menu, stats por trabalhador na equipe) eu faço em sequência depois que você confirmar que o vínculo está funcionando.
 
-### Fase D — Tela "Equipe de [Admin]"
-
-Refatorar `AdminFullPanel.tsx` (já existe) para bater com o briefing:
-
-- Header: Administrador, email, status, totais (trabalhadores, clientes, empréstimos, recebido hoje/semana/mês).
-- Abas: Resumo, **Trabalhadores**, Clientes, Empréstimos, Caixa, Relatórios, Auditoria.
-- Aba **Trabalhadores**: cards de cada trabalhador da equipe com nome, login, status, admin responsável, clientes ativos, empréstimos ativos, previsto hoje, recebido hoje, não pagos hoje, atrasados, recebido semana/mês, saldo. Botões: **Ver trabalhador**, **Rota**, **Caixa**, **Clientes**, **Empréstimos**, **Relatórios**, **Editar**, **Desativar/Reativar**, **Arquivar** (só se inativo).
-- Toggle "Mostrar arquivados".
-- Botões "Rota/Caixa/Clientes" aplicam scope (`setSelectedWorkerId`) e navegam para a tela correspondente.
-
----
-
-### Fase E — Painel do Trabalhador
-
-Refatorar `WorkerFullPanel.tsx`:
-
-- Header completo conforme briefing.
-- Abas: Resumo, **Rota**, Geral/Caixa, Clientes, Empréstimos, Histórico, Relatórios, Auditoria. Cada aba renderiza embed (link ou componente) com scope já fixado nesse trabalhador.
-
----
-
-### Fase F — Filtros nas listas (Clientes / Empréstimos / Caixa)
-
-- `ClientsPage.tsx`: para Admin/Super Admin, adicionar barra de filtros (Admin, Trabalhador, Status, Atrasados/Ativos) + agrupamento por trabalhador. Cada card exibe "Trabalhador: X" e (Super Admin) "Admin: Y".
-- `ActiveLoansPage.tsx` / `OverdueLoansPage.tsx`: mesmos filtros + colunas trabalhador/admin + origem (novo/renovação via `renewed_from_loan_id`).
-- `CaixaPage.tsx`: filtros equivalentes para Super Admin/Admin.
-
----
-
-### Fase G — Arquivamento na lista de Trabalhadores
-
-Em `WorkersPage.tsx` e na aba Trabalhadores do AdminFullPanel:
-
-- Botão "Desativar" quando ativo; "Arquivar" quando inativo; "Excluir definitivamente" (Super Admin, com confirmação) se sem dados.
-- Filtro "Mostrar arquivados".
-- Badge visual: Ativo / Inativo / Arquivado.
-
----
-
-### Critério de aceite (item 13 do briefing)
-
-Após a entrega, o usuário deve conseguir, sem adivinhar:
-1. Super Admin → ver lista de admins → clicar → ver equipe, trabalhadores, clientes agrupados, arquivar trabalhador inativo.
-2. Admin → ver só sua equipe → drill-down em trabalhador → rota/caixa/clientes/empréstimos.
-3. Trabalhador → ver apenas seus dados.
-Tudo com breadcrumb e botão voltar visíveis, e sem quebrar pagamentos / `remaining_balance` / RLS.
-
----
-
-### Detalhes técnicos
-
-- **Arquivos novos**: 1 migration; nada além disso (reaproveitar componentes).
-- **Arquivos editados**: `AppLayout.tsx`, `Breadcrumb.tsx`, `SuperAdminPage.tsx`, `AdminFullPanel.tsx`, `WorkerFullPanel.tsx`, `WorkersPage.tsx`, `ClientsPage.tsx`, `ActiveLoansPage.tsx`, `OverdueLoansPage.tsx`, `CaixaPage.tsx`, `consolidated-stats.ts`, `worker-utils.ts`.
-- **Não tocar**: `loans.remaining_balance`, RPC `apply_loan_payment`/`reverse_loan_payment`, ledger `daily_events`, geração de parcelas, lógica de cravo/renovação.
-- **RLS**: mantido — toda agregação por admin/worker passa por `is_super_admin` / `has_role` / `get_admin_id` / `get_worker_id` já existentes.
-- **Entrega faseada**: vou pedir aprovação da migration (Fase A) e em seguida aplico B→G numa sequência. Se preferir, posso fatiar em mais turnos (B+C, depois D+E, depois F+G).
-
-Devo seguir? Posso começar pela migration da Fase A e pelas Fases B+C (menus + Dashboard Super Admin) no mesmo turno?
+Confirma esse plano em fases ou prefere que eu faça tudo de uma vez (resposta mais demorada e maior risco de erro)?

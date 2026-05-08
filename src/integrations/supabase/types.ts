@@ -1033,6 +1033,15 @@ export type Database = {
     }
     Functions: {
       admin_assign_client_codes: { Args: never; Returns: number }
+      admin_create_client: {
+        Args: {
+          p_name: string
+          p_notes?: string
+          p_phone?: string
+          p_worker_id?: string
+        }
+        Returns: string
+      }
       admin_list_workers:
         | {
             Args: never
