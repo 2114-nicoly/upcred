@@ -94,6 +94,9 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
       "/admin": "Painel da Equipe",
       "/audit": "Auditoria da Equipe",
     };
+  }
+  return { ...base, "/caixa": "Geral", "/active-loans": "Empréstimos Ativos" };
+}
 
 function getRouteLabel(pathname: string, labels: Record<string, string>): string {
   if (labels[pathname]) return labels[pathname];
