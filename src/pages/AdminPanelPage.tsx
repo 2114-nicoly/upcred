@@ -52,11 +52,10 @@ export default function AdminPanelPage() {
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
       <Tabs defaultValue="overview">
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="overview" className="text-xs">Visão Geral</TabsTrigger>
           <TabsTrigger value="workers" className="text-xs">Trabalhadores</TabsTrigger>
           <TabsTrigger value="compare" className="text-xs">Comparativo</TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs">Auditoria</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-3">
@@ -67,9 +66,6 @@ export default function AdminPanelPage() {
         </TabsContent>
         <TabsContent value="compare" className="mt-3">
           <CompareTab />
-        </TabsContent>
-        <TabsContent value="audit" className="mt-3">
-          <AuditLogList />
         </TabsContent>
       </Tabs>
     </div>
