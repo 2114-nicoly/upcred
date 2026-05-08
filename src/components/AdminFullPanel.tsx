@@ -42,6 +42,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
   const { setSelectedAdminId, setSelectedWorkerId } = useWorkerFilter();
+  const confirm = useConfirm();
 
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [workers, setWorkers] = useState<Worker[]>([]);
