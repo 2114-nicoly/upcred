@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  ClipboardList, History, UserCog, ChevronRight,
+  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2, Power,
 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { useConfirm } from "@/hooks/useConfirm";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
@@ -23,7 +25,7 @@ type Admin = {
   id: string; nome: string; email_real: string; login_codigo: string | null;
   active: boolean; created_at: string; notas: string | null;
 };
-type Worker = { id: string; nome: string; login_codigo: string; active: boolean; parent_admin_id?: string | null };
+type Worker = { id: string; nome: string; login_codigo: string; active: boolean; parent_admin_id?: string | null; archived_at?: string | null };
 type ClientRow = { id: string; name: string; phone: string | null; client_code: number | null; worker_id: string | null };
 type LoanRow = {
   id: string; status: string; amount: number; total_amount: number;
@@ -40,6 +42,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
   const { setSelectedAdminId, setSelectedWorkerId } = useWorkerFilter();
+  const confirm = useConfirm();
 
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -53,39 +56,93 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
 
+  async function load(signal?: { cancel: boolean }) {
+    setLoading(true);
+    const [{ data: admins }, { data: ws }] = await Promise.all([
+      supabase.rpc("super_admin_list_admins" as any),
+      supabase.rpc("list_workers_by_admin" as any, { p_admin_id: adminId, p_include_archived: true }),
+    ]);
+    if (signal?.cancel) return;
+    const ad = ((admins as Admin[]) || []).find((a) => a.id === adminId) ?? null;
+    const wList = (ws as Worker[]) || [];
+    setAdmin(ad);
+    setWorkers(wList);
+
+    const wIds = wList.map((w) => w.id);
+    const [allStats, cs, ls, evs] = await Promise.all([
+      loadWorkersStats(range),
+      supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).order("name"),
+      supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
+      supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
+    ]);
+    if (signal?.cancel) return;
+
+    const wSet = new Set(wIds);
+    setStats(allStats.filter((s) => s.worker_id && wSet.has(s.worker_id)));
+    setClients((cs.data as ClientRow[]) || []);
+    setLoans((ls.data as any) || []);
+    setEvents((evs.data as any) || []);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    let cancel = false;
-    async function load() {
-      setLoading(true);
-      const [{ data: admins }, { data: ws }] = await Promise.all([
-        supabase.rpc("super_admin_list_admins" as any),
-        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: adminId }),
-      ]);
-      if (cancel) return;
-      const ad = ((admins as Admin[]) || []).find((a) => a.id === adminId) ?? null;
-      const wList = (ws as Worker[]) || [];
-      setAdmin(ad);
-      setWorkers(wList);
-
-      const wIds = wList.map((w) => w.id);
-      const [allStats, cs, ls, evs] = await Promise.all([
-        loadWorkersStats(range),
-        supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).order("name"),
-        supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
-        supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
-      ]);
-      if (cancel) return;
-
-      const wSet = new Set(wIds);
-      setStats(allStats.filter((s) => s.worker_id && wSet.has(s.worker_id)));
-      setClients((cs.data as ClientRow[]) || []);
-      setLoans((ls.data as any) || []);
-      setEvents((evs.data as any) || []);
-      setLoading(false);
-    }
-    load();
-    return () => { cancel = true; };
+    const signal = { cancel: false };
+    load(signal);
+    return () => { signal.cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId, range]);
+
+  async function handleToggleActive(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    const desativando = w.active;
+    const ok = await confirm({
+      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
+      description: desativando ? "O trabalhador perderá acesso. Histórico preservado." : "O trabalhador voltará a acessar o sistema.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("set_worker_active" as any, { p_worker_id: w.id, p_active: !w.active });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: w.active ? "Desativado" : "Ativado" });
+    load();
+  }
+
+  async function handleArchive(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (w.active) return toast({ title: "Desative o trabalhador antes de arquivar", variant: "destructive" });
+    const ok = await confirm({
+      title: "Arquivar trabalhador?",
+      description: "Sai da operação ativa. Histórico preservado. Pode desarquivar depois.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Arquivar", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("archive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador arquivado" }); load();
+  }
+
+  async function handleUnarchive(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    const { error } = await supabase.rpc("unarchive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador desarquivado" }); load();
+  }
+
+  async function handleDeleteForever(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title: "Excluir definitivamente?",
+      description: "Ação irreversível. Só funciona se o trabalhador não tiver clientes, empréstimos ou movimentações.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Excluir definitivamente", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("delete_worker_if_empty" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Não foi possível excluir", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador excluído" }); load();
+  }
 
   function viewAsAdmin(target = "/admin") {
     if (!admin) return;
@@ -208,25 +265,60 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
         </TabsContent>
 
         <TabsContent value="trabalhadores" className="mt-3 space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            {workers.length} trabalhador(es) ·{" "}
+            {workers.filter((w) => w.active).length} ativos ·{" "}
+            {workers.filter((w) => !w.active && !w.archived_at).length} inativos ·{" "}
+            {workers.filter((w) => w.archived_at).length} arquivados
+          </p>
           {workers.length === 0 ? (
-            <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Nenhum trabalhador.</CardContent></Card>
+            <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Nenhum trabalhador desta equipe.</CardContent></Card>
           ) : (
             workers.map((w) => {
               const s = stats.find((x) => x.worker_id === w.id);
+              const isArchived = !!w.archived_at;
               return (
-                <Card key={w.id} className="cursor-pointer hover:bg-muted/30" onClick={() => openWorker(w.id)}>
-                  <CardContent className="p-3 flex items-center gap-2">
-                    <UserCog className="h-4 w-4 text-primary shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {w.nome}
-                        {!w.active && <Badge variant="outline" className="ml-1 text-[9px]">Inativo</Badge>}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        Login {w.login_codigo} · Recebido {formatCurrency(s?.recebido ?? 0)} · Falta {formatCurrency(s?.faltaReceber ?? 0)}
-                      </p>
+                <Card key={w.id} className={isArchived ? "opacity-70" : ""}>
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => openWorker(w.id)}>
+                      <UserCog className="h-4 w-4 text-primary shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate flex items-center gap-1 flex-wrap">
+                          {w.nome}
+                          {isArchived
+                            ? <Badge variant="outline" className="text-[9px]">Arquivado</Badge>
+                            : w.active
+                              ? <Badge className="text-[9px]">Ativo</Badge>
+                              : <Badge variant="secondary" className="text-[9px]">Inativo</Badge>}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Login {w.login_codigo} · Recebido {formatCurrency(s?.recebido ?? 0)} · Falta {formatCurrency(s?.faltaReceber ?? 0)}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex flex-wrap gap-1">
+                      {!isArchived && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleToggleActive(w, e)}>
+                          <Power className="h-3.5 w-3.5 mr-1" /> {w.active ? "Desativar" : "Ativar"}
+                        </Button>
+                      )}
+                      {!isArchived && !w.active && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleArchive(w, e)}>
+                          <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
+                        </Button>
+                      )}
+                      {isArchived && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleUnarchive(w, e)}>
+                          <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
+                        </Button>
+                      )}
+                      {isArchived && (
+                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={(e) => handleDeleteForever(w, e)}>
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );
