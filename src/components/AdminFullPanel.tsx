@@ -56,39 +56,93 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
 
+  async function load(signal?: { cancel: boolean }) {
+    setLoading(true);
+    const [{ data: admins }, { data: ws }] = await Promise.all([
+      supabase.rpc("super_admin_list_admins" as any),
+      supabase.rpc("list_workers_by_admin" as any, { p_admin_id: adminId, p_include_archived: true }),
+    ]);
+    if (signal?.cancel) return;
+    const ad = ((admins as Admin[]) || []).find((a) => a.id === adminId) ?? null;
+    const wList = (ws as Worker[]) || [];
+    setAdmin(ad);
+    setWorkers(wList);
+
+    const wIds = wList.map((w) => w.id);
+    const [allStats, cs, ls, evs] = await Promise.all([
+      loadWorkersStats(range),
+      supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).order("name"),
+      supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
+      supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
+    ]);
+    if (signal?.cancel) return;
+
+    const wSet = new Set(wIds);
+    setStats(allStats.filter((s) => s.worker_id && wSet.has(s.worker_id)));
+    setClients((cs.data as ClientRow[]) || []);
+    setLoans((ls.data as any) || []);
+    setEvents((evs.data as any) || []);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    let cancel = false;
-    async function load() {
-      setLoading(true);
-      const [{ data: admins }, { data: ws }] = await Promise.all([
-        supabase.rpc("super_admin_list_admins" as any),
-        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: adminId }),
-      ]);
-      if (cancel) return;
-      const ad = ((admins as Admin[]) || []).find((a) => a.id === adminId) ?? null;
-      const wList = (ws as Worker[]) || [];
-      setAdmin(ad);
-      setWorkers(wList);
-
-      const wIds = wList.map((w) => w.id);
-      const [allStats, cs, ls, evs] = await Promise.all([
-        loadWorkersStats(range),
-        supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).order("name"),
-        supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
-        supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
-      ]);
-      if (cancel) return;
-
-      const wSet = new Set(wIds);
-      setStats(allStats.filter((s) => s.worker_id && wSet.has(s.worker_id)));
-      setClients((cs.data as ClientRow[]) || []);
-      setLoans((ls.data as any) || []);
-      setEvents((evs.data as any) || []);
-      setLoading(false);
-    }
-    load();
-    return () => { cancel = true; };
+    const signal = { cancel: false };
+    load(signal);
+    return () => { signal.cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId, range]);
+
+  async function handleToggleActive(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    const desativando = w.active;
+    const ok = await confirm({
+      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
+      description: desativando ? "O trabalhador perderá acesso. Histórico preservado." : "O trabalhador voltará a acessar o sistema.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("set_worker_active" as any, { p_worker_id: w.id, p_active: !w.active });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: w.active ? "Desativado" : "Ativado" });
+    load();
+  }
+
+  async function handleArchive(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (w.active) return toast({ title: "Desative o trabalhador antes de arquivar", variant: "destructive" });
+    const ok = await confirm({
+      title: "Arquivar trabalhador?",
+      description: "Sai da operação ativa. Histórico preservado. Pode desarquivar depois.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Arquivar", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("archive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador arquivado" }); load();
+  }
+
+  async function handleUnarchive(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    const { error } = await supabase.rpc("unarchive_worker" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador desarquivado" }); load();
+  }
+
+  async function handleDeleteForever(w: Worker, e: React.MouseEvent) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title: "Excluir definitivamente?",
+      description: "Ação irreversível. Só funciona se o trabalhador não tiver clientes, empréstimos ou movimentações.",
+      affected: [{ label: "Trabalhador", value: w.nome }],
+      confirmText: "Excluir definitivamente", destructive: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc("delete_worker_if_empty" as any, { p_worker_id: w.id });
+    if (error) return toast({ title: "Não foi possível excluir", description: error.message, variant: "destructive" });
+    toast({ title: "Trabalhador excluído" }); load();
+  }
 
   function viewAsAdmin(target = "/admin") {
     if (!admin) return;
