@@ -497,12 +497,25 @@ function WorkersTab() {
                     <button onClick={() => navigate(`/admin/worker/${w.id}`)} className="flex-1 text-left min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm truncate">{w.nome}</span>
-                        {!w.active && <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
+                        {w.archived_at ? (
+                          <Badge variant="outline" className="text-[10px]">Arquivado</Badge>
+                        ) : !w.active ? (
+                          <Badge variant="secondary" className="text-[10px]">Inativo</Badge>
+                        ) : null}
                       </div>
                       <div className="text-[11px] text-muted-foreground">Login <span className="font-mono">{w.login_codigo}</span></div>
                     </button>
-                    <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
-                    <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha"><KeyRound className="h-4 w-4" /></Button>
+                    {!w.archived_at && (
+                      <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
+                    )}
+                    {!w.archived_at && (
+                      <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha"><KeyRound className="h-4 w-4" /></Button>
+                    )}
+                    {(!w.active || w.archived_at) && (
+                      <Button size="sm" variant="outline" className="h-8 text-[10px] px-2" onClick={() => handleArchive(w)}>
+                        {w.archived_at ? "Desarquivar" : "Arquivar"}
+                      </Button>
+                    )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
                   </div>
                   {s && (
