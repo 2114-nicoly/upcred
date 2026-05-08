@@ -174,7 +174,7 @@ export default function ClientsPage() {
   const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "Sem trabalhador";
   const adminName = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
 
-  // Group by worker
+  // Group by worker (and admin for super_admin)
   const grouped: Record<string, Client[]> = {};
   if (groupByWorker) {
     for (const c of filtered) {
@@ -184,6 +184,19 @@ export default function ClientsPage() {
     }
   }
   const groupKeys = Object.keys(grouped).sort((a, b) => workerName(a === "__none__" ? null : a).localeCompare(workerName(b === "__none__" ? null : b)));
+
+  // 2-level grouping for super_admin: Admin > Worker
+  const groupedByAdmin: Record<string, Record<string, Client[]>> = {};
+  if (groupByWorker && isSuperAdmin) {
+    for (const c of filtered) {
+      const ak = c.admin_id || "__none__";
+      const wk = c.worker_id || "__none__";
+      if (!groupedByAdmin[ak]) groupedByAdmin[ak] = {};
+      if (!groupedByAdmin[ak][wk]) groupedByAdmin[ak][wk] = [];
+      groupedByAdmin[ak][wk].push(c);
+    }
+  }
+  const adminKeys = Object.keys(groupedByAdmin).sort((a, b) => adminName(a === "__none__" ? null : a).localeCompare(adminName(b === "__none__" ? null : b)));
 
   return (
     <div className="mx-auto max-w-lg p-4">
