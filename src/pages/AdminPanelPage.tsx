@@ -392,17 +392,21 @@ function WorkersTab() {
   async function handleResetPassword(w: Worker) {
     const ok = await confirm({
       title: "Resetar senha?",
-      description: "Uma nova senha temporária de 8 dígitos será gerada. A senha anterior deixará de funcionar.",
+      description: "Uma nova senha de 8 dígitos será gerada e atualizada no Auth. A senha anterior deixa de funcionar imediatamente.",
       affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
       confirmText: "Gerar nova senha", destructive: true,
     });
     if (!ok) return;
-    const password = generateTempPassword();
-    await supabase.from("worker_credentials_log").insert({
-      worker_id: w.id, login_codigo: w.login_codigo, temp_password: password, reason: "reset_pending",
-    } as any);
-    await logAction("reset_senha_trabalhador", "worker", w.id, null, { login: w.login_codigo });
-    setCreds({ nome: w.nome, login: w.login_codigo, password });
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+        body: { target_kind: "worker", target_id: w.id },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao redefinir senha");
+      setCreds({ nome: data.nome, login: data.login, password: data.password });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
   }
 
   async function resolveResetRequest(id: string) {
