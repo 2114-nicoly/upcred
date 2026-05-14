@@ -215,8 +215,14 @@ export default function ClientsPage() {
     filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "Sem trabalhador";
-  const adminName = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
+  const workerName = (id: string | null) => {
+    if (!id) return "Sem trabalhador";
+    return workers.find((w) => w.id === id)?.nome ?? "Trabalhador removido";
+  };
+  const adminName = (id: string | null) => {
+    if (!id) return "—";
+    return admins.find((a) => a.id === id)?.nome ?? "Admin removido";
+  };
 
   // Group by worker (and admin for super_admin)
   const grouped: Record<string, Client[]> = {};
