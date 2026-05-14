@@ -355,41 +355,14 @@ function WorkersTab() {
     e.preventDefault();
     if (!nome.trim()) { toast({ title: "Nome obrigatório", variant: "destructive" }); return; }
     setCreating(true);
-    const { data: { session: adminSession } } = await supabase.auth.getSession();
-
     try {
-      const login = await pickUniqueLogin();
-      const password = generateTempPassword();
-      const email = syntheticEmailFor(login);
-
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email, password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: { display_name: nome.trim() },
-        },
+      const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        body: { kind: "worker", nome: nome.trim(), notas: notas.trim() || null },
       });
-      if (signUpError) throw signUpError;
-      const newUserId = signUpData.user?.id;
-      if (!newUserId) throw new Error("Falha ao criar usuário.");
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao criar trabalhador");
 
-      if (adminSession) {
-        await supabase.auth.setSession({ access_token: adminSession.access_token, refresh_token: adminSession.refresh_token });
-      }
-
-      const { data: workerId, error: rpcError } = await supabase.rpc("admin_register_worker", {
-        p_nome: nome.trim(), p_login_codigo: login, p_synthetic_email: email,
-        p_auth_user_id: newUserId, p_notas: notas.trim() || null,
-      });
-      if (rpcError) throw rpcError;
-
-      await supabase.from("worker_credentials_log").insert({
-        worker_id: workerId as string, login_codigo: login, temp_password: password, reason: "created",
-      } as any);
-
-      await logAction("criar_trabalhador", "worker", workerId as string, null, { nome: nome.trim(), login });
-
-      setCreds({ nome: nome.trim(), login, password });
+      setCreds({ nome: data.nome, login: data.login_codigo, password: data.password });
       setNome(""); setNotas(""); setOpenCreate(false);
       load();
       toast({ title: "Trabalhador criado", description: "Anote o login e a senha temporária." });
@@ -419,17 +392,21 @@ function WorkersTab() {
   async function handleResetPassword(w: Worker) {
     const ok = await confirm({
       title: "Resetar senha?",
-      description: "Uma nova senha temporária de 8 dígitos será gerada. A senha anterior deixará de funcionar.",
+      description: "Uma nova senha de 8 dígitos será gerada e atualizada no Auth. A senha anterior deixa de funcionar imediatamente.",
       affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
       confirmText: "Gerar nova senha", destructive: true,
     });
     if (!ok) return;
-    const password = generateTempPassword();
-    await supabase.from("worker_credentials_log").insert({
-      worker_id: w.id, login_codigo: w.login_codigo, temp_password: password, reason: "reset_pending",
-    } as any);
-    await logAction("reset_senha_trabalhador", "worker", w.id, null, { login: w.login_codigo });
-    setCreds({ nome: w.nome, login: w.login_codigo, password });
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+        body: { target_kind: "worker", target_id: w.id },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao redefinir senha");
+      setCreds({ nome: data.nome, login: data.login, password: data.password });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
   }
 
   async function resolveResetRequest(id: string) {
