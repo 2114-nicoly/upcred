@@ -44,7 +44,7 @@ export default function ClientsPage() {
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [groupByWorker, setGroupByWorker] = useState(false);
+  const [groupByWorker, setGroupByWorker] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
