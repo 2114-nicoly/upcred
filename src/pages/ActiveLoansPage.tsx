@@ -458,7 +458,7 @@ export default function ActiveLoansPage() {
               <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/new-loan/${loan.clients.id}?renewFrom=${loan.id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/clients/${loan.clients.id}/new-loan?renewFrom=${loan.id}`)}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
