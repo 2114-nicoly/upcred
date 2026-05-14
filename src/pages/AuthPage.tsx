@@ -73,10 +73,12 @@ export default function AuthPage() {
         // Se for "email not confirmed" tenta próximo candidato
       }
 
-      // Fallback: se nenhum padrão deu certo e for numérico, resolver via edge function (admins legados com email_real)
+      // Fallback: chamar a edge function (que também confirma o email se necessário)
+      // e tentar de novo, mesmo que o email seja igual a um já tentado — pois a confirmação
+      // pendente pode ter sido o motivo da falha.
       if (!raw.includes("@")) {
         const resolved = await resolveEmailViaFn(raw);
-        if (resolved && !candidates.includes(resolved)) {
+        if (resolved) {
           const { error } = await trySignIn(resolved, pwd);
           if (!error) {
             toast.success("Bem-vindo!");
