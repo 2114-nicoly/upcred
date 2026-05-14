@@ -83,12 +83,12 @@ export function WorkerFilterProvider({ children }: { children: ReactNode }) {
     if (isSuperAdmin) {
       const [{ data: ad }, { data: ws }] = await Promise.all([
         supabase.rpc("super_admin_list_admins" as any),
-        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: selectedAdminId }),
+        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: selectedAdminId, p_include_archived: true }),
       ]);
       setAdmins((ad as AdminOption[]) || []);
       setWorkers((ws as WorkerOption[]) || []);
     } else {
-      const { data } = await supabase.rpc("admin_list_workers" as any);
+      const { data } = await supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null, p_include_archived: true });
       setWorkers((data as WorkerOption[]) || []);
       setAdmins([]);
     }
