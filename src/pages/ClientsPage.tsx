@@ -44,7 +44,7 @@ export default function ClientsPage() {
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [groupByWorker, setGroupByWorker] = useState(false);
+  const [groupByWorker, setGroupByWorker] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
@@ -215,8 +215,14 @@ export default function ClientsPage() {
     filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "Sem trabalhador";
-  const adminName = (id: string | null) => admins.find((a) => a.id === id)?.nome ?? "—";
+  const workerName = (id: string | null) => {
+    if (!id) return "Sem trabalhador";
+    return workers.find((w) => w.id === id)?.nome ?? "Trabalhador removido";
+  };
+  const adminName = (id: string | null) => {
+    if (!id) return "—";
+    return admins.find((a) => a.id === id)?.nome ?? "Admin removido";
+  };
 
   // Group by worker (and admin for super_admin)
   const grouped: Record<string, Client[]> = {};
