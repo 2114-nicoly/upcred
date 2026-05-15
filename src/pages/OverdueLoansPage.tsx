@@ -75,13 +75,15 @@ export default function OverdueLoansPage() {
 
   const fetchData = async () => {
     try {
-      const { data } = await supabase
+      let q = supabase
         .from("installments")
-        .select("*, loans(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, clients(id, name))")
+        .select("*, loans!inner(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, clients(id, name))")
         .lt("due_date", today)
         .neq("status", "paid")
-        .eq("is_penalty", false)
-        .order("due_date");
+        .eq("is_penalty", false);
+      // Worker scope: explicit filter on top of RLS for double protection
+      if (!isAdmin && !isSuperAdmin && workerId) q = q.eq("loans.worker_id", workerId);
+      const { data } = await q.order("due_date");
 
       const insts = (data as unknown as InstallmentWithLoan[]) || [];
 
