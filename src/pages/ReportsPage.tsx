@@ -76,18 +76,24 @@ export default function ReportsPage() {
     let cancel = false;
     async function load() {
       setLoading(true);
+      const scopeWorker = !isAdmin && !isSuperAdmin && workerId;
+      let insQ: any = supabase
+        .from("installments")
+        .select("id, amount, paid_amount, due_date, status, is_penalty, loan_id, loans!inner(worker_id)")
+        .gte("due_date", startDate)
+        .lte("due_date", endDate);
+      if (scopeWorker) insQ = insQ.eq("loans.worker_id", workerId);
+
+      let evQ: any = supabase
+        .from("daily_events" as any)
+        .select("id, cash_date, event_type, amount_in, amount_out, client_id, loan_id, observation")
+        .gte("cash_date", startDate)
+        .lte("cash_date", endDate)
+        .is("reversed_at", null);
+      if (scopeWorker) evQ = evQ.eq("worker_id", workerId);
+
       const [insRes, evRes, clRes] = await Promise.all([
-        supabase
-          .from("installments")
-          .select("id, amount, paid_amount, due_date, status, is_penalty, loan_id")
-          .gte("due_date", startDate)
-          .lte("due_date", endDate),
-        supabase
-          .from("daily_events" as any)
-          .select("id, cash_date, event_type, amount_in, amount_out, client_id, loan_id, observation")
-          .gte("cash_date", startDate)
-          .lte("cash_date", endDate),
-        supabase.from("clients").select("id, name"),
+        insQ, evQ, supabase.from("clients").select("id, name"),
       ]);
       if (cancel) return;
       setInstallments((insRes.data as Installment[]) || []);
