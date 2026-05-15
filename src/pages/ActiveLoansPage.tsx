@@ -51,7 +51,7 @@ type LoanProgress = {
 
 export default function ActiveLoansPage() {
   const navigate = useNavigate();
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [loans, setLoans] = useState<LoanWithClient[]>([]);
   const [loading, setLoading] = useState(true);
