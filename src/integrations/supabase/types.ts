@@ -154,6 +154,8 @@ export type Database = {
           installment_id: string | null
           loan_id: string | null
           observation: string | null
+          reversed_at: string | null
+          reversed_by: string | null
           type: string
           user_id: string | null
           worker_id: string | null
@@ -169,6 +171,8 @@ export type Database = {
           installment_id?: string | null
           loan_id?: string | null
           observation?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
           type: string
           user_id?: string | null
           worker_id?: string | null
@@ -184,6 +188,8 @@ export type Database = {
           installment_id?: string | null
           loan_id?: string | null
           observation?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
           type?: string
           user_id?: string | null
           worker_id?: string | null
@@ -447,6 +453,7 @@ export type Database = {
           loan_id: string | null
           observation: string | null
           origin: string | null
+          reversed_at: string | null
           user_id: string | null
           worker_id: string | null
         }
@@ -464,6 +471,7 @@ export type Database = {
           loan_id?: string | null
           observation?: string | null
           origin?: string | null
+          reversed_at?: string | null
           user_id?: string | null
           worker_id?: string | null
         }
@@ -481,6 +489,7 @@ export type Database = {
           loan_id?: string | null
           observation?: string | null
           origin?: string | null
+          reversed_at?: string | null
           user_id?: string | null
           worker_id?: string | null
         }
