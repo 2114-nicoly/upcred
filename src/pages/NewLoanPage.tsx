@@ -27,7 +27,7 @@ export default function NewLoanPage() {
   const [interestType, setInterestType] = useState<"percentage" | "fixed">("percentage");
   const [interestValue, setInterestValue] = useState("");
   const [installmentCount, setInstallmentCount] = useState("");
-  const [paymentType, setPaymentType] = useState<"daily" | "weekly" | "biweekly" | "monthly" | "fixed_dates">("monthly");
+  const [paymentType, setPaymentType] = useState<"daily" | "weekly" | "biweekly" | "monthly" | "fixed_dates">("daily");
   const [loanDate, setLoanDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [firstDueDate, setFirstDueDate] = useState("");
   const [fixedDates, setFixedDates] = useState<string[]>([]);
