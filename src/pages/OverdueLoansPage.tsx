@@ -58,7 +58,7 @@ type LoanGroup = {
 
 export default function OverdueLoansPage() {
   const navigate = useNavigate();
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
   const [groups, setGroups] = useState<LoanGroup[]>([]);
   const [loading, setLoading] = useState(true);
