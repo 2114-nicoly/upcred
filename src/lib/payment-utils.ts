@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { createDailyEvent } from "@/lib/daily-events";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, markCashMovementReversed } from "@/lib/cash-utils";
+import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 
 /**
