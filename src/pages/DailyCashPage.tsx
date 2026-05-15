@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
+import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
