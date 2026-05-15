@@ -393,7 +393,10 @@ export default function DailyCashPage() {
         .rpc("get_route_installments", { p_cash_date: selectedDate });
       if (routeError) throw routeError;
 
-      const routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
+      let routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
+      if (isSunday(selectedDate)) {
+        routeInstallments = routeInstallments.filter((i) => i.loans.payment_type !== "daily");
+      }
       if (isStale()) return;
 
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
