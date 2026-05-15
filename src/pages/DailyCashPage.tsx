@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
+import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
@@ -392,7 +393,10 @@ export default function DailyCashPage() {
         .rpc("get_route_installments", { p_cash_date: selectedDate });
       if (routeError) throw routeError;
 
-      const routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
+      let routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
+      if (isSunday(selectedDate)) {
+        routeInstallments = routeInstallments.filter((i) => i.loans.payment_type !== "daily");
+      }
       if (isStale()) return;
 
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
