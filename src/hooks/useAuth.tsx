@@ -40,28 +40,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAdminId(null);
   };
 
-  const loadUserContext = (uid: string) => {
+  const loadUserContext = async (uid: string) => {
     setLoading(true);
-    setTimeout(async () => {
-      try {
-        const [{ data: roles }, { data: workerData }, { data: adminData }] = await Promise.all([
-          supabase.from("user_roles").select("role").eq("user_id", uid),
-          supabase.from("workers").select("id, parent_admin_id").eq("auth_user_id", uid).maybeSingle(),
-          supabase.from("admins" as any).select("id").eq("auth_user_id", uid).maybeSingle(),
-        ]);
-        const roleNames = (roles ?? []).map((r: any) => r.role);
-        setIsSuperAdmin(roleNames.includes("super_admin"));
-        setIsAdmin(roleNames.includes("admin") || roleNames.includes("super_admin"));
-        setWorkerId(workerData?.id ?? null);
-        setAdminId(
-          ((adminData as any)?.id as string) ??
-            ((workerData as any)?.parent_admin_id as string) ??
-            null
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, 0);
+    try {
+      const [{ data: roles }, { data: workerData }, { data: adminData }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", uid),
+        supabase.from("workers").select("id, parent_admin_id").eq("auth_user_id", uid).maybeSingle(),
+        supabase.from("admins" as any).select("id").eq("auth_user_id", uid).maybeSingle(),
+      ]);
+      const roleNames = (roles ?? []).map((r: any) => r.role);
+      setIsSuperAdmin(roleNames.includes("super_admin"));
+      setIsAdmin(roleNames.includes("admin") || roleNames.includes("super_admin"));
+      setWorkerId(workerData?.id ?? null);
+      setAdminId(
+        ((adminData as any)?.id as string) ??
+          ((workerData as any)?.parent_admin_id as string) ??
+          null
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
