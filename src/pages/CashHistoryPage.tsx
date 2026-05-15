@@ -56,6 +56,7 @@ export default function CashHistoryPage() {
     let query = supabase
       .from("cash_movements")
       .select("*, clients(name)")
+      .is("reversed_at", null)
       .order("created_at", { ascending: false })
       .limit(500);
 
