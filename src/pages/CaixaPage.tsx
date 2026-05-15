@@ -248,8 +248,11 @@ export default function CaixaPage() {
           <Card>
             <CardContent className="p-2.5 text-center">
               <TrendingUp className="mx-auto mb-0.5 h-4 w-4 text-warning" />
-              <p className="text-[10px] text-muted-foreground">Dinheiro Emprestado</p>
-              <p className="text-sm font-bold">{formatCurrency(Number(balance.money_lent))}</p>
+              <p className="text-[10px] text-muted-foreground">A Receber</p>
+              <p className="text-sm font-bold">{formatCurrency(Number(balance.money_lent) + Number(balance.interest_receivable))}</p>
+              <p className="text-[9px] text-muted-foreground leading-tight">
+                Princ.: {formatCurrency(Number(balance.money_lent))} · Juros: {formatCurrency(Number(balance.interest_receivable))}
+              </p>
             </CardContent>
           </Card>
         </div>

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { getCurrentUserId } from "@/lib/auth-utils";
+import { getCurrentUserId, getCurrentWorkerId } from "@/lib/auth-utils";
 
 export type CashMovementType =
   | "emprestimo"
@@ -7,7 +7,9 @@ export type CashMovementType =
   | "recebimento_multa"
   | "entrada_manual"
   | "saida_manual"
-  | "ajuste_manual";
+  | "ajuste_manual"
+  | "estorno_pagamento"
+  | "estorno_manual";
 
 export type CashMovement = {
   id: string;
@@ -19,6 +21,8 @@ export type CashMovement = {
   observation: string | null;
   cash_date?: string;
   daily_event_id?: string | null;
+  reversed_at?: string | null;
+  reversed_by?: string | null;
   created_at: string;
 };
 
@@ -31,14 +35,17 @@ export type CashBalance = {
   updated_at: string;
 };
 
+/**
+ * Returns the cash_balance row for the current user.
+ * - Worker: their own row (worker_id = current worker)
+ * - Admin / super_admin: the admin/global row (worker_id IS NULL)
+ */
 export async function getCashBalance(): Promise<CashBalance | null> {
-  // For workers RLS returns only their row. For admin, prefer the admin row (worker_id IS NULL).
-  const { data } = await supabase
-    .from("cash_balance")
-    .select("*")
-    .order("worker_id", { ascending: true, nullsFirst: true })
-    .limit(1)
-    .maybeSingle();
+  const workerId = await getCurrentWorkerId();
+  let q = supabase.from("cash_balance").select("*");
+  if (workerId) q = q.eq("worker_id", workerId);
+  else q = q.is("worker_id", null);
+  const { data } = await q.limit(1).maybeSingle();
   return data as unknown as CashBalance;
 }
 
@@ -86,24 +93,50 @@ export async function linkCashMovementToDailyEvent(movementId: string, eventId: 
   await supabase.from("cash_movements").update({ daily_event_id: eventId } as any).eq("id", movementId);
 }
 
-export async function deleteCashMovement(id: string) {
-  await supabase.from("cash_movements").delete().eq("id", id);
+/**
+ * Mark a cash_movement as reversed (audit trail). NEVER deletes.
+ */
+export async function markCashMovementReversed(movementId: string) {
+  const userId = await getCurrentUserId();
+  await supabase
+    .from("cash_movements")
+    .update({ reversed_at: new Date().toISOString(), reversed_by: userId } as any)
+    .eq("id", movementId);
 }
 
 /**
- * Recalculates cash_balance from authoritative sources:
- * - available_cash: sum of ALL cash_movements (ledger of cash flow)
- * - money_lent + interest_receivable: derived from loans.remaining_balance (single source of truth)
- * - penalty_receivable: derived from penalty installments (amount - paid_amount)
+ * @deprecated kept for legacy callers — does NOT delete; marks as reversed.
+ */
+export async function deleteCashMovement(id: string) {
+  await markCashMovementReversed(id);
+}
+
+/**
+ * Recalculates cash_balance from authoritative sources, SCOPED to the
+ * current user's worker_id (if logged in as worker). Admins recalculate
+ * the global / their-admin scope.
  *
- * IMPORTANT: This uses loan.remaining_balance (set by apply_loan_payment RPC) instead of
- * installments.paid_amount, ensuring consistency even when installments are edited manually.
+ * - available_cash: sum of all (non-reversed) cash_movements.amount
+ * - money_lent + interest_receivable: derived from loans.remaining_balance
+ * - penalty_receivable: from penalty installments (amount - paid_amount)
  */
 export async function recalculateCashBalanceFromLedger() {
+  const workerId = await getCurrentWorkerId();
+
+  let movQ = supabase.from("cash_movements").select("amount, worker_id, reversed_at");
+  let loanQ = supabase.from("loans").select("amount, total_amount, remaining_balance, status, worker_id");
+  let instQ = supabase
+    .from("installments")
+    .select("amount, paid_amount, is_penalty, loan_id, loans!inner(worker_id)");
+
+  if (workerId) {
+    movQ = movQ.eq("worker_id", workerId);
+    loanQ = loanQ.eq("worker_id", workerId);
+    instQ = instQ.eq("loans.worker_id", workerId) as any;
+  }
+
   const [{ data: movements }, { data: loans }, { data: installments }] = await Promise.all([
-    supabase.from("cash_movements").select("amount"),
-    supabase.from("loans").select("amount, total_amount, remaining_balance, status"),
-    supabase.from("installments").select("amount, paid_amount, is_penalty"),
+    movQ, loanQ, instQ,
   ]);
 
   let available_cash = 0;
@@ -111,14 +144,12 @@ export async function recalculateCashBalanceFromLedger() {
   let interest_receivable = 0;
   let penalty_receivable = 0;
 
-  // available_cash = ledger sum
-  for (const m of (movements || [])) {
+  for (const m of (movements || []) as any[]) {
+    if (m.reversed_at) continue;
     available_cash += Number(m.amount);
   }
 
-  // money_lent + interest_receivable: derived from remaining_balance
-  // Allocation rule: paid amount goes to interest first, then principal
-  for (const loan of (loans || [])) {
+  for (const loan of (loans || []) as any[]) {
     const principal = Number(loan.amount);
     const total = Number(loan.total_amount);
     const remaining = Math.max(0, Number(loan.remaining_balance));
@@ -132,8 +163,7 @@ export async function recalculateCashBalanceFromLedger() {
     interest_receivable += Math.max(0, interestPortion - interestPaid);
   }
 
-  // penalty_receivable: from penalty installments
-  const penaltyInsts = (installments || []).filter((i: any) => i.is_penalty);
+  const penaltyInsts = ((installments || []) as any[]).filter((i) => i.is_penalty);
   penalty_receivable = penaltyInsts.reduce(
     (s: number, i: any) => s + Math.max(0, Number(i.amount) - Number(i.paid_amount)),
     0
@@ -159,6 +189,8 @@ export function getMovementTypeLabel(type: string): string {
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
+    case "estorno_pagamento": return "Estorno Pagamento";
+    case "estorno_manual": return "Estorno Manual";
     default: return type;
   }
 }
@@ -171,6 +203,8 @@ export function getMovementTypeColor(type: string): string {
     case "entrada_manual": return "text-success";
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
+    case "estorno_pagamento": return "text-muted-foreground";
+    case "estorno_manual": return "text-muted-foreground";
     default: return "text-muted-foreground";
   }
 }

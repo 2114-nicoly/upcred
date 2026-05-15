@@ -52,6 +52,7 @@ export default function PaymentHistoryPage() {
         .from("cash_movements")
         .select("id, type, amount, cash_date, observation, created_at, loan_id, client_id, daily_event_id")
         .in("type", ["recebimento_normal", "recebimento_multa"])
+        .is("reversed_at", null)
         .order("cash_date", { ascending: false })
         .order("created_at", { ascending: false });
 

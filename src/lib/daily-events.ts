@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { getCurrentUserId } from "@/lib/auth-utils";
+import { getCurrentUserId, getCurrentWorkerId } from "@/lib/auth-utils";
 
 export type DailyEventType =
   | "pagamento"
@@ -10,7 +10,9 @@ export type DailyEventType =
   | "entrada_manual"
   | "saida_manual"
   | "ajuste_manual"
-  | "recebimento_multa";
+  | "recebimento_multa"
+  | "estorno_pagamento"
+  | "estorno_manual";
 
 export type DailyEvent = {
   id: string;
@@ -27,6 +29,7 @@ export type DailyEvent = {
   created_at: string;
   worker_id?: string | null;
   admin_id?: string | null;
+  reversed_at?: string | null;
 };
 
 export async function createDailyEvent(event: {
@@ -62,31 +65,53 @@ export async function createDailyEvent(event: {
   return data as unknown as DailyEvent | null;
 }
 
-export async function getDailyEvents(cashDate: string): Promise<DailyEvent[]> {
-  const { data } = await (supabase.from("daily_events" as any)
+/**
+ * Returns daily events for a date, scoped to the current user's worker_id
+ * (when worker). Excludes events that have been reversed (reversed_at IS NOT NULL).
+ *
+ * Pass `includeReversed: true` to get the full audit list (used by an
+ * "Estornos do dia" expander).
+ */
+export async function getDailyEvents(
+  cashDate: string,
+  opts: { includeReversed?: boolean } = {}
+): Promise<DailyEvent[]> {
+  const workerId = await getCurrentWorkerId();
+  let q: any = supabase.from("daily_events" as any)
     .select("*")
-    .eq("cash_date", cashDate)
-    .order("created_at", { ascending: false }) as any);
+    .eq("cash_date", cashDate);
+  if (workerId) q = q.eq("worker_id", workerId);
+  if (!opts.includeReversed) q = q.is("reversed_at", null);
+  const { data } = await q.order("created_at", { ascending: false });
   return (data as unknown as DailyEvent[]) || [];
 }
 
+/**
+ * @deprecated Kept for legacy callers — does NOT delete; marks as reversed.
+ */
 export async function deleteDailyEvent(id: string) {
-  await supabase.from("daily_events" as any).delete().eq("id", id);
+  await markDailyEventReversed(id);
 }
 
 /**
- * Undo a daily event: reverses the financial impact based on event type.
- * - pagamento/recebimento_multa: reverts via RPC reverse_loan_payment + recalculates installments
- * - nao_pagou: removes not_paid_mark
- * - entrada_manual/saida_manual/ajuste_manual: deletes movement and recalculates cash from ledger
- * - emprestimo_novo/renovacao: BLOCKED — must be undone manually (too complex/risky)
- *
- * Throws an Error with a user-friendly message when the event cannot be undone safely.
+ * Mark a daily_event as reversed (audit trail). NEVER deletes.
+ */
+export async function markDailyEventReversed(id: string) {
+  await supabase
+    .from("daily_events" as any)
+    .update({ reversed_at: new Date().toISOString() } as any)
+    .eq("id", id);
+}
+
+/**
+ * Undo a daily event:
+ * - pagamento/recebimento_multa: reversePayment (mark as reversed + counter-entry)
+ * - nao_pagou: removes not_paid_mark (operational, not financial)
+ * - entrada_manual/saida_manual/ajuste_manual: mark original movement+event as
+ *   reversed and create counter-entries (estorno_manual)
+ * - emprestimo_novo/renovacao: BLOCKED — must be undone manually
  */
 export async function undoDailyEvent(event: DailyEvent) {
-  // Block undo for new loans and renewals — these create downstream state
-  // (installments, balances, possibly closing of previous loan) that cannot
-  // be safely reversed without manual review.
   if (event.event_type === "emprestimo_novo") {
     throw new Error(
       "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
@@ -98,47 +123,95 @@ export async function undoDailyEvent(event: DailyEvent) {
     );
   }
 
-  const { recalculateCashBalanceFromLedger } = await import("@/lib/cash-utils");
+  const { recalculateCashBalanceFromLedger, createCashMovement, markCashMovementReversed, linkCashMovementToDailyEvent } = await import("@/lib/cash-utils");
   const { reversePayment } = await import("@/lib/payment-utils");
 
-  if (event.event_type === "pagamento") {
+  if (event.event_type === "pagamento" || event.event_type === "recebimento_multa") {
     if (!event.cash_movement_id) {
       throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
     }
     await reversePayment({ movementId: event.cash_movement_id });
     return;
-  } else if (event.event_type === "recebimento_multa") {
-    if (!event.cash_movement_id) {
-      throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
-    }
-    await reversePayment({ movementId: event.cash_movement_id });
-    return;
-  } else if (event.event_type === "nao_pagou") {
+  }
+
+  if (event.event_type === "nao_pagou") {
     if (event.installment_id) {
       await supabase.from("not_paid_marks").delete()
         .eq("installment_id", event.installment_id)
         .eq("mark_date", event.cash_date);
     }
-  } else if (
+    await markDailyEventReversed(event.id);
+    return;
+  }
+
+  if (
     event.event_type === "entrada_manual" ||
     event.event_type === "saida_manual" ||
     event.event_type === "ajuste_manual"
   ) {
-    await supabase.from("cash_movements").delete()
-      .eq("type", event.event_type)
-      .eq("cash_date", event.cash_date);
+    // Locate the original cash_movement (prefer linked id; else match by type+date)
+    let movementId = event.cash_movement_id || null;
+    let originalAmount = Number(event.amount_in) - Number(event.amount_out);
+    if (!movementId) {
+      const { data: candidates } = await supabase
+        .from("cash_movements")
+        .select("id, amount, reversed_at")
+        .eq("type", event.event_type)
+        .eq("cash_date", event.cash_date)
+        .is("reversed_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const original = (candidates || [])[0] as any;
+      if (original) {
+        movementId = original.id;
+        originalAmount = Number(original.amount);
+      }
+    } else {
+      const { data: orig } = await supabase
+        .from("cash_movements").select("amount").eq("id", movementId).maybeSingle();
+      if (orig) originalAmount = Number((orig as any).amount);
+    }
+
+    if (movementId) await markCashMovementReversed(movementId);
+    await markDailyEventReversed(event.id);
+
+    // Counter movement and event (negative amount, opposite in/out)
+    const reversalMovement = await createCashMovement({
+      type: "estorno_manual" as any,
+      amount: -originalAmount,
+      observation: `Estorno: ${getEventTypeLabel(event.event_type)}`,
+      cash_date: event.cash_date,
+    }) as any;
+    const reversalEvent = await createDailyEvent({
+      cash_date: event.cash_date,
+      event_type: "estorno_manual",
+      amount_in: Number(event.amount_out) || 0,
+      amount_out: Number(event.amount_in) || 0,
+      observation: `Estorno: ${getEventTypeLabel(event.event_type)}`,
+      origin: "estorno",
+      cash_movement_id: reversalMovement?.id || null,
+    } as any) as any;
+    if (reversalMovement?.id && reversalEvent?.id) {
+      await linkCashMovementToDailyEvent(reversalMovement.id, reversalEvent.id);
+    }
+
     await recalculateCashBalanceFromLedger();
+    return;
   }
 
-  await deleteDailyEvent(event.id);
+  // Fallback: just mark event as reversed
+  await markDailyEventReversed(event.id);
 }
 
 export async function getDailyEventsByType(cashDate: string, eventType: string): Promise<DailyEvent[]> {
-  const { data } = await (supabase.from("daily_events" as any)
+  const workerId = await getCurrentWorkerId();
+  let q: any = supabase.from("daily_events" as any)
     .select("*")
     .eq("cash_date", cashDate)
     .eq("event_type", eventType)
-    .order("created_at", { ascending: false }) as any);
+    .is("reversed_at", null);
+  if (workerId) q = q.eq("worker_id", workerId);
+  const { data } = await q.order("created_at", { ascending: false });
   return (data as unknown as DailyEvent[]) || [];
 }
 
@@ -153,6 +226,8 @@ export function getEventTypeLabel(type: string): string {
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
     case "recebimento_multa": return "Multa Recebida";
+    case "estorno_pagamento": return "Estorno Pagamento";
+    case "estorno_manual": return "Estorno Manual";
     default: return type;
   }
 }
@@ -168,6 +243,8 @@ export function getEventTypeColor(type: string): string {
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
     case "recebimento_multa": return "text-warning";
+    case "estorno_pagamento": return "text-muted-foreground";
+    case "estorno_manual": return "text-muted-foreground";
     default: return "text-muted-foreground";
   }
 }

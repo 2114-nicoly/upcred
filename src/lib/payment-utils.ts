@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { createDailyEvent } from "@/lib/daily-events";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, markCashMovementReversed } from "@/lib/cash-utils";
+import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 
 /**
@@ -360,13 +360,14 @@ export async function reversePayment(params: {
 
   const { data: movement, error } = await supabase
     .from("cash_movements")
-    .select("id, type, amount, loan_id, installment_id, daily_event_id")
+    .select("id, type, amount, loan_id, client_id, cash_date, installment_id, daily_event_id")
     .eq("id", movementId)
     .single();
 
   if (error || !movement?.loan_id) throw new Error("Lançamento de pagamento não encontrado");
   const loanId = movement.loan_id;
   const totalReversed = Number(movement.amount);
+  const cashDate = (movement as any).cash_date || new Date().toISOString().slice(0, 10);
 
   if (movement.type === "recebimento_normal" && totalReversed > 0) {
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
@@ -394,13 +395,43 @@ export async function reversePayment(params: {
     throw new Error("Tipo de lançamento não pode ser desfeito automaticamente");
   }
 
-  await supabase.from("cash_movements").delete().eq("id", movementId);
+  // AUDIT TRAIL: never delete. Mark original as reversed and create a counter-entry.
+  await markCashMovementReversed(movementId);
 
-  const { data: events } = await (supabase.from("daily_events" as any)
-    .select("id")
-    .or(`id.eq.${(movement as any).daily_event_id || "00000000-0000-0000-0000-000000000000"},cash_movement_id.eq.${movementId}`) as any);
-  for (const ev of (events || [])) {
-    await supabase.from("daily_events" as any).delete().eq("id", ev.id);
+  // Mark linked daily_event(s) as reversed
+  const linkedEventIds = new Set<string>();
+  if ((movement as any).daily_event_id) linkedEventIds.add((movement as any).daily_event_id);
+  const { data: linkedEvents } = await (supabase.from("daily_events" as any)
+    .select("id").eq("cash_movement_id", movementId) as any);
+  for (const e of (linkedEvents || []) as any[]) linkedEventIds.add(e.id);
+  for (const eid of linkedEventIds) await markDailyEventReversed(eid);
+
+  // Counter-movement (negative)
+  const reversalMovement = await createCashMovement({
+    type: "estorno_pagamento",
+    amount: -totalReversed,
+    client_id: (movement as any).client_id || null,
+    loan_id: loanId,
+    installment_id: (movement as any).installment_id || null,
+    observation: `Estorno de ${movement.type === "recebimento_multa" ? "multa" : "pagamento"}`,
+    cash_date: cashDate,
+  }) as any;
+
+  // Counter-event (amount_out = reversed value)
+  const reversalEvent = await createDailyEvent({
+    cash_date: cashDate,
+    event_type: "estorno_pagamento" as any,
+    client_id: (movement as any).client_id || null,
+    loan_id: loanId,
+    installment_id: (movement as any).installment_id || null,
+    amount_in: 0,
+    amount_out: totalReversed,
+    observation: `Estorno de ${movement.type === "recebimento_multa" ? "multa" : "pagamento"}`,
+    origin: "estorno",
+    cash_movement_id: reversalMovement?.id || null,
+  } as any) as any;
+  if (reversalMovement?.id && reversalEvent?.id) {
+    await linkCashMovementToDailyEvent(reversalMovement.id, reversalEvent.id);
   }
 
   await recalculateCashBalanceFromLedger();
