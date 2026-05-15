@@ -45,6 +45,7 @@ type ClientRow = { id: string; name: string };
 const todayISO = () => format(new Date(), "yyyy-MM-dd");
 
 export default function ReportsPage() {
+  const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const [mode, setMode] = useState<PeriodMode>("day");
   const [customStart, setCustomStart] = useState(todayISO());
   const [customEnd, setCustomEnd] = useState(todayISO());
