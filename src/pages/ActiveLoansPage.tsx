@@ -113,11 +113,12 @@ export default function ActiveLoansPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: loansData } = await supabase
+      let lq = supabase
         .from("loans")
         .select("*, clients(id, name)")
-        .neq("status", "paid")
-        .order("loan_date", { ascending: false });
+        .neq("status", "paid");
+      if (!isAdmin && !isSuperAdmin && workerId) lq = lq.eq("worker_id", workerId);
+      const { data: loansData } = await lq.order("loan_date", { ascending: false });
 
       const loansList = (loansData as unknown as LoanWithClient[]) || [];
       setLoans(loansList);
