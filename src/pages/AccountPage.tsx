@@ -90,8 +90,29 @@ export default function AccountPage() {
             <Shield className="h-4 w-4" /> Senha
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-2 text-xs text-muted-foreground">
-          Para trocar sua senha, peça ao seu administrador um reset.
+        <CardContent className="p-4 pt-2 space-y-3">
+          {!isAdmin && !isSuperAdmin ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Para trocar sua senha, solicite ao seu administrador ou use a opção "Esqueci minha senha" na tela de login.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={async () => {
+                  await signOut();
+                  navigate("/auth", { replace: true });
+                }}
+              >
+                Ir para tela de login
+              </Button>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Sua senha é gerenciada pelo sistema. Para redefinir, peça ao super administrador.
+            </p>
+          )}
         </CardContent>
       </Card>
 

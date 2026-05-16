@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
 import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
-import { createDailyEvent, deleteDailyEvent } from "@/lib/daily-events";
+import { createDailyEvent, deleteDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -192,6 +192,7 @@ export default function DailyCashPage() {
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [renewalEvents, setRenewalEvents] = useState<DailyEventRow[]>([]);
+  const [reversedEvents, setReversedEvents] = useState<DailyEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
@@ -269,13 +270,15 @@ export default function DailyCashPage() {
       // Parallel: fetch daily_cash status, daily_events for today, not_paid_marks, new loans
       const [
         { data: dcData },
-        { data: eventsData },
+        eventsData,
+        allEventsIncReversed,
         { data: npData },
         { data: newLoanData },
         { data: paidMovementsData },
       ] = await Promise.all([
         supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
-        supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as unknown as QueryResult<DailyEventRow>,
+        getDailyEvents(selectedDate),
+        getDailyEvents(selectedDate, { includeReversed: true }),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
         supabase.from("loans")
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
@@ -292,8 +295,9 @@ export default function DailyCashPage() {
       setDailyCashStatus(status);
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
 
-      const allEvents = (eventsData || []) as DailyEventRow[];
+      const allEvents = (eventsData || []) as unknown as DailyEventRow[];
       setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
+      setReversedEvents((allEventsIncReversed || []).filter((e) => e.reversed_at !== null));
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
       // Build sets of loan IDs that already have payment or nao_pagou events today
@@ -1490,6 +1494,41 @@ export default function DailyCashPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* ESTORNOS DO DIA */}
+      {reversedEvents.length > 0 && (
+        <Collapsible className="mt-4 mb-4">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-full">
+              <Lock className="h-3 w-3" /> Estornos do dia ({reversedEvents.length})
+              <ChevronDown className="ml-auto h-3.5 w-3.5" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-1.5">
+            {reversedEvents.map((ev) => {
+              const valor = Number(ev.amount_in) || Number(ev.amount_out) || 0;
+              return (
+                <div key={ev.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-muted-foreground">{getEventTypeLabel(ev.event_type)}</p>
+                      {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[220px]">{ev.observation}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {valor > 0 && (
+                        <span className="text-xs font-bold tabular-nums text-muted-foreground line-through">
+                          {formatCurrency(valor)}
+                        </span>
+                      )}
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">Estornado</Badge>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {/* FAB */}

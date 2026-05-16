@@ -163,7 +163,7 @@ function WorkersTab() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [workers, setWorkers] = useState<(Worker & { archived_at?: string | null })[]>([]);
-  const [resetRequests, setResetRequests] = useState<any[]>([]);
+  // resetRequests removed: handled by PasswordRecoveryBell in header
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -177,13 +177,11 @@ function WorkersTab() {
     setLoading(true);
     const today = new Date().toISOString().slice(0, 10);
     const range = getPeriodRange("day", today, today);
-    const [{ data: w }, { data: r }, statsList] = await Promise.all([
+    const [{ data: w }, statsList] = await Promise.all([
       supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
-      supabase.from("worker_password_reset_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       loadWorkersStats(range),
     ]);
     setWorkers((w as any) || []);
-    setResetRequests((r as any) || []);
     const map: Record<string, WorkerStats> = {};
     statsList.forEach((s) => { if (s.worker_id) map[s.worker_id] = s; });
     setStats(map);
@@ -277,10 +275,7 @@ function WorkersTab() {
     }
   }
 
-  async function resolveResetRequest(id: string) {
-    await supabase.from("worker_password_reset_requests").update({ status: "resolved", resolved_at: new Date().toISOString() } as any).eq("id", id);
-    load();
-  }
+  // resolveResetRequest removed: handled by PasswordRecoveryBell
 
   function copyCreds() {
     if (!creds) return;
@@ -303,24 +298,7 @@ function WorkersTab() {
         </div>
       </div>
 
-      {resetRequests.length > 0 && (
-        <Card className="border-warning">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-sm flex items-center gap-2"><Inbox className="h-4 w-4" /> Pedidos de senha</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-1 space-y-2">
-            {resetRequests.map((r) => (
-              <div key={r.id} className="flex items-center justify-between text-sm border rounded p-2">
-                <div>
-                  <div className="font-medium">{r.identifier}</div>
-                  <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => resolveResetRequest(r.id)}>Resolver</Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {/* Reset password requests moved to PasswordRecoveryBell in header */}
 
       <div className="space-y-2">
         {workers.length === 0 ? (

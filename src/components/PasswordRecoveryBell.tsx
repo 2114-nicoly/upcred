@@ -79,6 +79,13 @@ export default function PasswordRecoveryBell() {
         .update({ status: "resolved", resolved_at: new Date().toISOString() })
         .eq("id", a.id);
       setCreds({ nome: r.nome, role: r.role, login: r.login, password: r.password, created_at: r.created_at });
+      if (a.login_informado) {
+        await supabase
+          .from("worker_password_reset_requests")
+          .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
+          .eq("identifier", a.login_informado)
+          .eq("status", "pending");
+      }
       toast.success("Senha redefinida");
       load();
     } catch (e: any) {

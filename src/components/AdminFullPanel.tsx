@@ -19,6 +19,8 @@ import {
 } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
+import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
+import { KeyRound } from "lucide-react";
 import { format } from "date-fns";
 
 type Admin = {
@@ -242,13 +244,16 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
           </div>
 
           {isSuperAdmin && (
-            <AccessSection
-              targetKind="admin"
-              targetId={admin.id}
-              loginCodigo={admin.login_codigo}
-              nome={admin.nome}
-              active={admin.active}
-            />
+            <>
+              <AccessSection
+                targetKind="admin"
+                targetId={admin.id}
+                loginCodigo={admin.login_codigo}
+                nome={admin.nome}
+                active={admin.active}
+              />
+              <AdminPendingPasswordRequests adminId={admin.id} />
+            </>
           )}
 
           <Card>
@@ -460,5 +465,88 @@ function LoanSection({
         </div>
       )}
     </div>
+  );
+}
+
+function AdminPendingPasswordRequests({ adminId }: { adminId: string }) {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [creds, setCreds] = useState<GeneratedCreds | null>(null);
+
+  async function load() {
+    const { data } = await supabase
+      .from("password_recovery_requests")
+      .select("*")
+      .eq("target_admin_id", adminId)
+      .eq("status", "pending")
+      .order("requested_at", { ascending: false });
+    setRequests((data as any[]) || []);
+  }
+
+  useEffect(() => { load(); }, [adminId]);
+
+  async function resolve(r: any) {
+    setBusyId(r.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+        body: { target_kind: "admin", target_id: adminId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const x = data as any;
+      await supabase
+        .from("password_recovery_requests")
+        .update({ status: "resolved", resolved_at: new Date().toISOString() } as any)
+        .eq("id", r.id);
+      setCreds({ nome: x.nome, role: x.role, login: x.login, password: x.password, created_at: x.created_at });
+      toast({ title: "Senha redefinida" });
+      load();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e?.message || "Falha", variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function dismiss(r: any) {
+    await supabase
+      .from("password_recovery_requests")
+      .update({ status: "dismissed", resolved_at: new Date().toISOString() } as any)
+      .eq("id", r.id);
+    load();
+  }
+
+  if (requests.length === 0) return null;
+
+  return (
+    <>
+      <Card className="border-warning">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Solicitações de senha pendentes ({requests.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-1 space-y-2">
+          {requests.map((r) => (
+            <div key={r.id} className="rounded border p-2 space-y-1">
+              <p className="text-sm font-medium">{r.nome_informado || "—"}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {r.login_informado && <>Login: <span className="font-mono">{r.login_informado}</span> · </>}
+                {format(new Date(r.requested_at), "dd/MM/yyyy HH:mm")}
+              </p>
+              <div className="flex gap-1">
+                <Button size="sm" className="flex-1 h-7 text-xs" disabled={busyId === r.id} onClick={() => resolve(r)}>
+                  {busyId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Resolver: gerar nova senha"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => dismiss(r)}>
+                  Dispensar
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <CredentialsDialog creds={creds} onClose={() => setCreds(null)} />
+    </>
   );
 }

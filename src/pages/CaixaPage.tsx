@@ -22,7 +22,7 @@ import {
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
   DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2
 } from "lucide-react";
-import { EmptyState } from "@/components/LoadingSkeleton";
+import { EmptyState, CardSkeleton } from "@/components/LoadingSkeleton";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -108,6 +108,7 @@ export default function CaixaPage() {
 
   const handleManualMovement = async () => {
     if (!manualType) return;
+    if (manualType === "ajuste_manual" && !isAdmin && !isSuperAdmin) { setManualType(null); return; }
     const amount = parseFloat(manualAmount);
     if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
     if (manualType !== "ajuste_manual" && amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
@@ -203,7 +204,9 @@ export default function CaixaPage() {
     }
   };
 
-  if (loading) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
+  if (loading) return <div className="mx-auto max-w-lg p-3 space-y-3"><CardSkeleton count={3} /></div>;
+
+  const showAjuste = isAdmin || isSuperAdmin;
 
   return (
     <div className="mx-auto max-w-lg p-3 pb-36 space-y-3">
@@ -268,6 +271,11 @@ export default function CaixaPage() {
               <p className="text-[9px] text-muted-foreground leading-tight">
                 Princ.: {formatCurrency(Number(balance.money_lent))} · Juros: {formatCurrency(Number(balance.interest_receivable))}
               </p>
+              {Number(balance.penalty_receivable) > 0 && (
+                <p className="text-[10px] text-warning font-semibold mt-0.5">
+                  Multas: {formatCurrency(Number(balance.penalty_receivable))}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -321,10 +329,14 @@ export default function CaixaPage() {
           onClick={() => setActiveSection("movimentos")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeSection === "movimentos" ? "border-border bg-accent/50" : "bg-card"}`}
         >
-          <p className="text-[10px] text-muted-foreground">Manual</p>
+          <p className="text-[10px] text-muted-foreground">Movim.</p>
           <p className="text-base font-bold">{movimentos.length}</p>
         </button>
       </div>
+
+      {activeSection === "resumo" && events.length === 0 && (
+        <p className="text-xs text-muted-foreground text-center py-4">Nenhum lançamento neste dia. Selecione uma aba acima para registrar.</p>
+      )}
 
       {/* Section content */}
       {activeSection === "pagos" && (
@@ -347,9 +359,11 @@ export default function CaixaPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(Number(ev.amount_in))}</span>
-                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
-                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
-                    </button>
+                    {!workerIsClosed && (
+                      <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                        <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -375,9 +389,11 @@ export default function CaixaPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
-                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
-                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
-                    </button>
+                    {!workerIsClosed && (
+                      <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                        <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -445,9 +461,11 @@ export default function CaixaPage() {
                     <span className={`text-sm font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : "text-destructive"}`}>
                       {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : `-${formatCurrency(Number(ev.amount_out))}`}
                     </span>
-                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
-                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
-                    </button>
+                    {!workerIsClosed && (
+                      <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                        <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -458,7 +476,7 @@ export default function CaixaPage() {
 
       {activeSection === "resumo" && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground text-center">Selecione uma aba acima para ver os detalhes do dia.</p>
+          {/* Resumo serve as overview - the 4 counters above already act as navigation */}
           {/* All events timeline */}
           {events.length > 0 && (
             <Card>
@@ -479,9 +497,11 @@ export default function CaixaPage() {
                       <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                         {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
                       </span>
-                      <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
-                        <Undo2 className="h-3 w-3 text-destructive" />
-                      </button>
+                      {!workerIsClosed && (
+                        <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
+                          <Undo2 className="h-3 w-3 text-destructive" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -492,25 +512,29 @@ export default function CaixaPage() {
       )}
 
       {/* Action buttons */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${showAjuste ? "grid-cols-3" : "grid-cols-2"}`}>
         <Button disabled={workerIsClosed} variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Entrada
         </Button>
         <Button disabled={workerIsClosed} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
           <Minus className="mr-1 h-3.5 w-3.5" /> Saída
         </Button>
-        <Button disabled={workerIsClosed} variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
-          <Settings className="mr-1 h-3.5 w-3.5" /> Ajuste
-        </Button>
+        {showAjuste && (
+          <Button disabled={workerIsClosed} variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
+            <Settings className="mr-1 h-3.5 w-3.5" /> Ajuste
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className={`grid gap-2 ${showAjuste ? "grid-cols-2" : "grid-cols-1"}`}>
         <Button variant="outline" className="w-full text-xs h-9" onClick={() => navigate("/daily-cash-history")}>
           <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
         </Button>
-        <Button variant="outline" className="w-full text-xs h-9" onClick={handleRecalculate}>
-          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalcular
-        </Button>
+        {showAjuste && (
+          <Button variant="outline" className="w-full text-xs h-9" onClick={handleRecalculate}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalcular
+          </Button>
+        )}
       </div>
 
       {/* Manual movement dialog */}
