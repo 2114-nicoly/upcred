@@ -7,15 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  Shield, ClipboardList, History,
+  Shield, ClipboardList, History, LockOpen,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 type Worker = {
   id: string; nome: string; login_codigo: string; active: boolean;
@@ -186,6 +190,8 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             active={worker.active}
           />
 
+          <RecentCashesSection workerId={worker.id} />
+
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (filtrados por este trabalhador)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 p-3">
@@ -326,5 +332,135 @@ function LoanSection({
         </div>
       )}
     </div>
+  );
+}
+
+type DailyCashRow = {
+  id: string;
+  cash_date: string;
+  status: string;
+  total_received: number;
+  total_not_paid_count: number;
+  closed_at: string | null;
+};
+
+function RecentCashesSection({ workerId }: { workerId: string }) {
+  const [rows, setRows] = useState<DailyCashRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [target, setTarget] = useState<DailyCashRow | null>(null);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("daily_cash")
+      .select("id, cash_date, status, total_received, total_not_paid_count, closed_at")
+      .eq("worker_id", workerId)
+      .order("cash_date", { ascending: false })
+      .limit(7);
+    setRows((data as DailyCashRow[]) || []);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [workerId]);
+
+  async function confirmReopen() {
+    if (!target || reason.trim().length < 5) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("daily_cash")
+        .update({ status: "open", closed_at: null })
+        .eq("id", target.id);
+      if (error) throw error;
+      const { data: { session } } = await supabase.auth.getSession();
+      try {
+        await supabase.from("audit_logs" as any).insert({
+          action_type: "reabrir_caixa",
+          entity_type: "daily_cash",
+          entity_id: target.id,
+          user_id: session?.user?.id,
+          observation: `Reabertura de caixa (${target.cash_date}): ${reason.trim()}`,
+        } as any);
+      } catch (err) {
+        console.warn("[audit] reabrir_caixa failed", err);
+      }
+      toast.success("Caixa reaberto!");
+      setTarget(null);
+      setReason("");
+      load();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao reabrir caixa");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Caixas Recentes</CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2">
+        {loading ? (
+          <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin" /></div>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-2">Nenhum caixa registrado ainda.</p>
+        ) : (
+          rows.map((c) => {
+            const closed = c.status === "closed";
+            return (
+              <div key={c.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs font-medium">
+                      {format(new Date(c.cash_date + "T12:00:00"), "dd/MM/yyyy")}
+                    </p>
+                    {closed ? (
+                      <Badge className="bg-destructive text-destructive-foreground text-[9px] h-4">Fechado</Badge>
+                    ) : (
+                      <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Recebido {formatCurrency(Number(c.total_received))} · {c.total_not_paid_count} não pagos
+                  </p>
+                </div>
+                {closed && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => { setTarget(c); setReason(""); }}>
+                    <LockOpen className="h-3 w-3 mr-1" /> Reabrir
+                  </Button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+
+      <Dialog open={!!target} onOpenChange={(o) => { if (!o) { setTarget(null); setReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reabrir caixa de {target && format(new Date(target.cash_date + "T12:00:00"), "dd/MM/yyyy")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs">Motivo da reabertura *</Label>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Descreva o motivo (mínimo 5 caracteres)..."
+              rows={3}
+            />
+            <p className="text-[10px] text-muted-foreground">Esta ação ficará registrada na auditoria.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTarget(null)} disabled={submitting}>Cancelar</Button>
+            <Button onClick={confirmReopen} disabled={reason.trim().length < 5 || submitting}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />} Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }

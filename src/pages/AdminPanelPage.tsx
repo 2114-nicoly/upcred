@@ -13,8 +13,8 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, ArrowUpDown,
-  TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target, TrendingDown } from "lucide-react";
+import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight,
+  TrendingUp, AlertTriangle, Target } from "lucide-react";
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/loan-utils";
@@ -51,21 +51,17 @@ export default function AdminPanelPage() {
   return (
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
-      <Tabs defaultValue="overview">
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="overview" className="text-xs">Visão Geral</TabsTrigger>
-          <TabsTrigger value="workers" className="text-xs">Trabalhadores</TabsTrigger>
-          <TabsTrigger value="compare" className="text-xs">Comparativo</TabsTrigger>
+      <Tabs defaultValue="workers">
+        <TabsList className="grid grid-cols-2 w-full">
+          <TabsTrigger value="workers" className="text-xs">Equipe</TabsTrigger>
+          <TabsTrigger value="overview" className="text-xs">Resumo</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-3">
-          <OverviewTab />
-        </TabsContent>
         <TabsContent value="workers" className="mt-3">
           <WorkersTab />
         </TabsContent>
-        <TabsContent value="compare" className="mt-3">
-          <CompareTab />
+        <TabsContent value="overview" className="mt-3">
+          <OverviewTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -129,27 +125,7 @@ function OverviewTab() {
             <Kpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} valueClass="text-success" />
             <Kpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Falta receber" value={formatCurrency(stats.faltaReceber)} valueClass="text-destructive" />
             <Kpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="% Recebido" value={`${stats.percentual.toFixed(1)}%`} />
-            <Kpi icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado" value={formatCurrency(stats.emprestado)} />
-            <Kpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Retirado" value={formatCurrency(stats.retirada)} />
-            <Kpi icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Aporte" value={formatCurrency(stats.aporte)} />
-            <Kpi icon={<TrendingDown className="h-4 w-4 text-destructive" />} label="Total saídas" value={formatCurrency(stats.totalSaidas)} />
           </div>
-
-          <Card className="mb-3"><CardContent className="p-3 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">Saldo líquido do período</p>
-                <p className={`text-lg font-bold ${stats.saldoLiquido >= 0 ? "text-success" : "text-destructive"}`}>
-                  {formatCurrency(stats.saldoLiquido)}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Não pagos</p>
-              <p className="text-sm font-bold text-destructive">{stats.naoPagosCount}</p>
-            </div>
-          </CardContent></Card>
 
           <div className="grid grid-cols-4 gap-2">
             <MiniStat label="Clientes" value={stats.clientesAtivos} />
@@ -180,115 +156,7 @@ function MiniStat({ label, value, valueClass }: { label: string; value: number; 
   );
 }
 
-/* ============= COMPARE TAB ============= */
-function CompareTab() {
-  const [mode, setMode] = useState<PeriodMode>("day");
-  const [customStart, setCustomStart] = useState(new Date().toISOString().slice(0, 10));
-  const [customEnd, setCustomEnd] = useState(new Date().toISOString().slice(0, 10));
-  const [rows, setRows] = useState<WorkerStats[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sortKey, setSortKey] = useState<keyof WorkerStats>("recebido");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const range = useMemo(() => getPeriodRange(mode, customStart, customEnd), [mode, customStart, customEnd]);
-
-  useEffect(() => {
-    let cancel = false;
-    async function load() {
-      setLoading(true);
-      const list = await loadWorkersStats(range);
-      if (cancel) return;
-      setRows(list);
-      setLoading(false);
-    }
-    load();
-    return () => { cancel = true; };
-  }, [range]);
-
-  const sorted = useMemo(() => {
-    const arr = [...rows];
-    arr.sort((a, b) => {
-      const av = a[sortKey] as number;
-      const bv = b[sortKey] as number;
-      return sortDir === "asc" ? av - bv : bv - av;
-    });
-    return arr;
-  }, [rows, sortKey, sortDir]);
-
-  function toggleSort(k: keyof WorkerStats) {
-    if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(k); setSortDir("desc"); }
-  }
-
-  const Th = ({ k, label }: { k: keyof WorkerStats; label: string }) => (
-    <th className="text-right cursor-pointer select-none px-1.5 py-1 text-[10px] font-semibold whitespace-nowrap" onClick={() => toggleSort(k)}>
-      <span className="inline-flex items-center gap-0.5">{label} <ArrowUpDown className="h-2.5 w-2.5" /></span>
-    </th>
-  );
-
-  return (
-    <div>
-      <Tabs value={mode} onValueChange={(v) => setMode(v as PeriodMode)} className="mb-3">
-        <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="day" className="text-xs">Dia</TabsTrigger>
-          <TabsTrigger value="week" className="text-xs">Semana</TabsTrigger>
-          <TabsTrigger value="month" className="text-xs">Mês</TabsTrigger>
-          <TabsTrigger value="custom" className="text-xs">Período</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {mode === "custom" && (
-        <Card className="mb-3"><CardContent className="p-2 grid grid-cols-2 gap-2">
-          <div><Label className="text-[10px]">Início</Label><Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="h-8 text-xs" /></div>
-          <div><Label className="text-[10px]">Fim</Label><Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="h-8 text-xs" /></div>
-        </CardContent></Card>
-      )}
-
-      <p className="text-xs text-muted-foreground mb-2">{range.label}</p>
-
-      {loading ? (
-        <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
-      ) : (
-        <Card><CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="text-left px-2 py-1 text-[10px] font-semibold">Trabalhador</th>
-                <Th k="previsto" label="Previsto" />
-                <Th k="recebido" label="Recebido" />
-                <Th k="percentual" label="%" />
-                <Th k="naoPagosCount" label="N.Pg" />
-                <Th k="atrasados" label="Atr" />
-                <Th k="emprestado" label="Emp" />
-                <Th k="retirada" label="Ret" />
-                <Th k="aporte" label="Apt" />
-                <Th k="saldoLiquido" label="Saldo" />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr><td colSpan={10} className="p-3 text-center text-muted-foreground">Sem dados no período</td></tr>
-              ) : sorted.map((s) => (
-                <tr key={s.worker_id ?? "null"} className="border-t">
-                  <td className="px-2 py-1.5 font-medium">{s.worker_name}</td>
-                  <td className="text-right px-1.5">{formatCurrency(s.previsto)}</td>
-                  <td className="text-right px-1.5 text-success">{formatCurrency(s.recebido)}</td>
-                  <td className="text-right px-1.5">{s.percentual.toFixed(0)}%</td>
-                  <td className="text-right px-1.5 text-destructive">{s.naoPagosCount}</td>
-                  <td className="text-right px-1.5 text-destructive">{s.atrasados}</td>
-                  <td className="text-right px-1.5">{formatCurrency(s.emprestado)}</td>
-                  <td className="text-right px-1.5 text-destructive">{formatCurrency(s.retirada)}</td>
-                  <td className="text-right px-1.5 text-success">{formatCurrency(s.aporte)}</td>
-                  <td className={`text-right px-1.5 font-bold ${s.saldoLiquido >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(s.saldoLiquido)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent></Card>
-      )}
-    </div>
-  );
-}
 
 /* ============= WORKERS TAB ============= */
 function WorkersTab() {

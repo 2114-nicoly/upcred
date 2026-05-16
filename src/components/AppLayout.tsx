@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle, AlertTriangle } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
@@ -19,27 +19,23 @@ const workerBottomNav: NavItem[] = [
   { path: "/caixa", label: "Geral", icon: Wallet },
 ];
 const workerSidebar: NavItem[] = [
-  { path: "/", label: "Rota", icon: MapPin },
+  { path: "/", label: "Rota do Dia", icon: MapPin },
   { path: "/caixa", label: "Geral", icon: Wallet },
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
-  { path: "/daily-cash-history", label: "Histórico", icon: CalendarDays },
-  { path: "/reports", label: "Relatórios", icon: BarChart3 },
+  { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
 const adminBottomNav: NavItem[] = [
   { path: "/admin", label: "Painel", icon: LayoutDashboard },
-  { path: "/caixa", label: "Caixa Equipe", icon: Wallet },
+  { path: "/caixa", label: "Caixa Geral", icon: Wallet },
 ];
 const adminSidebar: NavItem[] = [
-  { path: "/admin", label: "Painel (equipe)", icon: LayoutDashboard },
-  { path: "/clients", label: "Clientes da Equipe", icon: Users },
-  { path: "/active-loans", label: "Empréstimos da Equipe", icon: Landmark },
-  { path: "/caixa", label: "Caixa da Equipe", icon: Wallet },
-  { path: "/reports", label: "Relatórios", icon: BarChart3 },
-  { path: "/audit", label: "Auditoria da Equipe", icon: FileSearch },
-  { path: "/admin-tools", label: "Manutenção", icon: Wrench },
+  { path: "/admin", label: "Painel", icon: LayoutDashboard },
+  { path: "/caixa", label: "Caixa Geral", icon: Wallet },
+  { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
+  { path: "/audit", label: "Auditoria", icon: FileSearch },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
