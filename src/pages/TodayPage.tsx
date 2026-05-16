@@ -236,7 +236,6 @@ export default function TodayPage() {
   };
 
   const totalToReceive = installments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
-  const totalOverdue = overdueInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
 
   const renderInstCard = (inst: InstallmentWithLoan) => {
     const lp = loanProgressMap[inst.loan_id];
