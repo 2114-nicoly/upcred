@@ -389,9 +389,11 @@ export default function CaixaPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
-                    <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
-                      <Undo2 className="h-3.5 w-3.5 text-destructive" />
-                    </button>
+                    {!workerIsClosed && (
+                      <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
+                        <Undo2 className="h-3.5 w-3.5 text-destructive" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
