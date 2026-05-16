@@ -329,10 +329,14 @@ export default function CaixaPage() {
           onClick={() => setActiveSection("movimentos")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeSection === "movimentos" ? "border-border bg-accent/50" : "bg-card"}`}
         >
-          <p className="text-[10px] text-muted-foreground">Manual</p>
+          <p className="text-[10px] text-muted-foreground">Movim.</p>
           <p className="text-base font-bold">{movimentos.length}</p>
         </button>
       </div>
+
+      {activeSection === "resumo" && events.length === 0 && (
+        <p className="text-xs text-muted-foreground text-center py-4">Nenhum lançamento neste dia. Selecione uma aba acima para registrar.</p>
+      )}
 
       {/* Section content */}
       {activeSection === "pagos" && (
