@@ -271,6 +271,11 @@ export default function CaixaPage() {
               <p className="text-[9px] text-muted-foreground leading-tight">
                 Princ.: {formatCurrency(Number(balance.money_lent))} · Juros: {formatCurrency(Number(balance.interest_receivable))}
               </p>
+              {Number(balance.penalty_receivable) > 0 && (
+                <p className="text-[10px] text-warning font-semibold mt-0.5">
+                  Multas: {formatCurrency(Number(balance.penalty_receivable))}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
