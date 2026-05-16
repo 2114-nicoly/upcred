@@ -1496,6 +1496,41 @@ export default function DailyCashPage() {
         </div>
       )}
 
+      {/* ESTORNOS DO DIA */}
+      {reversedEvents.length > 0 && (
+        <Collapsible className="mt-4 mb-4">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-full">
+              <Lock className="h-3 w-3" /> Estornos do dia ({reversedEvents.length})
+              <ChevronDown className="ml-auto h-3.5 w-3.5" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-1.5">
+            {reversedEvents.map((ev) => {
+              const valor = Number(ev.amount_in) || Number(ev.amount_out) || 0;
+              return (
+                <div key={ev.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-muted-foreground">{getEventTypeLabel(ev.event_type)}</p>
+                      {ev.observation && <p className="text-[10px] text-muted-foreground truncate max-w-[220px]">{ev.observation}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {valor > 0 && (
+                        <span className="text-xs font-bold tabular-nums text-muted-foreground line-through">
+                          {formatCurrency(valor)}
+                        </span>
+                      )}
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">Estornado</Badge>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       {/* FAB */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
