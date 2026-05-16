@@ -58,6 +58,7 @@ export default function TodayPage() {
   const [overdueClientsCount, setOverdueClientsCount] = useState(0);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
