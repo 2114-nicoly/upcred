@@ -769,6 +769,33 @@ export default function LoanDetailPage() {
         </div>
       </div>
 
+      {/* Renegotiation history banner */}
+      {(renegInfo.newLoanId || renegInfo.sourceLoanId) && (
+        <div className="mb-3 space-y-2">
+          {renegInfo.newLoanId && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-xs flex items-center justify-between gap-2">
+              <span>
+                Este empréstimo foi <strong>{renegInfo.resultType === "renewal" ? "renovado" : "renegociado"}</strong>
+                {renegInfo.newLoanDate && ` em ${format(new Date(renegInfo.newLoanDate), "dd/MM/yyyy")}`}
+              </span>
+              <Button size="sm" variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(`/loans/${renegInfo.newLoanId}`)}>
+                Ver novo empréstimo →
+              </Button>
+            </div>
+          )}
+          {renegInfo.sourceLoanId && (
+            <div className="rounded-lg border border-muted bg-muted/30 p-2.5 text-xs flex items-center justify-between gap-2">
+              <span>
+                Este empréstimo é uma <strong>{renegInfo.sourceType === "renewal" ? "renovação" : "renegociação"}</strong> de um anterior
+              </span>
+              <Button size="sm" variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(`/loans/${renegInfo.sourceLoanId}`)}>
+                Ver empréstimo anterior →
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Loan Info Card */}
       <Card className="mb-4">
         <CardHeader className="pb-2">
