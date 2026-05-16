@@ -485,13 +485,13 @@ export default function CaixaPage() {
 
       {/* Action buttons */}
       <div className="grid grid-cols-3 gap-2">
-        <Button variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
+        <Button disabled={workerIsClosed} variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Entrada
         </Button>
-        <Button variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
+        <Button disabled={workerIsClosed} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
           <Minus className="mr-1 h-3.5 w-3.5" /> Saída
         </Button>
-        <Button variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
+        <Button disabled={workerIsClosed} variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
           <Settings className="mr-1 h-3.5 w-3.5" /> Ajuste
         </Button>
       </div>
