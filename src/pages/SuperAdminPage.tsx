@@ -255,6 +255,10 @@ function AdminsTab() {
                     <KeyRound className="h-3.5 w-3.5 mr-1" /> Senha
                   </Button>
                 </div>
+
+                <Button variant="outline" size="sm" className="w-full" onClick={() => navigate(`/super-admin/${a.id}`)}>
+                  <Eye className="h-4 w-4 mr-1" /> Ver Painel
+                </Button>
               </CardContent>
             </Card>
           );
