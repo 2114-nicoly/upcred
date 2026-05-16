@@ -22,7 +22,7 @@ import {
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
   DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2
 } from "lucide-react";
-import { EmptyState } from "@/components/LoadingSkeleton";
+import { EmptyState, CardSkeleton } from "@/components/LoadingSkeleton";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
