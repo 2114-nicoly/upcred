@@ -98,6 +98,18 @@ export default function TodayPage() {
       overdueInsts = overdueInsts.filter((i) => matchesScope(i.loans?.worker_id));
       setOverdueInstallments(overdueInsts);
 
+      const uniqueOverdueLoanIds = [...new Set(overdueInsts.map((i) => i.loan_id))];
+      let overdueBalanceSum = 0;
+      if (uniqueOverdueLoanIds.length > 0) {
+        const { data: overdueLoans } = await supabase
+          .from("loans")
+          .select("id, remaining_balance")
+          .in("id", uniqueOverdueLoanIds);
+        overdueBalanceSum = (overdueLoans || []).reduce((s: number, l: any) => s + Number(l.remaining_balance || 0), 0);
+      }
+      setTotalOverdueBalance(overdueBalanceSum);
+      setOverdueClientsCount(uniqueOverdueLoanIds.length);
+
       const allInsts = [...todayInsts, ...overdueInsts];
       const uniqueLoanIds = [...new Set(allInsts.map((d) => d.loan_id))];
       const progressMap: Record<string, LoanProgress> = {};
