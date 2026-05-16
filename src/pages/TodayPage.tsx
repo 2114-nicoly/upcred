@@ -306,7 +306,7 @@ export default function TodayPage() {
           <div className="flex gap-2">
             <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
               <DialogTrigger asChild>
-                <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                <Button size="sm" className="flex-1 bg-success hover:bg-success/90" disabled={isSubmitting}>
                   <Plus className="mr-1 h-4 w-4" /> Pagamento
                 </Button>
               </DialogTrigger>
@@ -333,18 +333,18 @@ export default function TodayPage() {
                     <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                   </div>
                   <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                  <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
-                    Confirmar Pagamento
+                  <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                    {isSubmitting ? "Processando..." : "Confirmar Pagamento"}
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
-            <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+            <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)} disabled={isSubmitting}>
               <XCircle className="mr-1 h-4 w-4" /> Não Pagou
             </Button>
           </div>
           {inst.status === "overdue" && (
-            <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)}>
+            <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)} disabled={isSubmitting}>
               <Undo2 className="mr-1 h-3 w-3" /> Desfazer "Não Pagou"
             </Button>
           )}
@@ -352,6 +352,7 @@ export default function TodayPage() {
             size="sm"
             variant="outline"
             className="w-full mt-1"
+            disabled={isSubmitting}
             onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}
           >
             <RefreshCw className="mr-1 h-3 w-3" /> Renovar
