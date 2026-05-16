@@ -531,6 +531,93 @@ export type Database = {
           },
         ]
       }
+      installment_reschedules: {
+        Row: {
+          admin_id: string | null
+          admin_note: string | null
+          approved_by: string | null
+          approved_due_date: string | null
+          created_at: string
+          id: string
+          installment_id: string
+          loan_id: string
+          original_due_date: string
+          reason: string | null
+          requested_due_date: string
+          resolved_at: string | null
+          status: string
+          worker_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          admin_note?: string | null
+          approved_by?: string | null
+          approved_due_date?: string | null
+          created_at?: string
+          id?: string
+          installment_id: string
+          loan_id: string
+          original_due_date: string
+          reason?: string | null
+          requested_due_date: string
+          resolved_at?: string | null
+          status?: string
+          worker_id: string
+        }
+        Update: {
+          admin_id?: string | null
+          admin_note?: string | null
+          approved_by?: string | null
+          approved_due_date?: string | null
+          created_at?: string
+          id?: string
+          installment_id?: string
+          loan_id?: string
+          original_due_date?: string
+          reason?: string | null
+          requested_due_date?: string
+          resolved_at?: string | null
+          status?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "installment_reschedules_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reschedules_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reschedules_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: false
+            referencedRelation: "installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reschedules_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reschedules_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       installments: {
         Row: {
           amount: number
@@ -540,9 +627,12 @@ export type Database = {
           is_penalty: boolean
           loan_id: string
           number: number
+          original_due_date: string | null
           paid_amount: number
           paid_at: string | null
           penalty_amount: number
+          reschedule_count: number
+          rescheduled: boolean
           status: string
         }
         Insert: {
@@ -553,9 +643,12 @@ export type Database = {
           is_penalty?: boolean
           loan_id: string
           number: number
+          original_due_date?: string | null
           paid_amount?: number
           paid_at?: string | null
           penalty_amount?: number
+          reschedule_count?: number
+          rescheduled?: boolean
           status?: string
         }
         Update: {
@@ -566,9 +659,12 @@ export type Database = {
           is_penalty?: boolean
           loan_id?: string
           number?: number
+          original_due_date?: string | null
           paid_amount?: number
           paid_at?: string | null
           penalty_amount?: number
+          reschedule_count?: number
+          rescheduled?: boolean
           status?: string
         }
         Relationships: [
@@ -577,6 +673,113 @@ export type Database = {
             columns: ["loan_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loan_renegotiations: {
+        Row: {
+          absorbed_from_new: number
+          admin_id: string | null
+          client_paid_amount: number
+          created_at: string
+          id: string
+          new_amount: number | null
+          new_installment_count: number | null
+          new_interest_type: string | null
+          new_interest_value: number | null
+          new_loan_id: string | null
+          new_payment_type: string | null
+          new_total_amount: number | null
+          original_installment_count: number
+          original_interest_type: string
+          original_interest_value: number
+          original_loan_id: string
+          original_payment_type: string
+          original_remaining_balance: number
+          original_total_amount: number
+          reason: string | null
+          released_to_client: number
+          type: string
+          worker_id: string | null
+        }
+        Insert: {
+          absorbed_from_new?: number
+          admin_id?: string | null
+          client_paid_amount?: number
+          created_at?: string
+          id?: string
+          new_amount?: number | null
+          new_installment_count?: number | null
+          new_interest_type?: string | null
+          new_interest_value?: number | null
+          new_loan_id?: string | null
+          new_payment_type?: string | null
+          new_total_amount?: number | null
+          original_installment_count: number
+          original_interest_type: string
+          original_interest_value: number
+          original_loan_id: string
+          original_payment_type: string
+          original_remaining_balance: number
+          original_total_amount: number
+          reason?: string | null
+          released_to_client?: number
+          type: string
+          worker_id?: string | null
+        }
+        Update: {
+          absorbed_from_new?: number
+          admin_id?: string | null
+          client_paid_amount?: number
+          created_at?: string
+          id?: string
+          new_amount?: number | null
+          new_installment_count?: number | null
+          new_interest_type?: string | null
+          new_interest_value?: number | null
+          new_loan_id?: string | null
+          new_payment_type?: string | null
+          new_total_amount?: number | null
+          original_installment_count?: number
+          original_interest_type?: string
+          original_interest_value?: number
+          original_loan_id?: string
+          original_payment_type?: string
+          original_remaining_balance?: number
+          original_total_amount?: number
+          reason?: string | null
+          released_to_client?: number
+          type?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_renegotiations_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loan_renegotiations_new_loan_id_fkey"
+            columns: ["new_loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loan_renegotiations_original_loan_id_fkey"
+            columns: ["original_loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loan_renegotiations_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
             referencedColumns: ["id"]
           },
         ]
@@ -600,6 +803,7 @@ export type Database = {
           renewed_from_loan_id: string | null
           route_id: string | null
           status: string
+          status_detail: string | null
           total_amount: number
           user_id: string | null
           worker_id: string | null
@@ -622,6 +826,7 @@ export type Database = {
           renewed_from_loan_id?: string | null
           route_id?: string | null
           status?: string
+          status_detail?: string | null
           total_amount: number
           user_id?: string | null
           worker_id?: string | null
@@ -644,6 +849,7 @@ export type Database = {
           renewed_from_loan_id?: string | null
           route_id?: string | null
           status?: string
+          status_detail?: string | null
           total_amount?: number
           user_id?: string | null
           worker_id?: string | null
@@ -796,33 +1002,51 @@ export type Database = {
         Row: {
           admin_id: string | null
           amount: number
+          base_amount: number | null
           created_at: string
           id: string
           installment_id: string
           loan_id: string
           observation: string | null
+          paid: boolean
+          paid_amount: number
+          paid_at: string | null
+          penalty_type: string
+          percentage_value: number | null
           user_id: string | null
           worker_id: string | null
         }
         Insert: {
           admin_id?: string | null
           amount: number
+          base_amount?: number | null
           created_at?: string
           id?: string
           installment_id: string
           loan_id: string
           observation?: string | null
+          paid?: boolean
+          paid_amount?: number
+          paid_at?: string | null
+          penalty_type?: string
+          percentage_value?: number | null
           user_id?: string | null
           worker_id?: string | null
         }
         Update: {
           admin_id?: string | null
           amount?: number
+          base_amount?: number | null
           created_at?: string
           id?: string
           installment_id?: string
           loan_id?: string
           observation?: string | null
+          paid?: boolean
+          paid_amount?: number
+          paid_at?: string | null
+          penalty_type?: string
+          percentage_value?: number | null
           user_id?: string | null
           worker_id?: string | null
         }
