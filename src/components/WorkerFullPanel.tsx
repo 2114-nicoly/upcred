@@ -7,15 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  Shield, ClipboardList, History,
+  Shield, ClipboardList, History, LockOpen,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 type Worker = {
   id: string; nome: string; login_codigo: string; active: boolean;
