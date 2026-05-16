@@ -1181,72 +1181,170 @@ export default function LoanDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Loan Dialog */}
-      <Dialog open={editLoanOpen} onOpenChange={setEditLoanOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Renegociar Empréstimo</DialogTitle></DialogHeader>
+      {/* Renegotiation Dialog (3-step flow) */}
+      <Dialog open={renegOpen} onOpenChange={(o) => { if (!o && !renegSubmitting) setRenegOpen(false); }}>
+        <DialogContent className="max-w-lg" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Renegociar Empréstimo — Passo {renegStep} de 3</DialogTitle>
+          </DialogHeader>
           <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
-            <div><Label>Valor Emprestado (R$)</Label><Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Tipo de Juros</Label>
-                <Select value={editInterestType} onValueChange={setEditInterestType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                  <SelectItem value="percentage">Porcentagem (%)</SelectItem><SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
-                </SelectContent></Select>
-              </div>
-              <div><Label>{editInterestType === "percentage" ? "Juros (%)" : "Juros (R$)"}</Label><Input type="number" value={editInterestValue} onChange={(e) => setEditInterestValue(e.target.value)} /></div>
-            </div>
-            <div><Label>Tipo de Pagamento</Label>
-              <Select value={editPaymentType} onValueChange={setEditPaymentType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                <SelectItem value="daily">Diário</SelectItem><SelectItem value="weekly">Semanal</SelectItem>
-                <SelectItem value="biweekly">Quinzenal</SelectItem><SelectItem value="monthly">Mensal</SelectItem>
-                <SelectItem value="fixed_dates">Data Fixa</SelectItem>
-              </SelectContent></Select>
-            </div>
-            <div><Label>Quantidade de Parcelas</Label><Input type="number" value={editInstallmentCount} onChange={(e) => setEditInstallmentCount(e.target.value)} /></div>
-            <div><Label>Data do Empréstimo</Label><Input type="date" value={editLoanDate} onChange={(e) => setEditLoanDate(e.target.value)} /></div>
-            {editPaymentType !== "fixed_dates" && (
-              <div><Label>Data do Primeiro Vencimento</Label><Input type="date" value={editFirstDueDate} onChange={(e) => setEditFirstDueDate(e.target.value)} /></div>
-            )}
-            <div><Label>Status</Label>
-              <Select value={editStatus} onValueChange={setEditStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                <SelectItem value="open">Em Aberto</SelectItem><SelectItem value="paid">Pago</SelectItem><SelectItem value="overdue">Atrasado</SelectItem>
-              </SelectContent></Select>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <Label className="text-sm">Marcar como Cravo 🔥</Label>
-              <Switch checked={editIsCravo} onCheckedChange={setEditIsCravo} />
-            </div>
-            {editCalc && (
-              <Card className="border-primary/30 bg-accent">
-                <CardHeader className="pb-2"><CardTitle className="flex items-center text-base"><Calculator className="mr-2 h-4 w-4" /> Prévia</CardTitle></CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span>Emprestado:</span><span className="font-semibold">{formatCurrency(editNumAmount)}</span></div>
-                  <div className="flex justify-between"><span>Juros:</span><span className="font-semibold">{formatCurrency(editCalc.interest)}</span></div>
-                  <div className="flex justify-between border-t pt-1"><span className="font-bold">Valor final:</span><span className="font-bold text-primary">{formatCurrency(editCalc.totalAmount)}</span></div>
-                  <div className="flex justify-between"><span>Parcela:</span><span className="font-semibold">{formatCurrency(editCalc.installmentAmount)}</span></div>
-                  {editDueDates.length > 0 && (
-                    <div className="mt-2 border-t pt-2">
-                      <p className="mb-1 font-medium">Novos vencimentos:</p>
-                      {editDueDates.map((d, i) => (
-                        <p key={i} className="text-muted-foreground">Parcela {i + 1}: {format(d, "dd/MM/yyyy")}</p>
-                      ))}
+            {/* STEP 1 — Current situation */}
+            {renegStep === 1 && (
+              <>
+                <Card>
+                  <CardContent className="pt-4 space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Valor original:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Juros originais:</span><span>{formatCurrency(Number(loan.total_amount) - Number(loan.amount))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Parcelas:</span><span>{Math.floor(loanProgress.fractionalProgress)} pagas / {loan.installment_count} total</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Valor por parcela:</span><span>{formatCurrency(Number(loan.total_amount) / loan.installment_count)}</span></div>
+                    <div className="border-t pt-2 flex justify-between items-baseline">
+                      <span className="font-semibold">Saldo devedor:</span>
+                      <span className="text-2xl font-bold text-primary">{formatCurrency(renegBase)}</span>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-            <div className="border-t pt-3">
-              <Label className="text-sm font-semibold">Registros de Multas ({penalties.length})</Label>
-              {penaltyInst && (
-                <div className="mt-1 mb-2 rounded-lg bg-muted/50 p-2 text-xs space-y-1">
-                  <div className="flex justify-between"><span>Total:</span><span className="font-semibold text-destructive">{formatCurrency(penaltyTotal)}</span></div>
-                  <div className="flex justify-between"><span>Pago:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
-                  <div className="flex justify-between"><span>Pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+                    {penaltyTotal - penaltyPaid > 0.01 && (
+                      <div className="flex justify-between text-destructive">
+                        <span>Multas pendentes:</span>
+                        <span className="font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs">
+                  ⚠️ A renegociação vai criar um <strong>novo plano de pagamento</strong>. O empréstimo atual será encerrado e um novo será gerado com as novas condições. O saldo devedor atual ({formatCurrency(renegBase)}) é a base do novo empréstimo.
                 </div>
-              )}
-            </div>
-            <Button onClick={handleEditLoan} className="w-full" size="lg">⚠️ Renegociar Empréstimo</Button>
-            <p className="text-xs text-center text-muted-foreground">As parcelas existentes serão substituídas pelas novas.</p>
+                <Button onClick={() => setRenegStep(2)} className="w-full" disabled={renegBase <= 0.01}>
+                  Próximo →
+                </Button>
+              </>
+            )}
+
+            {/* STEP 2 — New conditions */}
+            {renegStep === 2 && (
+              <>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Base do novo empréstimo (saldo devedor)</Label>
+                  <Input type="text" value={formatCurrency(renegBase)} disabled className="mt-1 font-semibold" />
+                </div>
+                <div>
+                  <Label>Juros adicionais</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Select value={renegInterestType} onValueChange={(v) => setRenegInterestType(v as "percentage" | "fixed")}>
+                      <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percentage">Porcentagem (%)</SelectItem>
+                        <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number" step="0.01" inputMode="decimal"
+                      placeholder={renegInterestType === "percentage" ? "Ex: 20" : "Ex: 100,00"}
+                      value={renegInterestValue}
+                      onChange={(e) => setRenegInterestValue(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Nº de parcelas</Label>
+                    <Input type="number" inputMode="numeric" value={renegInstallmentCount} onChange={(e) => setRenegInstallmentCount(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Tipo de pagamento</Label>
+                    <Select value={renegPaymentType} onValueChange={setRenegPaymentType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Diário</SelectItem>
+                        <SelectItem value="weekly">Semanal</SelectItem>
+                        <SelectItem value="biweekly">Quinzenal</SelectItem>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                        <SelectItem value="fixed_dates">Data fixa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {renegPaymentType !== "fixed_dates" && (
+                  <div>
+                    <Label>Data da 1ª parcela</Label>
+                    <Input type="date" value={renegFirstDueDate} onChange={(e) => setRenegFirstDueDate(e.target.value)} />
+                  </div>
+                )}
+                <div>
+                  <Label>Motivo da renegociação <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    value={renegReason}
+                    onChange={(e) => setRenegReason(e.target.value)}
+                    placeholder="Ex: cliente pediu prazo maior, mudou de emprego..."
+                    rows={2}
+                  />
+                </div>
+
+                <Card className="border-primary/30 bg-accent">
+                  <CardContent className="pt-3 space-y-1 text-sm">
+                    <div className="flex justify-between"><span>Base (saldo devedor):</span><span className="font-semibold">{formatCurrency(renegBase)}</span></div>
+                    <div className="flex justify-between"><span>Juros adicionais:</span><span className="font-semibold">{formatCurrency(renegCalc?.interest || 0)}</span></div>
+                    <div className="flex justify-between border-t pt-1"><span className="font-bold">Novo total:</span><span className="font-bold text-primary">{formatCurrency(renegCalc?.totalAmount || 0)}</span></div>
+                    <div className="flex justify-between"><span>Valor por parcela:</span><span className="font-semibold">{formatCurrency(renegCalc?.installmentAmount || 0)}</span></div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setRenegStep(1)} className="flex-1">← Voltar</Button>
+                  <Button
+                    onClick={() => setRenegStep(3)}
+                    className="flex-1"
+                    disabled={!renegCalc || renegDueDates.length === 0 || !renegReason.trim()}
+                  >
+                    Próximo →
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* STEP 3 — Confirmation */}
+            {renegStep === 3 && renegCalc && (
+              <>
+                <div className="rounded-lg border overflow-hidden text-sm">
+                  <div className="grid grid-cols-3 bg-muted/50 px-2 py-1.5 text-xs font-semibold">
+                    <span></span><span>Antes</span><span>Depois</span>
+                  </div>
+                  {[
+                    ["Valor base", formatCurrency(Number(loan.amount)), formatCurrency(renegBase)],
+                    ["Total a pagar", formatCurrency(Number(loan.total_amount)), formatCurrency(renegCalc.totalAmount)],
+                    ["Parcelas", String(loan.installment_count), String(renegNumInstallments)],
+                    ["Valor/parcela", formatCurrency(Number(loan.total_amount) / loan.installment_count), formatCurrency(renegCalc.installmentAmount)],
+                    ["Tipo pagto", getPaymentTypeLabel(loan.payment_type), getPaymentTypeLabel(renegPaymentType)],
+                  ].map(([label, before, after], i) => (
+                    <div key={i} className="grid grid-cols-3 border-t px-2 py-1.5 text-xs">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span>{before}</span>
+                      <span className="font-semibold">{after}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg bg-muted/40 p-2 text-xs">
+                  <strong>Motivo:</strong> {renegReason.trim()}
+                </div>
+                <label className="flex items-start gap-2 rounded-lg border p-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={renegConfirmed}
+                    onChange={(e) => setRenegConfirmed(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-sm">Confirmo as novas condições com o cliente</span>
+                </label>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setRenegStep(2)} className="flex-1" disabled={renegSubmitting}>← Voltar</Button>
+                  <Button
+                    onClick={handleRenegotiate}
+                    className="flex-1 bg-primary"
+                    disabled={!renegConfirmed || renegSubmitting}
+                  >
+                    {renegSubmitting ? "Processando..." : "Confirmar Renegociação"}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
