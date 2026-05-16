@@ -194,6 +194,10 @@ export default function DailyCashPage() {
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [renewalEvents, setRenewalEvents] = useState<DailyEventRow[]>([]);
   const [reversedEvents, setReversedEvents] = useState<DailyEvent[]>([]);
+  const [pendingPenalties, setPendingPenalties] = useState<Array<{ id: string; amount: number; loan_id: string; clientName: string; clientId: string; created_at: string }>>([]);
+  const [rescheduledInstIds, setRescheduledInstIds] = useState<Set<string>>(new Set());
+  const [totalPenaltyPaidToday, setTotalPenaltyPaidToday] = useState(0);
+  const [clientSearch, setClientSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
