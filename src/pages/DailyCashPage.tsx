@@ -1298,9 +1298,21 @@ export default function DailyCashPage() {
             <span className="text-sm font-bold text-destructive tabular-nums">{formatCurrency(totalOverdueValue)}</span>
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-success">Total recebido</span>
-          <span className="text-sm font-bold text-success tabular-nums">{formatCurrency(totalPaidValue)}</span>
+        <div className="border-t border-border pt-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-success flex items-center gap-1">💵 Recebimentos de empréstimo</span>
+            <span className="text-sm font-semibold text-success tabular-nums">{formatCurrency(totalPaidValue)}</span>
+          </div>
+          {totalPenaltyPaidToday > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-amber-600 flex items-center gap-1">⚠️ Multas recebidas</span>
+              <span className="text-sm font-semibold text-amber-600 tabular-nums">{formatCurrency(totalPenaltyPaidToday)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-1 border-t border-border">
+            <span className="text-xs font-bold">Total do dia</span>
+            <span className="text-base font-extrabold tabular-nums">{formatCurrency(totalPaidValue + totalPenaltyPaidToday)}</span>
+          </div>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">Progresso</span>
