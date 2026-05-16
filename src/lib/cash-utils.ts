@@ -132,6 +132,11 @@ export async function createCashMovement(movement: {
   daily_event_id?: string | null;
 }) {
   const userId = await getCurrentUserId();
+  const { worker_id, admin_id } = await resolveScope({
+    loan_id: movement.loan_id,
+    client_id: movement.client_id,
+    required: true,
+  });
   const { data, error } = await supabase.from("cash_movements").insert({
     type: movement.type,
     amount: movement.amount,
@@ -142,6 +147,8 @@ export async function createCashMovement(movement: {
     cash_date: movement.cash_date || new Date().toISOString().slice(0, 10),
     daily_event_id: movement.daily_event_id || null,
     user_id: userId,
+    worker_id,
+    admin_id,
   } as any).select().single();
   if (error) throw error;
   return data;
