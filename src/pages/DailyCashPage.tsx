@@ -1407,14 +1407,49 @@ export default function DailyCashPage() {
           )}
 
           {isClosed ? (
-            <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm">
-              <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
-            </Button>
+            (isAdmin || isSuperAdmin) ? (
+              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm">
+                <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
+              </Button>
+            ) : (
+              <p className="text-center text-xs text-muted-foreground mt-4">
+                Caixa fechado. Solicite a reabertura ao seu administrador.
+              </p>
+            )
           ) : (
             <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm">
               <Lock className="mr-2 h-4 w-4" /> Fechar Caixa do Dia
             </Button>
           )}
+
+          <Dialog open={reopenDialogOpen} onOpenChange={(o) => { setReopenDialogOpen(o); if (!o) setReopenReason(""); }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Reabrir caixa do dia</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>Motivo da reabertura <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    value={reopenReason}
+                    onChange={(e) => setReopenReason(e.target.value)}
+                    placeholder="Descreva o motivo (mínimo 5 caracteres)..."
+                    rows={3}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Esta ação ficará registrada no histórico de auditoria.
+                  </p>
+                </div>
+                <Button
+                  onClick={confirmReopenCash}
+                  disabled={reopenReason.trim().length < 5 || isReopening}
+                  className="w-full"
+                >
+                  {isReopening ? "Reabrindo..." : "Confirmar Reabertura"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </>
       )}
 
