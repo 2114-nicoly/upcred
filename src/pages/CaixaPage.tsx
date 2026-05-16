@@ -108,6 +108,7 @@ export default function CaixaPage() {
 
   const handleManualMovement = async () => {
     if (!manualType) return;
+    if (manualType === "ajuste_manual" && !isAdmin && !isSuperAdmin) { setManualType(null); return; }
     const amount = parseFloat(manualAmount);
     if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
     if (manualType !== "ajuste_manual" && amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
