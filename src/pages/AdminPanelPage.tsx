@@ -163,7 +163,7 @@ function WorkersTab() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [workers, setWorkers] = useState<(Worker & { archived_at?: string | null })[]>([]);
-  const [resetRequests, setResetRequests] = useState<any[]>([]);
+  // resetRequests removed: handled by PasswordRecoveryBell in header
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
