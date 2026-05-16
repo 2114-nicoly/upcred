@@ -797,10 +797,26 @@ export default function DailyCashPage() {
       total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
     };
 
+    let dailyCashId: string | null = null;
     if (existing) {
       await supabase.from("daily_cash").update(payload).eq("id", existing.id);
+      dailyCashId = existing.id;
     } else {
-      await supabase.from("daily_cash").insert({ ...payload, user_id: s3?.user?.id });
+      const { data: inserted } = await supabase.from("daily_cash").insert({ ...payload, user_id: s3?.user?.id }).select("id").maybeSingle();
+      dailyCashId = inserted?.id ?? null;
+    }
+
+    try {
+      await supabase.from("audit_logs").insert({
+        action_type: "fechar_caixa",
+        entity_type: "daily_cash",
+        entity_id: dailyCashId,
+        user_id: s3?.user?.id,
+        new_value: { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
+        observation: `Caixa fechado - ${selectedDate}`,
+      } as any);
+    } catch (err) {
+      console.warn("[audit] fechar_caixa failed", err);
     }
 
     toast.success("Caixa do dia fechado!");
@@ -809,14 +825,43 @@ export default function DailyCashPage() {
   };
 
   const handleReopenCash = async () => {
-    const { data: existing } = await supabase
-      .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
-    if (existing) {
-      await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
+    if (!isAdmin && !isSuperAdmin) {
+      toast.error("Apenas administradores podem reabrir o caixa.");
+      return;
     }
-    toast.success("Caixa reaberto!");
-    setDailyCashStatus("open");
-    refreshDataInBackground();
+    setReopenReason("");
+    setReopenDialogOpen(true);
+  };
+
+  const confirmReopenCash = async () => {
+    if (reopenReason.trim().length < 5) return;
+    setIsReopening(true);
+    try {
+      const { data: existing } = await supabase
+        .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
+      if (existing) {
+        await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
+      }
+      const { data: { session: s } } = await supabase.auth.getSession();
+      try {
+        await supabase.from("audit_logs").insert({
+          action_type: "reabrir_caixa",
+          entity_type: "daily_cash",
+          entity_id: existing?.id ?? null,
+          user_id: s?.user?.id,
+          observation: `Reabertura de caixa (${selectedDate}): ${reopenReason.trim()}`,
+        } as any);
+      } catch (err) {
+        console.warn("[audit] reabrir_caixa failed", err);
+      }
+      toast.success("Caixa reaberto!");
+      setDailyCashStatus("open");
+      setReopenDialogOpen(false);
+      setReopenReason("");
+      refreshDataInBackground();
+    } finally {
+      setIsReopening(false);
+    }
   };
 
   const handleQuitarEmprestimo = async (instId: string) => {
