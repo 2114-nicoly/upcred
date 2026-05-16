@@ -181,6 +181,7 @@ export default function CaixaPage() {
   };
 
   const handleUndoEvent = async (event: DailyEvent) => {
+    if (workerIsClosed) { toast.error("Caixa fechado. Solicite reabertura ao administrador."); return; }
     const valor = Number(event.amount_in) || Number(event.amount_out) || 0;
     const ok = await confirm({
       title: "Desfazer lançamento?",
