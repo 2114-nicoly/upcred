@@ -379,7 +379,8 @@ export default function DailyCashPage() {
           .select("installment_id, loan_id")
           .eq("type", "recebimento_normal")
           .eq("cash_date", selectedDate)
-          .in("loan_id", paidLoanIdArr);
+          .in("loan_id", paidLoanIdArr)
+          .is("reversed_at", null);
         const instByLoan = new Map<string, string[]>();
         for (const cm of (cmData || [])) {
           if (cm.installment_id && cm.loan_id) {
@@ -851,7 +852,8 @@ export default function DailyCashPage() {
       .from("cash_movements")
       .select("amount")
       .eq("type", "recebimento_multa")
-      .eq("cash_date", selectedDate) as unknown as QueryResult<PenaltyMovementRow>);
+      .eq("cash_date", selectedDate)
+      .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
     const { data: { session: s3 } } = await supabase.auth.getSession();
@@ -1084,6 +1086,11 @@ export default function DailyCashPage() {
                 <div>
                   <Label>Valor recebido</Label>
                   <Input type="number" placeholder={`Padrão: ${instAmount.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Multa a cobrar hoje (R$)</Label>
+                  <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Opcional — registrado separado da parcela</p>
                 </div>
                 <div>
                   <Label>Data do pagamento</Label>
