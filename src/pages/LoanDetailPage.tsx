@@ -50,6 +50,8 @@ type Loan = {
   observation: string | null;
   status_detail: string | null;
   renewed_from_loan_id: string | null;
+  worker_id: string | null;
+  admin_id: string | null;
   clients: { name: string; full_name: string | null; phone: string | null };
 };
 
