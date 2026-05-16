@@ -304,7 +304,8 @@ export default function DailyCashPage() {
         supabase.from("cash_movements")
           .select("id, loan_id, amount")
           .eq("cash_date", selectedDate)
-          .eq("type", "recebimento_normal") as unknown as QueryResult<CashMovementPaymentRow>,
+          .eq("type", "recebimento_normal")
+          .is("reversed_at", null) as unknown as QueryResult<CashMovementPaymentRow>,
       ]);
 
       if (isStale()) return;
@@ -975,8 +976,8 @@ export default function DailyCashPage() {
 
   // Summary values
   const totalPaidValue = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
-  const totalTodayValue = todayItems.reduce((s, i) => s + Number(i.loans.remaining_balance), 0);
-  const totalOverdueValue = overdueItems.reduce((s, i) => s + Number(i.loans.remaining_balance), 0);
+  const totalTodayValue = todayItems.reduce((s, i) => s + Math.max(0, Number(i.amount) - Number(i.paid_amount)), 0);
+  const totalOverdueValue = overdueItems.reduce((s, i) => s + Math.max(0, Number(i.amount) - Number(i.paid_amount)), 0);
   const totalTreated = paidGroups.length + notPaidMarks.length;
   const totalAll = totalTreated + pendingInstallments.length;
 
