@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle, AlertTriangle } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
