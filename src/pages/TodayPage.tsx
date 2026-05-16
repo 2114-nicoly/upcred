@@ -53,6 +53,8 @@ export default function TodayPage() {
   const { selectedWorkerId, selectedAdminId, workers } = useWorkerFilter();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
+  const [totalOverdueBalance, setTotalOverdueBalance] = useState(0);
+  const [overdueClientsCount, setOverdueClientsCount] = useState(0);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
