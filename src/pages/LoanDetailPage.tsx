@@ -128,17 +128,20 @@ export default function LoanDetailPage() {
   const [overduePenaltyAmount, setOverduePenaltyAmount] = useState("");
   const [overduePenaltyObs, setOverduePenaltyObs] = useState("");
 
-  // Edit loan
-  const [editLoanOpen, setEditLoanOpen] = useState(false);
-  const [editAmount, setEditAmount] = useState("");
-  const [editInterestValue, setEditInterestValue] = useState("");
-  const [editInterestType, setEditInterestType] = useState("percentage");
-  const [editPaymentType, setEditPaymentType] = useState("");
-  const [editLoanDate, setEditLoanDate] = useState("");
-  const [editFirstDueDate, setEditFirstDueDate] = useState("");
-  const [editInstallmentCount, setEditInstallmentCount] = useState("");
-  const [editStatus, setEditStatus] = useState("");
-  const [editIsCravo, setEditIsCravo] = useState(false);
+  // Renegotiation (3-step dialog)
+  const [renegOpen, setRenegOpen] = useState(false);
+  const [renegStep, setRenegStep] = useState<1 | 2 | 3>(1);
+  const [renegInterestType, setRenegInterestType] = useState<"percentage" | "fixed">("percentage");
+  const [renegInterestValue, setRenegInterestValue] = useState("");
+  const [renegInstallmentCount, setRenegInstallmentCount] = useState("");
+  const [renegPaymentType, setRenegPaymentType] = useState("daily");
+  const [renegFirstDueDate, setRenegFirstDueDate] = useState("");
+  const [renegReason, setRenegReason] = useState("");
+  const [renegConfirmed, setRenegConfirmed] = useState(false);
+  const [renegSubmitting, setRenegSubmitting] = useState(false);
+
+  // Renegotiation history banner
+  const [renegInfo, setRenegInfo] = useState<RenegotiationInfo>({});
 
   // Edit installment
   const [editInstId, setEditInstId] = useState<string | null>(null);
