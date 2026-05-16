@@ -240,6 +240,14 @@ export default function CaixaPage() {
         </Button>
       </div>
 
+      {!isAdmin && !isSuperAdmin && (
+        <div className="flex justify-center">
+          <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
+            {isClosed ? "Caixa Fechado" : "Caixa Aberto"}
+          </Badge>
+        </div>
+      )}
+
       {/* Global balance cards */}
       {balance && (
         <div className="grid grid-cols-2 gap-2">
