@@ -497,9 +497,11 @@ export default function CaixaPage() {
                       <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                         {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
                       </span>
-                      <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
-                        <Undo2 className="h-3 w-3 text-destructive" />
-                      </button>
+                      {!workerIsClosed && (
+                        <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
+                          <Undo2 className="h-3 w-3 text-destructive" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
