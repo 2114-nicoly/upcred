@@ -19,8 +19,9 @@ import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } f
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
-  Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History, Filter, ChevronDown, RefreshCw, Loader2
+  Plus, ChevronLeft, ChevronRight, Clock, Lock, LockOpen, MoreVertical, Eye, History, Filter, ChevronDown, RefreshCw, Loader2, Search, CalendarClock
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
@@ -193,6 +194,10 @@ export default function DailyCashPage() {
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [renewalEvents, setRenewalEvents] = useState<DailyEventRow[]>([]);
   const [reversedEvents, setReversedEvents] = useState<DailyEvent[]>([]);
+  const [pendingPenalties, setPendingPenalties] = useState<Array<{ id: string; amount: number; loan_id: string; clientName: string; clientId: string; created_at: string }>>([]);
+  const [rescheduledInstIds, setRescheduledInstIds] = useState<Set<string>>(new Set());
+  const [totalPenaltyPaidToday, setTotalPenaltyPaidToday] = useState(0);
+  const [clientSearch, setClientSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
@@ -255,10 +260,23 @@ export default function DailyCashPage() {
   }, [pendingInstallments, getOverdueDays]);
 
   const filteredPending = useMemo(() => {
-    if (pendingFilter === "overdue") return overdueItems;
-    if (pendingFilter === "today") return todayItems;
-    return pendingInstallments;
-  }, [pendingFilter, overdueItems, todayItems, pendingInstallments]);
+    const base = pendingFilter === "overdue" ? overdueItems
+      : pendingFilter === "today" ? todayItems
+      : pendingInstallments;
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((i) => i.loans.clients.name.toLowerCase().includes(q));
+  }, [pendingFilter, overdueItems, todayItems, pendingInstallments, clientSearch]);
+
+  const filteredOverdue = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
+    return q ? overdueItems.filter((i) => i.loans.clients.name.toLowerCase().includes(q)) : overdueItems;
+  }, [overdueItems, clientSearch]);
+
+  const filteredToday = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
+    return q ? todayItems.filter((i) => i.loans.clients.name.toLowerCase().includes(q)) : todayItems;
+  }, [todayItems, clientSearch]);
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++fetchSeqRef.current;
@@ -375,6 +393,16 @@ export default function DailyCashPage() {
       if (isStale()) return;
       setPaidGroups(paidGroupsList);
 
+      // Penalty payments total today (recebimento_multa)
+      const { data: penPayData } = await (supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("type", "recebimento_multa")
+        .eq("cash_date", selectedDate)
+        .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
+      if (isStale()) return;
+      setTotalPenaltyPaidToday((penPayData || []).reduce((s, m) => s + Number(m.amount), 0));
+
       // Not paid marks enrichment
       const npInstIdArr = [...npInstIds];
       let npInstMap: Record<string, InstallmentWithLoan> = {};
@@ -426,6 +454,40 @@ export default function DailyCashPage() {
       }
       setPendingInstallments(dedupedPending);
       setSelectedForNotPaid(new Set());
+
+      // Rescheduled flags for pending installments
+      const pendingInstIds = dedupedPending.map((i) => i.id);
+      if (pendingInstIds.length > 0) {
+        const { data: reschData } = await supabase
+          .from("installments")
+          .select("id, rescheduled")
+          .in("id", pendingInstIds)
+          .eq("rescheduled", true);
+        if (!isStale()) {
+          setRescheduledInstIds(new Set((reschData || []).map((r: any) => r.id)));
+        }
+      } else {
+        setRescheduledInstIds(new Set());
+      }
+
+      // Pending penalties (unpaid) for loans the user has scope on
+      const { data: penData } = await supabase
+        .from("penalties")
+        .select("id, amount, loan_id, created_at, loans:loan_id(client_id, clients:client_id(id, name))")
+        .eq("paid", false)
+        .lte("created_at", selectedDate + "T23:59:59")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (!isStale()) {
+        setPendingPenalties(((penData as any[]) || []).map((p) => ({
+          id: p.id,
+          amount: Number(p.amount),
+          loan_id: p.loan_id,
+          clientId: p.loans?.client_id ?? "",
+          clientName: p.loans?.clients?.name ?? "Cliente",
+          created_at: p.created_at,
+        })));
+      }
     } finally {
       if (!isStale()) {
         if (!silent) setLoading(false);
@@ -949,6 +1011,20 @@ export default function DailyCashPage() {
               <span className="text-sm font-extrabold tabular-nums text-foreground">
                 Saldo: {formatCurrency(remainingBalance)}
               </span>
+              {rescheduledInstIds.has(inst.id) && (
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 leading-none font-semibold border-blue-500/50 text-blue-600 bg-blue-500/10 cursor-help">
+                        <CalendarClock className="h-2.5 w-2.5 mr-0.5" /> Reagendada
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Esta parcela teve sua data de vencimento alterada.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isOverdue && (
                 <Badge
                   variant="outline"
@@ -1147,30 +1223,30 @@ export default function DailyCashPage() {
     if (pendingFilter === "all") {
       return (
         <>
-          {todayItems.length > 0 && (
+          {filteredToday.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between border-b border-primary/20 pb-1.5 mb-1">
                 <h3 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" /> HOJE ({todayItems.length})
+                  <Clock className="h-3.5 w-3.5" /> HOJE ({filteredToday.length})
                 </h3>
                 <button className="text-[10px] text-primary hover:underline" onClick={selectAllToday}>
                   Selecionar todos
                 </button>
               </div>
-              {todayItems.map(renderPendingRow)}
+              {filteredToday.map(renderPendingRow)}
             </div>
           )}
-          {overdueItems.length > 0 && (
+          {filteredOverdue.length > 0 && (
             <div className="space-y-1.5 mt-3">
               <div className="flex items-center justify-between border-b border-destructive/20 pb-1.5 mb-1">
                 <h3 className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5" /> ATRASADOS ({overdueItems.length})
+                  <AlertTriangle className="h-3.5 w-3.5" /> ATRASADOS ({filteredOverdue.length})
                 </h3>
                 <button className="text-[10px] text-primary hover:underline" onClick={selectAllOverdue}>
                   Selecionar todos
                 </button>
               </div>
-              {overdueItems.map(renderPendingRow)}
+              {filteredOverdue.map(renderPendingRow)}
             </div>
           )}
         </>
@@ -1222,9 +1298,21 @@ export default function DailyCashPage() {
             <span className="text-sm font-bold text-destructive tabular-nums">{formatCurrency(totalOverdueValue)}</span>
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-success">Total recebido</span>
-          <span className="text-sm font-bold text-success tabular-nums">{formatCurrency(totalPaidValue)}</span>
+        <div className="border-t border-border pt-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-success flex items-center gap-1">💵 Recebimentos de empréstimo</span>
+            <span className="text-sm font-semibold text-success tabular-nums">{formatCurrency(totalPaidValue)}</span>
+          </div>
+          {totalPenaltyPaidToday > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-amber-600 flex items-center gap-1">⚠️ Multas recebidas</span>
+              <span className="text-sm font-semibold text-amber-600 tabular-nums">{formatCurrency(totalPenaltyPaidToday)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-1 border-t border-border">
+            <span className="text-xs font-bold">Total do dia</span>
+            <span className="text-base font-extrabold tabular-nums">{formatCurrency(totalPaidValue + totalPenaltyPaidToday)}</span>
+          </div>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">Progresso</span>
@@ -1267,6 +1355,15 @@ export default function DailyCashPage() {
               </div>
             ) : (
               <>
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar cliente..."
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    className="h-8 pl-7 text-xs"
+                  />
+                </div>
                 <div className="flex items-center gap-1.5">
                   {(["all", "overdue", "today"] as PendingFilter[]).map(f => (
                     <button
@@ -1317,6 +1414,37 @@ export default function DailyCashPage() {
                 <XCircle className="h-3 w-3" /> Não Pagos do Dia ({notPaidMarks.length})
               </h2>
               {notPaidMarks.map(renderNotPaidRow)}
+            </div>
+          )}
+
+          {/* MULTAS PENDENTES */}
+          {pendingPenalties.length > 0 && (
+            <div className="space-y-1.5 mb-4">
+              <h2 className="text-xs font-semibold text-amber-600 flex items-center gap-1 uppercase tracking-wider">
+                <AlertTriangle className="h-3 w-3" /> Multas Pendentes ({pendingPenalties.length})
+              </h2>
+              {pendingPenalties.map((p) => (
+                <div key={p.id} className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/loans/${p.loan_id}`)}
+                        className="font-semibold text-sm truncate block text-left hover:underline"
+                      >
+                        {p.clientName}
+                      </button>
+                      <p className="text-[10px] text-muted-foreground">
+                        Aplicada em {format(new Date(p.created_at), "dd/MM/yyyy")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-amber-600 tabular-nums">{formatCurrency(p.amount)}</span>
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-500/50 text-amber-600">Pendente</Badge>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
