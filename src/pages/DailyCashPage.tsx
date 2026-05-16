@@ -1223,30 +1223,30 @@ export default function DailyCashPage() {
     if (pendingFilter === "all") {
       return (
         <>
-          {todayItems.length > 0 && (
+          {filteredToday.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between border-b border-primary/20 pb-1.5 mb-1">
                 <h3 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" /> HOJE ({todayItems.length})
+                  <Clock className="h-3.5 w-3.5" /> HOJE ({filteredToday.length})
                 </h3>
                 <button className="text-[10px] text-primary hover:underline" onClick={selectAllToday}>
                   Selecionar todos
                 </button>
               </div>
-              {todayItems.map(renderPendingRow)}
+              {filteredToday.map(renderPendingRow)}
             </div>
           )}
-          {overdueItems.length > 0 && (
+          {filteredOverdue.length > 0 && (
             <div className="space-y-1.5 mt-3">
               <div className="flex items-center justify-between border-b border-destructive/20 pb-1.5 mb-1">
                 <h3 className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5" /> ATRASADOS ({overdueItems.length})
+                  <AlertTriangle className="h-3.5 w-3.5" /> ATRASADOS ({filteredOverdue.length})
                 </h3>
                 <button className="text-[10px] text-primary hover:underline" onClick={selectAllOverdue}>
                   Selecionar todos
                 </button>
               </div>
-              {overdueItems.map(renderPendingRow)}
+              {filteredOverdue.map(renderPendingRow)}
             </div>
           )}
         </>
