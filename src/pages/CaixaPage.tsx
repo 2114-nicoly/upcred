@@ -61,12 +61,14 @@ export default function CaixaPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [bal, dayEvents] = await Promise.all([
+      const [bal, dayEvents, dcRes] = await Promise.all([
         getCashBalance(),
         getDailyEvents(selectedDate),
+        supabase.from("daily_cash").select("status").eq("cash_date", selectedDate).maybeSingle(),
       ]);
       setBalance(bal);
       setEvents(dayEvents);
+      setDailyCashStatus((dcRes?.data as any)?.status || "open");
 
       // Fetch client names for all events
       const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
