@@ -454,6 +454,40 @@ export default function DailyCashPage() {
       }
       setPendingInstallments(dedupedPending);
       setSelectedForNotPaid(new Set());
+
+      // Rescheduled flags for pending installments
+      const pendingInstIds = dedupedPending.map((i) => i.id);
+      if (pendingInstIds.length > 0) {
+        const { data: reschData } = await supabase
+          .from("installments")
+          .select("id, rescheduled")
+          .in("id", pendingInstIds)
+          .eq("rescheduled", true);
+        if (!isStale()) {
+          setRescheduledInstIds(new Set((reschData || []).map((r: any) => r.id)));
+        }
+      } else {
+        setRescheduledInstIds(new Set());
+      }
+
+      // Pending penalties (unpaid) for loans the user has scope on
+      const { data: penData } = await supabase
+        .from("penalties")
+        .select("id, amount, loan_id, created_at, loans:loan_id(client_id, clients:client_id(id, name))")
+        .eq("paid", false)
+        .lte("created_at", selectedDate + "T23:59:59")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (!isStale()) {
+        setPendingPenalties(((penData as any[]) || []).map((p) => ({
+          id: p.id,
+          amount: Number(p.amount),
+          loan_id: p.loan_id,
+          clientId: p.loans?.client_id ?? "",
+          clientName: p.loans?.clients?.name ?? "Cliente",
+          created_at: p.created_at,
+        })));
+      }
     } finally {
       if (!isStale()) {
         if (!silent) setLoading(false);
