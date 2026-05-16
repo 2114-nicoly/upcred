@@ -5,16 +5,20 @@ export type AuditAction =
   | "criar_cliente" | "editar_cliente" | "excluir_cliente"
   | "criar_emprestimo" | "editar_emprestimo" | "excluir_emprestimo" | "editar_observacao_emprestimo"
   | "renovar_emprestimo" | "quitar_emprestimo"
+  | "renegociacao_emprestimo" | "renovacao_emprestimo"
   | "anexar_arquivo" | "excluir_anexo"
   | "pagamento" | "editar_pagamento" | "desfazer_pagamento" | "nao_pagou"
   | "editar_parcela" | "alterar_data_parcela"
-  | "aporte" | "retirada" | "ajuste_caixa" | "fechar_caixa"
+  | "multa_aplicada" | "multa_paga"
+  | "reagendamento_solicitado" | "reagendamento_aprovado" | "reagendamento_recusado"
+  | "aporte" | "retirada" | "ajuste_caixa" | "fechar_caixa" | "reabrir_caixa"
   | "criar_trabalhador" | "reset_senha_trabalhador" | "ativar_trabalhador" | "desativar_trabalhador"
   | "arquivar_trabalhador" | "desarquivar_trabalhador" | "excluir_trabalhador"
   | "ativar_admin" | "desativar_admin";
 
 export type AuditEntity =
-  | "client" | "loan" | "installment" | "payment" | "cash" | "worker" | "transfer" | "admin";
+  | "client" | "loan" | "installment" | "payment" | "cash" | "worker" | "transfer" | "admin"
+  | "penalty" | "installment_reschedules" | "loan_renegotiations";
 
 /**
  * Logs an action. Never throws — auditing must not block the UI flow.

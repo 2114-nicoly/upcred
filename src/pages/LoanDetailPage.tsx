@@ -48,7 +48,22 @@ type Loan = {
   client_id: string;
   is_cravo: boolean;
   observation: string | null;
+  status_detail: string | null;
+  renewed_from_loan_id: string | null;
+  worker_id: string | null;
+  admin_id: string | null;
   clients: { name: string; full_name: string | null; phone: string | null };
+};
+
+type RenegotiationInfo = {
+  // This loan was renegotiated/renewed → link to the resulting new loan
+  newLoanId?: string | null;
+  newLoanDate?: string | null;
+  // This loan came from a renegotiation/renewal of a previous loan
+  sourceLoanId?: string | null;
+  sourceLoanDate?: string | null;
+  sourceType?: "renegotiation" | "renewal" | null;
+  resultType?: "renegotiation" | "renewal" | null;
 };
 
 type Installment = {
@@ -115,17 +130,20 @@ export default function LoanDetailPage() {
   const [overduePenaltyAmount, setOverduePenaltyAmount] = useState("");
   const [overduePenaltyObs, setOverduePenaltyObs] = useState("");
 
-  // Edit loan
-  const [editLoanOpen, setEditLoanOpen] = useState(false);
-  const [editAmount, setEditAmount] = useState("");
-  const [editInterestValue, setEditInterestValue] = useState("");
-  const [editInterestType, setEditInterestType] = useState("percentage");
-  const [editPaymentType, setEditPaymentType] = useState("");
-  const [editLoanDate, setEditLoanDate] = useState("");
-  const [editFirstDueDate, setEditFirstDueDate] = useState("");
-  const [editInstallmentCount, setEditInstallmentCount] = useState("");
-  const [editStatus, setEditStatus] = useState("");
-  const [editIsCravo, setEditIsCravo] = useState(false);
+  // Renegotiation (3-step dialog)
+  const [renegOpen, setRenegOpen] = useState(false);
+  const [renegStep, setRenegStep] = useState<1 | 2 | 3>(1);
+  const [renegInterestType, setRenegInterestType] = useState<"percentage" | "fixed">("percentage");
+  const [renegInterestValue, setRenegInterestValue] = useState("");
+  const [renegInstallmentCount, setRenegInstallmentCount] = useState("");
+  const [renegPaymentType, setRenegPaymentType] = useState("daily");
+  const [renegFirstDueDate, setRenegFirstDueDate] = useState("");
+  const [renegReason, setRenegReason] = useState("");
+  const [renegConfirmed, setRenegConfirmed] = useState(false);
+  const [renegSubmitting, setRenegSubmitting] = useState(false);
+
+  // Renegotiation history banner
+  const [renegInfo, setRenegInfo] = useState<RenegotiationInfo>({});
 
   // Edit installment
   const [editInstId, setEditInstId] = useState<string | null>(null);
@@ -200,6 +218,32 @@ export default function LoanDetailPage() {
         };
       });
       setPaymentHistory(history);
+
+      // Load renegotiation info (this loan as source OR as result)
+      const info: RenegotiationInfo = {};
+      const { data: asSource } = await (supabase.from("loan_renegotiations" as any)
+        .select("new_loan_id, type, created_at")
+        .eq("original_loan_id", loanId!)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle() as any);
+      if (asSource?.new_loan_id) {
+        info.newLoanId = asSource.new_loan_id;
+        info.newLoanDate = asSource.created_at;
+        info.resultType = asSource.type;
+      }
+      if ((l as any).renewed_from_loan_id) {
+        const { data: asResult } = await (supabase.from("loan_renegotiations" as any)
+          .select("original_loan_id, type, created_at")
+          .eq("new_loan_id", loanId!)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle() as any);
+        info.sourceLoanId = asResult?.original_loan_id ?? (l as any).renewed_from_loan_id;
+        info.sourceLoanDate = asResult?.created_at ?? null;
+        info.sourceType = asResult?.type ?? "renewal";
+      }
+      setRenegInfo(info);
     } catch (err) {
       console.error("Error in LoanDetailPage fetchData:", err);
       toast.error("Erro ao carregar dados do empréstimo");
@@ -449,62 +493,137 @@ export default function LoanDetailPage() {
     setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs("");
   };
 
-  // --- Edit Loan (renegotiation) ---
-  const editNumAmount = parseFloat(editAmount) || 0;
-  const editNumInterest = parseFloat(editInterestValue) || 0;
-  const editNumInstallments = parseInt(editInstallmentCount) || 0;
+  // --- Renegotiation (new 3-step flow) ---
+  const renegBase = loan ? Number(loan.remaining_balance) : 0;
+  const renegNumInterest = parseFloat(renegInterestValue) || 0;
+  const renegNumInstallments = parseInt(renegInstallmentCount) || 0;
 
-  const editCalc = useMemo(() => {
-    if (editNumAmount <= 0 || editNumInstallments <= 0) return null;
-    return calculateLoan(editNumAmount, editInterestType as "percentage" | "fixed", editNumInterest, editNumInstallments);
-  }, [editNumAmount, editInterestType, editNumInterest, editNumInstallments]);
+  const renegCalc = useMemo(() => {
+    if (renegBase <= 0 || renegNumInstallments <= 0) return null;
+    return calculateLoan(renegBase, renegInterestType, renegNumInterest, renegNumInstallments);
+  }, [renegBase, renegInterestType, renegNumInterest, renegNumInstallments]);
 
-  const editDueDates = useMemo(() => {
-    if (!editFirstDueDate || editNumInstallments <= 0 || editPaymentType === "fixed_dates") return [];
-    return generateDueDates(new Date(editFirstDueDate + "T12:00:00"), editNumInstallments, editPaymentType as "daily" | "weekly" | "biweekly" | "monthly");
-  }, [editFirstDueDate, editNumInstallments, editPaymentType]);
+  const renegDueDates = useMemo(() => {
+    if (!renegFirstDueDate || renegNumInstallments <= 0 || renegPaymentType === "fixed_dates") return [];
+    return generateDueDates(
+      new Date(renegFirstDueDate + "T12:00:00"),
+      renegNumInstallments,
+      renegPaymentType as "daily" | "weekly" | "biweekly" | "monthly",
+    );
+  }, [renegFirstDueDate, renegNumInstallments, renegPaymentType]);
 
-  const handleEditLoan = async () => {
-    if (!editCalc) { toast.error("Preencha todos os campos corretamente"); return; }
-    if (!editFirstDueDate && editPaymentType !== "fixed_dates") { toast.error("Informe a data do primeiro vencimento"); return; }
-
-    await supabase.from("loans").update({
-      amount: editNumAmount, interest_type: editInterestType, interest_value: editNumInterest,
-      total_amount: editCalc.totalAmount, installment_count: editNumInstallments,
-      payment_type: editPaymentType, loan_date: editLoanDate,
-      first_due_date: editFirstDueDate || null, status: editStatus, is_cravo: editIsCravo,
-    }).eq("id", loanId!);
-
-    const nonPenaltyIds = installments.filter(i => !i.is_penalty).map(i => i.id);
-    if (nonPenaltyIds.length > 0) {
-      for (const instId of nonPenaltyIds) {
-        await supabase.from("penalties").delete().eq("installment_id", instId);
-      }
-      await supabase.from("installments").delete().in("id", nonPenaltyIds);
-    }
-
-    const dates = editDueDates;
-    if (dates.length > 0) {
-      const newInstallments = dates.map((date, i) => ({
-        loan_id: loanId!, number: i + 1,
-        amount: editCalc.installmentAmount, due_date: format(date, "yyyy-MM-dd"), status: "pending" as const,
-      }));
-      await supabase.from("installments").insert(newInstallments);
-    }
-
-    await recalculateCashBalanceFromLedger();
-    toast.success("Empréstimo renegociado com sucesso!");
-    setEditLoanOpen(false);
-    fetchData();
+  const openRenegotiate = () => {
+    if (!loan) return;
+    setRenegStep(1);
+    setRenegInterestType((loan.interest_type as "percentage" | "fixed") || "percentage");
+    setRenegInterestValue("");
+    setRenegInstallmentCount("");
+    setRenegPaymentType(loan.payment_type || "daily");
+    setRenegFirstDueDate(format(new Date(), "yyyy-MM-dd"));
+    setRenegReason("");
+    setRenegConfirmed(false);
+    setRenegOpen(true);
   };
 
-  const openEditLoan = () => {
-    if (!loan) return;
-    setEditAmount(String(loan.amount)); setEditInterestValue(String(loan.interest_value));
-    setEditInterestType(loan.interest_type); setEditPaymentType(loan.payment_type);
-    setEditLoanDate(loan.loan_date); setEditFirstDueDate(loan.first_due_date || "");
-    setEditInstallmentCount(String(loan.installment_count)); setEditStatus(loan.status);
-    setEditIsCravo(loan.is_cravo); setEditLoanOpen(true);
+  const handleRenegotiate = async () => {
+    if (!loan || !renegCalc) { toast.error("Preencha as novas condições"); return; }
+    if (renegBase <= 0.01) { toast.error("Empréstimo sem saldo devedor — não pode ser renegociado"); return; }
+    if (renegDueDates.length === 0) { toast.error("Informe a data do primeiro vencimento"); return; }
+    if (!renegReason.trim()) { toast.error("Informe o motivo da renegociação"); return; }
+    if (!renegConfirmed) { toast.error("Confirme as novas condições com o cliente"); return; }
+    if (renegSubmitting) return;
+    setRenegSubmitting(true);
+    try {
+      // 1. Snapshot + insert renegotiation row
+      const { data: renegRow, error: renegErr } = await (supabase.from("loan_renegotiations" as any).insert({
+        original_loan_id: loan.id,
+        worker_id: loan.worker_id ?? null,
+        admin_id: loan.admin_id ?? null,
+        type: "renegotiation",
+        original_remaining_balance: renegBase,
+        original_total_amount: Number(loan.total_amount),
+        original_installment_count: loan.installment_count,
+        original_payment_type: loan.payment_type,
+        original_interest_type: loan.interest_type,
+        original_interest_value: Number(loan.interest_value),
+        client_paid_amount: 0,
+        absorbed_from_new: renegBase,
+        released_to_client: 0,
+        new_amount: renegBase,
+        new_interest_type: renegInterestType,
+        new_interest_value: renegNumInterest,
+        new_total_amount: renegCalc.totalAmount,
+        new_installment_count: renegNumInstallments,
+        new_payment_type: renegPaymentType,
+        reason: renegReason.trim(),
+      } as any).select("id").single() as any);
+      if (renegErr) throw renegErr;
+
+      // 2. Mark old loan as renegotiated
+      await supabase.from("loans").update({
+        status: "paid",
+        status_detail: "renegotiated",
+        remaining_balance: 0,
+      } as any).eq("id", loan.id);
+
+      // 3. Create the new loan
+      const { data: newLoan, error: newErr } = await supabase.from("loans").insert({
+        client_id: loan.client_id,
+        amount: renegBase,
+        interest_type: renegInterestType,
+        interest_value: renegNumInterest,
+        total_amount: renegCalc.totalAmount,
+        remaining_balance: renegCalc.totalAmount,
+        installment_count: renegNumInstallments,
+        payment_type: renegPaymentType,
+        loan_date: format(new Date(), "yyyy-MM-dd"),
+        first_due_date: renegFirstDueDate || null,
+        status: "open",
+        is_cravo: loan.is_cravo,
+        worker_id: (loan as any).worker_id ?? null,
+        admin_id: (loan as any).admin_id ?? null,
+        renewed_from_loan_id: loan.id,
+        status_detail: "active",
+        observation: `Renegociação de ${loan.id.slice(0, 8)} — ${renegReason.trim()}`,
+      } as any).select("id").single();
+      if (newErr || !newLoan) throw newErr || new Error("Falha ao criar novo empréstimo");
+
+      // 4. Generate installments for the new loan
+      if (renegDueDates.length > 0) {
+        const newInsts = renegDueDates.map((date, i) => ({
+          loan_id: newLoan.id,
+          number: i + 1,
+          amount: renegCalc.installmentAmount,
+          due_date: format(date, "yyyy-MM-dd"),
+          status: "pending" as const,
+        }));
+        await supabase.from("installments").insert(newInsts);
+      }
+
+      // 5. Link renegotiation row to the new loan
+      if (renegRow?.id) {
+        await (supabase.from("loan_renegotiations" as any).update({ new_loan_id: newLoan.id } as any).eq("id", renegRow.id) as any);
+      }
+
+      // 6. Audit log
+      await logAction(
+        "renegociacao_emprestimo",
+        "loan_renegotiations",
+        renegRow?.id ?? loan.id,
+        { old_balance: renegBase, old_total: Number(loan.total_amount), old_installments: loan.installment_count } as any,
+        { new_total: renegCalc.totalAmount, new_installments: renegNumInstallments, new_loan_id: newLoan.id, reason: renegReason.trim() } as any,
+      );
+
+      await recalculateCashBalanceFromLedger();
+      toast.success(`Empréstimo renegociado! Novo plano: ${renegNumInstallments}x ${formatCurrency(renegCalc.installmentAmount)}`);
+      setRenegOpen(false);
+      navigate(`/loans/${newLoan.id}`);
+    } catch (err: any) {
+      console.error("[renegotiate] failed", err);
+      toast.error("Erro ao renegociar: " + (err?.message || "tente novamente"));
+    } finally {
+      setRenegSubmitting(false);
+    }
   };
 
   // --- Edit/Delete installment ---
@@ -639,14 +758,43 @@ export default function LoanDetailPage() {
           </div>
         )}
         <div className="flex gap-1 ml-auto">
-          <Button variant="ghost" size="sm" onClick={openEditLoan}>
-            <Pencil className="mr-1 h-4 w-4" /> Editar
-          </Button>
+          {loan.status !== "paid" && (
+            <Button variant="ghost" size="sm" onClick={openRenegotiate}>
+              <RefreshCw className="mr-1 h-4 w-4" /> Renegociar
+            </Button>
+          )}
           <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
             <Trash2 className="mr-1 h-4 w-4" /> Excluir
           </Button>
         </div>
       </div>
+
+      {/* Renegotiation history banner */}
+      {(renegInfo.newLoanId || renegInfo.sourceLoanId) && (
+        <div className="mb-3 space-y-2">
+          {renegInfo.newLoanId && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-xs flex items-center justify-between gap-2">
+              <span>
+                Este empréstimo foi <strong>{renegInfo.resultType === "renewal" ? "renovado" : "renegociado"}</strong>
+                {renegInfo.newLoanDate && ` em ${format(new Date(renegInfo.newLoanDate), "dd/MM/yyyy")}`}
+              </span>
+              <Button size="sm" variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(`/loans/${renegInfo.newLoanId}`)}>
+                Ver novo empréstimo →
+              </Button>
+            </div>
+          )}
+          {renegInfo.sourceLoanId && (
+            <div className="rounded-lg border border-muted bg-muted/30 p-2.5 text-xs flex items-center justify-between gap-2">
+              <span>
+                Este empréstimo é uma <strong>{renegInfo.sourceType === "renewal" ? "renovação" : "renegociação"}</strong> de um anterior
+              </span>
+              <Button size="sm" variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(`/loans/${renegInfo.sourceLoanId}`)}>
+                Ver empréstimo anterior →
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Loan Info Card */}
       <Card className="mb-4">
@@ -1086,72 +1234,170 @@ export default function LoanDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Loan Dialog */}
-      <Dialog open={editLoanOpen} onOpenChange={setEditLoanOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Renegociar Empréstimo</DialogTitle></DialogHeader>
+      {/* Renegotiation Dialog (3-step flow) */}
+      <Dialog open={renegOpen} onOpenChange={(o) => { if (!o && !renegSubmitting) setRenegOpen(false); }}>
+        <DialogContent className="max-w-lg" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Renegociar Empréstimo — Passo {renegStep} de 3</DialogTitle>
+          </DialogHeader>
           <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
-            <div><Label>Valor Emprestado (R$)</Label><Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Tipo de Juros</Label>
-                <Select value={editInterestType} onValueChange={setEditInterestType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                  <SelectItem value="percentage">Porcentagem (%)</SelectItem><SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
-                </SelectContent></Select>
-              </div>
-              <div><Label>{editInterestType === "percentage" ? "Juros (%)" : "Juros (R$)"}</Label><Input type="number" value={editInterestValue} onChange={(e) => setEditInterestValue(e.target.value)} /></div>
-            </div>
-            <div><Label>Tipo de Pagamento</Label>
-              <Select value={editPaymentType} onValueChange={setEditPaymentType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                <SelectItem value="daily">Diário</SelectItem><SelectItem value="weekly">Semanal</SelectItem>
-                <SelectItem value="biweekly">Quinzenal</SelectItem><SelectItem value="monthly">Mensal</SelectItem>
-                <SelectItem value="fixed_dates">Data Fixa</SelectItem>
-              </SelectContent></Select>
-            </div>
-            <div><Label>Quantidade de Parcelas</Label><Input type="number" value={editInstallmentCount} onChange={(e) => setEditInstallmentCount(e.target.value)} /></div>
-            <div><Label>Data do Empréstimo</Label><Input type="date" value={editLoanDate} onChange={(e) => setEditLoanDate(e.target.value)} /></div>
-            {editPaymentType !== "fixed_dates" && (
-              <div><Label>Data do Primeiro Vencimento</Label><Input type="date" value={editFirstDueDate} onChange={(e) => setEditFirstDueDate(e.target.value)} /></div>
-            )}
-            <div><Label>Status</Label>
-              <Select value={editStatus} onValueChange={setEditStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-                <SelectItem value="open">Em Aberto</SelectItem><SelectItem value="paid">Pago</SelectItem><SelectItem value="overdue">Atrasado</SelectItem>
-              </SelectContent></Select>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <Label className="text-sm">Marcar como Cravo 🔥</Label>
-              <Switch checked={editIsCravo} onCheckedChange={setEditIsCravo} />
-            </div>
-            {editCalc && (
-              <Card className="border-primary/30 bg-accent">
-                <CardHeader className="pb-2"><CardTitle className="flex items-center text-base"><Calculator className="mr-2 h-4 w-4" /> Prévia</CardTitle></CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span>Emprestado:</span><span className="font-semibold">{formatCurrency(editNumAmount)}</span></div>
-                  <div className="flex justify-between"><span>Juros:</span><span className="font-semibold">{formatCurrency(editCalc.interest)}</span></div>
-                  <div className="flex justify-between border-t pt-1"><span className="font-bold">Valor final:</span><span className="font-bold text-primary">{formatCurrency(editCalc.totalAmount)}</span></div>
-                  <div className="flex justify-between"><span>Parcela:</span><span className="font-semibold">{formatCurrency(editCalc.installmentAmount)}</span></div>
-                  {editDueDates.length > 0 && (
-                    <div className="mt-2 border-t pt-2">
-                      <p className="mb-1 font-medium">Novos vencimentos:</p>
-                      {editDueDates.map((d, i) => (
-                        <p key={i} className="text-muted-foreground">Parcela {i + 1}: {format(d, "dd/MM/yyyy")}</p>
-                      ))}
+            {/* STEP 1 — Current situation */}
+            {renegStep === 1 && (
+              <>
+                <Card>
+                  <CardContent className="pt-4 space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Valor original:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Juros originais:</span><span>{formatCurrency(Number(loan.total_amount) - Number(loan.amount))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Parcelas:</span><span>{Math.floor(loanProgress.fractionalProgress)} pagas / {loan.installment_count} total</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Valor por parcela:</span><span>{formatCurrency(Number(loan.total_amount) / loan.installment_count)}</span></div>
+                    <div className="border-t pt-2 flex justify-between items-baseline">
+                      <span className="font-semibold">Saldo devedor:</span>
+                      <span className="text-2xl font-bold text-primary">{formatCurrency(renegBase)}</span>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-            <div className="border-t pt-3">
-              <Label className="text-sm font-semibold">Registros de Multas ({penalties.length})</Label>
-              {penaltyInst && (
-                <div className="mt-1 mb-2 rounded-lg bg-muted/50 p-2 text-xs space-y-1">
-                  <div className="flex justify-between"><span>Total:</span><span className="font-semibold text-destructive">{formatCurrency(penaltyTotal)}</span></div>
-                  <div className="flex justify-between"><span>Pago:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
-                  <div className="flex justify-between"><span>Pendente:</span><span className="text-destructive">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+                    {penaltyTotal - penaltyPaid > 0.01 && (
+                      <div className="flex justify-between text-destructive">
+                        <span>Multas pendentes:</span>
+                        <span className="font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs">
+                  ⚠️ A renegociação vai criar um <strong>novo plano de pagamento</strong>. O empréstimo atual será encerrado e um novo será gerado com as novas condições. O saldo devedor atual ({formatCurrency(renegBase)}) é a base do novo empréstimo.
                 </div>
-              )}
-            </div>
-            <Button onClick={handleEditLoan} className="w-full" size="lg">⚠️ Renegociar Empréstimo</Button>
-            <p className="text-xs text-center text-muted-foreground">As parcelas existentes serão substituídas pelas novas.</p>
+                <Button onClick={() => setRenegStep(2)} className="w-full" disabled={renegBase <= 0.01}>
+                  Próximo →
+                </Button>
+              </>
+            )}
+
+            {/* STEP 2 — New conditions */}
+            {renegStep === 2 && (
+              <>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Base do novo empréstimo (saldo devedor)</Label>
+                  <Input type="text" value={formatCurrency(renegBase)} disabled className="mt-1 font-semibold" />
+                </div>
+                <div>
+                  <Label>Juros adicionais</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Select value={renegInterestType} onValueChange={(v) => setRenegInterestType(v as "percentage" | "fixed")}>
+                      <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percentage">Porcentagem (%)</SelectItem>
+                        <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number" step="0.01" inputMode="decimal"
+                      placeholder={renegInterestType === "percentage" ? "Ex: 20" : "Ex: 100,00"}
+                      value={renegInterestValue}
+                      onChange={(e) => setRenegInterestValue(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Nº de parcelas</Label>
+                    <Input type="number" inputMode="numeric" value={renegInstallmentCount} onChange={(e) => setRenegInstallmentCount(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Tipo de pagamento</Label>
+                    <Select value={renegPaymentType} onValueChange={setRenegPaymentType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Diário</SelectItem>
+                        <SelectItem value="weekly">Semanal</SelectItem>
+                        <SelectItem value="biweekly">Quinzenal</SelectItem>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                        <SelectItem value="fixed_dates">Data fixa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {renegPaymentType !== "fixed_dates" && (
+                  <div>
+                    <Label>Data da 1ª parcela</Label>
+                    <Input type="date" value={renegFirstDueDate} onChange={(e) => setRenegFirstDueDate(e.target.value)} />
+                  </div>
+                )}
+                <div>
+                  <Label>Motivo da renegociação <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    value={renegReason}
+                    onChange={(e) => setRenegReason(e.target.value)}
+                    placeholder="Ex: cliente pediu prazo maior, mudou de emprego..."
+                    rows={2}
+                  />
+                </div>
+
+                <Card className="border-primary/30 bg-accent">
+                  <CardContent className="pt-3 space-y-1 text-sm">
+                    <div className="flex justify-between"><span>Base (saldo devedor):</span><span className="font-semibold">{formatCurrency(renegBase)}</span></div>
+                    <div className="flex justify-between"><span>Juros adicionais:</span><span className="font-semibold">{formatCurrency(renegCalc?.interest || 0)}</span></div>
+                    <div className="flex justify-between border-t pt-1"><span className="font-bold">Novo total:</span><span className="font-bold text-primary">{formatCurrency(renegCalc?.totalAmount || 0)}</span></div>
+                    <div className="flex justify-between"><span>Valor por parcela:</span><span className="font-semibold">{formatCurrency(renegCalc?.installmentAmount || 0)}</span></div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setRenegStep(1)} className="flex-1">← Voltar</Button>
+                  <Button
+                    onClick={() => setRenegStep(3)}
+                    className="flex-1"
+                    disabled={!renegCalc || renegDueDates.length === 0 || !renegReason.trim()}
+                  >
+                    Próximo →
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* STEP 3 — Confirmation */}
+            {renegStep === 3 && renegCalc && (
+              <>
+                <div className="rounded-lg border overflow-hidden text-sm">
+                  <div className="grid grid-cols-3 bg-muted/50 px-2 py-1.5 text-xs font-semibold">
+                    <span></span><span>Antes</span><span>Depois</span>
+                  </div>
+                  {[
+                    ["Valor base", formatCurrency(Number(loan.amount)), formatCurrency(renegBase)],
+                    ["Total a pagar", formatCurrency(Number(loan.total_amount)), formatCurrency(renegCalc.totalAmount)],
+                    ["Parcelas", String(loan.installment_count), String(renegNumInstallments)],
+                    ["Valor/parcela", formatCurrency(Number(loan.total_amount) / loan.installment_count), formatCurrency(renegCalc.installmentAmount)],
+                    ["Tipo pagto", getPaymentTypeLabel(loan.payment_type), getPaymentTypeLabel(renegPaymentType)],
+                  ].map(([label, before, after], i) => (
+                    <div key={i} className="grid grid-cols-3 border-t px-2 py-1.5 text-xs">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span>{before}</span>
+                      <span className="font-semibold">{after}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg bg-muted/40 p-2 text-xs">
+                  <strong>Motivo:</strong> {renegReason.trim()}
+                </div>
+                <label className="flex items-start gap-2 rounded-lg border p-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={renegConfirmed}
+                    onChange={(e) => setRenegConfirmed(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-sm">Confirmo as novas condições com o cliente</span>
+                </label>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setRenegStep(2)} className="flex-1" disabled={renegSubmitting}>← Voltar</Button>
+                  <Button
+                    onClick={handleRenegotiate}
+                    className="flex-1 bg-primary"
+                    disabled={!renegConfirmed || renegSubmitting}
+                  >
+                    {renegSubmitting ? "Processando..." : "Confirmar Renegociação"}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
