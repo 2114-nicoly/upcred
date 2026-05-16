@@ -157,6 +157,7 @@ export default function TodayPage() {
   useEffect(() => { fetchInstallments(); }, [selectedWorkerId, selectedAdminId]);
 
   const handlePay = async (id: string) => {
+    if (isSubmitting) return;
     const allInsts = [...installments, ...overdueInstallments];
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
@@ -166,8 +167,8 @@ export default function TodayPage() {
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
+    setIsSubmitting(true);
     try {
-      // Penalty first (independent flow)
       if (multaValue > 0) {
         await registerPenaltyPayment({
           loanId: inst.loan_id,
@@ -180,7 +181,6 @@ export default function TodayPage() {
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       }
 
-      // Regular payment (uses centralized helper -> apply_loan_payment RPC)
       if (parcValue !== null || !payPenaltyAmount) {
         const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
         const paidValue = parcValue ?? instRemaining;
@@ -209,30 +209,62 @@ export default function TodayPage() {
       toast.error(err?.message || "Erro ao registrar pagamento");
     } finally {
       setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+      setIsSubmitting(false);
       fetchInstallments();
     }
   };
 
   const handleNotPaid = async (id: string) => {
+    if (isSubmitting) return;
+    const allInsts = [...installments, ...overdueInstallments];
+    const inst = allInsts.find((i) => i.id === id);
+    if (!inst) return;
+    setIsSubmitting(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      // Operational mark (prevents client coming back as pending same day)
+      await supabase.from("not_paid_marks").insert({
+        mark_date: today,
+        installment_id: inst.id,
+        loan_id: inst.loan_id,
+        client_id: inst.loans.client_id,
+        user_id: session?.user?.id,
+      } as any);
       await supabase.from("installments").update({ status: "overdue" }).eq("id", id);
-      toast.info("Parcela marcada como atrasada");
-    } catch (err) {
+      // Daily ledger entry (no financial amount)
+      await createDailyEvent({
+        cash_date: today,
+        event_type: "nao_pagou",
+        client_id: inst.loans.client_id,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        observation: `Não pagou - ${inst.loans.clients.name}`,
+        origin: "rota",
+      });
+      toast.info("Marcada como 'Não Pagou'");
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao marcar parcela");
+      toast.error(err?.message || "Erro ao marcar parcela");
     } finally {
+      setIsSubmitting(false);
       fetchInstallments();
     }
   };
 
   const handleUndoOverdue = async (id: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       await supabase.from("installments").update({ status: "pending" }).eq("id", id);
+      // Remove not_paid_mark for today, if any
+      await supabase.from("not_paid_marks").delete()
+        .eq("installment_id", id).eq("mark_date", today);
       toast.success("Status restaurado para pendente!");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao restaurar status");
     } finally {
+      setIsSubmitting(false);
       fetchInstallments();
     }
   };
