@@ -177,13 +177,11 @@ function WorkersTab() {
     setLoading(true);
     const today = new Date().toISOString().slice(0, 10);
     const range = getPeriodRange("day", today, today);
-    const [{ data: w }, { data: r }, statsList] = await Promise.all([
+    const [{ data: w }, statsList] = await Promise.all([
       supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
-      supabase.from("worker_password_reset_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       loadWorkersStats(range),
     ]);
     setWorkers((w as any) || []);
-    setResetRequests((r as any) || []);
     const map: Record<string, WorkerStats> = {};
     statsList.forEach((s) => { if (s.worker_id) map[s.worker_id] = s; });
     setStats(map);
