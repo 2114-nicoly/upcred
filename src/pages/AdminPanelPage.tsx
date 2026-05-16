@@ -298,24 +298,7 @@ function WorkersTab() {
         </div>
       </div>
 
-      {resetRequests.length > 0 && (
-        <Card className="border-warning">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-sm flex items-center gap-2"><Inbox className="h-4 w-4" /> Pedidos de senha</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-1 space-y-2">
-            {resetRequests.map((r) => (
-              <div key={r.id} className="flex items-center justify-between text-sm border rounded p-2">
-                <div>
-                  <div className="font-medium">{r.identifier}</div>
-                  <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => resolveResetRequest(r.id)}>Resolver</Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {/* Reset password requests moved to PasswordRecoveryBell in header */}
 
       <div className="space-y-2">
         {workers.length === 0 ? (
