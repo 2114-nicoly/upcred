@@ -270,13 +270,15 @@ export default function DailyCashPage() {
       // Parallel: fetch daily_cash status, daily_events for today, not_paid_marks, new loans
       const [
         { data: dcData },
-        { data: eventsData },
+        eventsData,
+        allEventsIncReversed,
         { data: npData },
         { data: newLoanData },
         { data: paidMovementsData },
       ] = await Promise.all([
         supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
-        supabase.from("daily_events").select("*").eq("cash_date", selectedDate) as unknown as QueryResult<DailyEventRow>,
+        getDailyEvents(selectedDate),
+        getDailyEvents(selectedDate, { includeReversed: true }),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
         supabase.from("loans")
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
@@ -293,8 +295,9 @@ export default function DailyCashPage() {
       setDailyCashStatus(status);
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
 
-      const allEvents = (eventsData || []) as DailyEventRow[];
+      const allEvents = (eventsData || []) as unknown as DailyEventRow[];
       setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
+      setReversedEvents((allEventsIncReversed || []).filter((e) => e.reversed_at !== null));
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
       // Build sets of loan IDs that already have payment or nao_pagou events today
