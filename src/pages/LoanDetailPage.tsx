@@ -732,9 +732,11 @@ export default function LoanDetailPage() {
           </div>
         )}
         <div className="flex gap-1 ml-auto">
-          <Button variant="ghost" size="sm" onClick={openEditLoan}>
-            <Pencil className="mr-1 h-4 w-4" /> Editar
-          </Button>
+          {loan.status !== "paid" && (
+            <Button variant="ghost" size="sm" onClick={openRenegotiate}>
+              <RefreshCw className="mr-1 h-4 w-4" /> Renegociar
+            </Button>
+          )}
           <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
             <Trash2 className="mr-1 h-4 w-4" /> Excluir
           </Button>
