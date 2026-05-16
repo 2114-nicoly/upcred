@@ -351,8 +351,8 @@ export default function TodayPage() {
           <CardContent className="p-3">
             <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-warning" />
             <p className="text-xs text-muted-foreground">Atrasadas</p>
-            <p className="text-sm font-bold text-destructive">{overdueInstallments.length}</p>
-            {totalOverdue > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdue)}</p>}
+            <p className="text-sm font-bold text-destructive">{overdueClientsCount} {overdueClientsCount === 1 ? "cliente" : "clientes"}</p>
+            {totalOverdueBalance > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdueBalance)}</p>}
           </CardContent>
         </Card>
       </div>
