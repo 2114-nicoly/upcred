@@ -410,7 +410,7 @@ export default function TodayPage() {
               <CollapsibleTrigger asChild>
                 <Button variant="outline" className="w-full border-destructive/50 text-destructive">
                   <AlertTriangle className="mr-2 h-4 w-4" />
-                  Parcelas Vencidas Não Pagas ({overdueInstallments.length}) — {formatCurrency(totalOverdueBalance)}
+                  Parcelas Vencidas Não Pagas ({overdueInstallments.length})
                   <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
                 </Button>
               </CollapsibleTrigger>
