@@ -46,6 +46,7 @@ export default function CaixaPage() {
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
+  const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
   // Manual movement dialog
   const [manualType, setManualType] = useState<"entrada_manual" | "saida_manual" | "ajuste_manual" | null>(null);
@@ -60,12 +61,14 @@ export default function CaixaPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [bal, dayEvents] = await Promise.all([
+      const [bal, dayEvents, dcRes] = await Promise.all([
         getCashBalance(),
         getDailyEvents(selectedDate),
+        supabase.from("daily_cash").select("status").eq("cash_date", selectedDate).maybeSingle(),
       ]);
       setBalance(bal);
       setEvents(dayEvents);
+      setDailyCashStatus((dcRes?.data as any)?.status || "open");
 
       // Fetch client names for all events
       const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
@@ -84,6 +87,9 @@ export default function CaixaPage() {
   }, [selectedDate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const isClosed = dailyCashStatus === "closed";
+  const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
   let scopedEvents = events;
@@ -175,6 +181,7 @@ export default function CaixaPage() {
   };
 
   const handleUndoEvent = async (event: DailyEvent) => {
+    if (workerIsClosed) { toast.error("Caixa fechado. Solicite reabertura ao administrador."); return; }
     const valor = Number(event.amount_in) || Number(event.amount_out) || 0;
     const ok = await confirm({
       title: "Desfazer lançamento?",
@@ -232,6 +239,14 @@ export default function CaixaPage() {
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
+
+      {!isAdmin && !isSuperAdmin && (
+        <div className="flex justify-center">
+          <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
+            {isClosed ? "Caixa Fechado" : "Caixa Aberto"}
+          </Badge>
+        </div>
+      )}
 
       {/* Global balance cards */}
       {balance && (
@@ -478,13 +493,13 @@ export default function CaixaPage() {
 
       {/* Action buttons */}
       <div className="grid grid-cols-3 gap-2">
-        <Button variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
+        <Button disabled={workerIsClosed} variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Entrada
         </Button>
-        <Button variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
+        <Button disabled={workerIsClosed} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
           <Minus className="mr-1 h-3.5 w-3.5" /> Saída
         </Button>
-        <Button variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
+        <Button disabled={workerIsClosed} variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
           <Settings className="mr-1 h-3.5 w-3.5" /> Ajuste
         </Button>
       </div>
