@@ -48,7 +48,20 @@ type Loan = {
   client_id: string;
   is_cravo: boolean;
   observation: string | null;
+  status_detail: string | null;
+  renewed_from_loan_id: string | null;
   clients: { name: string; full_name: string | null; phone: string | null };
+};
+
+type RenegotiationInfo = {
+  // This loan was renegotiated/renewed → link to the resulting new loan
+  newLoanId?: string | null;
+  newLoanDate?: string | null;
+  // This loan came from a renegotiation/renewal of a previous loan
+  sourceLoanId?: string | null;
+  sourceLoanDate?: string | null;
+  sourceType?: "renegotiation" | "renewal" | null;
+  resultType?: "renegotiation" | "renewal" | null;
 };
 
 type Installment = {
