@@ -393,6 +393,16 @@ export default function DailyCashPage() {
       if (isStale()) return;
       setPaidGroups(paidGroupsList);
 
+      // Penalty payments total today (recebimento_multa)
+      const { data: penPayData } = await (supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("type", "recebimento_multa")
+        .eq("cash_date", selectedDate)
+        .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
+      if (isStale()) return;
+      setTotalPenaltyPaidToday((penPayData || []).reduce((s, m) => s + Number(m.amount), 0));
+
       // Not paid marks enrichment
       const npInstIdArr = [...npInstIds];
       let npInstMap: Record<string, InstallmentWithLoan> = {};
