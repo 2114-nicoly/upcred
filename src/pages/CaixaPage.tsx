@@ -481,10 +481,10 @@ export default function CaixaPage() {
           {events.length > 0 && (
             <Card>
               <CardHeader className="pb-1.5 pt-3 px-3">
-                <CardTitle className="text-xs">Todos os Lançamentos ({events.length})</CardTitle>
+                <CardTitle className="text-xs">Últimos lançamentos</CardTitle>
               </CardHeader>
               <CardContent className="px-3 pb-3 space-y-1.5">
-                {events.map(ev => (
+                {events.slice(-5).reverse().map(ev => (
                   <div key={ev.id} className="flex items-center justify-between rounded-lg bg-accent px-2.5 py-1.5">
                     <div className="flex-1 min-w-0">
                       <p className={`text-[11px] font-medium ${getEventTypeColor(ev.event_type)}`}>
@@ -505,6 +505,13 @@ export default function CaixaPage() {
                     </div>
                   </div>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setActiveSection("pagos")}
+                  className="w-full text-center text-[11px] text-primary hover:underline pt-1"
+                >
+                  Ver todos os lançamentos →
+                </button>
               </CardContent>
             </Card>
           )}
