@@ -437,6 +437,21 @@ export async function reversePayment(params: {
   await recalculateCashBalanceFromLedger();
   await recalculateInstallments(loanId);
 
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.from("audit_logs" as any).insert({
+      action_type: "estornar_pagamento",
+      entity_type: "cash_movement",
+      entity_id: movementId,
+      user_id: session?.user?.id,
+      old_value: { amount: totalReversed, loan_id: loanId },
+      new_value: { reversed: true },
+      observation: "Pagamento estornado",
+    } as any);
+  } catch (err) {
+    console.warn("[audit] estornar_pagamento failed", err);
+  }
+
   return totalReversed;
 }
 
