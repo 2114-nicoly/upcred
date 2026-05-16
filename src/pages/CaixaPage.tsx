@@ -476,7 +476,7 @@ export default function CaixaPage() {
 
       {activeSection === "resumo" && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground text-center">Selecione uma aba acima para ver os detalhes do dia.</p>
+          {/* Resumo serve as overview - the 4 counters above already act as navigation */}
           {/* All events timeline */}
           {events.length > 0 && (
             <Card>
