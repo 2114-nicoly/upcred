@@ -218,6 +218,32 @@ export default function LoanDetailPage() {
         };
       });
       setPaymentHistory(history);
+
+      // Load renegotiation info (this loan as source OR as result)
+      const info: RenegotiationInfo = {};
+      const { data: asSource } = await (supabase.from("loan_renegotiations" as any)
+        .select("new_loan_id, type, created_at")
+        .eq("original_loan_id", loanId!)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle() as any);
+      if (asSource?.new_loan_id) {
+        info.newLoanId = asSource.new_loan_id;
+        info.newLoanDate = asSource.created_at;
+        info.resultType = asSource.type;
+      }
+      if ((l as any).renewed_from_loan_id) {
+        const { data: asResult } = await (supabase.from("loan_renegotiations" as any)
+          .select("original_loan_id, type, created_at")
+          .eq("new_loan_id", loanId!)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle() as any);
+        info.sourceLoanId = asResult?.original_loan_id ?? (l as any).renewed_from_loan_id;
+        info.sourceLoanDate = asResult?.created_at ?? null;
+        info.sourceType = asResult?.type ?? "renewal";
+      }
+      setRenegInfo(info);
     } catch (err) {
       console.error("Error in LoanDetailPage fetchData:", err);
       toast.error("Erro ao carregar dados do empréstimo");
