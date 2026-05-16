@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, getStatusColor, getStatusLabel, getInstallmentDisplayStatus } from "@/lib/loan-utils";
 import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle, Plus, ClipboardList, ChevronDown, Undo2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -57,6 +58,7 @@ export default function TodayPage() {
   const [overdueClientsCount, setOverdueClientsCount] = useState(0);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
@@ -155,6 +157,7 @@ export default function TodayPage() {
   useEffect(() => { fetchInstallments(); }, [selectedWorkerId, selectedAdminId]);
 
   const handlePay = async (id: string) => {
+    if (isSubmitting) return;
     const allInsts = [...installments, ...overdueInstallments];
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
@@ -164,8 +167,8 @@ export default function TodayPage() {
     if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
+    setIsSubmitting(true);
     try {
-      // Penalty first (independent flow)
       if (multaValue > 0) {
         await registerPenaltyPayment({
           loanId: inst.loan_id,
@@ -178,7 +181,6 @@ export default function TodayPage() {
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       }
 
-      // Regular payment (uses centralized helper -> apply_loan_payment RPC)
       if (parcValue !== null || !payPenaltyAmount) {
         const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
         const paidValue = parcValue ?? instRemaining;
@@ -207,30 +209,62 @@ export default function TodayPage() {
       toast.error(err?.message || "Erro ao registrar pagamento");
     } finally {
       setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+      setIsSubmitting(false);
       fetchInstallments();
     }
   };
 
   const handleNotPaid = async (id: string) => {
+    if (isSubmitting) return;
+    const allInsts = [...installments, ...overdueInstallments];
+    const inst = allInsts.find((i) => i.id === id);
+    if (!inst) return;
+    setIsSubmitting(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      // Operational mark (prevents client coming back as pending same day)
+      await supabase.from("not_paid_marks").insert({
+        mark_date: today,
+        installment_id: inst.id,
+        loan_id: inst.loan_id,
+        client_id: inst.loans.client_id,
+        user_id: session?.user?.id,
+      } as any);
       await supabase.from("installments").update({ status: "overdue" }).eq("id", id);
-      toast.info("Parcela marcada como atrasada");
-    } catch (err) {
+      // Daily ledger entry (no financial amount)
+      await createDailyEvent({
+        cash_date: today,
+        event_type: "nao_pagou",
+        client_id: inst.loans.client_id,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        observation: `Não pagou - ${inst.loans.clients.name}`,
+        origin: "rota",
+      });
+      toast.info("Marcada como 'Não Pagou'");
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao marcar parcela");
+      toast.error(err?.message || "Erro ao marcar parcela");
     } finally {
+      setIsSubmitting(false);
       fetchInstallments();
     }
   };
 
   const handleUndoOverdue = async (id: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       await supabase.from("installments").update({ status: "pending" }).eq("id", id);
+      // Remove not_paid_mark for today, if any
+      await supabase.from("not_paid_marks").delete()
+        .eq("installment_id", id).eq("mark_date", today);
       toast.success("Status restaurado para pendente!");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao restaurar status");
     } finally {
+      setIsSubmitting(false);
       fetchInstallments();
     }
   };
@@ -272,7 +306,7 @@ export default function TodayPage() {
           <div className="flex gap-2">
             <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
               <DialogTrigger asChild>
-                <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
+                <Button size="sm" className="flex-1 bg-success hover:bg-success/90" disabled={isSubmitting}>
                   <Plus className="mr-1 h-4 w-4" /> Pagamento
                 </Button>
               </DialogTrigger>
@@ -299,18 +333,18 @@ export default function TodayPage() {
                     <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                   </div>
                   <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                  <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">
-                    Confirmar Pagamento
+                  <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                    {isSubmitting ? "Processando..." : "Confirmar Pagamento"}
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
-            <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)}>
+            <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleNotPaid(inst.id)} disabled={isSubmitting}>
               <XCircle className="mr-1 h-4 w-4" /> Não Pagou
             </Button>
           </div>
           {inst.status === "overdue" && (
-            <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)}>
+            <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => handleUndoOverdue(inst.id)} disabled={isSubmitting}>
               <Undo2 className="mr-1 h-3 w-3" /> Desfazer "Não Pagou"
             </Button>
           )}
@@ -318,6 +352,7 @@ export default function TodayPage() {
             size="sm"
             variant="outline"
             className="w-full mt-1"
+            disabled={isSubmitting}
             onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}
           >
             <RefreshCw className="mr-1 h-3 w-3" /> Renovar
@@ -352,7 +387,6 @@ export default function TodayPage() {
             <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-warning" />
             <p className="text-xs text-muted-foreground">Atrasadas</p>
             <p className="text-sm font-bold text-destructive">{overdueClientsCount} {overdueClientsCount === 1 ? "cliente" : "clientes"}</p>
-            {totalOverdueBalance > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdueBalance)}</p>}
           </CardContent>
         </Card>
       </div>
@@ -376,7 +410,7 @@ export default function TodayPage() {
               <CollapsibleTrigger asChild>
                 <Button variant="outline" className="w-full border-destructive/50 text-destructive">
                   <AlertTriangle className="mr-2 h-4 w-4" />
-                  Parcelas Vencidas Não Pagas ({overdueInstallments.length}) — {formatCurrency(totalOverdueBalance)}
+                  Parcelas Vencidas Não Pagas ({overdueInstallments.length})
                   <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
                 </Button>
               </CollapsibleTrigger>

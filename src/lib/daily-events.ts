@@ -45,6 +45,14 @@ export async function createDailyEvent(event: {
   cash_movement_id?: string | null;
 }) {
   const userId = await getCurrentUserId();
+  const { resolveScope } = await import("@/lib/cash-utils");
+  // Financial events require scope; "nao_pagou" is operational but we still try to scope.
+  const isFinancial = event.event_type !== "nao_pagou";
+  const { worker_id, admin_id } = await resolveScope({
+    loan_id: event.loan_id,
+    client_id: event.client_id,
+    required: isFinancial,
+  });
   const { data, error } = await supabase.from("daily_events" as any).insert({
     cash_date: event.cash_date,
     event_type: event.event_type,
@@ -57,6 +65,8 @@ export async function createDailyEvent(event: {
     origin: event.origin || "rota",
     cash_movement_id: event.cash_movement_id || null,
     user_id: userId,
+    worker_id,
+    admin_id,
   }).select().single();
   if (error) {
     console.error("Error creating daily event:", error);
