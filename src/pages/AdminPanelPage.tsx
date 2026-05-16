@@ -275,10 +275,7 @@ function WorkersTab() {
     }
   }
 
-  async function resolveResetRequest(id: string) {
-    await supabase.from("worker_password_reset_requests").update({ status: "resolved", resolved_at: new Date().toISOString() } as any).eq("id", id);
-    load();
-  }
+  // resolveResetRequest removed: handled by PasswordRecoveryBell
 
   function copyCreds() {
     if (!creds) return;
