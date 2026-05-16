@@ -88,6 +88,9 @@ export default function CaixaPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const isClosed = dailyCashStatus === "closed";
+  const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
+
   // Apply hierarchical scope filter to events list
   let scopedEvents = events;
   if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
