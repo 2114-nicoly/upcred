@@ -1417,6 +1417,37 @@ export default function DailyCashPage() {
             </div>
           )}
 
+          {/* MULTAS PENDENTES */}
+          {pendingPenalties.length > 0 && (
+            <div className="space-y-1.5 mb-4">
+              <h2 className="text-xs font-semibold text-amber-600 flex items-center gap-1 uppercase tracking-wider">
+                <AlertTriangle className="h-3 w-3" /> Multas Pendentes ({pendingPenalties.length})
+              </h2>
+              {pendingPenalties.map((p) => (
+                <div key={p.id} className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/loans/${p.loan_id}`)}
+                        className="font-semibold text-sm truncate block text-left hover:underline"
+                      >
+                        {p.clientName}
+                      </button>
+                      <p className="text-[10px] text-muted-foreground">
+                        Aplicada em {format(new Date(p.created_at), "dd/MM/yyyy")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-amber-600 tabular-nums">{formatCurrency(p.amount)}</span>
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-500/50 text-amber-600">Pendente</Badge>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* NOVOS EMPRÉSTIMOS */}
           {newLoans.filter(r => !r.renewed_from_loan_id).length > 0 && (
             <Collapsible className="mb-4">
