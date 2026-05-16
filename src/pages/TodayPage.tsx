@@ -53,6 +53,8 @@ export default function TodayPage() {
   const { selectedWorkerId, selectedAdminId, workers } = useWorkerFilter();
   const [installments, setInstallments] = useState<InstallmentWithLoan[]>([]);
   const [overdueInstallments, setOverdueInstallments] = useState<InstallmentWithLoan[]>([]);
+  const [totalOverdueBalance, setTotalOverdueBalance] = useState(0);
+  const [overdueClientsCount, setOverdueClientsCount] = useState(0);
   const [loanProgressMap, setLoanProgressMap] = useState<Record<string, LoanProgress>>({});
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
@@ -95,6 +97,18 @@ export default function TodayPage() {
       let overdueInsts = (overdueData as unknown as InstallmentWithLoan[]) || [];
       overdueInsts = overdueInsts.filter((i) => matchesScope(i.loans?.worker_id));
       setOverdueInstallments(overdueInsts);
+
+      const uniqueOverdueLoanIds = [...new Set(overdueInsts.map((i) => i.loan_id))];
+      let overdueBalanceSum = 0;
+      if (uniqueOverdueLoanIds.length > 0) {
+        const { data: overdueLoans } = await supabase
+          .from("loans")
+          .select("id, remaining_balance")
+          .in("id", uniqueOverdueLoanIds);
+        overdueBalanceSum = (overdueLoans || []).reduce((s: number, l: any) => s + Number(l.remaining_balance || 0), 0);
+      }
+      setTotalOverdueBalance(overdueBalanceSum);
+      setOverdueClientsCount(uniqueOverdueLoanIds.length);
 
       const allInsts = [...todayInsts, ...overdueInsts];
       const uniqueLoanIds = [...new Set(allInsts.map((d) => d.loan_id))];
@@ -222,7 +236,6 @@ export default function TodayPage() {
   };
 
   const totalToReceive = installments.reduce((sum, i) => sum + (Number(i.amount) - Number(i.paid_amount)), 0);
-  const totalOverdue = overdueInstallments.reduce((s, i) => s + (Number(i.amount) - Number(i.paid_amount)), 0);
 
   const renderInstCard = (inst: InstallmentWithLoan) => {
     const lp = loanProgressMap[inst.loan_id];
@@ -338,8 +351,8 @@ export default function TodayPage() {
           <CardContent className="p-3">
             <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-warning" />
             <p className="text-xs text-muted-foreground">Atrasadas</p>
-            <p className="text-sm font-bold text-destructive">{overdueInstallments.length}</p>
-            {totalOverdue > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdue)}</p>}
+            <p className="text-sm font-bold text-destructive">{overdueClientsCount} {overdueClientsCount === 1 ? "cliente" : "clientes"}</p>
+            {totalOverdueBalance > 0 && <p className="text-xs text-destructive">{formatCurrency(totalOverdueBalance)}</p>}
           </CardContent>
         </Card>
       </div>
@@ -363,7 +376,7 @@ export default function TodayPage() {
               <CollapsibleTrigger asChild>
                 <Button variant="outline" className="w-full border-destructive/50 text-destructive">
                   <AlertTriangle className="mr-2 h-4 w-4" />
-                  Parcelas Vencidas Não Pagas ({overdueInstallments.length}) — {formatCurrency(totalOverdue)}
+                  Parcelas Vencidas Não Pagas ({overdueInstallments.length}) — {formatCurrency(totalOverdueBalance)}
                   <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${overdueOpen ? "rotate-180" : ""}`} />
                 </Button>
               </CollapsibleTrigger>
