@@ -465,62 +465,137 @@ export default function LoanDetailPage() {
     setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs("");
   };
 
-  // --- Edit Loan (renegotiation) ---
-  const editNumAmount = parseFloat(editAmount) || 0;
-  const editNumInterest = parseFloat(editInterestValue) || 0;
-  const editNumInstallments = parseInt(editInstallmentCount) || 0;
+  // --- Renegotiation (new 3-step flow) ---
+  const renegBase = loan ? Number(loan.remaining_balance) : 0;
+  const renegNumInterest = parseFloat(renegInterestValue) || 0;
+  const renegNumInstallments = parseInt(renegInstallmentCount) || 0;
 
-  const editCalc = useMemo(() => {
-    if (editNumAmount <= 0 || editNumInstallments <= 0) return null;
-    return calculateLoan(editNumAmount, editInterestType as "percentage" | "fixed", editNumInterest, editNumInstallments);
-  }, [editNumAmount, editInterestType, editNumInterest, editNumInstallments]);
+  const renegCalc = useMemo(() => {
+    if (renegBase <= 0 || renegNumInstallments <= 0) return null;
+    return calculateLoan(renegBase, renegInterestType, renegNumInterest, renegNumInstallments);
+  }, [renegBase, renegInterestType, renegNumInterest, renegNumInstallments]);
 
-  const editDueDates = useMemo(() => {
-    if (!editFirstDueDate || editNumInstallments <= 0 || editPaymentType === "fixed_dates") return [];
-    return generateDueDates(new Date(editFirstDueDate + "T12:00:00"), editNumInstallments, editPaymentType as "daily" | "weekly" | "biweekly" | "monthly");
-  }, [editFirstDueDate, editNumInstallments, editPaymentType]);
+  const renegDueDates = useMemo(() => {
+    if (!renegFirstDueDate || renegNumInstallments <= 0 || renegPaymentType === "fixed_dates") return [];
+    return generateDueDates(
+      new Date(renegFirstDueDate + "T12:00:00"),
+      renegNumInstallments,
+      renegPaymentType as "daily" | "weekly" | "biweekly" | "monthly",
+    );
+  }, [renegFirstDueDate, renegNumInstallments, renegPaymentType]);
 
-  const handleEditLoan = async () => {
-    if (!editCalc) { toast.error("Preencha todos os campos corretamente"); return; }
-    if (!editFirstDueDate && editPaymentType !== "fixed_dates") { toast.error("Informe a data do primeiro vencimento"); return; }
-
-    await supabase.from("loans").update({
-      amount: editNumAmount, interest_type: editInterestType, interest_value: editNumInterest,
-      total_amount: editCalc.totalAmount, installment_count: editNumInstallments,
-      payment_type: editPaymentType, loan_date: editLoanDate,
-      first_due_date: editFirstDueDate || null, status: editStatus, is_cravo: editIsCravo,
-    }).eq("id", loanId!);
-
-    const nonPenaltyIds = installments.filter(i => !i.is_penalty).map(i => i.id);
-    if (nonPenaltyIds.length > 0) {
-      for (const instId of nonPenaltyIds) {
-        await supabase.from("penalties").delete().eq("installment_id", instId);
-      }
-      await supabase.from("installments").delete().in("id", nonPenaltyIds);
-    }
-
-    const dates = editDueDates;
-    if (dates.length > 0) {
-      const newInstallments = dates.map((date, i) => ({
-        loan_id: loanId!, number: i + 1,
-        amount: editCalc.installmentAmount, due_date: format(date, "yyyy-MM-dd"), status: "pending" as const,
-      }));
-      await supabase.from("installments").insert(newInstallments);
-    }
-
-    await recalculateCashBalanceFromLedger();
-    toast.success("Empréstimo renegociado com sucesso!");
-    setEditLoanOpen(false);
-    fetchData();
+  const openRenegotiate = () => {
+    if (!loan) return;
+    setRenegStep(1);
+    setRenegInterestType((loan.interest_type as "percentage" | "fixed") || "percentage");
+    setRenegInterestValue("");
+    setRenegInstallmentCount("");
+    setRenegPaymentType(loan.payment_type || "daily");
+    setRenegFirstDueDate(format(new Date(), "yyyy-MM-dd"));
+    setRenegReason("");
+    setRenegConfirmed(false);
+    setRenegOpen(true);
   };
 
-  const openEditLoan = () => {
-    if (!loan) return;
-    setEditAmount(String(loan.amount)); setEditInterestValue(String(loan.interest_value));
-    setEditInterestType(loan.interest_type); setEditPaymentType(loan.payment_type);
-    setEditLoanDate(loan.loan_date); setEditFirstDueDate(loan.first_due_date || "");
-    setEditInstallmentCount(String(loan.installment_count)); setEditStatus(loan.status);
-    setEditIsCravo(loan.is_cravo); setEditLoanOpen(true);
+  const handleRenegotiate = async () => {
+    if (!loan || !renegCalc) { toast.error("Preencha as novas condições"); return; }
+    if (renegBase <= 0.01) { toast.error("Empréstimo sem saldo devedor — não pode ser renegociado"); return; }
+    if (renegDueDates.length === 0) { toast.error("Informe a data do primeiro vencimento"); return; }
+    if (!renegReason.trim()) { toast.error("Informe o motivo da renegociação"); return; }
+    if (!renegConfirmed) { toast.error("Confirme as novas condições com o cliente"); return; }
+    if (renegSubmitting) return;
+    setRenegSubmitting(true);
+    try {
+      // 1. Snapshot + insert renegotiation row
+      const { data: renegRow, error: renegErr } = await (supabase.from("loan_renegotiations" as any).insert({
+        original_loan_id: loan.id,
+        worker_id: loan.worker_id ?? null,
+        admin_id: loan.admin_id ?? null,
+        type: "renegotiation",
+        original_remaining_balance: renegBase,
+        original_total_amount: Number(loan.total_amount),
+        original_installment_count: loan.installment_count,
+        original_payment_type: loan.payment_type,
+        original_interest_type: loan.interest_type,
+        original_interest_value: Number(loan.interest_value),
+        client_paid_amount: 0,
+        absorbed_from_new: renegBase,
+        released_to_client: 0,
+        new_amount: renegBase,
+        new_interest_type: renegInterestType,
+        new_interest_value: renegNumInterest,
+        new_total_amount: renegCalc.totalAmount,
+        new_installment_count: renegNumInstallments,
+        new_payment_type: renegPaymentType,
+        reason: renegReason.trim(),
+      } as any).select("id").single() as any);
+      if (renegErr) throw renegErr;
+
+      // 2. Mark old loan as renegotiated
+      await supabase.from("loans").update({
+        status: "paid",
+        status_detail: "renegotiated",
+        remaining_balance: 0,
+      } as any).eq("id", loan.id);
+
+      // 3. Create the new loan
+      const { data: newLoan, error: newErr } = await supabase.from("loans").insert({
+        client_id: loan.client_id,
+        amount: renegBase,
+        interest_type: renegInterestType,
+        interest_value: renegNumInterest,
+        total_amount: renegCalc.totalAmount,
+        remaining_balance: renegCalc.totalAmount,
+        installment_count: renegNumInstallments,
+        payment_type: renegPaymentType,
+        loan_date: format(new Date(), "yyyy-MM-dd"),
+        first_due_date: renegFirstDueDate || null,
+        status: "open",
+        is_cravo: loan.is_cravo,
+        worker_id: (loan as any).worker_id ?? null,
+        admin_id: (loan as any).admin_id ?? null,
+        renewed_from_loan_id: loan.id,
+        status_detail: "active",
+        observation: `Renegociação de ${loan.id.slice(0, 8)} — ${renegReason.trim()}`,
+      } as any).select("id").single();
+      if (newErr || !newLoan) throw newErr || new Error("Falha ao criar novo empréstimo");
+
+      // 4. Generate installments for the new loan
+      if (renegDueDates.length > 0) {
+        const newInsts = renegDueDates.map((date, i) => ({
+          loan_id: newLoan.id,
+          number: i + 1,
+          amount: renegCalc.installmentAmount,
+          due_date: format(date, "yyyy-MM-dd"),
+          status: "pending" as const,
+        }));
+        await supabase.from("installments").insert(newInsts);
+      }
+
+      // 5. Link renegotiation row to the new loan
+      if (renegRow?.id) {
+        await (supabase.from("loan_renegotiations" as any).update({ new_loan_id: newLoan.id } as any).eq("id", renegRow.id) as any);
+      }
+
+      // 6. Audit log
+      await logAction(
+        "renegociacao_emprestimo",
+        "loan_renegotiations",
+        renegRow?.id ?? loan.id,
+        { old_balance: renegBase, old_total: Number(loan.total_amount), old_installments: loan.installment_count } as any,
+        { new_total: renegCalc.totalAmount, new_installments: renegNumInstallments, new_loan_id: newLoan.id, reason: renegReason.trim() } as any,
+      );
+
+      await recalculateCashBalanceFromLedger();
+      toast.success(`Empréstimo renegociado! Novo plano: ${renegNumInstallments}x ${formatCurrency(renegCalc.installmentAmount)}`);
+      setRenegOpen(false);
+      navigate(`/loans/${newLoan.id}`);
+    } catch (err: any) {
+      console.error("[renegotiate] failed", err);
+      toast.error("Erro ao renegociar: " + (err?.message || "tente novamente"));
+    } finally {
+      setRenegSubmitting(false);
+    }
   };
 
   // --- Edit/Delete installment ---
