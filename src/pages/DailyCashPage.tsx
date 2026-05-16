@@ -213,6 +213,9 @@ export default function DailyCashPage() {
   const localActionedLoanIds = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
   const refreshTimerRef = useRef<number | null>(null);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [isReopening, setIsReopening] = useState(false);
 
   useEffect(() => {
     const urlDate = dateParam || today;
