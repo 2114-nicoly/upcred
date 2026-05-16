@@ -156,8 +156,7 @@ function MiniStat({ label, value, valueClass }: { label: string; value: number; 
   );
 }
 
-/* ============= COMPARE TAB ============= */
-function CompareTab() {
+/* ============= WORKERS TAB ============= */
   const [mode, setMode] = useState<PeriodMode>("day");
   const [customStart, setCustomStart] = useState(new Date().toISOString().slice(0, 10));
   const [customEnd, setCustomEnd] = useState(new Date().toISOString().slice(0, 10));
