@@ -204,7 +204,9 @@ export default function CaixaPage() {
     }
   };
 
-  if (loading) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
+  if (loading) return <div className="mx-auto max-w-lg p-3 space-y-3"><CardSkeleton count={3} /></div>;
+
+  const showAjuste = isAdmin || isSuperAdmin;
 
   return (
     <div className="mx-auto max-w-lg p-3 pb-36 space-y-3">
