@@ -125,27 +125,7 @@ function OverviewTab() {
             <Kpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} valueClass="text-success" />
             <Kpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Falta receber" value={formatCurrency(stats.faltaReceber)} valueClass="text-destructive" />
             <Kpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="% Recebido" value={`${stats.percentual.toFixed(1)}%`} />
-            <Kpi icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado" value={formatCurrency(stats.emprestado)} />
-            <Kpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Retirado" value={formatCurrency(stats.retirada)} />
-            <Kpi icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Aporte" value={formatCurrency(stats.aporte)} />
-            <Kpi icon={<TrendingDown className="h-4 w-4 text-destructive" />} label="Total saídas" value={formatCurrency(stats.totalSaidas)} />
           </div>
-
-          <Card className="mb-3"><CardContent className="p-3 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">Saldo líquido do período</p>
-                <p className={`text-lg font-bold ${stats.saldoLiquido >= 0 ? "text-success" : "text-destructive"}`}>
-                  {formatCurrency(stats.saldoLiquido)}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Não pagos</p>
-              <p className="text-sm font-bold text-destructive">{stats.naoPagosCount}</p>
-            </div>
-          </CardContent></Card>
 
           <div className="grid grid-cols-4 gap-2">
             <MiniStat label="Clientes" value={stats.clientesAtivos} />
