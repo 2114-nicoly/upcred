@@ -46,6 +46,7 @@ export default function CaixaPage() {
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
+  const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
   // Manual movement dialog
   const [manualType, setManualType] = useState<"entrada_manual" | "saida_manual" | "ajuste_manual" | null>(null);
