@@ -13,8 +13,8 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, ArrowUpDown,
-  TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target, TrendingDown } from "lucide-react";
+import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight,
+  TrendingUp, AlertTriangle, Target } from "lucide-react";
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/loan-utils";
