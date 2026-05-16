@@ -19,6 +19,8 @@ import {
 } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
+import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
+import { KeyRound } from "lucide-react";
 import { format } from "date-fns";
 
 type Admin = {
