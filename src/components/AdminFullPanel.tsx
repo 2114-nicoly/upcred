@@ -244,13 +244,16 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
           </div>
 
           {isSuperAdmin && (
-            <AccessSection
-              targetKind="admin"
-              targetId={admin.id}
-              loginCodigo={admin.login_codigo}
-              nome={admin.nome}
-              active={admin.active}
-            />
+            <>
+              <AccessSection
+                targetKind="admin"
+                targetId={admin.id}
+                loginCodigo={admin.login_codigo}
+                nome={admin.nome}
+                active={admin.active}
+              />
+              <AdminPendingPasswordRequests adminId={admin.id} />
+            </>
           )}
 
           <Card>
