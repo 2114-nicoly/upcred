@@ -1011,6 +1011,20 @@ export default function DailyCashPage() {
               <span className="text-sm font-extrabold tabular-nums text-foreground">
                 Saldo: {formatCurrency(remainingBalance)}
               </span>
+              {rescheduledInstIds.has(inst.id) && (
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 leading-none font-semibold border-blue-500/50 text-blue-600 bg-blue-500/10 cursor-help">
+                        <CalendarClock className="h-2.5 w-2.5 mr-0.5" /> Reagendada
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Esta parcela teve sua data de vencimento alterada.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isOverdue && (
                 <Badge
                   variant="outline"
