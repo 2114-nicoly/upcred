@@ -190,6 +190,8 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             active={worker.active}
           />
 
+          <RecentCashesSection workerId={worker.id} />
+
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (filtrados por este trabalhador)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 p-3">
