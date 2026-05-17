@@ -436,6 +436,19 @@ export default function LoanDetailPage() {
     }
 
     await updateCashBalance({ penalty_receivable: penAmount });
+    try {
+      await createDailyEvent({
+        cash_date: format(new Date(), "yyyy-MM-dd"),
+        event_type: "multa_adicionada",
+        client_id: loan?.client_id || null,
+        loan_id: loanId!,
+        installment_id: installmentId,
+        amount_in: 0,
+        amount_out: 0,
+        observation: `Multa adicionada ${formatCurrency(penAmount)}${penObs ? ` - ${penObs}` : ""}`,
+        origin: "detalhe_emprestimo",
+      });
+    } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }
     toast.success("Multa adicionada!");
     setPenaltyAmount(""); setPenaltyObservation("");
     fetchData();
