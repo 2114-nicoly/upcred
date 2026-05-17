@@ -244,22 +244,28 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
               {events.map((e) => {
                 const inV = Number(e.amount_in || 0);
                 const outV = Number(e.amount_out || 0);
+                const reversed = !!e.reversed_at;
                 return (
-                  <Card key={e.id}>
+                  <Card key={e.id} className={reversed ? "opacity-60" : ""}>
                     <CardContent className="p-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium">
-                          <Badge variant="outline" className="text-[9px] mr-1">{e.event_type}</Badge>
-                          {e.clients?.name ?? ""}
+                        <p className="text-xs font-medium flex items-center gap-1 flex-wrap">
+                          <Badge variant="outline" className={`text-[9px] ${getEventTypeColor(e.event_type)}`}>
+                            {getEventTypeLabel(e.event_type)}
+                          </Badge>
+                          {reversed && <Badge variant="secondary" className="text-[9px]">Estornado</Badge>}
+                          <span className="truncate">{e.clients?.name ?? ""}</span>
                         </p>
                         <p className="text-[10px] text-muted-foreground">
                           {format(new Date(e.cash_date + "T12:00:00"), "dd/MM/yyyy")}
+                          {e.origin && <> · {e.origin}</>}
                           {e.observation && <> · {e.observation}</>}
                         </p>
                       </div>
                       <div className="text-right text-xs whitespace-nowrap">
                         {inV > 0 && <p className="text-success font-semibold">+{formatCurrency(inV)}</p>}
                         {outV > 0 && <p className="text-destructive font-semibold">-{formatCurrency(outV)}</p>}
+                        {inV === 0 && outV === 0 && <p className="text-[10px] text-muted-foreground">—</p>}
                       </div>
                     </CardContent>
                   </Card>
