@@ -11,6 +11,7 @@ export type DailyEventType =
   | "saida_manual"
   | "ajuste_manual"
   | "recebimento_multa"
+  | "multa_adicionada"
   | "estorno_pagamento"
   | "estorno_manual";
 
