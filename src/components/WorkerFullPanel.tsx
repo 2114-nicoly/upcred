@@ -36,6 +36,7 @@ type LoanRow = {
 type EventRow = {
   id: string; cash_date: string; event_type: string;
   amount_in: number; amount_out: number; observation: string | null;
+  origin: string | null; reversed_at: string | null;
   clients: { name: string } | null;
 };
 
