@@ -256,6 +256,7 @@ export function getEventTypeColor(type: string): string {
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
     case "recebimento_multa": return "text-warning";
+    case "multa_adicionada": return "text-warning";
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
     default: return "text-muted-foreground";
