@@ -47,8 +47,9 @@ export async function createDailyEvent(event: {
 }) {
   const userId = await getCurrentUserId();
   const { resolveScope } = await import("@/lib/cash-utils");
-  // Financial events require scope; "nao_pagou" is operational but we still try to scope.
-  const isFinancial = event.event_type !== "nao_pagou";
+  // Financial events require scope; operational events still try to scope.
+  const operationalOnly = event.event_type === "nao_pagou" || event.event_type === "multa_adicionada";
+  const isFinancial = !operationalOnly;
   const { worker_id, admin_id } = await resolveScope({
     loan_id: event.loan_id,
     client_id: event.client_id,
