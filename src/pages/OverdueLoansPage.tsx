@@ -262,7 +262,7 @@ export default function OverdueLoansPage() {
       await createDailyEvent({
         cash_date: format(new Date(), "yyyy-MM-dd"),
         event_type: "multa_adicionada",
-        client_id: (inst as any).client_id || null,
+        client_id: inst.loans?.client_id || null,
         loan_id: inst.loan_id,
         installment_id: inst.id,
         amount_in: 0,
