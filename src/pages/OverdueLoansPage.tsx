@@ -258,6 +258,20 @@ export default function OverdueLoansPage() {
       });
     }
 
+    try {
+      await createDailyEvent({
+        cash_date: format(new Date(), "yyyy-MM-dd"),
+        event_type: "multa_adicionada",
+        client_id: (inst as any).client_id || null,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        amount_in: 0,
+        amount_out: 0,
+        observation: `Multa adicionada ${formatCurrency(amount)}${penaltyObservation ? ` - ${penaltyObservation}` : ""}`,
+        origin: "atrasados",
+      });
+    } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }
+
     toast.success("Multa adicionada!");
     setPenaltyAmount(""); setPenaltyObservation(""); setPenaltyDialogId(null);
     fetchData();
