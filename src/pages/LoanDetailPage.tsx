@@ -25,6 +25,7 @@ import {
   calculateLoanProgress,
 } from "@/lib/loan-utils";
 import { updateCashBalance, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, editPayment, recalculateInstallments, reversePayment } from "@/lib/payment-utils";
 import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History, Receipt } from "lucide-react";
 import { EmptyState } from "@/components/LoadingSkeleton";
