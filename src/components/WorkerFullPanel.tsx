@@ -20,6 +20,7 @@ import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { getEventTypeLabel, getEventTypeColor } from "@/lib/daily-events";
 
 type Worker = {
   id: string; nome: string; login_codigo: string; active: boolean;
