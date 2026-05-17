@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
+import { createDailyEvent } from "@/lib/daily-events";
 import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -256,6 +257,20 @@ export default function OverdueLoansPage() {
         status: "pending",
       });
     }
+
+    try {
+      await createDailyEvent({
+        cash_date: format(new Date(), "yyyy-MM-dd"),
+        event_type: "multa_adicionada",
+        client_id: inst.loans?.client_id || null,
+        loan_id: inst.loan_id,
+        installment_id: inst.id,
+        amount_in: 0,
+        amount_out: 0,
+        observation: `Multa adicionada ${formatCurrency(amount)}${penaltyObservation ? ` - ${penaltyObservation}` : ""}`,
+        origin: "atrasados",
+      });
+    } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }
 
     toast.success("Multa adicionada!");
     setPenaltyAmount(""); setPenaltyObservation(""); setPenaltyDialogId(null);

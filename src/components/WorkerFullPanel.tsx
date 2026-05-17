@@ -20,6 +20,7 @@ import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { getEventTypeLabel, getEventTypeColor } from "@/lib/daily-events";
 
 type Worker = {
   id: string; nome: string; login_codigo: string; active: boolean;
@@ -35,6 +36,7 @@ type LoanRow = {
 type EventRow = {
   id: string; cash_date: string; event_type: string;
   amount_in: number; amount_out: number; observation: string | null;
+  origin: string | null; reversed_at: string | null;
   clients: { name: string } | null;
 };
 
@@ -64,7 +66,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
         loadWorkersStats(range),
         supabase.from("clients").select("id, name, phone, client_code").eq("worker_id", workerId).order("name"),
         supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, clients(name)").eq("worker_id", workerId).order("loan_date", { ascending: false }).limit(200),
-        supabase.from("daily_events" as any).select("id, cash_date, event_type, amount_in, amount_out, observation, clients(name)").eq("worker_id", workerId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(200),
+        supabase.from("daily_events" as any).select("id, cash_date, event_type, amount_in, amount_out, observation, origin, reversed_at, clients(name)").eq("worker_id", workerId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
       ]);
       if (cancel) return;
       const wRow = w as Worker | null;
@@ -242,22 +244,28 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
               {events.map((e) => {
                 const inV = Number(e.amount_in || 0);
                 const outV = Number(e.amount_out || 0);
+                const reversed = !!e.reversed_at;
                 return (
-                  <Card key={e.id}>
+                  <Card key={e.id} className={reversed ? "opacity-60" : ""}>
                     <CardContent className="p-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium">
-                          <Badge variant="outline" className="text-[9px] mr-1">{e.event_type}</Badge>
-                          {e.clients?.name ?? ""}
+                        <p className="text-xs font-medium flex items-center gap-1 flex-wrap">
+                          <Badge variant="outline" className={`text-[9px] ${getEventTypeColor(e.event_type)}`}>
+                            {getEventTypeLabel(e.event_type)}
+                          </Badge>
+                          {reversed && <Badge variant="secondary" className="text-[9px]">Estornado</Badge>}
+                          <span className="truncate">{e.clients?.name ?? ""}</span>
                         </p>
                         <p className="text-[10px] text-muted-foreground">
                           {format(new Date(e.cash_date + "T12:00:00"), "dd/MM/yyyy")}
+                          {e.origin && <> · {e.origin}</>}
                           {e.observation && <> · {e.observation}</>}
                         </p>
                       </div>
                       <div className="text-right text-xs whitespace-nowrap">
                         {inV > 0 && <p className="text-success font-semibold">+{formatCurrency(inV)}</p>}
                         {outV > 0 && <p className="text-destructive font-semibold">-{formatCurrency(outV)}</p>}
+                        {inV === 0 && outV === 0 && <p className="text-[10px] text-muted-foreground">—</p>}
                       </div>
                     </CardContent>
                   </Card>

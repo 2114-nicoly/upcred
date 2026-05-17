@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
@@ -196,22 +196,24 @@ export default function NewLoanPage() {
       interest_receivable: interest,
     });
 
+    let movementId: string | null = null;
     if (cashOut > 0) {
-      await createCashMovement({
+      const mv = await createCashMovement({
         type: "emprestimo",
         amount: -cashOut,
         client_id: clientId!,
         loan_id: loan.id,
         observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
         cash_date: loanDate,
-      });
+      }) as any;
+      movementId = mv?.id || null;
     }
 
     const renewObs = renewFromLoanId
       ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
       : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
 
-    await createDailyEvent({
+    const evt = await createDailyEvent({
       cash_date: loanDate,
       event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
       client_id: clientId!,
@@ -220,7 +222,11 @@ export default function NewLoanPage() {
       amount_out: cashOut,
       observation: renewObs,
       origin: "novo_emprestimo",
-    });
+      cash_movement_id: movementId,
+    }) as any;
+    if (movementId && evt?.id) {
+      await linkCashMovementToDailyEvent(movementId, evt.id);
+    }
 
     // Se ainda restou saldo no antigo após o pagamento, quitar (absorvido pelo novo)
     if (renewFromLoanId) {

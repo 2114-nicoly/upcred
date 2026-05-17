@@ -11,6 +11,7 @@ export type DailyEventType =
   | "saida_manual"
   | "ajuste_manual"
   | "recebimento_multa"
+  | "multa_adicionada"
   | "estorno_pagamento"
   | "estorno_manual";
 
@@ -46,8 +47,9 @@ export async function createDailyEvent(event: {
 }) {
   const userId = await getCurrentUserId();
   const { resolveScope } = await import("@/lib/cash-utils");
-  // Financial events require scope; "nao_pagou" is operational but we still try to scope.
-  const isFinancial = event.event_type !== "nao_pagou";
+  // Financial events require scope; operational events still try to scope.
+  const operationalOnly = event.event_type === "nao_pagou" || event.event_type === "multa_adicionada";
+  const isFinancial = !operationalOnly;
   const { worker_id, admin_id } = await resolveScope({
     loan_id: event.loan_id,
     client_id: event.client_id,
@@ -236,7 +238,8 @@ export function getEventTypeLabel(type: string): string {
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
     case "recebimento_multa": return "Multa Recebida";
-    case "estorno_pagamento": return "Estorno Pagamento";
+    case "multa_adicionada": return "Multa Adicionada";
+    case "estorno_pagamento": return "Estorno de Pagamento";
     case "estorno_manual": return "Estorno Manual";
     default: return type;
   }
@@ -253,6 +256,7 @@ export function getEventTypeColor(type: string): string {
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
     case "recebimento_multa": return "text-warning";
+    case "multa_adicionada": return "text-warning";
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
     default: return "text-muted-foreground";
