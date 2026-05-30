@@ -94,11 +94,12 @@ export default function ActiveLoansPage() {
       return;
     }
     for (const loanId of selectedIds) {
-      await supabase.from("not_paid_marks").delete().eq("loan_id", loanId);
-      await supabase.from("cash_movements").delete().eq("loan_id", loanId);
-      await supabase.from("penalties").delete().eq("loan_id", loanId);
-      await supabase.from("installments").delete().eq("loan_id", loanId);
-      await supabase.from("loans").delete().eq("id", loanId);
+      try {
+        await cancelLoan({ loanId, reason: "Cancelamento em massa" });
+      } catch (err: any) {
+        console.error("Falha ao cancelar empréstimo", loanId, err);
+        toast.error(`Falha ao cancelar: ${err?.message || "erro"}`);
+      }
     }
     // Recalculate cash balance after bulk deletion
     await recalculateCashBalanceFromLedger();
