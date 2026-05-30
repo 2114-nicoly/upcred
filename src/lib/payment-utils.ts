@@ -482,3 +482,103 @@ export async function editPayment(params: {
 
   return result;
 }
+
+/**
+ * Safely cancel a loan WITHOUT deleting financial history.
+ * - Reverses every non-reversed cash_movement of the loan (mark reversed + counter-entry)
+ * - Marks linked daily_events as reversed
+ * - Marks loan as cancelled (status='cancelled', remaining_balance=0)
+ * - Marks non-paid installments as cancelled
+ * - Removes operational not_paid_marks for the loan (non-financial)
+ * - Creates a single "cancelamento" daily_event for traceability
+ * - Recalculates cash balance
+ */
+export async function cancelLoan(params: {
+  loanId: string;
+  reason?: string;
+}) {
+  const { loanId, reason } = params;
+
+  const { data: loan } = await supabase
+    .from("loans")
+    .select("id, client_id, remaining_balance, status")
+    .eq("id", loanId)
+    .single();
+  if (!loan) throw new Error("Empréstimo não encontrado");
+
+  // 1. Reverse each non-reversed cash_movement linked to the loan
+  const { data: movements } = await supabase
+    .from("cash_movements")
+    .select("id, type, amount")
+    .eq("loan_id", loanId)
+    .is("reversed_at", null);
+
+  for (const mov of (movements || []) as any[]) {
+    try {
+      if (mov.type === "recebimento_normal" || mov.type === "recebimento_multa") {
+        await reversePayment({ movementId: mov.id });
+      } else {
+        // emprestimo / other: mark reversed + counter-entry
+        await markCashMovementReversed(mov.id);
+        const reversal = await createCashMovement({
+          type: "estorno_manual" as any,
+          amount: -Number(mov.amount),
+          loan_id: loanId,
+          observation: `Cancelamento de empréstimo`,
+          cash_date: new Date().toISOString().slice(0, 10),
+        }) as any;
+        const evt = await createDailyEvent({
+          cash_date: new Date().toISOString().slice(0, 10),
+          event_type: "cancelamento" as any,
+          loan_id: loanId,
+          client_id: loan.client_id,
+          amount_in: Number(mov.amount) < 0 ? -Number(mov.amount) : 0,
+          amount_out: Number(mov.amount) > 0 ? Number(mov.amount) : 0,
+          observation: `Estorno por cancelamento`,
+          origin: "cancelamento",
+          cash_movement_id: reversal?.id || null,
+        } as any) as any;
+        if (reversal?.id && evt?.id) await linkCashMovementToDailyEvent(reversal.id, evt.id);
+      }
+    } catch (err) {
+      console.warn("[cancelLoan] reverse movement failed", err);
+    }
+  }
+
+  // 2. Mark any remaining non-reversed daily_events for this loan as reversed
+  const { data: events } = await (supabase.from("daily_events" as any)
+    .select("id").eq("loan_id", loanId).is("reversed_at", null) as any);
+  for (const e of (events || []) as any[]) {
+    await markDailyEventReversed(e.id);
+  }
+
+  // 3. Cancel installments that are not paid
+  await supabase
+    .from("installments")
+    .update({ status: "cancelled" } as any)
+    .eq("loan_id", loanId)
+    .neq("status", "paid");
+
+  // 4. Remove operational not_paid_marks (non-financial, no audit value once cancelled)
+  await supabase.from("not_paid_marks").delete().eq("loan_id", loanId);
+
+  // 5. Cancel the loan itself (preserves the row + history)
+  await supabase
+    .from("loans")
+    .update({ status: "cancelled", remaining_balance: 0 } as any)
+    .eq("id", loanId);
+
+  // 6. Single audit event for the cancellation itself
+  await createDailyEvent({
+    cash_date: new Date().toISOString().slice(0, 10),
+    event_type: "cancelamento" as any,
+    loan_id: loanId,
+    client_id: loan.client_id,
+    amount_in: 0,
+    amount_out: 0,
+    observation: reason ? `Empréstimo cancelado: ${reason}` : "Empréstimo cancelado",
+    origin: "cancelamento",
+  } as any);
+
+  await recalculateCashBalanceFromLedger();
+}
