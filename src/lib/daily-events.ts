@@ -242,6 +242,7 @@ export function getEventTypeLabel(type: string): string {
     case "multa_adicionada": return "Multa Adicionada";
     case "estorno_pagamento": return "Estorno de Pagamento";
     case "estorno_manual": return "Estorno Manual";
+    case "cancelamento": return "Cancelamento";
     default: return type;
   }
 }
