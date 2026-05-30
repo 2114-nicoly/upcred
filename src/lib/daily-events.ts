@@ -13,7 +13,8 @@ export type DailyEventType =
   | "recebimento_multa"
   | "multa_adicionada"
   | "estorno_pagamento"
-  | "estorno_manual";
+  | "estorno_manual"
+  | "cancelamento";
 
 export type DailyEvent = {
   id: string;
@@ -241,6 +242,7 @@ export function getEventTypeLabel(type: string): string {
     case "multa_adicionada": return "Multa Adicionada";
     case "estorno_pagamento": return "Estorno de Pagamento";
     case "estorno_manual": return "Estorno Manual";
+    case "cancelamento": return "Cancelamento";
     default: return type;
   }
 }
@@ -259,6 +261,7 @@ export function getEventTypeColor(type: string): string {
     case "multa_adicionada": return "text-warning";
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
+    case "cancelamento": return "text-destructive";
     default: return "text-muted-foreground";
   }
 }

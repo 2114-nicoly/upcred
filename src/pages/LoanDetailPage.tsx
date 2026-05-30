@@ -723,25 +723,26 @@ export default function LoanDetailPage() {
 
   const handleDeleteLoan = async () => {
     const ok = await confirm({
-      title: "Excluir empréstimo?",
-      description: "Todas as parcelas, pagamentos, multas e movimentações deste empréstimo serão removidos. Esta ação é irreversível.",
+      title: "Cancelar empréstimo?",
+      description: "O empréstimo será cancelado. Pagamentos e movimentações serão estornados; o histórico financeiro permanece preservado para auditoria.",
       affected: [
         { label: "Cliente", value: loan?.clients?.name || "—" },
         { label: "Total", value: loan ? formatCurrency(Number(loan.total_amount)) : "—" },
         { label: "Parcelas", value: String(installments.length) },
         { label: "Pagamentos", value: String(paymentHistory.length) },
       ],
-      confirmText: "Excluir tudo", destructive: true,
+      confirmText: "Cancelar empréstimo", destructive: true,
     });
     if (!ok) return;
-    await supabase.from("not_paid_marks").delete().eq("loan_id", loanId!);
-    await supabase.from("cash_movements").delete().eq("loan_id", loanId!);
-    await supabase.from("penalties").delete().eq("loan_id", loanId!);
-    await supabase.from("installments").delete().eq("loan_id", loanId!);
-    await supabase.from("loans").delete().eq("id", loanId!);
-    await recalculateCashBalanceFromLedger();
-    toast.success("Empréstimo excluído!");
-    navigate(-1);
+    try {
+      const { cancelLoan } = await import("@/lib/payment-utils");
+      await cancelLoan({ loanId: loanId!, reason: "Cancelado pelo usuário" });
+      toast.success("Empréstimo cancelado!");
+      navigate(-1);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao cancelar: ${err?.message || "erro"}`);
+    }
   };
 
   const getInstallmentNumber = (installmentId: string) => {
