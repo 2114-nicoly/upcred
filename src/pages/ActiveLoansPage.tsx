@@ -16,7 +16,7 @@ import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Tras
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
-import { registerPayment, registerPenaltyPayment, settleLoan } from "@/lib/payment-utils";
+import { registerPayment, registerPenaltyPayment, settleLoan, cancelLoan } from "@/lib/payment-utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
