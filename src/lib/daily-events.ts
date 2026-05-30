@@ -13,7 +13,8 @@ export type DailyEventType =
   | "recebimento_multa"
   | "multa_adicionada"
   | "estorno_pagamento"
-  | "estorno_manual";
+  | "estorno_manual"
+  | "cancelamento";
 
 export type DailyEvent = {
   id: string;
