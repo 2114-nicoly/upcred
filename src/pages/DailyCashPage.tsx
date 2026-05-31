@@ -958,12 +958,17 @@ export default function DailyCashPage() {
     if (reopenReason.trim().length < 5) return;
     setIsReopening(true);
     try {
-      const { data: existing } = await applyDailyCashScope(
+      const { data: existing, error: selErr } = await applyDailyCashScope(
         supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
         await getCurrentDailyCashScope()
       ).maybeSingle();
+      if (selErr) throw selErr;
       if (existing) {
-        await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
+        const { error: updErr } = await supabase
+          .from("daily_cash")
+          .update({ status: "open", closed_at: null })
+          .eq("id", existing.id);
+        if (updErr) throw updErr;
       }
       const { data: { session: s } } = await supabase.auth.getSession();
       try {
@@ -982,6 +987,9 @@ export default function DailyCashPage() {
       setReopenDialogOpen(false);
       setReopenReason("");
       refreshDataInBackground();
+    } catch (err) {
+      console.error("[confirmReopenCash] failed", err);
+      toast.error("Não foi possível reabrir o caixa. Tente novamente.");
     } finally {
       setIsReopening(false);
     }
