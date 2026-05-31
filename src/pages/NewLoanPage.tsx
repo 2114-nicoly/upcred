@@ -88,7 +88,7 @@ export default function NewLoanPage() {
     setFixedDates(newDates);
   };
 
-  useMemo(() => {
+  useEffect(() => {
     if (paymentType === "fixed_dates" && numInstallments > 0) {
       setFixedDates((prev) => {
         const arr = [...prev];
