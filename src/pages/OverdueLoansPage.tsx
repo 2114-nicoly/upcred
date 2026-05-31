@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { createDailyEvent } from "@/lib/daily-events";
+import { getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
