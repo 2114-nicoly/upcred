@@ -914,8 +914,10 @@ export default function DailyCashPage() {
     if (reopenReason.trim().length < 5) return;
     setIsReopening(true);
     try {
-      const { data: existing } = await supabase
-        .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
+      const { data: existing } = await applyDailyCashScope(
+        supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
+        await getCurrentDailyCashScope()
+      ).maybeSingle();
       if (existing) {
         await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
       }
