@@ -585,4 +585,13 @@ export async function cancelLoan(params: {
   } as any);
 
   await recalculateCashBalanceFromLedger();
+
+  await logAction(
+    "excluir_emprestimo",
+    "loan",
+    loanId,
+    { remaining_balance: Number(loan.remaining_balance), status: loan.status },
+    { status: "cancelled", remaining_balance: 0 },
+    reason ? `Empréstimo cancelado: ${reason}` : "Empréstimo cancelado",
+  );
 }
