@@ -709,7 +709,6 @@ export default function DailyCashPage() {
     setBatchNotPaidDialogOpen(false);
     setBatchNotPaidObs("");
     setShowBatchNotPaidObs(false);
-    toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
 
     const { data: { session: s2 } } = await supabase.auth.getSession();
     const inserts = selectedInsts.map(inst => ({
@@ -720,8 +719,12 @@ export default function DailyCashPage() {
       observation: obs || null,
       user_id: s2?.user?.id,
     }));
+    const optimisticIds = new Set(optimisticMarks.map(m => m.id));
     try {
-      await supabase.from("not_paid_marks").insert(inserts);
+      const { error: insertErr } = await supabase
+        .from("not_paid_marks")
+        .upsert(inserts, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
+      if (insertErr) throw insertErr;
       for (const inst of selectedInsts) {
         await createDailyEvent({
           cash_date: selectedDate,
@@ -733,6 +736,13 @@ export default function DailyCashPage() {
           origin: "rota",
         });
       }
+      toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
+    } catch (err) {
+      console.error("[handleBatchNotPaid] failed", err);
+      toast.error("Erro ao marcar parcelas. Recarregando dados...");
+      // Rollback optimistic marks
+      setNotPaidMarks(prev => prev.filter(m => !optimisticIds.has(m.id)));
+      selectedInsts.forEach(i => localActionedLoanIds.current.delete(i.loan_id));
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
