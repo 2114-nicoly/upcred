@@ -1,110 +1,88 @@
-## Objetivo
-Corrigir definitivamente o sistema multiusuário (Super Admin / Admin / Trabalhador): credenciais visíveis, geração de nova senha funcional, vínculos corretos de clientes a trabalhadores, equipe do admin populada, e Super Admin separado de admins comuns.
+# Plano: 4 melhorias estruturais no UpCred
 
-Vou dividir em **6 frentes** entregues em sequência, sem quebrar pagamentos, RLS, Rota, Caixa, Renovação ou Auditoria.
-
----
-
-### Frente 1 — Credenciais e geração de senha (backend)
-
-**Migrations:**
-- Garantir que `worker_credentials_log` tenha índice por `(worker_id, created_at desc)` e `(admin_id, created_at desc)`.
-- Criar RPC `get_latest_credential(p_kind, p_target_id)` que retorna `{login_codigo, temp_password, created_at, created_by, reason, status}` com permissão:
-  - super_admin: tudo
-  - admin: apenas trabalhadores onde `parent_admin_id = get_admin_id(auth.uid())`
-  - trabalhador: bloqueado
-- Criar RPC `list_password_recovery_alerts()` que retorna pendências visíveis ao chamador (super_admin vê todas; admin vê apenas as do próprio time).
-
-**Edge functions** (`admin-create-user`, `admin-reset-password`):
-- Já geram login + senha e gravam em `worker_credentials_log`. Garantir que o retorno JSON sempre inclua `login_codigo` e `password` para o frontend exibir.
-- Garantir que admin comum só consiga resetar trabalhador do próprio time (já implementado — verificar e reforçar).
-- Senha de admin gera 5 dígitos? Atualmente `gen(8)` — manter 8 dígitos por segurança (login é que tem 4/5). Confirmar com pedido: o pedido fala em "senha temporária de 8 dígitos" para ambos ✅.
-
-### Frente 2 — UI de credenciais
-
-- `CredentialsDialog`: garantir que sempre exiba `login` + `password` + `nome` + `role` + `created_at` + `created_by` quando vierem do edge function.
-- Em `AdminWorkerDetailPage` e `SuperAdminDetailPage`/`SuperAdminWorkerDetailPage`: adicionar seção **"Acesso"** com:
-  - login atual
-  - botão "Gerar nova senha" (chama edge function e abre `CredentialsDialog` com a nova senha)
-  - última redefinição (data + quem) via `get_latest_credential`
-  - status ativo/inativo/arquivado
-- Trabalhador: NÃO mostrar nada disso.
-
-### Frente 3 — Esqueci senha → alertas
-
-- Tabela `password_recovery_requests` já existe.
-- Frontend: badge no `AppLayout` (sino) para admin/super_admin com contagem de `status='open'` via `list_password_recovery_alerts`.
-- Página/dialog "Solicitações de senha pendentes":
-  - lista cada solicitação com nome, login, data
-  - botão "Gerar nova senha" → chama `admin-reset-password` → marca `password_recovery_requests.status='resolved'`, `resolved_by=auth.uid()`, `resolved_at=now()` → exibe `CredentialsDialog`
-- Auditoria registrada via `log_audit('redefinir_senha', ...)` (já existe).
-
-### Frente 4 — Equipe do admin (visibilidade dos trabalhadores)
-
-- `AdminPanelPage` / `AdminPage`: garantir que use `admin_list_workers()` (RPC) — já filtra por `parent_admin_id`.
-- Para Super Admin clicando em um admin específico: usar `list_workers_by_admin(p_admin_id)`.
-- Card de trabalhador deve mostrar todos os campos pedidos: nome, login, status, admin responsável, contadores (clientes ativos, empréstimos ativos, recebido hoje/semana, atrasados, não pagos, saldo aberto). Adicionar RPC `worker_dashboard_stats(p_worker_id)` que devolve esses números em uma chamada.
-- Estado vazio correto.
-
-### Frente 5 — Super Admin separado de admins comuns
-
-- `super_admin_list_admins()` atualmente retorna todos de `admins`. Filtrar para excluir registros cujo `auth_user_id` tenha role `super_admin` em `user_roles`. Implementar via SQL na própria function.
-- Frontend `SuperAdminPage`: já consome essa RPC — ficará automaticamente correto.
-
-### Frente 6 — Cliente sempre com trabalhador
-
-**Backend:**
-- Criar RPC `worker_create_client(p_name, p_phone, ...)` que pega `worker_id = get_worker_id(auth.uid())` e `admin_id = parent_admin_id` automaticamente — bloqueia se trabalhador não tiver admin.
-- Validação: trigger `BEFORE INSERT ON clients` que rejeita inserts sem `worker_id`+`admin_id` (exceto super_admin com bypass explícito).
-- Exception: super_admin pode criar atribuindo manualmente (já tem `admin_create_client` com `p_worker_id`).
-- Edição simples NÃO pode alterar `worker_id`/`admin_id`. Adicionar trigger `BEFORE UPDATE ON clients` que rejeita mudança de `worker_id`/`admin_id` exceto via `admin_transfer_client` (usar GUC `app.allow_client_transfer = 'true'` setado dentro da RPC).
-- Reaproveitar `admin_transfer_client` (já existe e registra auditoria + `client_transfers`).
-
-**Frontend:**
-- `ClientForm` no fluxo trabalhador: usar `worker_create_client`.
-- `ClientForm` no fluxo admin: continuar usando `admin_create_client` com seleção obrigatória de trabalhador.
-- Esconder/desabilitar campo "trabalhador" na edição simples.
-- Listagem de clientes: agrupar por trabalhador para admin/super_admin (collapsible accordion). Trabalhador vê lista plana.
-- Exibir badge "Trabalhador: X" em cada card de cliente em todas as telas.
-- Manutenção: adicionar card "Clientes sem trabalhador responsável" usando `admin_find_orphans()` (já existe) com botão "Atribuir trabalhador".
-
-### Itens 11, 12, 13, 14, 15 (cross-cutting)
-
-- **Nome clicável**: revisar listas/cards e envolver `<Link to={`/clients/${id}`}>` onde aparecer nome. Páginas: ActiveLoansPage, OverdueLoansPage, TodayPage, NewLoanPage, ReportsPage, PaymentHistoryPage, AuditPage, painéis admin.
-- **Contexto visual**: header com "Equipe de: X" / "Trabalhador selecionado: Y" via `useWorkerFilter` (já existe `ScopeIndicator`) — verificar que aparece nas páginas administrativas.
-- **Auditoria**: confirmar que cada ação relevante chama `logAction(...)`.
-- **RLS**: já está sólida — apenas adicionar as triggers do item 6 e a filtragem do item 5.
+Trabalho dividido em 4 frentes. Sem mudanças visuais. Reaproveita funções/tabelas existentes (`audit_logs`, `log_audit`, `daily_cash`, `daily_events`, `loan_renegotiations`, `loans`, `installments`).
 
 ---
 
-### Detalhes técnicos
+## 1. Auditoria completa
 
+Criar helper centralizado `src/lib/audit-log.ts` (ou estender `audit-utils.ts`) com `logAudit({ action, entity, entityId, oldValue, newValue, observation, workerId })` que chama a RPC `log_audit` já existente (ela preenche user_id/worker_id/admin_id automaticamente).
+
+Pontos de chamada a auditar (inserir 1 linha em cada handler):
+- Clientes: criação (`ClientForm`), edição, exclusão.
+- Empréstimos: criação (`NewLoanPage`), renovação, cancelamento, quitação, edição de parcelas.
+- Pagamentos: `registerPayment` e `reversePayment` em `payment-utils.ts`.
+- "Não pagou": insert/undo em `DailyCashPage`.
+- Caixa: fechar/reabrir em `DailyCashPage` e ajustes manuais em `CaixaPage`/`Geral`.
+- Renegociação: novo fluxo (item 4).
+
+Action types padrão: `criar_cliente`, `editar_cliente`, `excluir_cliente`, `criar_emprestimo`, `renovar_emprestimo`, `renegociar_emprestimo`, `cancelar_emprestimo`, `quitar_emprestimo`, `pagamento`, `nao_pagou`, `estorno_pagamento`, `desfazer_nao_pagou`, `fechar_caixa`, `reabrir_caixa`, `entrada_manual`, `saida_manual`, `ajuste_caixa`.
+
+## 2. Bloqueio com caixa fechado
+
+Migração: criar função SQL `is_cash_closed(p_worker_id uuid, p_admin_id uuid, p_date date) returns boolean` que consulta `daily_cash` pelo escopo correto.
+
+Criar helper `src/lib/cash-lock.ts` com `assertCashOpen(date, workerId?)` que faz SELECT em `daily_cash` filtrado por worker/admin escopo e lança erro "Caixa do dia já está fechado. Reabra antes de operar." se status=`closed`.
+
+Chamar `assertCashOpen` no início dos handlers em:
+- `DailyCashPage`: handlePay, handleNotPaid, handleBatchNotPaid, handleUndo.
+- `CaixaPage`/módulo Geral: entrada/saída/ajuste manual.
+- `NewLoanPage`: validar `loan_date` antes de submit (apenas se igual ao caixa fechado).
+- `LoanDetailPage`: pagamento, cancelamento, renovação.
+
+Admin/superadmin continuam podendo reabrir via botão existente.
+
+## 3. Padronizar status
+
+Criar `src/lib/status-constants.ts`:
+```ts
+export const LOAN_STATUS = { OPEN:'open', PAID:'paid', OVERDUE:'overdue', CANCELLED:'cancelled', RENEGOTIATED:'renegotiated' } as const;
+export const INSTALLMENT_STATUS = { PENDING:'pending', PARTIAL:'partial', PAID:'paid', OVERDUE:'overdue', CANCELLED:'cancelled', RENEGOTIATED:'renegotiated' } as const;
 ```
-Migration 1 — Frente 1, 5, 6:
-  - CREATE OR REPLACE FUNCTION get_latest_credential(...)
-  - CREATE OR REPLACE FUNCTION list_password_recovery_alerts()
-  - CREATE OR REPLACE FUNCTION worker_create_client(...)
-  - CREATE OR REPLACE FUNCTION worker_dashboard_stats(...)
-  - CREATE OR REPLACE FUNCTION super_admin_list_admins() — filtra super_admins
-  - TRIGGER clients_require_scope BEFORE INSERT
-  - TRIGGER clients_lock_scope BEFORE UPDATE (só permite mudança via GUC setado pela RPC de transferência)
-  - Atualizar admin_transfer_client para setar a GUC
-  - Índices em worker_credentials_log
-```
 
-### Não escopo / não tocar
-- Lógica de pagamento, `apply_loan_payment`, `reverse_loan_payment`
-- Geração de parcelas
-- Cálculo de Rota, Caixa, Geral
-- RLS existentes (apenas leituras adicionais)
-- Renovação, fechamento de caixa, daily_events
+Atualizar `getStatusLabel`/`getStatusColor` em `loan-utils.ts` para cobrir `cancelled` e `renegotiated` (cinza neutro, sem alterar paleta — usa `bg-muted`).
 
-### Ordem de entrega
-1. Migration única com todas as RPCs/triggers/índices
-2. Atualizar `CredentialsDialog` e detalhe de admin/trabalhador para "Gerar nova senha" + área Acesso
-3. Sino + página de solicitações pendentes
-4. `worker_create_client` no fluxo trabalhador + agrupar clientes por trabalhador
-5. Manutenção: card de clientes sem trabalhador
-6. Sweep de "nome clicável" nas listagens
+Revisar `admin_recalculate_loans` e `admin_recalculate_installments` (migração) para ignorar empréstimos com status `cancelled` ou `renegotiated` (não recalcular para overdue).
 
-Confirma para eu seguir?
+Telas: `ActiveLoansPage`, `LoanDetailPage`, `OverdueLoansPage` — filtrar `status NOT IN ('cancelled','renegotiated')` onde mostram "ativos".
+
+## 4. Renegociação completa
+
+Reaproveitar tabela existente `loan_renegotiations` (já tem todos os campos: original_loan_id, new_loan_id, original_*, new_*, type, reason).
+
+Criar página/dialog `RenegotiateLoanDialog` (estilo igual ao renovar — sem novo design). Campos: novo valor, juros, parcelas, frequência, primeira data, motivo.
+
+Fluxo no submit (transação client-side, com rollback manual em caso de erro):
+1. `assertCashOpen` (item 2).
+2. INSERT `loans` novo com `renewed_from_loan_id = original` e status `open`.
+3. Gerar `installments` do novo.
+4. UPDATE original: `status = 'renegotiated'`, `remaining_balance = 0`.
+5. UPDATE installments do original com `status IN ('pending','partial','overdue')` → `status = 'renegotiated'`.
+6. INSERT `loan_renegotiations` com snapshot original_* e new_*, type='renegociacao', reason, worker_id, admin_id.
+7. `createDailyEvent` event_type='renegociacao' (entrada/saída líquida conforme valor liberado vs absorvido — espelhar lógica de renovação existente).
+8. `logAudit('renegociar_emprestimo', 'loan', originalId, {original}, {newLoanId}, motivo)`.
+
+Disponibilizar botão "Renegociar" em `LoanDetailPage` ao lado de "Renovar" (mesmo estilo de botão existente).
+
+Incluir renegociação na exibição de `DailyReportPage` e `DailyCashHistoryPage` — já listam `daily_events`, basta tratar o tipo `renegociacao` no mapeamento de label.
+
+---
+
+## Arquivos a criar
+- `src/lib/audit-log.ts` (helper)
+- `src/lib/cash-lock.ts` (helper)
+- `src/lib/status-constants.ts`
+- `src/components/RenegotiateLoanDialog.tsx`
+- 1 migração: função `is_cash_closed` + ajuste em `admin_recalculate_*` para ignorar cancelled/renegotiated.
+
+## Arquivos a editar (handlers)
+- `src/lib/payment-utils.ts`, `src/lib/daily-events.ts`
+- `src/pages/DailyCashPage.tsx`, `src/pages/CaixaPage.tsx`, `src/pages/NewLoanPage.tsx`, `src/pages/LoanDetailPage.tsx`, `src/pages/ActiveLoansPage.tsx`, `src/pages/ClientsPage.tsx`, `src/pages/ClientDetailPage.tsx`, `src/pages/DailyReportPage.tsx`, `src/pages/OverdueLoansPage.tsx`
+- `src/components/ClientForm.tsx`
+- `src/lib/loan-utils.ts` (labels)
+
+## Validação
+- `tsc --noEmit` via build automático.
+- Smoke test mental: pagamento com caixa fechado deve falhar; renegociação deve aparecer no relatório diário; status cancelled não deve virar overdue.
+
+Confirma para eu prosseguir?
