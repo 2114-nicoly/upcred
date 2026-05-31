@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, markCashMovementReversed } from "@/lib/cash-utils";
 import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
+import { logAction } from "@/lib/audit-utils";
 
 /**
  * Centralized payment functions - SINGLE SOURCE OF TRUTH
@@ -154,6 +155,15 @@ export async function registerPayment(params: {
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
   await recalculateCashBalanceFromLedger();
+
+  await logAction(
+    "pagamento",
+    "payment",
+    movement?.id ?? null,
+    null,
+    { loan_id: loanId, amount: applied, cash_date: cashDate, client_id: clientId },
+    `Pagamento ${formatCurrency(applied)} - ${clientName}`,
+  );
 
   return { applied, newBalance: Number(newBalance) };
 }
