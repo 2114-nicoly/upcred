@@ -294,7 +294,7 @@ export default function DailyCashPage() {
         { data: newLoanData },
         { data: paidMovementsData },
       ] = await Promise.all([
-        supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
+        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
         getDailyEvents(selectedDate),
         getDailyEvents(selectedDate, { includeReversed: true }),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
