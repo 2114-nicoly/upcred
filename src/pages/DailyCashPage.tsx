@@ -808,10 +808,10 @@ export default function DailyCashPage() {
     // Optimistic: remove from not-paid (will come back to pending on refresh)
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
     if (mark) localActionedLoanIds.current.delete(mark.loan_id);
-    toast.success("Marcação desfeita!");
 
     try {
-      await supabase.from("not_paid_marks").delete().eq("id", markId);
+      const { error: delErr } = await supabase.from("not_paid_marks").delete().eq("id", markId);
+      if (delErr) throw delErr;
       if (mark) {
         const { data: events } = await (supabase.from("daily_events")
           .select("id").eq("event_type", "nao_pagou")
@@ -821,6 +821,10 @@ export default function DailyCashPage() {
           await deleteDailyEvent(ev.id);
         }
       }
+      toast.success("Marcação desfeita!");
+    } catch (err) {
+      console.error("[handleUndoNotPaid] failed", err);
+      toast.error("Não foi possível desfazer. Recarregando dados...");
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
