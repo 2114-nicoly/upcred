@@ -851,10 +851,13 @@ export default function DailyCashPage() {
     // Optimistic: remove from paid
     setPaidGroups(prev => prev.filter(g => g.loanId !== loanId));
     localActionedLoanIds.current.delete(loanId);
-    toast.success("Pagamento desfeito!");
 
     try {
       await reversePayment({ movementId });
+      toast.success("Pagamento desfeito!");
+    } catch (err) {
+      console.error("[handleUndoPayment] failed", err);
+      toast.error("Não foi possível desfazer o pagamento. Recarregando dados...");
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
