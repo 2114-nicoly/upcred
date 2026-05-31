@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, markCashMovementReversed } from "@/lib/cash-utils";
 import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
+import { logAction } from "@/lib/audit-utils";
 
 /**
  * Centralized payment functions - SINGLE SOURCE OF TRUTH
@@ -154,6 +155,15 @@ export async function registerPayment(params: {
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
   await recalculateCashBalanceFromLedger();
+
+  await logAction(
+    "pagamento",
+    "payment",
+    movement?.id ?? null,
+    null,
+    { loan_id: loanId, amount: applied, cash_date: cashDate, client_id: clientId },
+    `Pagamento ${formatCurrency(applied)} - ${clientName}`,
+  );
 
   return { applied, newBalance: Number(newBalance) };
 }
@@ -437,20 +447,14 @@ export async function reversePayment(params: {
   await recalculateCashBalanceFromLedger();
   await recalculateInstallments(loanId);
 
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    await supabase.from("audit_logs" as any).insert({
-      action_type: "estornar_pagamento",
-      entity_type: "cash_movement",
-      entity_id: movementId,
-      user_id: session?.user?.id,
-      old_value: { amount: totalReversed, loan_id: loanId },
-      new_value: { reversed: true },
-      observation: "Pagamento estornado",
-    } as any);
-  } catch (err) {
-    console.warn("[audit] estornar_pagamento failed", err);
-  }
+  await logAction(
+    "desfazer_pagamento",
+    "payment",
+    movementId,
+    { amount: totalReversed, loan_id: loanId },
+    { reversed: true },
+    "Pagamento estornado",
+  );
 
   return totalReversed;
 }
@@ -581,4 +585,13 @@ export async function cancelLoan(params: {
   } as any);
 
   await recalculateCashBalanceFromLedger();
+
+  await logAction(
+    "excluir_emprestimo",
+    "loan",
+    loanId,
+    { remaining_balance: Number(loan.remaining_balance), status: loan.status },
+    { status: "cancelled", remaining_balance: 0 },
+    reason ? `Empréstimo cancelado: ${reason}` : "Empréstimo cancelado",
+  );
 }

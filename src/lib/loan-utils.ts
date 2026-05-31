@@ -106,6 +106,9 @@ export function getStatusColor(status: string): string {
       return "bg-due-today text-due-today-foreground";
     case "pending":
       return "bg-open text-open-foreground";
+    case "cancelled":
+    case "renegotiated":
+      return "bg-muted text-muted-foreground";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -125,6 +128,10 @@ export function getStatusLabel(status: string): string {
       return "Parcial";
     case "open":
       return "Em Aberto";
+    case "cancelled":
+      return "Cancelado";
+    case "renegotiated":
+      return "Renegociado";
     default:
       return status;
   }
@@ -138,20 +145,23 @@ export function getInstallmentDisplayStatus(inst: {
   paid_amount: number;
 }): string {
   if (inst.status === "paid") return "paid";
-  
+  if (inst.status === "cancelled") return "cancelled";
+  if (inst.status === "renegotiated") return "renegotiated";
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(inst.due_date + "T00:00:00");
-  
+
   // Today's installments always show "Vence Hoje", never overdue
   if (due.getTime() === today.getTime()) return "due_today";
-  
+
   // Past due date and not fully paid = overdue (even if partial payment was made)
   if (inst.status === "overdue" || due < today) return "overdue";
-  
+
   if (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) < Number(inst.amount)) return "partial";
   return "pending";
 }
+
 
 export function getLoanStatusColor(status: string): string {
   switch (status) {

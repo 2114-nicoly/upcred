@@ -16,6 +16,8 @@ import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger, getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
+import { logAction } from "@/lib/audit-utils";
+import { isCashClosed } from "@/lib/cash-lock";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
@@ -921,18 +923,14 @@ export default function DailyCashPage() {
         dailyCashId = inserted?.id ?? null;
       }
 
-      try {
-        await supabase.from("audit_logs").insert({
-          action_type: "fechar_caixa",
-          entity_type: "daily_cash",
-          entity_id: dailyCashId,
-          user_id: s3?.user?.id,
-          new_value: { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
-          observation: `Caixa fechado - ${selectedDate}`,
-        } as any);
-      } catch (err) {
-        console.warn("[audit] fechar_caixa failed", err);
-      }
+      await logAction(
+        "fechar_caixa",
+        "cash",
+        dailyCashId,
+        null,
+        { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
+        `Caixa fechado - ${selectedDate}`,
+      );
 
       toast.success("Caixa do dia fechado!");
       setDailyCashStatus("closed");
@@ -971,17 +969,14 @@ export default function DailyCashPage() {
         if (updErr) throw updErr;
       }
       const { data: { session: s } } = await supabase.auth.getSession();
-      try {
-        await supabase.from("audit_logs").insert({
-          action_type: "reabrir_caixa",
-          entity_type: "daily_cash",
-          entity_id: existing?.id ?? null,
-          user_id: s?.user?.id,
-          observation: `Reabertura de caixa (${selectedDate}): ${reopenReason.trim()}`,
-        } as any);
-      } catch (err) {
-        console.warn("[audit] reabrir_caixa failed", err);
-      }
+      await logAction(
+        "reabrir_caixa",
+        "cash",
+        existing?.id ?? null,
+        null,
+        { cash_date: selectedDate },
+        `Reabertura de caixa (${selectedDate}): ${reopenReason.trim()}`,
+      );
       toast.success("Caixa reaberto!");
       setDailyCashStatus("open");
       setReopenDialogOpen(false);
