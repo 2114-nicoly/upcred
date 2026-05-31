@@ -33,6 +33,7 @@ import SuperAdminDetailPage from "@/pages/SuperAdminDetailPage";
 import SuperAdminWorkerDetailPage from "@/pages/SuperAdminWorkerDetailPage";
 import AuditPage from "@/pages/AuditPage";
 import AccountPage from "@/pages/AccountPage";
+import DailyReportPage from "@/pages/DailyReportPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { ConfirmProvider } from "@/hooks/useConfirm";
 import { Loader2 } from "lucide-react";
