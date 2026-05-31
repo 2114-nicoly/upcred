@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle, AlertTriangle } from "lucide-react";
+import { MapPin, Wallet, Menu, X, Users, Landmark, CalendarDays, BarChart3, Crown, ArrowLeft, LogOut, Eye, LayoutDashboard, Wrench, FileSearch, UserCircle, AlertTriangle, FileText } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
@@ -24,6 +24,7 @@ const workerSidebar: NavItem[] = [
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
   { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
+  { path: "/daily-report", label: "Relatório Diário", icon: FileText },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
@@ -35,6 +36,7 @@ const adminSidebar: NavItem[] = [
   { path: "/admin", label: "Painel", icon: LayoutDashboard },
   { path: "/caixa", label: "Caixa Geral", icon: Wallet },
   { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
+  { path: "/daily-report", label: "Relatório Diário", icon: FileText },
   { path: "/audit", label: "Auditoria", icon: FileSearch },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
@@ -49,6 +51,7 @@ const superAdminSidebar: NavItem[] = [
   { path: "/active-loans", label: "Empréstimos", icon: Landmark },
   { path: "/caixa", label: "Caixa Geral", icon: Wallet },
   { path: "/reports", label: "Relatórios Gerais", icon: BarChart3 },
+  { path: "/daily-report", label: "Relatório Diário", icon: FileText },
   { path: "/audit", label: "Auditoria Geral", icon: FileSearch },
   { path: "/admin-tools", label: "Manutenção", icon: Wrench },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
@@ -64,6 +67,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
     "/admin-tools": "Manutenção",
     "/audit": "Auditoria",
     "/account": "Minha Conta",
+    "/daily-report": "Relatório Diário",
     "/workers": "Trabalhadores",
     "/overdue": "Parcelas Atrasadas",
     "/today-summary": "Resumo do Dia",

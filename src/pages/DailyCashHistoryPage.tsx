@@ -108,6 +108,13 @@ export default function DailyCashHistoryPage() {
                     <Badge
                       variant="outline"
                       className="cursor-pointer text-xs"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/daily-report?date=${day.date}`); }}
+                    >
+                      Relatório
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="cursor-pointer text-xs"
                       onClick={(e) => { e.stopPropagation(); navigate(`/caixa?date=${day.date}`); }}
                     >
                       Ver caixa <ChevronRight className="h-3 w-3 ml-1" />
