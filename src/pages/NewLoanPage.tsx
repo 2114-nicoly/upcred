@@ -262,6 +262,24 @@ export default function NewLoanPage() {
     } else {
       toast.success("Empréstimo criado com sucesso!");
     }
+
+    // Audit
+    await logAction(
+      renewFromLoanId ? "renovar_emprestimo" : "criar_emprestimo",
+      "loan",
+      loan.id,
+      renewFromLoanId ? { from_loan_id: renewFromLoanId, falta_quitar: faltaQuitar } : null,
+      {
+        amount: numAmount,
+        total_amount: calc.totalAmount,
+        installment_count: numInstallments,
+        payment_type: paymentType,
+        loan_date: loanDate,
+        released: renewFromLoanId ? valorLiberado : numAmount,
+      },
+      renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,
+    );
+
     navigate("/");
   };
 
