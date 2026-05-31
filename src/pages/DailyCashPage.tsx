@@ -1610,7 +1610,7 @@ export default function DailyCashPage() {
 
           {isClosed ? (
             (isAdmin || isSuperAdmin) ? (
-              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm">
+              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm" disabled={isSubmitting || isReopening}>
                 <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
               </Button>
             ) : (
@@ -1619,8 +1619,8 @@ export default function DailyCashPage() {
               </p>
             )
           ) : (
-            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm">
-              <Lock className="mr-2 h-4 w-4" /> Fechar Caixa do Dia
+            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm" disabled={isSubmitting}>
+              <Lock className="mr-2 h-4 w-4" /> {isSubmitting ? "Fechando..." : "Fechar Caixa do Dia"}
             </Button>
           )}
 
