@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } from "@/lib/loan-utils";
 import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { createDailyEvent } from "@/lib/daily-events";
+import { getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -137,11 +138,10 @@ export default function OverdueLoansPage() {
   useEffect(() => { fetchData(); }, []);
 
   const handlePay = async (id: string) => {
-    const { data: dc } = await supabase
-      .from("daily_cash")
-      .select("status")
-      .eq("cash_date", payDate)
-      .maybeSingle();
+    const { data: dc } = await applyDailyCashScope(
+      supabase.from("daily_cash").select("status").eq("cash_date", payDate),
+      await getCurrentDailyCashScope()
+    ).maybeSingle();
     if (dc?.status === "closed") {
       toast.error("O caixa desse dia já está fechado. Altere a data ou solicite reabertura.");
       return;

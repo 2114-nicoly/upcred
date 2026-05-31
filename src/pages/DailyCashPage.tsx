@@ -13,7 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
 import { isSunday } from "@/lib/utils";
-import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger, getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { createDailyEvent, deleteDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -294,7 +294,7 @@ export default function DailyCashPage() {
         { data: newLoanData },
         { data: paidMovementsData },
       ] = await Promise.all([
-        supabase.from("daily_cash").select("*").eq("cash_date", selectedDate).maybeSingle(),
+        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
         getDailyEvents(selectedDate),
         getDailyEvents(selectedDate, { includeReversed: true }),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
@@ -857,8 +857,11 @@ export default function DailyCashPage() {
     const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
     const { data: { session: s3 } } = await supabase.auth.getSession();
-    const { data: existing } = await supabase
-      .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
+    const scope = await getCurrentDailyCashScope();
+    const { data: existing } = await applyDailyCashScope(
+      supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
+      scope
+    ).maybeSingle();
 
     const payload: DailyCashPayload = {
       cash_date: selectedDate, status: "closed", total_received: totalReceived,
@@ -871,7 +874,12 @@ export default function DailyCashPage() {
       await supabase.from("daily_cash").update(payload).eq("id", existing.id);
       dailyCashId = existing.id;
     } else {
-      const { data: inserted } = await supabase.from("daily_cash").insert({ ...payload, user_id: s3?.user?.id }).select("id").maybeSingle();
+      const { data: inserted } = await supabase.from("daily_cash").insert({
+        ...payload,
+        user_id: s3?.user?.id,
+        worker_id: scope.worker_id,
+        admin_id: scope.admin_id,
+      } as any).select("id").maybeSingle();
       dailyCashId = inserted?.id ?? null;
     }
 
@@ -906,8 +914,10 @@ export default function DailyCashPage() {
     if (reopenReason.trim().length < 5) return;
     setIsReopening(true);
     try {
-      const { data: existing } = await supabase
-        .from("daily_cash").select("id").eq("cash_date", selectedDate).maybeSingle();
+      const { data: existing } = await applyDailyCashScope(
+        supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
+        await getCurrentDailyCashScope()
+      ).maybeSingle();
       if (existing) {
         await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
       }

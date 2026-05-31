@@ -15,6 +15,8 @@ import {
   createCashMovement,
   recalculateCashBalanceFromLedger,
   CashBalance,
+  getCurrentDailyCashScope,
+  applyDailyCashScope,
 } from "@/lib/cash-utils";
 import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
 import {
@@ -64,7 +66,7 @@ export default function CaixaPage() {
       const [bal, dayEvents, dcRes] = await Promise.all([
         getCashBalance(),
         getDailyEvents(selectedDate),
-        supabase.from("daily_cash").select("status").eq("cash_date", selectedDate).maybeSingle(),
+        applyDailyCashScope(supabase.from("daily_cash").select("status").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
       ]);
       setBalance(bal);
       setEvents(dayEvents);
