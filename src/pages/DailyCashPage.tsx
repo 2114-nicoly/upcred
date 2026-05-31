@@ -1624,6 +1624,15 @@ export default function DailyCashPage() {
             </Button>
           )}
 
+          <Button
+            onClick={() => navigate(`/daily-report?date=${selectedDate}`)}
+            variant="outline"
+            size="sm"
+            className="w-full mt-2"
+          >
+            Ver Relatório do Dia
+          </Button>
+
           <Dialog open={reopenDialogOpen} onOpenChange={(o) => { setReopenDialogOpen(o); if (!o) setReopenReason(""); }}>
             <DialogContent>
               <DialogHeader>
