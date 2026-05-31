@@ -1455,6 +1455,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_cash_closed: { Args: { p_cash_date: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       list_password_recovery_alerts: {
         Args: never
