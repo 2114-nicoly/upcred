@@ -59,6 +59,28 @@ export async function resolveScope(input: {
   return { worker_id, admin_id };
 }
 
+/**
+ * Returns the daily_cash scope (worker_id/admin_id) for the current user.
+ * Used to scope the per-day cash close row so multiple workers can close the
+ * same day independently.
+ */
+export async function getCurrentDailyCashScope(): Promise<{ worker_id: string | null; admin_id: string | null }> {
+  return await resolveScope({ required: false });
+}
+
+/**
+ * Apply the daily_cash scope filter to a supabase query builder.
+ * - worker_id present: filter eq worker_id
+ * - admin_id only:    filter worker_id IS NULL + eq admin_id
+ * - neither:          filter both NULL (global row)
+ */
+export function applyDailyCashScope<T>(query: T, scope: { worker_id: string | null; admin_id: string | null }): T {
+  const q: any = query;
+  if (scope.worker_id) return q.eq("worker_id", scope.worker_id);
+  if (scope.admin_id) return q.is("worker_id", null).eq("admin_id", scope.admin_id);
+  return q.is("worker_id", null).is("admin_id", null);
+}
+
 export type CashMovementType =
   | "emprestimo"
   | "recebimento_normal"
