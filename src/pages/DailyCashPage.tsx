@@ -1681,8 +1681,8 @@ export default function DailyCashPage() {
                       + adicionar observação
                     </button>
                   )}
-                  <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full">
-                    Confirmar Não Pagou ({selectedForNotPaid.size})
+                  <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? "Processando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
                   </Button>
                 </div>
               </DialogContent>
