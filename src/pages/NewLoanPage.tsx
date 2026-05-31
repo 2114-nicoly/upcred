@@ -12,6 +12,8 @@ import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent } f
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
+import { assertCashOpen } from "@/lib/cash-lock";
+import { logAction } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -120,6 +122,15 @@ export default function NewLoanPage() {
     }
 
     setSaving(true);
+
+    // Guard: caixa do dia do empréstimo precisa estar aberto
+    try {
+      await assertCashOpen(loanDate);
+    } catch (err: any) {
+      toast.error(err?.message || "Caixa fechado para esta data");
+      setSaving(false);
+      return;
+    }
 
     // Guard: only 1 active loan per client (renewal allowed when targeting the existing active loan)
     const activeLoan = await getActiveLoanForClient(clientId!);
