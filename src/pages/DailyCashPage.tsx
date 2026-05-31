@@ -878,58 +878,71 @@ export default function DailyCashPage() {
       confirmText: "Fechar caixa",
     });
     if (!ok) return;
-
-    const { data: penaltyMovements } = await (supabase
-      .from("cash_movements")
-      .select("amount")
-      .eq("type", "recebimento_multa")
-      .eq("cash_date", selectedDate)
-      .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
-    const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
-
-    const { data: { session: s3 } } = await supabase.auth.getSession();
-    const scope = await getCurrentDailyCashScope();
-    const { data: existing } = await applyDailyCashScope(
-      supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
-      scope
-    ).maybeSingle();
-
-    const payload: DailyCashPayload = {
-      cash_date: selectedDate, status: "closed", total_received: totalReceived,
-      total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
-      total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
-    };
-
-    let dailyCashId: string | null = null;
-    if (existing) {
-      await supabase.from("daily_cash").update(payload).eq("id", existing.id);
-      dailyCashId = existing.id;
-    } else {
-      const { data: inserted } = await supabase.from("daily_cash").insert({
-        ...payload,
-        user_id: s3?.user?.id,
-        worker_id: scope.worker_id,
-        admin_id: scope.admin_id,
-      } as any).select("id").maybeSingle();
-      dailyCashId = inserted?.id ?? null;
-    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     try {
-      await supabase.from("audit_logs").insert({
-        action_type: "fechar_caixa",
-        entity_type: "daily_cash",
-        entity_id: dailyCashId,
-        user_id: s3?.user?.id,
-        new_value: { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
-        observation: `Caixa fechado - ${selectedDate}`,
-      } as any);
-    } catch (err) {
-      console.warn("[audit] fechar_caixa failed", err);
-    }
+      const { data: penaltyMovements, error: pmErr } = await (supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("type", "recebimento_multa")
+        .eq("cash_date", selectedDate)
+        .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
+      if (pmErr) throw pmErr;
+      const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
-    toast.success("Caixa do dia fechado!");
-    setDailyCashStatus("closed");
-    setPendingInstallments([]);
+      const { data: { session: s3 } } = await supabase.auth.getSession();
+      const scope = await getCurrentDailyCashScope();
+      const { data: existing, error: selErr } = await applyDailyCashScope(
+        supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
+        scope
+      ).maybeSingle();
+      if (selErr) throw selErr;
+
+      const payload: DailyCashPayload = {
+        cash_date: selectedDate, status: "closed", total_received: totalReceived,
+        total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
+        total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
+      };
+
+      let dailyCashId: string | null = null;
+      if (existing) {
+        const { error: updErr } = await supabase.from("daily_cash").update(payload).eq("id", existing.id);
+        if (updErr) throw updErr;
+        dailyCashId = existing.id;
+      } else {
+        const { data: inserted, error: insErr } = await supabase.from("daily_cash").insert({
+          ...payload,
+          user_id: s3?.user?.id,
+          worker_id: scope.worker_id,
+          admin_id: scope.admin_id,
+        } as any).select("id").maybeSingle();
+        if (insErr) throw insErr;
+        dailyCashId = inserted?.id ?? null;
+      }
+
+      try {
+        await supabase.from("audit_logs").insert({
+          action_type: "fechar_caixa",
+          entity_type: "daily_cash",
+          entity_id: dailyCashId,
+          user_id: s3?.user?.id,
+          new_value: { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
+          observation: `Caixa fechado - ${selectedDate}`,
+        } as any);
+      } catch (err) {
+        console.warn("[audit] fechar_caixa failed", err);
+      }
+
+      toast.success("Caixa do dia fechado!");
+      setDailyCashStatus("closed");
+      setPendingInstallments([]);
+    } catch (err) {
+      console.error("[handleCloseCash] failed", err);
+      toast.error("Não foi possível fechar o caixa. Tente novamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReopenCash = async () => {
