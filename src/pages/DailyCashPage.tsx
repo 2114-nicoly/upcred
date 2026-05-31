@@ -580,10 +580,9 @@ export default function DailyCashPage() {
       }];
     });
     resetPayDialog();
-    toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
 
     try {
-      // Penalty payment
+      // Penalty payment (optional)
       if (multaValue > 0) {
         try {
           await registerPenaltyPayment({
@@ -592,7 +591,9 @@ export default function DailyCashPage() {
             cashDate: payDate, origin: "rota",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-        } catch { toast.error("Nenhuma multa registrada para abater"); }
+        } catch {
+          toast.error("Nenhuma multa registrada para abater");
+        }
       }
 
       // Main payment via centralized function
@@ -603,9 +604,13 @@ export default function DailyCashPage() {
           cashDate: payDate, origin: "rota",
           installmentId: inst.id, startInstNumber: inst.number,
         });
+        toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
-    } catch {
-      toast.error("Erro ao sincronizar, recarregando...");
+    } catch (err) {
+      console.error("[handlePay] failed", err);
+      toast.error("Erro ao registrar pagamento. Recarregando dados...");
+      // Rollback optimistic state
+      localActionedLoanIds.current.delete(inst.loan_id);
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -642,16 +647,18 @@ export default function DailyCashPage() {
     setNotPaidObs("");
     setShowNotPaidObs(false);
     setNotPaidDialogId(null);
-    toast.info("Marcado como 'Não Pagou'");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from("not_paid_marks").insert({
-        mark_date: selectedDate, installment_id: inst.id,
-        loan_id: inst.loan_id, client_id: inst.loans.client_id,
-        observation: obs || null,
-        user_id: session?.user?.id,
-      });
+      const { error: insertErr } = await supabase
+        .from("not_paid_marks")
+        .upsert({
+          mark_date: selectedDate, installment_id: inst.id,
+          loan_id: inst.loan_id, client_id: inst.loans.client_id,
+          observation: obs || null,
+          user_id: session?.user?.id,
+        }, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
+      if (insertErr) throw insertErr;
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
@@ -661,6 +668,13 @@ export default function DailyCashPage() {
         observation: obs || `Não pagou - ${inst.loans.clients.name}`,
         origin: "rota",
       });
+      toast.info("Marcado como 'Não Pagou'");
+    } catch (err) {
+      console.error("[handleNotPaid] failed", err);
+      toast.error("Erro ao marcar como 'Não Pagou'. Recarregando dados...");
+      // Rollback optimistic state
+      setNotPaidMarks(prev => prev.filter(m => m.id !== optimisticMark.id));
+      localActionedLoanIds.current.delete(inst.loan_id);
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -695,7 +709,6 @@ export default function DailyCashPage() {
     setBatchNotPaidDialogOpen(false);
     setBatchNotPaidObs("");
     setShowBatchNotPaidObs(false);
-    toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
 
     const { data: { session: s2 } } = await supabase.auth.getSession();
     const inserts = selectedInsts.map(inst => ({
@@ -706,8 +719,12 @@ export default function DailyCashPage() {
       observation: obs || null,
       user_id: s2?.user?.id,
     }));
+    const optimisticIds = new Set(optimisticMarks.map(m => m.id));
     try {
-      await supabase.from("not_paid_marks").insert(inserts);
+      const { error: insertErr } = await supabase
+        .from("not_paid_marks")
+        .upsert(inserts, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
+      if (insertErr) throw insertErr;
       for (const inst of selectedInsts) {
         await createDailyEvent({
           cash_date: selectedDate,
@@ -719,6 +736,13 @@ export default function DailyCashPage() {
           origin: "rota",
         });
       }
+      toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
+    } catch (err) {
+      console.error("[handleBatchNotPaid] failed", err);
+      toast.error("Erro ao marcar parcelas. Recarregando dados...");
+      // Rollback optimistic marks
+      setNotPaidMarks(prev => prev.filter(m => !optimisticIds.has(m.id)));
+      selectedInsts.forEach(i => localActionedLoanIds.current.delete(i.loan_id));
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -784,10 +808,10 @@ export default function DailyCashPage() {
     // Optimistic: remove from not-paid (will come back to pending on refresh)
     setNotPaidMarks(prev => prev.filter(m => m.id !== markId));
     if (mark) localActionedLoanIds.current.delete(mark.loan_id);
-    toast.success("Marcação desfeita!");
 
     try {
-      await supabase.from("not_paid_marks").delete().eq("id", markId);
+      const { error: delErr } = await supabase.from("not_paid_marks").delete().eq("id", markId);
+      if (delErr) throw delErr;
       if (mark) {
         const { data: events } = await (supabase.from("daily_events")
           .select("id").eq("event_type", "nao_pagou")
@@ -797,6 +821,10 @@ export default function DailyCashPage() {
           await deleteDailyEvent(ev.id);
         }
       }
+      toast.success("Marcação desfeita!");
+    } catch (err) {
+      console.error("[handleUndoNotPaid] failed", err);
+      toast.error("Não foi possível desfazer. Recarregando dados...");
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -823,10 +851,13 @@ export default function DailyCashPage() {
     // Optimistic: remove from paid
     setPaidGroups(prev => prev.filter(g => g.loanId !== loanId));
     localActionedLoanIds.current.delete(loanId);
-    toast.success("Pagamento desfeito!");
 
     try {
       await reversePayment({ movementId });
+      toast.success("Pagamento desfeito!");
+    } catch (err) {
+      console.error("[handleUndoPayment] failed", err);
+      toast.error("Não foi possível desfazer o pagamento. Recarregando dados...");
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
@@ -847,58 +878,71 @@ export default function DailyCashPage() {
       confirmText: "Fechar caixa",
     });
     if (!ok) return;
-
-    const { data: penaltyMovements } = await (supabase
-      .from("cash_movements")
-      .select("amount")
-      .eq("type", "recebimento_multa")
-      .eq("cash_date", selectedDate)
-      .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
-    const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
-
-    const { data: { session: s3 } } = await supabase.auth.getSession();
-    const scope = await getCurrentDailyCashScope();
-    const { data: existing } = await applyDailyCashScope(
-      supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
-      scope
-    ).maybeSingle();
-
-    const payload: DailyCashPayload = {
-      cash_date: selectedDate, status: "closed", total_received: totalReceived,
-      total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
-      total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
-    };
-
-    let dailyCashId: string | null = null;
-    if (existing) {
-      await supabase.from("daily_cash").update(payload).eq("id", existing.id);
-      dailyCashId = existing.id;
-    } else {
-      const { data: inserted } = await supabase.from("daily_cash").insert({
-        ...payload,
-        user_id: s3?.user?.id,
-        worker_id: scope.worker_id,
-        admin_id: scope.admin_id,
-      } as any).select("id").maybeSingle();
-      dailyCashId = inserted?.id ?? null;
-    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     try {
-      await supabase.from("audit_logs").insert({
-        action_type: "fechar_caixa",
-        entity_type: "daily_cash",
-        entity_id: dailyCashId,
-        user_id: s3?.user?.id,
-        new_value: { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
-        observation: `Caixa fechado - ${selectedDate}`,
-      } as any);
-    } catch (err) {
-      console.warn("[audit] fechar_caixa failed", err);
-    }
+      const { data: penaltyMovements, error: pmErr } = await (supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("type", "recebimento_multa")
+        .eq("cash_date", selectedDate)
+        .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
+      if (pmErr) throw pmErr;
+      const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
 
-    toast.success("Caixa do dia fechado!");
-    setDailyCashStatus("closed");
-    setPendingInstallments([]);
+      const { data: { session: s3 } } = await supabase.auth.getSession();
+      const scope = await getCurrentDailyCashScope();
+      const { data: existing, error: selErr } = await applyDailyCashScope(
+        supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
+        scope
+      ).maybeSingle();
+      if (selErr) throw selErr;
+
+      const payload: DailyCashPayload = {
+        cash_date: selectedDate, status: "closed", total_received: totalReceived,
+        total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
+        total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
+      };
+
+      let dailyCashId: string | null = null;
+      if (existing) {
+        const { error: updErr } = await supabase.from("daily_cash").update(payload).eq("id", existing.id);
+        if (updErr) throw updErr;
+        dailyCashId = existing.id;
+      } else {
+        const { data: inserted, error: insErr } = await supabase.from("daily_cash").insert({
+          ...payload,
+          user_id: s3?.user?.id,
+          worker_id: scope.worker_id,
+          admin_id: scope.admin_id,
+        } as any).select("id").maybeSingle();
+        if (insErr) throw insErr;
+        dailyCashId = inserted?.id ?? null;
+      }
+
+      try {
+        await supabase.from("audit_logs").insert({
+          action_type: "fechar_caixa",
+          entity_type: "daily_cash",
+          entity_id: dailyCashId,
+          user_id: s3?.user?.id,
+          new_value: { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
+          observation: `Caixa fechado - ${selectedDate}`,
+        } as any);
+      } catch (err) {
+        console.warn("[audit] fechar_caixa failed", err);
+      }
+
+      toast.success("Caixa do dia fechado!");
+      setDailyCashStatus("closed");
+      setPendingInstallments([]);
+    } catch (err) {
+      console.error("[handleCloseCash] failed", err);
+      toast.error("Não foi possível fechar o caixa. Tente novamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReopenCash = async () => {
@@ -914,12 +958,17 @@ export default function DailyCashPage() {
     if (reopenReason.trim().length < 5) return;
     setIsReopening(true);
     try {
-      const { data: existing } = await applyDailyCashScope(
+      const { data: existing, error: selErr } = await applyDailyCashScope(
         supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
         await getCurrentDailyCashScope()
       ).maybeSingle();
+      if (selErr) throw selErr;
       if (existing) {
-        await supabase.from("daily_cash").update({ status: "open", closed_at: null }).eq("id", existing.id);
+        const { error: updErr } = await supabase
+          .from("daily_cash")
+          .update({ status: "open", closed_at: null })
+          .eq("id", existing.id);
+        if (updErr) throw updErr;
       }
       const { data: { session: s } } = await supabase.auth.getSession();
       try {
@@ -938,6 +987,9 @@ export default function DailyCashPage() {
       setReopenDialogOpen(false);
       setReopenReason("");
       refreshDataInBackground();
+    } catch (err) {
+      console.error("[confirmReopenCash] failed", err);
+      toast.error("Não foi possível reabrir o caixa. Tente novamente.");
     } finally {
       setIsReopening(false);
     }
@@ -1558,7 +1610,7 @@ export default function DailyCashPage() {
 
           {isClosed ? (
             (isAdmin || isSuperAdmin) ? (
-              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm">
+              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm" disabled={isSubmitting || isReopening}>
                 <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
               </Button>
             ) : (
@@ -1567,8 +1619,8 @@ export default function DailyCashPage() {
               </p>
             )
           ) : (
-            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm">
-              <Lock className="mr-2 h-4 w-4" /> Fechar Caixa do Dia
+            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm" disabled={isSubmitting}>
+              <Lock className="mr-2 h-4 w-4" /> {isSubmitting ? "Fechando..." : "Fechar Caixa do Dia"}
             </Button>
           )}
 
@@ -1629,8 +1681,8 @@ export default function DailyCashPage() {
                       + adicionar observação
                     </button>
                   )}
-                  <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full">
-                    Confirmar Não Pagou ({selectedForNotPaid.size})
+                  <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? "Processando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
                   </Button>
                 </div>
               </DialogContent>
