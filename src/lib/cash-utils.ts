@@ -74,11 +74,10 @@ export async function getCurrentDailyCashScope(): Promise<{ worker_id: string | 
  * - admin_id only:    filter worker_id IS NULL + eq admin_id
  * - neither:          filter both NULL (global row)
  */
-export function applyDailyCashScope<T>(query: T, scope: { worker_id: string | null; admin_id: string | null }): T {
-  const q: any = query;
-  if (scope.worker_id) return q.eq("worker_id", scope.worker_id);
-  if (scope.admin_id) return q.is("worker_id", null).eq("admin_id", scope.admin_id);
-  return q.is("worker_id", null).is("admin_id", null);
+export function applyDailyCashScope(query: any, scope: { worker_id: string | null; admin_id: string | null }): any {
+  if (scope.worker_id) return query.eq("worker_id", scope.worker_id);
+  if (scope.admin_id) return query.is("worker_id", null).eq("admin_id", scope.admin_id);
+  return query.is("worker_id", null).is("admin_id", null);
 }
 
 export type CashMovementType =
