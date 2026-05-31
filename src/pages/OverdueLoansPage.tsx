@@ -138,11 +138,10 @@ export default function OverdueLoansPage() {
   useEffect(() => { fetchData(); }, []);
 
   const handlePay = async (id: string) => {
-    const { data: dc } = await supabase
-      .from("daily_cash")
-      .select("status")
-      .eq("cash_date", payDate)
-      .maybeSingle();
+    const { data: dc } = await applyDailyCashScope(
+      supabase.from("daily_cash").select("status").eq("cash_date", payDate),
+      await getCurrentDailyCashScope()
+    ).maybeSingle();
     if (dc?.status === "closed") {
       toast.error("O caixa desse dia já está fechado. Altere a data ou solicite reabertura.");
       return;
