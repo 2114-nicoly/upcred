@@ -580,10 +580,9 @@ export default function DailyCashPage() {
       }];
     });
     resetPayDialog();
-    toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
 
     try {
-      // Penalty payment
+      // Penalty payment (optional)
       if (multaValue > 0) {
         try {
           await registerPenaltyPayment({
@@ -592,7 +591,9 @@ export default function DailyCashPage() {
             cashDate: payDate, origin: "rota",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-        } catch { toast.error("Nenhuma multa registrada para abater"); }
+        } catch {
+          toast.error("Nenhuma multa registrada para abater");
+        }
       }
 
       // Main payment via centralized function
@@ -603,9 +604,13 @@ export default function DailyCashPage() {
           cashDate: payDate, origin: "rota",
           installmentId: inst.id, startInstNumber: inst.number,
         });
+        toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
-    } catch {
-      toast.error("Erro ao sincronizar, recarregando...");
+    } catch (err) {
+      console.error("[handlePay] failed", err);
+      toast.error("Erro ao registrar pagamento. Recarregando dados...");
+      // Rollback optimistic state
+      localActionedLoanIds.current.delete(inst.loan_id);
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
