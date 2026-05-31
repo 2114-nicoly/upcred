@@ -33,6 +33,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
+import { assertCashOpen } from "@/lib/cash-lock";
 
 type Loan = {
   id: string;
@@ -548,6 +549,10 @@ export default function LoanDetailPage() {
     if (renegSubmitting) return;
     setRenegSubmitting(true);
     try {
+      // 0. Caixa do dia precisa estar aberto
+      const today = format(new Date(), "yyyy-MM-dd");
+      await assertCashOpen(today);
+
       // 1. Snapshot + insert renegotiation row
       const { data: renegRow, error: renegErr } = await (supabase.from("loan_renegotiations" as any).insert({
         original_loan_id: loan.id,
@@ -573,12 +578,19 @@ export default function LoanDetailPage() {
       } as any).select("id").single() as any);
       if (renegErr) throw renegErr;
 
-      // 2. Mark old loan as renegotiated
+      // 2. Mark old loan as renegotiated (status canônico)
       await supabase.from("loans").update({
-        status: "paid",
+        status: "renegotiated",
         status_detail: "renegotiated",
         remaining_balance: 0,
       } as any).eq("id", loan.id);
+
+      // 2b. Mark non-paid installments of the old loan as renegotiated
+      await supabase
+        .from("installments")
+        .update({ status: "renegotiated" } as any)
+        .eq("loan_id", loan.id)
+        .in("status", ["pending", "partial", "overdue"]);
 
       // 3. Create the new loan
       const { data: newLoan, error: newErr } = await supabase.from("loans").insert({
@@ -590,7 +602,7 @@ export default function LoanDetailPage() {
         remaining_balance: renegCalc.totalAmount,
         installment_count: renegNumInstallments,
         payment_type: renegPaymentType,
-        loan_date: format(new Date(), "yyyy-MM-dd"),
+        loan_date: today,
         first_due_date: renegFirstDueDate || null,
         status: "open",
         is_cravo: loan.is_cravo,
@@ -619,7 +631,19 @@ export default function LoanDetailPage() {
         await (supabase.from("loan_renegotiations" as any).update({ new_loan_id: newLoan.id } as any).eq("id", renegRow.id) as any);
       }
 
-      // 6. Audit log
+      // 6. Daily event (sem movimento de caixa — renegociação não move dinheiro)
+      await createDailyEvent({
+        cash_date: today,
+        event_type: "renovacao",
+        client_id: loan.client_id,
+        loan_id: newLoan.id,
+        amount_in: 0,
+        amount_out: 0,
+        observation: `Renegociação de ${formatCurrency(renegBase)} → ${renegNumInstallments}x ${formatCurrency(renegCalc.installmentAmount)} - ${renegReason.trim()}`,
+        origin: "renegociacao",
+      } as any);
+
+      // 7. Audit log
       await logAction(
         "renegociacao_emprestimo",
         "loan_renegotiations",
