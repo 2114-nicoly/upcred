@@ -62,15 +62,8 @@ function WorkerOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Bloqueia trabalhador comum (apenas admin/superadmin podem acessar). */
-function WorkerBlockedRoute({ children }: { children: React.ReactNode }) {
-  const { isAdmin, isSuperAdmin, loading } = useAuth();
-  if (loading) {
-    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
-  }
-  if (!isAdmin && !isSuperAdmin) return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
+
+
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
