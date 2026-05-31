@@ -67,6 +67,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
     "/admin-tools": "Manutenção",
     "/audit": "Auditoria",
     "/account": "Minha Conta",
+    "/daily-report": "Relatório Diário",
     "/workers": "Trabalhadores",
     "/overdue": "Parcelas Atrasadas",
     "/today-summary": "Resumo do Dia",
