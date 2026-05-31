@@ -15,6 +15,8 @@ import {
   createCashMovement,
   recalculateCashBalanceFromLedger,
   CashBalance,
+  getCurrentDailyCashScope,
+  applyDailyCashScope,
 } from "@/lib/cash-utils";
 import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
 import {
