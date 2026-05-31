@@ -647,16 +647,18 @@ export default function DailyCashPage() {
     setNotPaidObs("");
     setShowNotPaidObs(false);
     setNotPaidDialogId(null);
-    toast.info("Marcado como 'Não Pagou'");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from("not_paid_marks").insert({
-        mark_date: selectedDate, installment_id: inst.id,
-        loan_id: inst.loan_id, client_id: inst.loans.client_id,
-        observation: obs || null,
-        user_id: session?.user?.id,
-      });
+      const { error: insertErr } = await supabase
+        .from("not_paid_marks")
+        .upsert({
+          mark_date: selectedDate, installment_id: inst.id,
+          loan_id: inst.loan_id, client_id: inst.loans.client_id,
+          observation: obs || null,
+          user_id: session?.user?.id,
+        }, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
+      if (insertErr) throw insertErr;
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
@@ -666,6 +668,13 @@ export default function DailyCashPage() {
         observation: obs || `Não pagou - ${inst.loans.clients.name}`,
         origin: "rota",
       });
+      toast.info("Marcado como 'Não Pagou'");
+    } catch (err) {
+      console.error("[handleNotPaid] failed", err);
+      toast.error("Erro ao marcar como 'Não Pagou'. Recarregando dados...");
+      // Rollback optimistic state
+      setNotPaidMarks(prev => prev.filter(m => m.id !== optimisticMark.id));
+      localActionedLoanIds.current.delete(inst.loan_id);
     } finally {
       setIsSubmitting(false);
       refreshDataInBackground();
