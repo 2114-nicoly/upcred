@@ -62,6 +62,9 @@ function WorkerOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+
+
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
@@ -79,22 +82,23 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, isSuperAdmin, loading } = useAuth();
   if (loading) {
     return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
   }
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!isAdmin && !isSuperAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 function SuperAdminRoute({ children }: { children: React.ReactNode }) {
-  const { isSuperAdmin, loading } = useAuth();
+  const { isAdmin, isSuperAdmin, loading } = useAuth();
   if (loading) {
     return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
   }
-  if (!isSuperAdmin) return <Navigate to="/" replace />;
+  if (!isSuperAdmin) return <Navigate to={isAdmin ? "/admin" : "/"} replace />;
   return <>{children}</>;
 }
+
 
 function AppRoutes() {
   return (
@@ -117,11 +121,12 @@ function AppRoutes() {
                 <Route path="/new-loan" element={<WrappedRoute element={<NewLoanSelectClientPage />} />} />
                 <Route path="/active-loans" element={<WrappedRoute element={<ActiveLoansPage />} />} />
                 <Route path="/overdue" element={<WrappedRoute element={<OverdueLoansPage />} />} />
-                <Route path="/today-summary" element={<WrappedRoute element={<TodaySummaryPage />} />} />
+                <Route path="/today-summary" element={<AdminRoute><WrappedRoute element={<TodaySummaryPage />} /></AdminRoute>} />
                 <Route path="/payment-history" element={<WrappedRoute element={<PaymentHistoryPage />} />} />
                 <Route path="/caixa" element={<WrappedRoute element={<CaixaPage />} />} />
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
-                <Route path="/reports" element={<WrappedRoute element={<ReportsPage />} />} />
+                <Route path="/reports" element={<SuperAdminRoute><WrappedRoute element={<ReportsPage />} /></SuperAdminRoute>} />
+
                 <Route path="/admin-tools" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
                 <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
                 <Route path="/account" element={<WrappedRoute element={<AccountPage />} />} />
