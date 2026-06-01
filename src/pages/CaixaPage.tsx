@@ -492,22 +492,24 @@ export default function CaixaPage() {
       </Card>
 
       {/* Close / Reopen cash actions */}
-      <div className="grid grid-cols-2 gap-2">
-        {!isClosed ? (
-          <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
-            <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
-          </Button>
-        ) : (
-          <Button
-            onClick={() => setReopenOpen(true)}
-            disabled={submitting || (!isAdmin && !isSuperAdmin)}
-            variant="outline"
-            className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-          >
-            <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
-          </Button>
-        )}
-      </div>
+      {!isNotStarted && (
+        <div className="grid grid-cols-2 gap-2">
+          {!isClosed ? (
+            <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
+              <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setReopenOpen(true)}
+              disabled={submitting || (!isAdmin && !isSuperAdmin)}
+              variant="outline"
+              className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+            >
+              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
+            </Button>
+          )}
+        </div>
+      )}
 
 
       {/* Section tabs */}
