@@ -32,7 +32,7 @@ type WorkerOpt = { id: string; nome: string; parent_admin_id: string | null };
 type AdminOpt = { id: string; nome: string };
 
 const INCOME_TYPES = new Set(["pagamento", "recebimento_multa", "entrada_manual"]);
-const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "saida", "saida_manual"]);
+const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "renegociacao", "saida", "saida_manual"]);
 
 export default function DailyReportPage() {
   const { workerId: myWorkerId, adminId: myAdminId, isAdmin, isSuperAdmin } = useAuth();
