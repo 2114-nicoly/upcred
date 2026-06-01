@@ -101,7 +101,7 @@ export default function DateNavigator({ date, onChange, origin = "rota", hideQui
             variant="outline"
             size="sm"
             className="h-7 text-[10px] px-1"
-            onClick={() => navigate("/cash-history")}
+            onClick={() => navigate("/daily-cash-history")}
             title="Abrir histórico"
           >
             <History className="h-3 w-3 mr-0.5" /> Histórico
