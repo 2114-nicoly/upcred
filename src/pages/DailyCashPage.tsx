@@ -662,77 +662,24 @@ export default function DailyCashPage() {
     };
   }, [selectedDate, fetchData]);
 
-  // === Payment handler with optimistic UI ===
+  // === Payment handler: wait for server confirmation (no premature optimistic UI) ===
   const handlePay = async (id: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
-    if (!inst) { setIsSubmitting(false); return; }
+    if (!inst) return;
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); setIsSubmitting(false); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); setIsSubmitting(false); return; }
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = parcValue ?? instRemaining;
-    const newRemainingBalance = Math.max(0, Number(inst.loans.remaining_balance) - paidValue);
 
-    // Optimistic: move to paid, remove from pending
-    localActionedLoanIds.current.add(inst.loan_id);
-    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    const totalAmt = Number(inst.loans.total_amount);
-    const instCount = Number(inst.loans.installment_count);
-    const instAmt = instCount > 0 ? totalAmt / instCount : 0;
-    setPaidGroups(prev => {
-      const existing = prev.find(g => g.loanId === inst.loan_id);
-      if (existing) {
-        const newTotalPaid = existing.totalPaid + paidValue;
-        const newPaidAfter = Math.max(0, totalAmt - newRemainingBalance);
-        return prev.map(g => g.loanId === inst.loan_id
-          ? {
-              ...g,
-              totalPaid: newTotalPaid,
-              accumulatedPaid: newPaidAfter,
-              remainingBalance: newRemainingBalance,
-              paidAfter: newPaidAfter,
-              remainingAfter: newRemainingBalance,
-              progressAfterFormatted: formatProgress(newPaidAfter, instAmt, instCount),
-              progressDeltaFormatted: formatDelta(newPaidAfter - g.paidBefore, instAmt),
-            }
-          : g
-        );
-      }
-      const remainingBefore = Number(inst.loans.remaining_balance);
-      const paidBefore = Math.max(0, totalAmt - remainingBefore);
-      const paidAfter = Math.max(0, totalAmt - newRemainingBalance);
-      return [...prev, {
-        movementId: "",
-        clientName: inst.loans.clients.name,
-        clientId: inst.loans.client_id,
-        loanId: inst.loan_id,
-        totalPaid: paidValue,
-        accumulatedPaid: paidAfter,
-        remainingBalance: newRemainingBalance,
-        instAmount: instAmt,
-        installmentIds: [inst.id],
-        totalAmount: totalAmt,
-        installmentCount: instCount,
-        paidBefore,
-        paidAfter,
-        remainingBefore,
-        remainingAfter: newRemainingBalance,
-        progressBeforeFormatted: formatProgress(paidBefore, instAmt, instCount),
-        progressAfterFormatted: formatProgress(paidAfter, instAmt, instCount),
-        progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmt),
-      }];
-    });
-    resetPayDialog();
-
+    setIsSubmitting(true);
     try {
-      // Penalty payment (optional)
       if (multaValue > 0) {
         try {
           await registerPenaltyPayment({
@@ -745,8 +692,6 @@ export default function DailyCashPage() {
           toast.error("Nenhuma multa registrada para abater");
         }
       }
-
-      // Main payment via centralized function
       if (paidValue > 0) {
         await registerPayment({
           loanId: inst.loan_id, amount: paidValue,
@@ -756,16 +701,16 @@ export default function DailyCashPage() {
         });
         toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
-    } catch (err) {
+      resetPayDialog();
+      await fetchData({ silent: true });
+    } catch (err: any) {
       console.error("[handlePay] failed", err);
-      toast.error("Erro ao registrar pagamento. Recarregando dados...");
-      // Rollback optimistic state
-      localActionedLoanIds.current.delete(inst.loan_id);
+      toast.error(err?.message || "Erro ao registrar pagamento. O cliente continua em pendentes.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
+
 
   const resetPayDialog = () => {
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
