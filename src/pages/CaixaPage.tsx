@@ -282,7 +282,7 @@ export default function CaixaPage() {
   };
 
   const handleUndoEvent = async (event: DailyEvent) => {
-    if (workerIsClosed) { toast.error("Caixa fechado. Solicite reabertura ao administrador."); return; }
+    if (cashLocked) { toast.error("Caixa fechado. Reabra o caixa antes de desfazer lançamentos."); return; }
     const valor = Number(event.amount_in) || Number(event.amount_out) || 0;
     const ok = await confirm({
       title: "Desfazer lançamento?",
@@ -299,8 +299,8 @@ export default function CaixaPage() {
       await undoDailyEvent(event);
       toast.success("Lançamento desfeito!");
       fetchData();
-    } catch {
-      toast.error("Erro ao desfazer lançamento");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao desfazer lançamento");
     }
   };
 
