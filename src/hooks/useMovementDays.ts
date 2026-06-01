@@ -4,7 +4,7 @@ import { computeDailyTotals } from "@/lib/daily-totals";
 
 export type MovementDay = {
   date: string;                  // YYYY-MM-DD
-  status: "open" | "closed" | null;
+  status: "open" | "closed" | "cancelled" | null;
   entradas: number;
   saidas: number;
   saldo: number;
