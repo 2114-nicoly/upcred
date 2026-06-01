@@ -72,11 +72,13 @@ export default function CaixaPage() {
       const [bal, dayEvents, dcRes] = await Promise.all([
         getCashBalance(),
         getDailyEvents(selectedDate),
-        applyDailyCashScope(supabase.from("daily_cash").select("status").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
+        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
       ]);
       setBalance(bal);
       setEvents(dayEvents);
-      setDailyCashStatus((dcRes?.data as any)?.status || "open");
+      const dc = (dcRes?.data as any) || null;
+      setDailyCashRow(dc);
+      setDailyCashStatus(dc?.status || "open");
 
       // Fetch client names for all events
       const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
@@ -97,6 +99,8 @@ export default function CaixaPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const isClosed = dailyCashStatus === "closed";
+  // Once closed, financial actions are blocked for ALL roles for that day.
+  const cashLocked = isClosed;
   const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
@@ -104,14 +108,42 @@ export default function CaixaPage() {
   if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
   if (isAdmin && selectedWorkerId) scopedEvents = scopedEvents.filter((e: any) => e.worker_id === selectedWorkerId);
 
-  // Computed totals from daily_events
+  // Computed totals from daily_events (live, used when not yet closed).
   const totalIn = scopedEvents.reduce((s, e) => s + Number(e.amount_in), 0);
   const totalOut = scopedEvents.reduce((s, e) => s + Number(e.amount_out), 0);
   const saldoDia = totalIn - totalOut;
+  const totalReceived = scopedEvents.filter(e => e.event_type === "pagamento").reduce((s, e) => s + Number(e.amount_in), 0);
+  const totalPenalty = scopedEvents.filter(e => e.event_type === "recebimento_multa").reduce((s, e) => s + Number(e.amount_in), 0);
+  const totalLent = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type)).reduce((s, e) => s + Number(e.amount_out), 0);
+  const totalManualIn = scopedEvents.filter(e => e.event_type === "entrada_manual").reduce((s, e) => s + Number(e.amount_in), 0);
+  const totalManualOut = scopedEvents.filter(e => e.event_type === "saida_manual").reduce((s, e) => s + Number(e.amount_out), 0);
+
+  // When closed, prefer authoritative totals stored in daily_cash.
+  const summary = isClosed && dailyCashRow ? {
+    opening: Number(dailyCashRow.opening_balance || 0),
+    totalIn: Number(dailyCashRow.total_in || 0),
+    totalOut: Number(dailyCashRow.total_out || 0),
+    received: Number(dailyCashRow.total_received || 0),
+    penalty: Number(dailyCashRow.total_penalty_received || 0),
+    lent: Number(dailyCashRow.total_lent || 0),
+    manualIn: Number(dailyCashRow.total_manual_in || 0),
+    manualOut: Number(dailyCashRow.total_manual_out || 0),
+    expected: Number(dailyCashRow.expected_closing_balance || 0),
+    notPaidCount: Number(dailyCashRow.total_not_paid_count || 0),
+    eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
+  } : {
+    opening: 0,
+    totalIn, totalOut,
+    received: totalReceived, penalty: totalPenalty, lent: totalLent,
+    manualIn: totalManualIn, manualOut: totalManualOut,
+    expected: 0 + totalIn - totalOut,
+    notPaidCount: scopedEvents.filter(e => e.event_type === "nao_pagou").length,
+    eventsCount: scopedEvents.length,
+  };
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
-  const novos = scopedEvents.filter(e => e.event_type === "emprestimo_novo" || e.event_type === "renovacao");
+  const novos = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type));
   const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
 
   const handleManualMovement = async () => {
