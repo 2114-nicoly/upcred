@@ -17,14 +17,24 @@ export async function getCurrentWorkerId(): Promise<string | null> {
   return data?.id ?? null;
 }
 
-/** 4-digit code, zero-padded */
-export function generateLoginCodigo(): string {
-  return String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+/** Cryptographically secure unbiased random integer in [0, max). */
+function secureRandomInt(max: number): number {
+  const limit = Math.floor(0xffffffff / max) * max;
+  const buf = new Uint32Array(1);
+  while (true) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < limit) return buf[0] % max;
+  }
 }
 
-/** 8-digit numeric password */
+/** 4-digit code, zero-padded (CSPRNG) */
+export function generateLoginCodigo(): string {
+  return String(secureRandomInt(10000)).padStart(4, "0");
+}
+
+/** 8-digit numeric password (CSPRNG) */
 export function generateTempPassword(): string {
-  return String(Math.floor(Math.random() * 100000000)).padStart(8, "0");
+  return String(secureRandomInt(100000000)).padStart(8, "0");
 }
 
 export function syntheticEmailFor(loginCodigo: string): string {
