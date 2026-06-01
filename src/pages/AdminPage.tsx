@@ -199,6 +199,8 @@ export default function AdminPage() {
         </CardContent>
       </Card>
 
+      <EmptyCashCleanup />
+
       {orphans.length > 0 && (
         <Card>
           <CardHeader className="p-4 pb-2">
