@@ -41,10 +41,12 @@ type LoanSummary = {
 export default function ClientsPage() {
   const { isAdmin, isSuperAdmin } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQ = searchParams.get("q") ?? "";
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQ);
   const [open, setOpen] = useState(false);
   const [groupByWorker, setGroupByWorker] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
