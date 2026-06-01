@@ -365,8 +365,9 @@ export async function settleLoan(params: {
  */
 export async function reversePayment(params: {
   movementId: string;
+  reason?: string;
 }) {
-  const { movementId } = params;
+  const { movementId, reason } = params;
 
   const { data: movement, error } = await supabase
     .from("cash_movements")
