@@ -123,15 +123,9 @@ export default function CaixaPage() {
   if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
   if (isAdmin && selectedWorkerId) scopedEvents = scopedEvents.filter((e: any) => e.worker_id === selectedWorkerId);
 
-  // Computed totals from daily_events (live, used when not yet closed).
-  const totalIn = scopedEvents.reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalOut = scopedEvents.reduce((s, e) => s + Number(e.amount_out), 0);
-  const saldoDia = totalIn - totalOut;
-  const totalReceived = scopedEvents.filter(e => e.event_type === "pagamento").reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalPenalty = scopedEvents.filter(e => e.event_type === "recebimento_multa").reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalLent = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type)).reduce((s, e) => s + Number(e.amount_out), 0);
-  const totalManualIn = scopedEvents.filter(e => e.event_type === "entrada_manual").reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalManualOut = scopedEvents.filter(e => e.event_type === "saida_manual").reduce((s, e) => s + Number(e.amount_out), 0);
+  // Unified totals from daily_events (live, used when not yet closed).
+  const liveTotals = computeDailyTotals(scopedEvents as any, 0);
+  const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
   // When closed, prefer authoritative totals stored in daily_cash.
   const summary = isClosed && dailyCashRow ? {
@@ -148,11 +142,15 @@ export default function CaixaPage() {
     eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
   } : {
     opening: 0,
-    totalIn, totalOut,
-    received: totalReceived, penalty: totalPenalty, lent: totalLent,
-    manualIn: totalManualIn, manualOut: totalManualOut,
-    expected: 0 + totalIn - totalOut,
-    notPaidCount: scopedEvents.filter(e => e.event_type === "nao_pagou").length,
+    totalIn: liveTotals.entradas,
+    totalOut: liveTotals.saidas,
+    received: liveTotals.pagamentos,
+    penalty: liveTotals.multas,
+    lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
+    manualIn: liveTotals.entradasManuais,
+    manualOut: liveTotals.saidasManuais,
+    expected: liveTotals.saldoFinalEsperado,
+    notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
 
