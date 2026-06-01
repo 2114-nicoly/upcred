@@ -198,10 +198,16 @@ export default function ClientsPage() {
     setEditOpen(true);
   };
 
-  let filtered = clients.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    String(c.client_code || "").includes(search)
-  );
+  const q = search.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, "");
+  let filtered = !q ? clients : clients.filter((c) => {
+    if (c.name.toLowerCase().includes(q)) return true;
+    if (String(c.client_code || "").includes(q)) return true;
+    if (qDigits && c.phone && c.phone.replace(/\D/g, "").includes(qDigits)) return true;
+    if (qDigits && (c.doc_primary_number || "").replace(/\D/g, "").includes(qDigits)) return true;
+    if (qDigits && (c.doc_secondary_number || "").replace(/\D/g, "").includes(qDigits)) return true;
+    return false;
+  });
 
   if (filterActive) {
     filtered = filtered.filter((c) => loanSummaries[c.id]?.count > 0);
