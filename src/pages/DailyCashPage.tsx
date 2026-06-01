@@ -1401,24 +1401,7 @@ export default function DailyCashPage() {
     <div className="mx-auto max-w-lg p-3 pb-36">
       {/* Date navigation */}
       <div className="mb-3">
-        <div className="mt-1.5 flex items-center gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1 text-center">
-            <p className="text-xs font-medium">
-              {format(new Date(selectedDate + "T12:00:00"), "EEE, dd 'de' MMMM", { locale: ptBR })}
-            </p>
-            {selectedDate !== today && (
-              <button className="text-[10px] text-primary underline" onClick={() => { setSelectedDate(today); setSearchParams({}); }}>
-                Voltar para hoje
-              </button>
-            )}
-          </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        <DateNavigator date={selectedDate} onChange={handleDateChange} />
         {isClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-1.5 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
@@ -1426,6 +1409,11 @@ export default function DailyCashPage() {
             </p>
           </div>
         )}
+        <NoMovementHint
+          date={selectedDate}
+          hasMovement={dailyEvents.length > 0 || pendingInstallments.length > 0 || paidGroups.length > 0 || notPaidMarks.length > 0 || newLoans.length > 0}
+          onChange={handleDateChange}
+        />
       </div>
 
       {/* Painel de produção do trabalhador */}
