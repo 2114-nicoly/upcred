@@ -147,7 +147,7 @@ export default function CaixaPage() {
   const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
 
   const handleManualMovement = async () => {
-    if (!manualType) return;
+    if (!manualType || submitting) return;
     if (manualType === "ajuste_manual" && !isAdmin && !isSuperAdmin) { setManualType(null); return; }
     const amount = parseFloat(manualAmount);
     if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
@@ -170,50 +170,110 @@ export default function CaixaPage() {
     });
     if (!ok) return;
 
-    if (manualType === "ajuste_manual") {
-      const current = await getCashBalance();
-      if (!current) { toast.error("Erro ao obter saldo"); return; }
-      const diff = amount - Number(current.available_cash);
-      await updateCashBalance({ available_cash: diff });
-      await createCashMovement({
-        type: "ajuste_manual",
-        amount: diff,
-        observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
-        cash_date: selectedDate,
-      });
-      await createDailyEvent({
-        cash_date: selectedDate,
-        event_type: "ajuste_manual",
-        amount_in: diff >= 0 ? diff : 0,
-        amount_out: diff < 0 ? Math.abs(diff) : 0,
-        observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
-        origin: "geral",
-      });
-    } else {
-      const cashChange = manualType === "saida_manual" ? -amount : amount;
-      await updateCashBalance({ available_cash: cashChange });
-      await createCashMovement({
-        type: manualType,
-        amount: manualType === "saida_manual" ? -amount : amount,
-        observation: manualObs || null,
-        cash_date: selectedDate,
-      });
-      await createDailyEvent({
-        cash_date: selectedDate,
-        event_type: manualType,
-        amount_in: manualType === "entrada_manual" ? amount : 0,
-        amount_out: manualType === "saida_manual" ? amount : 0,
-        observation: manualObs || null,
-        origin: "geral",
-      });
-    }
+    setSubmitting(true);
+    try {
+      await assertCashOpen(selectedDate);
 
-    toast.success("Movimentação registrada!");
-    setManualType(null);
-    setManualAmount("");
-    setManualObs("");
-    fetchData();
+      if (manualType === "ajuste_manual") {
+        const current = await getCashBalance();
+        if (!current) { toast.error("Erro ao obter saldo"); return; }
+        const diff = amount - Number(current.available_cash);
+        await updateCashBalance({ available_cash: diff });
+        await createCashMovement({
+          type: "ajuste_manual",
+          amount: diff,
+          observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
+          cash_date: selectedDate,
+        });
+        await createDailyEvent({
+          cash_date: selectedDate,
+          event_type: "ajuste_manual",
+          amount_in: diff >= 0 ? diff : 0,
+          amount_out: diff < 0 ? Math.abs(diff) : 0,
+          observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
+          origin: "geral",
+        });
+        await logAction("ajuste_caixa", "cash", null, null, { amount, diff }, manualObs || null);
+      } else {
+        const cashChange = manualType === "saida_manual" ? -amount : amount;
+        await updateCashBalance({ available_cash: cashChange });
+        await createCashMovement({
+          type: manualType,
+          amount: manualType === "saida_manual" ? -amount : amount,
+          observation: manualObs || null,
+          cash_date: selectedDate,
+        });
+        await createDailyEvent({
+          cash_date: selectedDate,
+          event_type: manualType,
+          amount_in: manualType === "entrada_manual" ? amount : 0,
+          amount_out: manualType === "saida_manual" ? amount : 0,
+          observation: manualObs || null,
+          origin: "geral",
+        });
+        await logAction(manualType === "entrada_manual" ? "aporte" : "retirada", "cash", null, null, { amount }, manualObs || null);
+      }
+
+      toast.success("Movimentação registrada!");
+      setManualType(null);
+      setManualAmount("");
+      setManualObs("");
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] manual movement failed", err);
+      toast.error(err?.message || "Erro ao registrar movimentação");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const handleCloseCash = async () => {
+    if (submitting || isClosed) return;
+    const ok = await confirm({
+      title: "Fechar caixa do dia?",
+      description: "Os totais serão calculados a partir das atividades do dia e o caixa será marcado como fechado. Após fechar, ações financeiras serão bloqueadas até a reabertura.",
+      affected: [
+        { label: "Data", value: format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy") },
+        { label: "Atividades", value: String(summary.eventsCount) },
+        { label: "Saldo esperado", value: formatCurrency(summary.expected) },
+      ],
+      confirmText: "Fechar caixa", destructive: false,
+    });
+    if (!ok) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("close_daily_cash" as any, { p_cash_date: selectedDate } as any);
+      if (error) throw error;
+      toast.success("Caixa fechado!");
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] close failed", err);
+      toast.error(err?.message || "Erro ao fechar caixa");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReopenCash = async () => {
+    if (submitting) return;
+    if (!isAdmin && !isSuperAdmin) { toast.error("Apenas administradores podem reabrir o caixa."); return; }
+    if (reopenReason.trim().length < 3) { toast.error("Informe o motivo da reabertura."); return; }
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("reopen_daily_cash" as any, { p_cash_date: selectedDate, p_reason: reopenReason.trim() } as any);
+      if (error) throw error;
+      toast.success("Caixa reaberto!");
+      setReopenOpen(false);
+      setReopenReason("");
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] reopen failed", err);
+      toast.error(err?.message || "Erro ao reabrir caixa");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
 
   const handleRecalculate = async () => {
     await recalculateCashBalanceFromLedger();
