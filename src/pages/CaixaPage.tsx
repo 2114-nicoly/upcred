@@ -98,6 +98,36 @@ export default function CaixaPage() {
       setDailyCashRow(dc);
       setDailyCashStatus(dc?.status || "open");
 
+      // Inherit opening balance from last closed daily_cash if current row is open/missing.
+      const currentOpening = Number(dc?.opening_balance || 0);
+      const currentClosed = dc?.status === "closed";
+      if (!currentClosed && currentOpening <= 0.001) {
+        try {
+          const scope = await getCurrentDailyCashScope();
+          const prevQ = applyDailyCashScope(
+            supabase.from("daily_cash")
+              .select("expected_closing_balance, counted_closing_balance, cash_date, status")
+              .lt("cash_date", selectedDate)
+              .eq("status", "closed")
+              .order("cash_date", { ascending: false })
+              .limit(1),
+            scope
+          );
+          const { data: prev } = await prevQ;
+          const prevRow = (prev?.[0] as any) || null;
+          if (prevRow) {
+            const inh = Number(prevRow.counted_closing_balance ?? prevRow.expected_closing_balance ?? 0);
+            setInheritedOpening(isFinite(inh) ? inh : 0);
+          } else {
+            setInheritedOpening(0);
+          }
+        } catch {
+          setInheritedOpening(0);
+        }
+      } else {
+        setInheritedOpening(0);
+      }
+
       // Fetch client names for all events
       const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
       if (clientIds.length > 0) {
