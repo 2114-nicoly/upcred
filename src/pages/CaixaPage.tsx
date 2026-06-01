@@ -406,10 +406,22 @@ export default function CaixaPage() {
       />
 
       <div className="flex justify-center">
-        <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
-          {isClosed ? "Caixa Fechado" : "Caixa Aberto"}
+        <Badge
+          className={
+            isClosed
+              ? "bg-destructive text-destructive-foreground"
+              : isNotStarted
+                ? "bg-warning text-warning-foreground"
+                : "bg-success text-success-foreground"
+          }
+        >
+          {isClosed ? "Caixa Fechado" : isNotStarted ? "Caixa do dia ainda não iniciado" : "Caixa Aberto"}
         </Badge>
       </div>
+
+      {isNotStarted && (
+        <OpenCashBanner cashDate={selectedDate} onOpened={fetchData} />
+      )}
 
       {/* Global balance cards */}
       {balance && (
