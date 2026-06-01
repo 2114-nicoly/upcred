@@ -1402,6 +1402,10 @@ export type Database = {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
       }
+      _daily_cash_emptiness_reason: {
+        Args: { p_cash_id: string }
+        Returns: string
+      }
       _daily_cash_is_empty: { Args: { p_cash_id: string }; Returns: boolean }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_cleanup_empty_daily_cash: {
@@ -1440,7 +1444,9 @@ export type Database = {
           admin_nome: string
           cash_date: string
           id: string
+          is_empty: boolean
           opened_at: string
+          reason: string
           worker_id: string
           worker_nome: string
         }[]

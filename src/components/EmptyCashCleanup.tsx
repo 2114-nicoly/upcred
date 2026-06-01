@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -15,7 +16,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Ban, Search, Sparkles } from "lucide-react";
 
-type Empty = {
+type Row = {
   id: string;
   cash_date: string;
   worker_id: string | null;
@@ -23,6 +24,8 @@ type Empty = {
   worker_nome: string | null;
   admin_nome: string | null;
   opened_at: string | null;
+  is_empty: boolean;
+  reason: string | null;
 };
 
 function todayISO(offset = 0) {
@@ -39,12 +42,12 @@ export default function EmptyCashCleanup() {
   const [workerId, setWorkerId] = useState<string>("__all__");
   const [admins, setAdmins] = useState<Array<{ id: string; nome: string }>>([]);
   const [workers, setWorkers] = useState<Array<{ id: string; nome: string; parent_admin_id: string | null }>>([]);
-  const [items, setItems] = useState<Empty[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Load admins list (superadmin only)
   useEffect(() => {
     (async () => {
       if (isSuperAdmin) {
@@ -54,7 +57,6 @@ export default function EmptyCashCleanup() {
     })();
   }, [isSuperAdmin]);
 
-  // Reload workers when admin filter changes (or for non-super admins on mount).
   useEffect(() => {
     (async () => {
       const p_admin_id = isSuperAdmin ? (adminId === "__all__" ? null : adminId) : null;
@@ -68,9 +70,14 @@ export default function EmptyCashCleanup() {
     })();
   }, [isSuperAdmin, adminId]);
 
+  const emptyRows = useMemo(() => (rows ?? []).filter((r) => r.is_empty), [rows]);
+  const nonEmptyRows = useMemo(() => (rows ?? []).filter((r) => !r.is_empty), [rows]);
+  const allWorkersLabel = isSuperAdmin && adminId === "__all__" ? "Todos os trabalhadores" : "Toda a equipe";
+
   async function preview() {
     setLoading(true);
-    setItems(null);
+    setRows(null);
+    setErrorMsg(null);
     try {
       const { data, error } = await supabase.rpc("admin_find_empty_daily_cash" as any, {
         p_start: start,
@@ -79,9 +86,10 @@ export default function EmptyCashCleanup() {
         p_worker_id: workerId === "__all__" ? null : workerId,
       });
       if (error) throw error;
-      setItems((data as Empty[]) ?? []);
+      setRows((data as Row[]) ?? []);
     } catch (e: any) {
-      toast({ title: "Erro ao buscar", description: e.message, variant: "destructive" });
+      setErrorMsg(e?.message ?? "Erro ao buscar caixas");
+      toast({ title: "Erro ao buscar", description: e?.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -90,6 +98,7 @@ export default function EmptyCashCleanup() {
   async function execute() {
     setConfirmOpen(false);
     setCleaning(true);
+    setErrorMsg(null);
     try {
       const { data, error } = await supabase.rpc("admin_cleanup_empty_daily_cash" as any, {
         p_start: start,
@@ -99,10 +108,10 @@ export default function EmptyCashCleanup() {
       });
       if (error) throw error;
       toast({ title: "Cancelamento concluído", description: `${Number(data ?? 0)} caixa(s) vazios cancelados.` });
-      setItems(null);
       await preview();
     } catch (e: any) {
-      toast({ title: "Erro no cancelamento", description: e.message, variant: "destructive" });
+      setErrorMsg(e?.message ?? "Erro no cancelamento");
+      toast({ title: "Erro no cancelamento", description: e?.message, variant: "destructive" });
     } finally {
       setCleaning(false);
     }
@@ -115,9 +124,8 @@ export default function EmptyCashCleanup() {
           <Sparkles className="h-4 w-4" /> Cancelar Caixas Vazios
         </CardTitle>
         <CardDescription className="text-xs">
-          Esta ação <strong>não apaga</strong> nenhuma movimentação. Apenas marca como <code>cancelled_empty</code>
-          os caixas abertos que não tiveram nenhuma atividade real (sem pagamentos, empréstimos, retiradas,
-          aportes, marcações ou eventos financeiros), retornando o dia ao estado neutro.
+          Lista todos os caixas <strong>abertos</strong> no período. Os marcados como “vazio” podem ser cancelados
+          (status <code>cancelled_empty</code>) — nenhuma movimentação é apagada.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 pt-2 space-y-3">
@@ -153,7 +161,7 @@ export default function EmptyCashCleanup() {
           <Select value={workerId} onValueChange={setWorkerId}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">Toda a equipe</SelectItem>
+              <SelectItem value="__all__">{allWorkersLabel}</SelectItem>
               {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -169,30 +177,60 @@ export default function EmptyCashCleanup() {
             size="sm"
             className="flex-1 gap-2"
             onClick={() => setConfirmOpen(true)}
-            disabled={cleaning || !items || items.length === 0}
+            disabled={cleaning || emptyRows.length === 0}
           >
             {cleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-            Cancelar {items?.length ? `(${items.length})` : ""}
+            Cancelar {emptyRows.length ? `(${emptyRows.length})` : ""}
           </Button>
         </div>
 
-        {items !== null && (
-          <div className="border rounded text-xs max-h-64 overflow-auto">
-            {items.length === 0 ? (
-              <p className="p-3 text-muted-foreground text-center">Nenhum caixa vazio encontrado no período.</p>
-            ) : (
-              <ul className="divide-y">
-                {items.map((it) => (
-                  <li key={it.id} className="p-2 flex justify-between gap-2">
-                    <span className="font-mono">{it.cash_date}</span>
-                    <span className="text-muted-foreground truncate">
-                      {it.worker_nome ?? "—"}{isSuperAdmin && it.admin_nome ? ` · ${it.admin_nome}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {errorMsg && (
+          <div className="text-xs rounded border border-destructive/40 bg-destructive/10 text-destructive p-2">
+            {errorMsg}
           </div>
+        )}
+
+        {rows !== null && (
+          <>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span><strong className="text-foreground">{rows.length}</strong> caixa(s) abertos</span>
+              <span>·</span>
+              <span><strong className="text-success">{emptyRows.length}</strong> candidato(s)</span>
+              <span>·</span>
+              <span><strong>{nonEmptyRows.length}</strong> com movimento</span>
+            </div>
+
+            <div className="border rounded text-xs max-h-72 overflow-auto">
+              {rows.length === 0 ? (
+                <p className="p-3 text-muted-foreground text-center">
+                  Nenhum caixa aberto encontrado no período com os filtros atuais.
+                </p>
+              ) : (
+                <ul className="divide-y">
+                  {rows.map((it) => (
+                    <li key={it.id} className="p-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono">{it.cash_date}</span>
+                        <span className="text-muted-foreground truncate">
+                          {it.worker_nome ?? "—"}
+                          {isSuperAdmin && it.admin_nome ? ` · ${it.admin_nome}` : ""}
+                        </span>
+                      </div>
+                      {it.is_empty ? (
+                        <Badge variant="secondary" className="bg-success/15 text-success border-success/30">
+                          vazio
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] max-w-[55%] truncate" title={it.reason ?? ""}>
+                          {it.reason ?? "com movimento"}
+                        </Badge>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
         )}
       </CardContent>
 
@@ -201,7 +239,7 @@ export default function EmptyCashCleanup() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar cancelamento</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão marcados como <strong>cancelled_empty</strong> <strong>{items?.length ?? 0}</strong> caixa(s) vazio(s)
+              Serão marcados como <strong>cancelled_empty</strong> <strong>{emptyRows.length}</strong> caixa(s) vazio(s)
               entre {start} e {end}. Nenhuma movimentação será apagada — o dia volta ao estado neutro
               e pode ser reaberto manualmente.
             </AlertDialogDescription>
