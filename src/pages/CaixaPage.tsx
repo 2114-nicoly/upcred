@@ -818,6 +818,52 @@ export default function CaixaPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Undo reason dialog */}
+      <Dialog open={!!undoTarget} onOpenChange={(o) => { if (!o) { setUndoTarget(null); setUndoReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Undo2 className="h-4 w-4" /> Desfazer lançamento
+            </DialogTitle>
+          </DialogHeader>
+          {undoTarget && (
+            <div className="space-y-2 text-xs">
+              <div className="rounded border bg-muted/30 p-2 space-y-0.5">
+                <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium">{getEventTypeLabel(undoTarget.event_type)}</span></p>
+                {(Number(undoTarget.amount_in) > 0 || Number(undoTarget.amount_out) > 0) && (
+                  <p>
+                    <span className="text-muted-foreground">Valor:</span>{" "}
+                    <span className="font-medium tabular-nums">{formatCurrency(Number(undoTarget.amount_in) || Number(undoTarget.amount_out))}</span>
+                  </p>
+                )}
+                {undoTarget.client_id && clientNames[undoTarget.client_id] && (
+                  <p><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{clientNames[undoTarget.client_id]}</span></p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs">Motivo do estorno <span className="text-destructive">*</span></Label>
+                <Textarea
+                  value={undoReason}
+                  onChange={(e) => setUndoReason(e.target.value)}
+                  placeholder="Ex.: lançado no cliente errado, valor incorreto..."
+                  className="text-xs"
+                  rows={3}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Mínimo 3 caracteres. Será registrado no histórico e no contra-lançamento.</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={() => { setUndoTarget(null); setUndoReason(""); }} disabled={submitting}>
+                  Cancelar
+                </Button>
+                <Button variant="destructive" className="flex-1" onClick={confirmUndoEvent} disabled={submitting || undoReason.trim().length < 3}>
+                  {submitting ? "Estornando..." : "Confirmar estorno"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
