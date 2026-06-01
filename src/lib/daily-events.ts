@@ -177,7 +177,7 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
     if (!event.cash_movement_id) {
       throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
     }
-    await reversePayment({ movementId: event.cash_movement_id });
+    await reversePayment({ movementId: event.cash_movement_id, reason });
     return;
   }
 
