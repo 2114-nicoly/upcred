@@ -1,0 +1,126 @@
+import { useMemo, useState } from "react";
+import { format, isToday, isYesterday, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { formatCurrency } from "@/lib/loan-utils";
+import { CalendarDays, ChevronRight, FileText, Loader2, Lock, Wallet, MapPin } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { MovementDay, useMovementDays } from "@/hooks/useMovementDays";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelectDate: (date: string) => void;
+  /** Optional: navigate also offered as inline actions. */
+  withActions?: boolean;
+};
+
+function labelFor(dateStr: string) {
+  const d = parseISO(dateStr + "T12:00:00");
+  if (isToday(d)) return "Hoje";
+  if (isYesterday(d)) return "Ontem";
+  return format(d, "EEE, dd 'de' MMM", { locale: ptBR });
+}
+
+export default function MovementDaysSelector({ open, onOpenChange, onSelectDate, withActions = false }: Props) {
+  const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const { selectedWorkerId, selectedAdminId } = useWorkerFilter();
+  const { days, loading } = useMovementDays({
+    workerId: isAdmin ? selectedWorkerId : null,
+    adminId: isAdmin && !selectedWorkerId ? selectedAdminId : null,
+  });
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!q) return days;
+    const term = q.toLowerCase();
+    return days.filter((d) => d.date.includes(term) || labelFor(d.date).toLowerCase().includes(term));
+  }, [days, q]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <CalendarDays className="h-4 w-4" /> Dias com movimento
+          </DialogTitle>
+        </DialogHeader>
+        <Input placeholder="Filtrar (data ou dia)" value={q} onChange={(e) => setQ(e.target.value)} className="h-8 text-xs" />
+        <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : filtered.length === 0 ? (
+            <p className="text-center text-xs text-muted-foreground py-8">Nenhum dia com movimento encontrado.</p>
+          ) : (
+            filtered.map((d) => (
+              <MovementDayRow
+                key={d.date}
+                day={d}
+                withActions={withActions}
+                onSelect={() => { onSelectDate(d.date); onOpenChange(false); }}
+                onAction={(action) => {
+                  onOpenChange(false);
+                  if (action === "rota") navigate(`/?date=${d.date}`);
+                  else if (action === "caixa") navigate(`/caixa?date=${d.date}`);
+                  else if (action === "relatorio") navigate(`/daily-report?date=${d.date}`);
+                }}
+              />
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MovementDayRow({
+  day, onSelect, withActions, onAction,
+}: {
+  day: MovementDay;
+  onSelect: () => void;
+  withActions: boolean;
+  onAction: (action: "rota" | "caixa" | "relatorio") => void;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-2.5">
+      <button onClick={onSelect} className="w-full text-left">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold capitalize">{labelFor(day.date)}</p>
+            <p className="text-[10px] text-muted-foreground">{day.date}</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> Fechado</Badge>}
+            {day.status === "open" && <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>}
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1.5 text-[11px]">
+          <div className="flex justify-between"><span className="text-muted-foreground">Entradas</span><span className="text-success tabular-nums">+{formatCurrency(day.entradas)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(day.saidas)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Saldo</span><span className={`tabular-nums ${day.saldo >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(day.saldo)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Lanç.</span><span className="tabular-nums">{day.eventsCount}{day.notPaidCount > 0 ? ` · ${day.notPaidCount} np` : ""}</span></div>
+        </div>
+      </button>
+      {withActions && (
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          <Button size="sm" variant="outline" className="h-7 text-[10px] px-1" onClick={() => onAction("rota")}>
+            <MapPin className="h-3 w-3 mr-0.5" /> Rota
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px] px-1" onClick={() => onAction("caixa")}>
+            <Wallet className="h-3 w-3 mr-0.5" /> Caixa
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px] px-1" onClick={() => onAction("relatorio")}>
+            <FileText className="h-3 w-3 mr-0.5" /> Relat.
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
