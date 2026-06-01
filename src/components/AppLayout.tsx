@@ -36,9 +36,13 @@ const adminBottomNav: NavItem[] = [
 const adminSidebar: NavItem[] = [
   { path: "/admin", label: "Painel", icon: LayoutDashboard },
   { path: "/caixa", label: "Caixa Geral", icon: Wallet },
+  { path: "/clients", label: "Clientes", icon: Users },
+  { path: "/active-loans", label: "Empréstimos", icon: Landmark },
   { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
+  { path: "/daily-cash-history", label: "Histórico do Caixa", icon: CalendarDays },
   { path: "/daily-report", label: "Relatório Diário", icon: FileText },
   { path: "/audit", label: "Auditoria", icon: FileSearch },
+  { path: "/admin-tools", label: "Manutenção", icon: Wrench },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
