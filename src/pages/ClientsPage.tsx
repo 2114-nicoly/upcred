@@ -28,6 +28,8 @@ type Client = {
   client_code: number | null;
   worker_id: string | null;
   admin_id: string | null;
+  doc_primary_number?: string | null;
+  doc_secondary_number?: string | null;
 };
 
 type LoanSummary = {
