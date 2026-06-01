@@ -35,7 +35,10 @@ export default function RecentWorkDays({ excludeDate, limit = 4 }: Props) {
   });
 
   const recent = useMemo(
-    () => days.filter((d) => !excludeDate || d.date !== excludeDate).slice(0, limit),
+    () => days
+      .filter((d) => d.status !== "cancelled")
+      .filter((d) => !excludeDate || d.date !== excludeDate)
+      .slice(0, limit),
     [days, excludeDate, limit]
   );
 

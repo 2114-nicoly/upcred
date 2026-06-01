@@ -4,7 +4,7 @@ import { computeDailyTotals } from "@/lib/daily-totals";
 
 export type MovementDay = {
   date: string;                  // YYYY-MM-DD
-  status: "open" | "closed" | null;
+  status: "open" | "closed" | "cancelled" | null;
   entradas: number;
   saidas: number;
   saldo: number;
@@ -104,11 +104,16 @@ export function useMovementDays(opts: UseMovementDaysOpts = {}) {
         const cash = cashByDate.get(date) || null;
         const opening = Number(cash?.opening_balance || 0);
         const t = computeDailyTotals(events as any, opening);
-        const status = (cash?.status === "closed" ? "closed" : cash?.status === "open" ? "open" : (events.length ? "open" : null)) as MovementDay["status"];
+        const status = (
+          cash?.status === "closed" ? "closed"
+          : cash?.status === "cancelled_empty" || cash?.status === "void" ? "cancelled"
+          : cash?.status === "open" ? "open"
+          : (events.length ? "open" : null)
+        ) as MovementDay["status"];
         const counted = cash?.counted_closing_balance != null ? Number(cash.counted_closing_balance) : null;
         const diff = cash?.closing_difference != null ? Number(cash.closing_difference) : null;
-        // Only include days with actual movement OR an existing daily_cash row.
-        if (events.length === 0 && !cash) continue;
+        // Only include days with actual movement OR an existing non-cancelled daily_cash row.
+        if (events.length === 0 && (!cash || status === "cancelled")) continue;
         out.push({
           date,
           status,

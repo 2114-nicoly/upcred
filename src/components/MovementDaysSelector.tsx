@@ -57,6 +57,7 @@ export default function MovementDaysSelector({ open, onOpenChange, onSelectDate,
 
   const closedDates = useMemo(() => days.filter(d => d.status === "closed").map(d => parseISO(d.date + "T12:00:00")), [days]);
   const openDates = useMemo(() => days.filter(d => d.status === "open").map(d => parseISO(d.date + "T12:00:00")), [days]);
+  const cancelledDates = useMemo(() => days.filter(d => d.status === "cancelled").map(d => parseISO(d.date + "T12:00:00")), [days]);
 
   const handleCalendarSelect = (d?: Date) => {
     if (!d) return;
@@ -114,15 +115,17 @@ export default function MovementDaysSelector({ open, onOpenChange, onSelectDate,
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Fechado</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> Aberto</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-muted" /> Sem movimento</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-orange-300" /> Cancelado</span>
             </div>
             <Calendar
               mode="single"
               onSelect={handleCalendarSelect}
               locale={ptBR}
-              modifiers={{ closed: closedDates, openMov: openDates }}
+              modifiers={{ closed: closedDates, openMov: openDates, cancelled: cancelledDates }}
               modifiersClassNames={{
                 closed: "bg-success/20 text-success-foreground font-semibold ring-1 ring-success/40",
                 openMov: "bg-primary/20 text-primary-foreground font-semibold ring-1 ring-primary/40",
+                cancelled: "bg-orange-200/50 text-orange-900 dark:text-orange-200 ring-1 ring-orange-300/60",
               }}
               className={cn("p-2 pointer-events-auto rounded-md border mx-auto")}
             />
@@ -155,6 +158,7 @@ function MovementDayRow({
           <div className="flex items-center gap-1.5">
             {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> Fechado</Badge>}
             {day.status === "open" && <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>}
+            {day.status === "cancelled" && <Badge className="bg-orange-200 text-orange-900 text-[9px] h-4">Cancelado</Badge>}
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
         </div>
