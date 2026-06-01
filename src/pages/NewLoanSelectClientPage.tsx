@@ -50,17 +50,39 @@ export default function NewLoanSelectClientPage() {
   } | null>(null);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase.from("clients").select("id, name, phone, client_code").order("client_code");
-      setClients(data || []);
+    const fetchEligible = async () => {
+      // 1) buscar todos os clientes do escopo
+      const { data: clientRows } = await supabase
+        .from("clients")
+        .select("id, name, phone, client_code, doc_primary_number, doc_secondary_number")
+        .order("client_code");
+      // 2) buscar empréstimos ativos para excluir esses clientes
+      const { data: activeLoans } = await supabase
+        .from("loans")
+        .select("client_id, status, remaining_balance")
+        .not("status", "in", "(paid,cancelled,renegotiated)")
+        .gt("remaining_balance", 0.01);
+      const blocked = new Set((activeLoans || []).map((l: any) => l.client_id));
+      const eligible = (clientRows || []).filter((c: any) => !blocked.has(c.id));
+      setClients(eligible as Client[]);
     };
-    fetch();
+    fetchEligible();
   }, []);
 
-  const filtered = clients.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    String(c.client_code || "").includes(search)
-  );
+  const filtered = clients.filter((c) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const onlyDigits = q.replace(/\D/g, "");
+    return (
+      c.name.toLowerCase().includes(q) ||
+      String(c.client_code || "").includes(q) ||
+      (c.phone || "").toLowerCase().includes(q) ||
+      (onlyDigits && (c.phone || "").replace(/\D/g, "").includes(onlyDigits)) ||
+      (c.doc_primary_number || "").toLowerCase().includes(q) ||
+      (c.doc_secondary_number || "").toLowerCase().includes(q)
+    );
+  });
+
 
   const handleSelectClient = async (client: Client) => {
     const active = await getActiveLoanForClient(client.id);
