@@ -13,7 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Trash2, Search, Sparkles } from "lucide-react";
+import { Loader2, Ban, Search, Sparkles } from "lucide-react";
 
 type Empty = {
   id: string;
@@ -34,7 +34,7 @@ function todayISO(offset = 0) {
 export default function EmptyCashCleanup() {
   const { isSuperAdmin } = useAuth();
   const [start, setStart] = useState(todayISO(-60));
-  const [end, setEnd] = useState(todayISO(-1));
+  const [end, setEnd] = useState(todayISO(0));
   const [adminId, setAdminId] = useState<string>("__all__");
   const [workerId, setWorkerId] = useState<string>("__all__");
   const [admins, setAdmins] = useState<Array<{ id: string; nome: string }>>([]);
@@ -44,20 +44,29 @@ export default function EmptyCashCleanup() {
   const [cleaning, setCleaning] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  // Load admins list (superadmin only)
   useEffect(() => {
     (async () => {
       if (isSuperAdmin) {
         const { data } = await supabase.rpc("super_admin_list_admins" as any);
         setAdmins(((data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome })));
       }
-      const { data: ws } = await supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null });
-      setWorkers(((ws as any[]) ?? []).map((w) => ({ id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id })));
     })();
   }, [isSuperAdmin]);
 
-  const filteredWorkers = adminId === "__all__"
-    ? workers
-    : workers.filter((w) => w.parent_admin_id === adminId);
+  // Reload workers when admin filter changes (or for non-super admins on mount).
+  useEffect(() => {
+    (async () => {
+      const p_admin_id = isSuperAdmin ? (adminId === "__all__" ? null : adminId) : null;
+      const { data: ws } = await supabase.rpc("list_workers_by_admin" as any, {
+        p_admin_id,
+        p_include_archived: true,
+      });
+      setWorkers(((ws as any[]) ?? []).map((w) => ({
+        id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id,
+      })));
+    })();
+  }, [isSuperAdmin, adminId]);
 
   async function preview() {
     setLoading(true);
@@ -89,11 +98,11 @@ export default function EmptyCashCleanup() {
         p_worker_id: workerId === "__all__" ? null : workerId,
       });
       if (error) throw error;
-      toast({ title: "Limpeza concluída", description: `${Number(data ?? 0)} caixa(s) vazios removidos.` });
+      toast({ title: "Cancelamento concluído", description: `${Number(data ?? 0)} caixa(s) vazios cancelados.` });
       setItems(null);
       await preview();
     } catch (e: any) {
-      toast({ title: "Erro na limpeza", description: e.message, variant: "destructive" });
+      toast({ title: "Erro no cancelamento", description: e.message, variant: "destructive" });
     } finally {
       setCleaning(false);
     }
@@ -103,11 +112,12 @@ export default function EmptyCashCleanup() {
     <Card>
       <CardHeader className="p-4 pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Sparkles className="h-4 w-4" /> Limpar Caixas Vazios
+          <Sparkles className="h-4 w-4" /> Cancelar Caixas Vazios
         </CardTitle>
         <CardDescription className="text-xs">
-          Remove caixas abertos sem nenhuma movimentação real (sem pagamentos, empréstimos, marcações ou eventos).
-          Dias com qualquer atividade são preservados.
+          Esta ação <strong>não apaga</strong> nenhuma movimentação. Apenas marca como <code>cancelled_empty</code>
+          os caixas abertos que não tiveram nenhuma atividade real (sem pagamentos, empréstimos, retiradas,
+          aportes, marcações ou eventos financeiros), retornando o dia ao estado neutro.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 pt-2 space-y-3">
@@ -125,7 +135,10 @@ export default function EmptyCashCleanup() {
         {isSuperAdmin && (
           <div>
             <Label className="text-xs">Administrador</Label>
-            <Select value={adminId} onValueChange={(v) => { setAdminId(v); setWorkerId("__all__"); }}>
+            <Select
+              value={adminId}
+              onValueChange={(v) => { setAdminId(v); setWorkerId("__all__"); }}
+            >
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todos os admins</SelectItem>
@@ -141,7 +154,7 @@ export default function EmptyCashCleanup() {
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Toda a equipe</SelectItem>
-              {filteredWorkers.map((w) => <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>)}
+              {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -158,8 +171,8 @@ export default function EmptyCashCleanup() {
             onClick={() => setConfirmOpen(true)}
             disabled={cleaning || !items || items.length === 0}
           >
-            {cleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Limpar {items?.length ? `(${items.length})` : ""}
+            {cleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+            Cancelar {items?.length ? `(${items.length})` : ""}
           </Button>
         </div>
 
@@ -186,16 +199,17 @@ export default function EmptyCashCleanup() {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar limpeza</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar cancelamento</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão removidos <strong>{items?.length ?? 0}</strong> caixa(s) vazio(s) entre {start} e {end}.
-              Esta ação não pode ser desfeita, mas só remove caixas sem nenhuma movimentação real.
+              Serão marcados como <strong>cancelled_empty</strong> <strong>{items?.length ?? 0}</strong> caixa(s) vazio(s)
+              entre {start} e {end}. Nenhuma movimentação será apagada — o dia volta ao estado neutro
+              e pode ser reaberto manualmente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
             <AlertDialogAction onClick={execute} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Confirmar limpeza
+              Cancelar caixas
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
