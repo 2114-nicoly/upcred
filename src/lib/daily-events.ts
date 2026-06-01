@@ -5,6 +5,7 @@ export type DailyEventType =
   | "pagamento"
   | "nao_pagou"
   | "renovacao"
+  | "renegociacao"
   | "emprestimo_novo"
   | "saida"
   | "entrada_manual"
@@ -14,7 +15,40 @@ export type DailyEventType =
   | "multa_adicionada"
   | "estorno_pagamento"
   | "estorno_manual"
-  | "cancelamento";
+  | "cancelamento"
+  | "cliente_criado"
+  | "cliente_editado"
+  | "parcela_editada"
+  | "transferencia_cliente"
+  | "anexo_adicionado"
+  | "anexo_removido";
+
+/** Event types that move money (have cash_movement + change available_cash). */
+export const FINANCIAL_EVENT_TYPES: DailyEventType[] = [
+  "pagamento",
+  "recebimento_multa",
+  "emprestimo_novo",
+  "renovacao",
+  "saida",
+  "entrada_manual",
+  "saida_manual",
+  "ajuste_manual",
+];
+
+/** Reversal / correction events. */
+export const REVERSAL_EVENT_TYPES: DailyEventType[] = [
+  "estorno_pagamento",
+  "estorno_manual",
+  "cancelamento",
+];
+
+export function isFinancialEvent(type: string): boolean {
+  return (FINANCIAL_EVENT_TYPES as string[]).includes(type);
+}
+
+export function isReversalEvent(type: string): boolean {
+  return (REVERSAL_EVENT_TYPES as string[]).includes(type);
+}
 
 export type DailyEvent = {
   id: string;
