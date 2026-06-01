@@ -719,31 +719,12 @@ export default function DailyCashPage() {
   const handleNotPaid = async (id: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
-    if (!inst) { setIsSubmitting(false); return; }
+    if (!inst) return;
 
     const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
-    const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
-      id: "temp-" + Date.now(),
-      mark_date: selectedDate,
-      installment_id: inst.id,
-      loan_id: inst.loan_id,
-      client_id: inst.loans.client_id,
-      observation: obs || null,
-      created_at: new Date().toISOString(),
-      installment: inst,
-    };
-    localActionedLoanIds.current.add(inst.loan_id);
-    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    setNotPaidMarks(prev => [...prev, optimisticMark]);
-    setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
-    setNotPaidObs("");
-    setShowNotPaidObs(false);
-    setNotPaidReason("Não encontrado");
-    setNotPaidDialogId(null);
-
+    setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const { error: insertErr } = await supabase
@@ -764,60 +745,40 @@ export default function DailyCashPage() {
         observation: obs || `Não pagou - ${inst.loans.clients.name}`,
         origin: "rota",
       });
+      setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setNotPaidObs("");
+      setShowNotPaidObs(false);
+      setNotPaidReason("Não encontrado");
+      setNotPaidDialogId(null);
       toast.info("Marcado como 'Não Pagou'");
-    } catch (err) {
+      await fetchData({ silent: true });
+    } catch (err: any) {
       console.error("[handleNotPaid] failed", err);
-      toast.error("Erro ao marcar como 'Não Pagou'. Recarregando dados...");
-      // Rollback optimistic state
-      setNotPaidMarks(prev => prev.filter(m => m.id !== optimisticMark.id));
-      localActionedLoanIds.current.delete(inst.loan_id);
+      toast.error(err?.message || "Erro ao marcar como 'Não Pagou'.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
 
   const handleBatchNotPaid = async () => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
-    if (selectedInsts.length === 0) { setIsSubmitting(false); return; }
+    if (selectedInsts.length === 0) return;
 
     const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
-    const optimisticMarks = selectedInsts.map(inst => ({
-      id: "temp-" + Date.now() + "-" + inst.id,
-      mark_date: selectedDate,
-      installment_id: inst.id,
-      loan_id: inst.loan_id,
-      client_id: inst.loans.client_id,
-      observation: obs || null,
-      created_at: new Date().toISOString(),
-      installment: inst,
-    }));
-
-    const batchLoanIds = new Set(selectedInsts.map(i => i.loan_id));
-    selectedInsts.forEach(i => localActionedLoanIds.current.add(i.loan_id));
-    setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id) && !batchLoanIds.has(i.loan_id)));
-    setNotPaidMarks(prev => [...prev, ...optimisticMarks]);
-    setSelectedForNotPaid(new Set());
-    setBatchNotPaidDialogOpen(false);
-    setBatchNotPaidObs("");
-    setShowBatchNotPaidObs(false);
-    setBatchNotPaidReason("Não encontrado");
-
-    const { data: { session: s2 } } = await supabase.auth.getSession();
-    const inserts = selectedInsts.map(inst => ({
-      mark_date: selectedDate,
-      installment_id: inst.id,
-      loan_id: inst.loan_id,
-      client_id: inst.loans.client_id,
-      observation: obs || null,
-      user_id: s2?.user?.id,
-    }));
-    const optimisticIds = new Set(optimisticMarks.map(m => m.id));
+    setIsSubmitting(true);
     try {
+      const { data: { session: s2 } } = await supabase.auth.getSession();
+      const inserts = selectedInsts.map(inst => ({
+        mark_date: selectedDate,
+        installment_id: inst.id,
+        loan_id: inst.loan_id,
+        client_id: inst.loans.client_id,
+        observation: obs || null,
+        user_id: s2?.user?.id,
+      }));
       const { error: insertErr } = await supabase
         .from("not_paid_marks")
         .upsert(inserts, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
@@ -833,18 +794,21 @@ export default function DailyCashPage() {
           origin: "rota",
         });
       }
+      setSelectedForNotPaid(new Set());
+      setBatchNotPaidDialogOpen(false);
+      setBatchNotPaidObs("");
+      setShowBatchNotPaidObs(false);
+      setBatchNotPaidReason("Não encontrado");
       toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
-    } catch (err) {
+      await fetchData({ silent: true });
+    } catch (err: any) {
       console.error("[handleBatchNotPaid] failed", err);
-      toast.error("Erro ao marcar parcelas. Recarregando dados...");
-      // Rollback optimistic marks
-      setNotPaidMarks(prev => prev.filter(m => !optimisticIds.has(m.id)));
-      selectedInsts.forEach(i => localActionedLoanIds.current.delete(i.loan_id));
+      toast.error(err?.message || "Erro ao marcar parcelas.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
+
 
   const toggleSelectForNotPaid = (id: string) => {
     setSelectedForNotPaid(prev => {
