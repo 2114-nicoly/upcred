@@ -329,6 +329,7 @@ export default function NewLoanPage() {
       renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,
     );
 
+    draft.clear();
     navigate("/");
   };
 
