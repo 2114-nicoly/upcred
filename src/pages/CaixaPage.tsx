@@ -42,7 +42,7 @@ type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
 
 export default function CaixaPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers } = useWorkerFilter();
@@ -64,9 +64,21 @@ export default function CaixaPage() {
   const [manualAmount, setManualAmount] = useState("");
   const [manualObs, setManualObs] = useState("");
 
-  const changeDate = (offset: number) => {
-    const d = new Date(selectedDate + "T12:00:00");
-    setSelectedDate(format(addDays(d, offset), "yyyy-MM-dd"));
+  // Close cash dialog
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [countedAmount, setCountedAmount] = useState("");
+  const [closeNote, setCloseNote] = useState("");
+
+  // sync URL ↔ state
+  useEffect(() => {
+    const urlDate = searchParams.get("date") || today;
+    setSelectedDate((current) => (current === urlDate ? current : urlDate));
+  }, [searchParams, today]);
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    if (newDate === today) setSearchParams({});
+    else setSearchParams({ date: newDate });
   };
 
   const fetchData = useCallback(async () => {
