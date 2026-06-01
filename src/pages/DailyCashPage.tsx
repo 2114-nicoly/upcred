@@ -439,20 +439,62 @@ export default function DailyCashPage() {
 
         for (const loan of (paidLoansData || [])) {
           const client = loan.clients;
-          const movements = paidMovementsByLoan.get(loan.id) || [];
-          const base = {
+          const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+          const totalAmount = Number(loan.total_amount);
+          const instCount = Number(loan.installment_count);
+          const instAmount = instCount > 0 ? totalAmount / instCount : 0;
+          const currentRemaining = Number(loan.remaining_balance);
+          const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
+
+          const baseStatic = {
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
             loanId: loan.id,
-            accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
-            remainingBalance: Number(loan.remaining_balance),
-            instAmount: Number(loan.total_amount) / Number(loan.installment_count),
-            installmentIds: [],
+            accumulatedPaid,
+            remainingBalance: currentRemaining,
+            instAmount,
+            installmentIds: [] as string[],
+            totalAmount,
+            installmentCount: instCount,
           };
+
+          const buildProgress = (totalPaid: number, remainingAfter: number): Partial<PaidGroup> => {
+            const remainingBefore = Math.min(totalAmount, remainingAfter + totalPaid);
+            const paidBefore = Math.max(0, totalAmount - remainingBefore);
+            const paidAfter = Math.max(0, totalAmount - remainingAfter);
+            return {
+              paidBefore, paidAfter, remainingBefore, remainingAfter,
+              progressBeforeFormatted: formatProgress(paidBefore, instAmount, instCount),
+              progressAfterFormatted: formatProgress(paidAfter, instAmount, instCount),
+              progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
+            };
+          };
+
           if (movements.length > 0) {
-            movements.forEach((mov) => paidGroupsList.push({ ...base, movementId: mov.id, totalPaid: Number(mov.amount) }));
+            // Walk forward: remainingBefore for first mov = currentRemaining + sum(all movements today)
+            const totalToday = movements.reduce((s, m) => s + Number(m.amount), 0);
+            let runningRemaining = Math.min(totalAmount, currentRemaining + totalToday);
+            for (const mov of movements) {
+              const amt = Number(mov.amount);
+              const after = Math.max(0, runningRemaining - amt);
+              paidGroupsList.push({
+                ...baseStatic,
+                movementId: mov.id,
+                totalPaid: amt,
+                ...buildProgress(amt, after),
+              } as PaidGroup);
+              runningRemaining = after;
+            }
           } else {
-            paidGroupsList.push({ ...base, movementId: "", totalPaid: paidEventsByLoan.get(loan.id) || 0 });
+            const totalPaid = paidEventsByLoan.get(loan.id) || 0;
+            paidGroupsList.push({
+              ...baseStatic,
+              movementId: "",
+              totalPaid,
+              ...buildProgress(totalPaid, currentRemaining),
+            } as PaidGroup);
           }
         }
 
