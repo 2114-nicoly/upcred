@@ -345,24 +345,12 @@ export default function CaixaPage() {
         </Card>
       )}
       {/* Date navigation */}
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(-1)}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1 text-center">
-          <p className="text-xs font-medium capitalize">
-            {format(new Date(selectedDate + "T12:00:00"), "EEE, dd 'de' MMMM", { locale: ptBR })}
-          </p>
-          {selectedDate !== today && (
-            <button className="text-[10px] text-primary underline" onClick={() => setSelectedDate(today)}>
-              Voltar para hoje
-            </button>
-          )}
-        </div>
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(1)}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+      <DateNavigator date={selectedDate} onChange={handleDateChange} />
+      <NoMovementHint
+        date={selectedDate}
+        hasMovement={events.length > 0 || !!dailyCashRow}
+        onChange={handleDateChange}
+      />
 
       <div className="flex justify-center">
         <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
