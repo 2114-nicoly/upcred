@@ -716,7 +716,7 @@ export default function DailyCashPage() {
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
     if (selectedInsts.length === 0) { setIsSubmitting(false); return; }
 
-    const obs = batchNotPaidObs;
+    const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
     const optimisticMarks = selectedInsts.map(inst => ({
       id: "temp-" + Date.now() + "-" + inst.id,
       mark_date: selectedDate,
@@ -736,6 +736,7 @@ export default function DailyCashPage() {
     setBatchNotPaidDialogOpen(false);
     setBatchNotPaidObs("");
     setShowBatchNotPaidObs(false);
+    setBatchNotPaidReason("Não encontrado");
 
     const { data: { session: s2 } } = await supabase.auth.getSession();
     const inserts = selectedInsts.map(inst => ({
