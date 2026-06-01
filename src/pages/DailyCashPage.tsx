@@ -1394,11 +1394,15 @@ export default function DailyCashPage() {
 
   // === Paid row ===
   const renderPaidRow = (group: PaidGroup) => {
+    const isSettled = group.remainingAfter <= 0.01;
     return (
-      <div key={`${group.clientId}-${group.loanId}`} className="rounded-lg border border-success/30 bg-card px-3 py-2">
-        <div className="flex items-center justify-between">
+      <div key={`${group.clientId}-${group.loanId}-${group.movementId || "opt"}`} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-sm truncate">{group.clientName}</span>
           <div className="flex items-center gap-2">
+            {isSettled && (
+              <Badge className="bg-success text-success-foreground text-[10px] px-1.5 py-0">Quitado</Badge>
+            )}
             <span className="font-bold text-sm text-success shrink-0">+{formatCurrency(group.totalPaid)}</span>
             {!isClosed && (
               <DropdownMenu>
@@ -1419,9 +1423,16 @@ export default function DailyCashPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(group.remainingBalance)} • Pago: {formatCurrency(group.accumulatedPaid)}</span>
-          <span className="text-[10px] text-muted-foreground tabular-nums">Parcela: {formatCurrency(group.instAmount)}</span>
+        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
+          <div>
+            Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
+            <span className="ml-1 text-success">({group.progressDeltaFormatted} parcela{group.progressDeltaFormatted === "+1" ? "" : "s"})</span>
+          </div>
+          <div>
+            Pago: {formatCurrency(group.paidBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.paidAfter)}</span>
+            <span className="mx-1">•</span>
+            Saldo: {formatCurrency(group.remainingBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.remainingAfter)}</span>
+          </div>
         </div>
       </div>
     );
