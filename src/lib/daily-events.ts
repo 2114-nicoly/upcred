@@ -164,9 +164,9 @@ export async function undoDailyEvent(event: DailyEvent) {
       "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
     );
   }
-  if (event.event_type === "renovacao") {
+  if (event.event_type === "renovacao" || event.event_type === "renegociacao") {
     throw new Error(
-      "Não é possível desfazer uma renovação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
+      "Não é possível desfazer uma renovação/renegociação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
     );
   }
 
