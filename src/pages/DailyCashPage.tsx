@@ -32,6 +32,8 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import WorkerDashboard from "@/components/WorkerDashboard";
 import EmptyState from "@/components/EmptyState";
+import DateNavigator from "@/components/DateNavigator";
+import NoMovementHint from "@/components/NoMovementHint";
 
 type InstallmentWithLoan = {
   id: string;
