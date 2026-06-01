@@ -181,6 +181,22 @@ type PaidGroup = {
 
 type PendingFilter = "all" | "overdue" | "today";
 
+const NOT_PAID_REASONS = [
+  "Não encontrado",
+  "Sem dinheiro",
+  "Prometeu pagar",
+  "Recusou pagar",
+  "Outro",
+] as const;
+
+function composeNotPaidObservation(reason: string, obs: string): string {
+  const r = (reason || "").trim();
+  const o = (obs || "").trim();
+  if (r && o) return `[${r}] ${o}`;
+  if (r) return `[${r}]`;
+  return o;
+}
+
 export default function DailyCashPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
