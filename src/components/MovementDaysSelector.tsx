@@ -115,15 +115,17 @@ export default function MovementDaysSelector({ open, onOpenChange, onSelectDate,
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Fechado</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> Aberto</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-muted" /> Sem movimento</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-orange-300" /> Cancelado</span>
             </div>
             <Calendar
               mode="single"
               onSelect={handleCalendarSelect}
               locale={ptBR}
-              modifiers={{ closed: closedDates, openMov: openDates }}
+              modifiers={{ closed: closedDates, openMov: openDates, cancelled: cancelledDates }}
               modifiersClassNames={{
                 closed: "bg-success/20 text-success-foreground font-semibold ring-1 ring-success/40",
                 openMov: "bg-primary/20 text-primary-foreground font-semibold ring-1 ring-primary/40",
+                cancelled: "bg-orange-200/50 text-orange-900 dark:text-orange-200 ring-1 ring-orange-300/60",
               }}
               className={cn("p-2 pointer-events-auto rounded-md border mx-auto")}
             />
