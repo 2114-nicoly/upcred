@@ -17,6 +17,8 @@ import { logAction } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import { useConfirm } from "@/hooks/useConfirm";
 
 export default function NewLoanPage() {
   const { clientId } = useParams();
