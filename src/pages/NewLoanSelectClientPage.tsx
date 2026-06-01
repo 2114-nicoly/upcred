@@ -197,20 +197,33 @@ export default function NewLoanSelectClientPage() {
         </Button>
       </div>
 
-      <p className="mb-3 text-sm text-muted-foreground">Ou selecione um cliente existente:</p>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Ou selecione um cliente <strong>sem empréstimo ativo</strong>:
+      </p>
 
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Buscar por nome ou código..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input
+          className="pl-9"
+          placeholder="Buscar por nome, código, telefone ou documento..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
           <EmptyState
             icon={Users}
-            message={search ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
-            description={search ? "Tente outro nome ou código." : "Cadastre um cliente para começar."}
+            message={search ? "Nenhum cliente elegível encontrado" : "Nenhum cliente sem empréstimo ativo"}
+            description={search ? "Tente outro termo de busca." : "Cadastre um novo cliente para liberar um empréstimo."}
+            action={
+              !search ? (
+                <Button onClick={() => setNewClientMode(true)}>Cadastrar novo cliente</Button>
+              ) : undefined
+            }
           />
+
         ) : (
           filtered.map((client) => (
             <Card
