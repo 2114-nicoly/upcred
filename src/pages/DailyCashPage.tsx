@@ -683,24 +683,50 @@ export default function DailyCashPage() {
     // Optimistic: move to paid, remove from pending
     localActionedLoanIds.current.add(inst.loan_id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
+    const totalAmt = Number(inst.loans.total_amount);
+    const instCount = Number(inst.loans.installment_count);
+    const instAmt = instCount > 0 ? totalAmt / instCount : 0;
     setPaidGroups(prev => {
       const existing = prev.find(g => g.loanId === inst.loan_id);
       if (existing) {
+        const newTotalPaid = existing.totalPaid + paidValue;
+        const newPaidAfter = Math.max(0, totalAmt - newRemainingBalance);
         return prev.map(g => g.loanId === inst.loan_id
-          ? { ...g, totalPaid: g.totalPaid + paidValue, accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance), remainingBalance: newRemainingBalance }
+          ? {
+              ...g,
+              totalPaid: newTotalPaid,
+              accumulatedPaid: newPaidAfter,
+              remainingBalance: newRemainingBalance,
+              paidAfter: newPaidAfter,
+              remainingAfter: newRemainingBalance,
+              progressAfterFormatted: formatProgress(newPaidAfter, instAmt, instCount),
+              progressDeltaFormatted: formatDelta(newPaidAfter - g.paidBefore, instAmt),
+            }
           : g
         );
       }
+      const remainingBefore = Number(inst.loans.remaining_balance);
+      const paidBefore = Math.max(0, totalAmt - remainingBefore);
+      const paidAfter = Math.max(0, totalAmt - newRemainingBalance);
       return [...prev, {
         movementId: "",
         clientName: inst.loans.clients.name,
         clientId: inst.loans.client_id,
         loanId: inst.loan_id,
         totalPaid: paidValue,
-        accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance),
+        accumulatedPaid: paidAfter,
         remainingBalance: newRemainingBalance,
-        instAmount: Number(inst.amount),
+        instAmount: instAmt,
         installmentIds: [inst.id],
+        totalAmount: totalAmt,
+        installmentCount: instCount,
+        paidBefore,
+        paidAfter,
+        remainingBefore,
+        remainingAfter: newRemainingBalance,
+        progressBeforeFormatted: formatProgress(paidBefore, instAmt, instCount),
+        progressAfterFormatted: formatProgress(paidAfter, instAmt, instCount),
+        progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmt),
       }];
     });
     resetPayDialog();
