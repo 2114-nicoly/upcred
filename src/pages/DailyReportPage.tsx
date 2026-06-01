@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
+import { computeDailyTotals } from "@/lib/daily-totals";
 import { useAuth } from "@/hooks/useAuth";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
