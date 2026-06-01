@@ -59,14 +59,16 @@ export default function SuperAdminPage() {
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Super Admin</h1>
       <Tabs defaultValue="dashboard">
-        <TabsList className="grid grid-cols-3 w-full">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="dashboard" className="text-xs">Dashboard</TabsTrigger>
           <TabsTrigger value="admins" className="text-xs">Administradores</TabsTrigger>
           <TabsTrigger value="ranking" className="text-xs">Ranking</TabsTrigger>
+          <TabsTrigger value="maintenance" className="text-xs">Manutenção</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard" className="mt-3"><DashboardTab /></TabsContent>
         <TabsContent value="admins" className="mt-3"><AdminsTab /></TabsContent>
         <TabsContent value="ranking" className="mt-3"><RankingTab /></TabsContent>
+        <TabsContent value="maintenance" className="mt-3"><SuperMaintenanceTab /></TabsContent>
       </Tabs>
     </div>
   );
