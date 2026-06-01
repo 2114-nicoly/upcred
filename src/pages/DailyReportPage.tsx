@@ -215,7 +215,7 @@ export default function DailyReportPage() {
       totalOut += Number(e.amount_out || 0);
       if (e.event_type === "pagamento") payments += Number(e.amount_in || 0);
       if (e.event_type === "emprestimo_novo") loans += Number(e.amount_out || 0);
-      if (e.event_type === "renovacao") renewals += Number(e.amount_out || 0);
+      if (e.event_type === "renovacao" || e.event_type === "renegociacao") renewals += Number(e.amount_out || 0);
       if (e.event_type === "recebimento_multa") penalties += Number(e.amount_in || 0);
       if (e.event_type === "nao_pagou") notPaidCount += 1;
     }
