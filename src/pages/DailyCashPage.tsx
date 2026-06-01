@@ -1420,6 +1420,23 @@ export default function DailyCashPage() {
         )}
       </div>
 
+      {/* Painel de produção do trabalhador */}
+      <div className="mb-3">
+        <WorkerDashboard
+          data={{
+            cashStatus: isClosed ? "closed" : "open",
+            treatedCount: totalTreated,
+            paidCount: paidGroups.length,
+            notPaidCount: notPaidMarks.length,
+            remainingPending: pendingInstallments.length,
+            totalReceived: totalPaidValue,
+            totalLent: newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
+            totalPenaltyReceived: totalPenaltyPaidToday,
+            expectedBalance: openingBalance + manualInToday - manualOutToday + totalPaidValue + totalPenaltyPaidToday - newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
+          }}
+        />
+      </div>
+
       {/* Top summary */}
       <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
         <div className="flex items-center justify-between">
