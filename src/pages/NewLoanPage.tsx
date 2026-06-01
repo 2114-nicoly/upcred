@@ -153,6 +153,23 @@ export default function NewLoanPage() {
       return;
     }
 
+    // Confirmação para ações sensíveis: renovação ou liberação alta
+    const cashOutPreview = renewFromLoanId ? valorLiberado : numAmount;
+    const ok = await confirm({
+      title: renewFromLoanId ? "Confirmar renovação?" : "Confirmar novo empréstimo?",
+      description: renewFromLoanId
+        ? "Esta ação encerra o contrato atual e abre um novo."
+        : "Esta ação libera dinheiro e cria parcelas.",
+      affected: [
+        { label: "Cliente", value: clientName },
+        { label: "Valor", value: formatCurrency(numAmount) },
+        { label: "Parcelas", value: `${numInstallments}x ${formatCurrency(calc.installmentAmount)}` },
+        { label: "Liberado em caixa", value: formatCurrency(cashOutPreview) },
+      ],
+      confirmText: renewFromLoanId ? "Renovar" : "Criar",
+    });
+    if (!ok) return;
+
     setSaving(true);
 
     // Guard: caixa do dia do empréstimo precisa estar aberto
