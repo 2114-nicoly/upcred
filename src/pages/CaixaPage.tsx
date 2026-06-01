@@ -343,13 +343,11 @@ export default function CaixaPage() {
         </Button>
       </div>
 
-      {!isAdmin && !isSuperAdmin && (
-        <div className="flex justify-center">
-          <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
-            {isClosed ? "Caixa Fechado" : "Caixa Aberto"}
-          </Badge>
-        </div>
-      )}
+      <div className="flex justify-center">
+        <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
+          {isClosed ? "Caixa Fechado" : "Caixa Aberto"}
+        </Badge>
+      </div>
 
       {/* Global balance cards */}
       {balance && (
@@ -384,23 +382,59 @@ export default function CaixaPage() {
       {/* Daily summary card */}
       <Card>
         <CardContent className="p-3 space-y-1.5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resumo do Dia</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resumo do Dia</p>
+            <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
+          </div>
+          {summary.opening > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">Saldo inicial</span>
+              <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-xs text-success flex items-center gap-1"><ArrowDownCircle className="h-3 w-3" /> Entradas</span>
-            <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(totalIn)}</span>
+            <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-destructive flex items-center gap-1"><ArrowUpCircle className="h-3 w-3" /> Saídas</span>
-            <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(totalOut)}</span>
+            <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1.5 border-t text-[11px]">
+            <div className="flex justify-between"><span className="text-muted-foreground">Pagamentos</span><span className="text-success tabular-nums">{formatCurrency(summary.received)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Multas</span><span className="text-warning tabular-nums">{formatCurrency(summary.penalty)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Emprestado</span><span className="text-primary tabular-nums">{formatCurrency(summary.lent)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Não pagou</span><span className="text-destructive tabular-nums">{summary.notPaidCount}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Entr. manual</span><span className="text-success tabular-nums">{formatCurrency(summary.manualIn)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Saída manual</span><span className="text-destructive tabular-nums">{formatCurrency(summary.manualOut)}</span></div>
           </div>
           <div className="flex items-center justify-between border-t pt-1.5">
-            <span className="text-xs font-semibold">Saldo do Dia</span>
-            <span className={`text-sm font-bold tabular-nums ${saldoDia >= 0 ? "text-success" : "text-destructive"}`}>
-              {saldoDia >= 0 ? "+" : ""}{formatCurrency(saldoDia)}
+            <span className="text-xs font-semibold">Saldo Final Esperado</span>
+            <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>
+              {summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}
             </span>
           </div>
         </CardContent>
       </Card>
+
+      {/* Close / Reopen cash actions */}
+      <div className="grid grid-cols-2 gap-2">
+        {!isClosed ? (
+          <Button onClick={handleCloseCash} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
+            <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
+          </Button>
+        ) : (
+          <Button
+            onClick={() => setReopenOpen(true)}
+            disabled={submitting || (!isAdmin && !isSuperAdmin)}
+            variant="outline"
+            className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+          >
+            <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
+          </Button>
+        )}
+      </div>
+
 
       {/* Section tabs */}
       <div className="grid grid-cols-4 gap-1.5">
