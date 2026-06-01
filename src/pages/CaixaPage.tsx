@@ -34,6 +34,9 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
+import DateNavigator from "@/components/DateNavigator";
+import NoMovementHint from "@/components/NoMovementHint";
+import { computeDailyTotals } from "@/lib/daily-totals";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
 
