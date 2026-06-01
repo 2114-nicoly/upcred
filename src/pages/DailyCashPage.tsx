@@ -339,6 +339,34 @@ export default function DailyCashPage() {
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
+      // Opening balance: from yesterday's closed daily_cash for same scope.
+      const dcAny = dcData as any;
+      if (dcAny?.opening_balance != null) {
+        setOpeningBalance(Number(dcAny.opening_balance) || 0);
+      } else {
+        try {
+          const scope = await getCurrentDailyCashScope();
+          const { data: prior } = await applyDailyCashScope(
+            supabase.from("daily_cash")
+              .select("expected_closing_balance, cash_date")
+              .lt("cash_date", selectedDate)
+              .eq("status", "closed")
+              .order("cash_date", { ascending: false })
+              .limit(1),
+            scope
+          );
+          const p = (prior || [])[0] as any;
+          setOpeningBalance(p ? Number(p.expected_closing_balance) || 0 : 0);
+        } catch { setOpeningBalance(0); }
+      }
+      // Manual in/out totals from events (non-reversed)
+      let mIn = 0, mOut = 0;
+      for (const e of (eventsData || []) as DailyEventRow[]) {
+        if (e.event_type === "entrada_manual") mIn += Number(e.amount_in) || 0;
+        if (e.event_type === "saida_manual") mOut += Number(e.amount_out) || 0;
+      }
+      setManualInToday(mIn);
+      setManualOutToday(mOut);
 
       const allEvents = (eventsData || []) as unknown as DailyEventRow[];
       setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
