@@ -174,7 +174,7 @@ export default function CaixaPage() {
     notPaidCount: Number(dailyCashRow.total_not_paid_count || 0),
     eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
   } : {
-    opening: 0,
+    opening: inheritedOpening,
     totalIn: liveTotals.entradas,
     totalOut: liveTotals.saidas,
     received: liveTotals.pagamentos,
@@ -182,7 +182,7 @@ export default function CaixaPage() {
     lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
     manualIn: liveTotals.entradasManuais,
     manualOut: liveTotals.saidasManuais,
-    expected: liveTotals.saldoFinalEsperado,
+    expected: inheritedOpening + liveTotals.saldoFinalEsperado,
     notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
