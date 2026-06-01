@@ -1403,7 +1403,7 @@ export default function DailyCashPage() {
     <div className="mx-auto max-w-lg p-3 pb-36">
       {/* Date navigation */}
       <div className="mb-3">
-        <DateNavigator date={selectedDate} onChange={handleDateChange} />
+        <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
         {isClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-1.5 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
