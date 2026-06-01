@@ -23,8 +23,8 @@ import { assertCashOpen } from "@/lib/cash-lock";
 import { logAction } from "@/lib/audit-utils";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
-  History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
-  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2
+  History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw, Lock, Unlock,
+  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2, FileText
 } from "lucide-react";
 import { EmptyState, CardSkeleton } from "@/components/LoadingSkeleton";
 import { format, addDays } from "date-fns";
