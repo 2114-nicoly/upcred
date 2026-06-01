@@ -57,6 +57,7 @@ export default function MovementDaysSelector({ open, onOpenChange, onSelectDate,
 
   const closedDates = useMemo(() => days.filter(d => d.status === "closed").map(d => parseISO(d.date + "T12:00:00")), [days]);
   const openDates = useMemo(() => days.filter(d => d.status === "open").map(d => parseISO(d.date + "T12:00:00")), [days]);
+  const cancelledDates = useMemo(() => days.filter(d => d.status === "cancelled").map(d => parseISO(d.date + "T12:00:00")), [days]);
 
   const handleCalendarSelect = (d?: Date) => {
     if (!d) return;
