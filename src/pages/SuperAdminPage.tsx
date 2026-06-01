@@ -13,7 +13,32 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3, KeyRound } from "lucide-react";
+import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3, KeyRound, Wrench, ExternalLink } from "lucide-react";
+import EmptyCashCleanup from "@/components/EmptyCashCleanup";
+import { Card as CardUI, CardContent as CardContentUI, CardHeader as CardHeaderUI, CardTitle as CardTitleUI } from "@/components/ui/card";
+
+function SuperMaintenanceTab() {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-3">
+      <CardUI>
+        <CardHeaderUI className="p-4 pb-2"><CardTitleUI className="text-sm flex items-center gap-2"><Wrench className="h-4 w-4" /> Ferramentas de Manutenção</CardTitleUI></CardHeaderUI>
+        <CardContentUI className="p-4 pt-2 space-y-2">
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/admin-tools")}>
+            Abrir página de manutenção <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/audit")}>
+            Auditoria Geral <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-cash-history")}>
+            Histórico do Caixa <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        </CardContentUI>
+      </CardUI>
+      <EmptyCashCleanup />
+    </div>
+  );
+}
 import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
