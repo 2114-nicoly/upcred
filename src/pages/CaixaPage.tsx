@@ -333,26 +333,39 @@ export default function CaixaPage() {
     fetchData();
   };
 
-  const handleUndoEvent = async (event: DailyEvent) => {
+  const handleUndoEvent = (event: DailyEvent) => {
     if (cashLocked) { toast.error("Caixa fechado. Reabra o caixa antes de desfazer lançamentos."); return; }
-    const valor = Number(event.amount_in) || Number(event.amount_out) || 0;
-    const ok = await confirm({
-      title: "Desfazer lançamento?",
-      description: "O saldo do caixa será revertido conforme este evento.",
-      affected: [
-        { label: "Tipo", value: getEventTypeLabel(event.event_type) },
-        ...(valor > 0 ? [{ label: "Valor", value: formatCurrency(valor) }] : []),
-        ...(event.client_id && clientNames[event.client_id] ? [{ label: "Cliente", value: clientNames[event.client_id] }] : []),
-      ],
-      confirmText: "Desfazer", destructive: true,
-    });
-    if (!ok) return;
+    setUndoReason("");
+    setUndoTarget(event);
+  };
+
+  const confirmUndoEvent = async () => {
+    if (!undoTarget || submitting) return;
+    if (undoReason.trim().length < 3) {
+      toast.error("Informe o motivo do estorno (mínimo 3 caracteres).");
+      return;
+    }
+    setSubmitting(true);
     try {
-      await undoDailyEvent(event);
+      await undoDailyEvent(undoTarget, undoReason.trim());
+      await logAction(
+        undoTarget.event_type === "pagamento" || undoTarget.event_type === "recebimento_multa"
+          ? "desfazer_pagamento"
+          : "ajuste_caixa",
+        "cash",
+        undoTarget.id,
+        { event_type: undoTarget.event_type, amount_in: undoTarget.amount_in, amount_out: undoTarget.amount_out },
+        { reversed: true, reason: undoReason.trim() },
+        `Estorno: ${undoReason.trim()}`,
+      );
       toast.success("Lançamento desfeito!");
-      fetchData();
+      setUndoTarget(null);
+      setUndoReason("");
+      await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao desfazer lançamento");
+    } finally {
+      setSubmitting(false);
     }
   };
 
