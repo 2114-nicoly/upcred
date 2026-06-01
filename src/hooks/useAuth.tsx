@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { clearAllDraftsForUser } from "@/hooks/useFormDraft";
 
 type AuthContextType = {
   session: Session | null;
@@ -89,8 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    const uid = user?.id;
     await supabase.auth.signOut();
     localStorage.removeItem("authenticated");
+    clearAllDraftsForUser(uid);
   };
 
   return (
