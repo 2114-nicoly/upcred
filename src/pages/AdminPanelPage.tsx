@@ -52,9 +52,10 @@ export default function AdminPanelPage() {
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
       <Tabs defaultValue="workers">
-        <TabsList className="grid grid-cols-2 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="workers" className="text-xs">Equipe</TabsTrigger>
           <TabsTrigger value="overview" className="text-xs">Resumo</TabsTrigger>
+          <TabsTrigger value="maintenance" className="text-xs">Manutenção</TabsTrigger>
         </TabsList>
 
         <TabsContent value="workers" className="mt-3">
@@ -62,6 +63,9 @@ export default function AdminPanelPage() {
         </TabsContent>
         <TabsContent value="overview" className="mt-3">
           <OverviewTab />
+        </TabsContent>
+        <TabsContent value="maintenance" className="mt-3">
+          <MaintenanceTab />
         </TabsContent>
       </Tabs>
     </div>
