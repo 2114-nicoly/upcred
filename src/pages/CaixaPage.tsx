@@ -376,17 +376,22 @@ export default function CaixaPage() {
   return (
     <div className="mx-auto max-w-lg p-3 pb-36 space-y-3">
       {isAdmin && (
-        <Card>
-          <CardContent className="p-3 space-y-2">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
-            <WorkerFilterSelect />
-            {(selectedAdminId || selectedWorkerId) && (
-              <p className="text-[10px] text-muted-foreground">
-                Mostrando {scopedEvents.length} de {events.length} eventos do dia
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 px-3 pt-3 pb-2 bg-background/95 backdrop-blur border-b">
+          <Card>
+            <CardContent className="p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">1. Trabalhador/equipe</p>
+              <WorkerFilterSelect />
+              {!selectedWorkerId && !selectedAdminId && isSuperAdmin && (
+                <p className="text-[10px] text-warning">Selecione um trabalhador ou administrador para escopo correto.</p>
+              )}
+              {(selectedAdminId || selectedWorkerId) && (
+                <p className="text-[10px] text-muted-foreground">
+                  Mostrando {scopedEvents.length} de {events.length} eventos do dia
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
       {/* Date navigation */}
       <DateNavigator date={selectedDate} onChange={handleDateChange} origin="caixa" />
