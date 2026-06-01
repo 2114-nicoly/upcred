@@ -1054,42 +1054,11 @@ export default function DailyCashPage() {
   const handleQuitarEmprestimo = async (instId: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === instId);
-    if (!inst) { setIsSubmitting(false); return; }
+    if (!inst) return;
 
-    // Optimistic
-    localActionedLoanIds.current.add(inst.loan_id);
-    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    const currentBalance = Number(inst.loans.remaining_balance);
-    const qTotalAmt = Number(inst.loans.total_amount);
-    const qInstCount = Number(inst.loans.installment_count);
-    const qInstAmt = qInstCount > 0 ? qTotalAmt / qInstCount : 0;
-    const qPaidBefore = Math.max(0, qTotalAmt - currentBalance);
-    setPaidGroups(prev => [...prev, {
-      movementId: "",
-      clientName: inst.loans.clients.name,
-      clientId: inst.loans.client_id,
-      loanId: inst.loan_id,
-      totalPaid: currentBalance,
-      accumulatedPaid: qTotalAmt,
-      remainingBalance: 0,
-      instAmount: qInstAmt,
-      installmentIds: [inst.id],
-      totalAmount: qTotalAmt,
-      installmentCount: qInstCount,
-      paidBefore: qPaidBefore,
-      paidAfter: qTotalAmt,
-      remainingBefore: currentBalance,
-      remainingAfter: 0,
-      progressBeforeFormatted: formatProgress(qPaidBefore, qInstAmt, qInstCount),
-      progressAfterFormatted: formatProgress(qTotalAmt, qInstAmt, qInstCount),
-      progressDeltaFormatted: formatDelta(qTotalAmt - qPaidBefore, qInstAmt),
-    }]);
-    setQuitarDialogId(null);
-    toast.success("Empréstimo quitado!");
-
+    setIsSubmitting(true);
     try {
       await settleLoan({
         loanId: inst.loan_id,
@@ -1099,13 +1068,17 @@ export default function DailyCashPage() {
         origin: "rota",
         installmentId: inst.id,
       });
-    } catch {
-      toast.error("Erro ao quitar, recarregando...");
+      setQuitarDialogId(null);
+      toast.success("Empréstimo quitado!");
+      await fetchData({ silent: true });
+    } catch (err: any) {
+      console.error("[handleQuitarEmprestimo] failed", err);
+      toast.error(err?.message || "Erro ao quitar empréstimo.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
+
 
   // Summary values
   const totalPaidValue = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
