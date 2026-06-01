@@ -417,6 +417,7 @@ export async function reversePayment(params: {
   for (const e of (linkedEvents || []) as any[]) linkedEventIds.add(e.id);
   for (const eid of linkedEventIds) await markDailyEventReversed(eid);
 
+  const reasonSuffix = reason ? ` — Motivo: ${reason}` : "";
   // Counter-movement (negative)
   const reversalMovement = await createCashMovement({
     type: "estorno_pagamento",
@@ -424,7 +425,7 @@ export async function reversePayment(params: {
     client_id: (movement as any).client_id || null,
     loan_id: loanId,
     installment_id: (movement as any).installment_id || null,
-    observation: `Estorno de ${movement.type === "recebimento_multa" ? "multa" : "pagamento"}`,
+    observation: `Estorno de ${movement.type === "recebimento_multa" ? "multa" : "pagamento"}${reasonSuffix}`,
     cash_date: cashDate,
   }) as any;
 
@@ -437,7 +438,7 @@ export async function reversePayment(params: {
     installment_id: (movement as any).installment_id || null,
     amount_in: 0,
     amount_out: totalReversed,
-    observation: `Estorno de ${movement.type === "recebimento_multa" ? "multa" : "pagamento"}`,
+    observation: `Estorno de ${movement.type === "recebimento_multa" ? "multa" : "pagamento"}${reasonSuffix}`,
     origin: "estorno",
     cash_movement_id: reversalMovement?.id || null,
   } as any) as any;
@@ -453,8 +454,8 @@ export async function reversePayment(params: {
     "payment",
     movementId,
     { amount: totalReversed, loan_id: loanId },
-    { reversed: true },
-    "Pagamento estornado",
+    { reversed: true, reason: reason || null },
+    reason ? `Pagamento estornado: ${reason}` : "Pagamento estornado",
   );
 
   return totalReversed;
