@@ -1393,7 +1393,17 @@ export type Database = {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
       }
+      _daily_cash_is_empty: { Args: { p_cash_id: string }; Returns: boolean }
       admin_assign_client_codes: { Args: never; Returns: number }
+      admin_cleanup_empty_daily_cash: {
+        Args: {
+          p_admin_id?: string
+          p_end: string
+          p_start: string
+          p_worker_id?: string
+        }
+        Returns: number
+      }
       admin_create_client: {
         Args: {
           p_address?: string
@@ -1408,6 +1418,23 @@ export type Database = {
           p_worker_id?: string
         }
         Returns: string
+      }
+      admin_find_empty_daily_cash: {
+        Args: {
+          p_admin_id?: string
+          p_end: string
+          p_start: string
+          p_worker_id?: string
+        }
+        Returns: {
+          admin_id: string
+          admin_nome: string
+          cash_date: string
+          id: string
+          opened_at: string
+          worker_id: string
+          worker_nome: string
+        }[]
       }
       admin_find_orphans: {
         Args: never
