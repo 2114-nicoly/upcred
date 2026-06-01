@@ -210,10 +210,12 @@ export default function DailyCashPage() {
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
   const [showNotPaidObs, setShowNotPaidObs] = useState(false);
+  const [notPaidReason, setNotPaidReason] = useState<string>("Não encontrado");
   const [selectedForNotPaid, setSelectedForNotPaid] = useState<Set<string>>(new Set());
   const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
+  const [batchNotPaidReason, setBatchNotPaidReason] = useState<string>("Não encontrado");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
@@ -224,6 +226,11 @@ export default function DailyCashPage() {
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [isReopening, setIsReopening] = useState(false);
+  const [closeCashDialogOpen, setCloseCashDialogOpen] = useState(false);
+  const [openingBalance, setOpeningBalance] = useState(0);
+  const [manualInToday, setManualInToday] = useState(0);
+  const [manualOutToday, setManualOutToday] = useState(0);
+  const [quickSearch, setQuickSearch] = useState("");
 
   useEffect(() => {
     const urlDate = dateParam || today;
