@@ -285,6 +285,8 @@ export function getEventTypeLabel(type: string): string {
     case "transferencia_cliente": return "Transferência de Cliente";
     case "anexo_adicionado": return "Anexo Adicionado";
     case "anexo_removido": return "Anexo Removido";
+    case "caixa_aberto": return "Caixa Aberto";
+    case "caixa_fechado": return "Caixa Fechado";
     default: return type;
   }
 }
