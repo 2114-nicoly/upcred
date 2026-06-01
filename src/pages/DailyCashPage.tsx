@@ -1408,11 +1408,16 @@ export default function DailyCashPage() {
       {/* Date navigation */}
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
-        {isClosed && (
+        {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-1.5 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
               <Lock className="h-3 w-3" /> Caixa Fechado
             </p>
+          </div>
+        )}
+        {isNotStarted && (
+          <div className="mt-2">
+            <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
           </div>
         )}
         <NoMovementHint
