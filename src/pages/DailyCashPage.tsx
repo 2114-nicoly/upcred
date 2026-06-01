@@ -1217,7 +1217,7 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
+          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); setNotPaidReason("Não encontrado"); } }}>
             <DialogTrigger asChild>
               <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
                 <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
@@ -1229,9 +1229,20 @@ export default function DailyCashPage() {
                 <p className="text-sm text-muted-foreground">
                   {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(instAmount)}
                 </p>
+                <div>
+                  <Label>Motivo</Label>
+                  <Select value={notPaidReason} onValueChange={setNotPaidReason}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {NOT_PAID_REASONS.map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {showNotPaidObs ? (
                   <div>
-                    <Label>Observação</Label>
+                    <Label>Observação (opcional)</Label>
                     <Textarea placeholder="Ex: Cliente não atendeu..." value={notPaidObs} onChange={(e) => setNotPaidObs(e.target.value)} />
                   </div>
                 ) : (
@@ -1240,7 +1251,7 @@ export default function DailyCashPage() {
                   </button>
                 )}
                 <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Processando..." : "Confirmar Não Pagou"}
+                  {isSubmitting ? "Salvando..." : "Confirmar Não Pagou"}
                 </Button>
               </div>
             </DialogContent>
