@@ -298,7 +298,18 @@ export default function ClientsPage() {
 
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input
+          className="pl-9"
+          placeholder="Buscar por nome, código, telefone ou documento..."
+          value={search}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSearch(v);
+            const next = new URLSearchParams(searchParams);
+            if (v) next.set("q", v); else next.delete("q");
+            setSearchParams(next, { replace: true });
+          }}
+        />
       </div>
 
       {isAdmin && (
