@@ -1730,7 +1730,7 @@ export default function DailyCashPage() {
       {selectedForNotPaid.size > 0 && !isClosed && (
         <div className="fixed bottom-20 left-0 right-0 z-40 flex items-center justify-center gap-2 px-4">
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
-            <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); } }}>
+            <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); setBatchNotPaidReason("Não encontrado"); } }}>
               <DialogTrigger asChild>
                 <Button type="button" size="sm" variant="destructive" className="flex-1">
                   <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
@@ -1742,9 +1742,20 @@ export default function DailyCashPage() {
                   <p className="text-sm text-muted-foreground">
                     {selectedForNotPaid.size} parcela(s) selecionada(s).
                   </p>
+                  <div>
+                    <Label>Motivo</Label>
+                    <Select value={batchNotPaidReason} onValueChange={setBatchNotPaidReason}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {NOT_PAID_REASONS.map((r) => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   {showBatchNotPaidObs ? (
                     <div>
-                      <Label>Observação</Label>
+                      <Label>Observação (opcional)</Label>
                       <Textarea placeholder="Ex: Dia de chuva..." value={batchNotPaidObs} onChange={(e) => setBatchNotPaidObs(e.target.value)} />
                     </div>
                   ) : (
@@ -1753,7 +1764,7 @@ export default function DailyCashPage() {
                     </button>
                   )}
                   <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Processando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
+                    {isSubmitting ? "Salvando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
                   </Button>
                 </div>
               </DialogContent>
