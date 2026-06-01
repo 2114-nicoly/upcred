@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,8 @@ type Client = {
   client_code: number | null;
   worker_id: string | null;
   admin_id: string | null;
+  doc_primary_number?: string | null;
+  doc_secondary_number?: string | null;
 };
 
 type LoanSummary = {
@@ -39,10 +41,12 @@ type LoanSummary = {
 export default function ClientsPage() {
   const { isAdmin, isSuperAdmin } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQ = searchParams.get("q") ?? "";
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [loanSummaries, setLoanSummaries] = useState<Record<string, LoanSummary>>({});
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQ);
   const [open, setOpen] = useState(false);
   const [groupByWorker, setGroupByWorker] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
@@ -194,10 +198,16 @@ export default function ClientsPage() {
     setEditOpen(true);
   };
 
-  let filtered = clients.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    String(c.client_code || "").includes(search)
-  );
+  const q = search.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, "");
+  let filtered = !q ? clients : clients.filter((c) => {
+    if (c.name.toLowerCase().includes(q)) return true;
+    if (String(c.client_code || "").includes(q)) return true;
+    if (qDigits && c.phone && c.phone.replace(/\D/g, "").includes(qDigits)) return true;
+    if (qDigits && (c.doc_primary_number || "").replace(/\D/g, "").includes(qDigits)) return true;
+    if (qDigits && (c.doc_secondary_number || "").replace(/\D/g, "").includes(qDigits)) return true;
+    return false;
+  });
 
   if (filterActive) {
     filtered = filtered.filter((c) => loanSummaries[c.id]?.count > 0);
@@ -288,7 +298,18 @@ export default function ClientsPage() {
 
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input
+          className="pl-9"
+          placeholder="Buscar por nome, código, telefone ou documento..."
+          value={search}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSearch(v);
+            const next = new URLSearchParams(searchParams);
+            if (v) next.set("q", v); else next.delete("q");
+            setSearchParams(next, { replace: true });
+          }}
+        />
       </div>
 
       {isAdmin && (

@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
@@ -180,6 +181,22 @@ type PaidGroup = {
 
 type PendingFilter = "all" | "overdue" | "today";
 
+const NOT_PAID_REASONS = [
+  "Não encontrado",
+  "Sem dinheiro",
+  "Prometeu pagar",
+  "Recusou pagar",
+  "Outro",
+] as const;
+
+function composeNotPaidObservation(reason: string, obs: string): string {
+  const r = (reason || "").trim();
+  const o = (obs || "").trim();
+  if (r && o) return `[${r}] ${o}`;
+  if (r) return `[${r}]`;
+  return o;
+}
+
 export default function DailyCashPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -210,10 +227,12 @@ export default function DailyCashPage() {
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
   const [showNotPaidObs, setShowNotPaidObs] = useState(false);
+  const [notPaidReason, setNotPaidReason] = useState<string>("Não encontrado");
   const [selectedForNotPaid, setSelectedForNotPaid] = useState<Set<string>>(new Set());
   const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
+  const [batchNotPaidReason, setBatchNotPaidReason] = useState<string>("Não encontrado");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [quitarDialogId, setQuitarDialogId] = useState<string | null>(null);
@@ -224,6 +243,11 @@ export default function DailyCashPage() {
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [isReopening, setIsReopening] = useState(false);
+  const [closeCashDialogOpen, setCloseCashDialogOpen] = useState(false);
+  const [openingBalance, setOpeningBalance] = useState(0);
+  const [manualInToday, setManualInToday] = useState(0);
+  const [manualOutToday, setManualOutToday] = useState(0);
+  const [quickSearch, setQuickSearch] = useState("");
 
   useEffect(() => {
     const urlDate = dateParam || today;
@@ -315,6 +339,34 @@ export default function DailyCashPage() {
       const status = dcData?.status || "open";
       setDailyCashStatus(status);
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
+      // Opening balance: from yesterday's closed daily_cash for same scope.
+      const dcAny = dcData as any;
+      if (dcAny?.opening_balance != null) {
+        setOpeningBalance(Number(dcAny.opening_balance) || 0);
+      } else {
+        try {
+          const scope = await getCurrentDailyCashScope();
+          const { data: prior } = await applyDailyCashScope(
+            supabase.from("daily_cash")
+              .select("expected_closing_balance, cash_date")
+              .lt("cash_date", selectedDate)
+              .eq("status", "closed")
+              .order("cash_date", { ascending: false })
+              .limit(1),
+            scope
+          );
+          const p = (prior || [])[0] as any;
+          setOpeningBalance(p ? Number(p.expected_closing_balance) || 0 : 0);
+        } catch { setOpeningBalance(0); }
+      }
+      // Manual in/out totals from events (non-reversed)
+      let mIn = 0, mOut = 0;
+      for (const e of (eventsData || []) as DailyEventRow[]) {
+        if (e.event_type === "entrada_manual") mIn += Number(e.amount_in) || 0;
+        if (e.event_type === "saida_manual") mOut += Number(e.amount_out) || 0;
+      }
+      setManualInToday(mIn);
+      setManualOutToday(mOut);
 
       const allEvents = (eventsData || []) as unknown as DailyEventRow[];
       setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
@@ -631,7 +683,7 @@ export default function DailyCashPage() {
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) { setIsSubmitting(false); return; }
 
-    const obs = notPaidObs;
+    const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
     const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
       id: "temp-" + Date.now(),
       mark_date: selectedDate,
@@ -648,6 +700,7 @@ export default function DailyCashPage() {
     setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
     setNotPaidObs("");
     setShowNotPaidObs(false);
+    setNotPaidReason("Não encontrado");
     setNotPaidDialogId(null);
 
     try {
@@ -691,7 +744,7 @@ export default function DailyCashPage() {
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
     if (selectedInsts.length === 0) { setIsSubmitting(false); return; }
 
-    const obs = batchNotPaidObs;
+    const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
     const optimisticMarks = selectedInsts.map(inst => ({
       id: "temp-" + Date.now() + "-" + inst.id,
       mark_date: selectedDate,
@@ -711,6 +764,7 @@ export default function DailyCashPage() {
     setBatchNotPaidDialogOpen(false);
     setBatchNotPaidObs("");
     setShowBatchNotPaidObs(false);
+    setBatchNotPaidReason("Não encontrado");
 
     const { data: { session: s2 } } = await supabase.auth.getSession();
     const inserts = selectedInsts.map(inst => ({
@@ -866,21 +920,22 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleCloseCash = async () => {
-    const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
-    const ok = await confirm({
-      title: "Fechar caixa do dia?",
-      description: "Após o fechamento, lançamentos do dia ficam bloqueados. Você poderá reabrir se precisar.",
-      affected: [
-        { label: "Data", value: format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy") },
-        { label: "Total recebido", value: formatCurrency(totalReceived) },
-        { label: "Não pagos", value: String(notPaidMarks.length) },
-        { label: "Itens tratados", value: String(paidGroups.length + notPaidMarks.length) },
-      ],
-      confirmText: "Fechar caixa",
-    });
-    if (!ok) return;
+  const handleCloseCash = () => {
+    if (dailyCashStatus === "closed") {
+      toast.info("Caixa já está fechado.");
+      return;
+    }
+    setCloseCashDialogOpen(true);
+  };
+
+  const handleCloseCashConfirm = async () => {
     if (isSubmitting) return;
+    if (dailyCashStatus === "closed") {
+      toast.info("Caixa já está fechado.");
+      setCloseCashDialogOpen(false);
+      return;
+    }
+    const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
     setIsSubmitting(true);
 
     try {
@@ -935,6 +990,7 @@ export default function DailyCashPage() {
       toast.success("Caixa do dia fechado!");
       setDailyCashStatus("closed");
       setPendingInstallments([]);
+      setCloseCashDialogOpen(false);
     } catch (err) {
       console.error("[handleCloseCash] failed", err);
       toast.error("Não foi possível fechar o caixa. Tente novamente.");
@@ -1161,7 +1217,7 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); } }}>
+          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); setNotPaidReason("Não encontrado"); } }}>
             <DialogTrigger asChild>
               <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
                 <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
@@ -1173,9 +1229,20 @@ export default function DailyCashPage() {
                 <p className="text-sm text-muted-foreground">
                   {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(instAmount)}
                 </p>
+                <div>
+                  <Label>Motivo</Label>
+                  <Select value={notPaidReason} onValueChange={setNotPaidReason}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {NOT_PAID_REASONS.map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {showNotPaidObs ? (
                   <div>
-                    <Label>Observação</Label>
+                    <Label>Observação (opcional)</Label>
                     <Textarea placeholder="Ex: Cliente não atendeu..." value={notPaidObs} onChange={(e) => setNotPaidObs(e.target.value)} />
                   </div>
                 ) : (
@@ -1184,7 +1251,7 @@ export default function DailyCashPage() {
                   </button>
                 )}
                 <Button onClick={() => handleNotPaid(inst.id)} variant="destructive" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Processando..." : "Confirmar Não Pagou"}
+                  {isSubmitting ? "Salvando..." : "Confirmar Não Pagou"}
                 </Button>
               </div>
             </DialogContent>
@@ -1663,7 +1730,7 @@ export default function DailyCashPage() {
       {selectedForNotPaid.size > 0 && !isClosed && (
         <div className="fixed bottom-20 left-0 right-0 z-40 flex items-center justify-center gap-2 px-4">
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
-            <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); } }}>
+            <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); setBatchNotPaidReason("Não encontrado"); } }}>
               <DialogTrigger asChild>
                 <Button type="button" size="sm" variant="destructive" className="flex-1">
                   <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
@@ -1675,9 +1742,20 @@ export default function DailyCashPage() {
                   <p className="text-sm text-muted-foreground">
                     {selectedForNotPaid.size} parcela(s) selecionada(s).
                   </p>
+                  <div>
+                    <Label>Motivo</Label>
+                    <Select value={batchNotPaidReason} onValueChange={setBatchNotPaidReason}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {NOT_PAID_REASONS.map((r) => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   {showBatchNotPaidObs ? (
                     <div>
-                      <Label>Observação</Label>
+                      <Label>Observação (opcional)</Label>
                       <Textarea placeholder="Ex: Dia de chuva..." value={batchNotPaidObs} onChange={(e) => setBatchNotPaidObs(e.target.value)} />
                     </div>
                   ) : (
@@ -1686,7 +1764,7 @@ export default function DailyCashPage() {
                     </button>
                   )}
                   <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Processando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
+                    {isSubmitting ? "Salvando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
                   </Button>
                 </div>
               </DialogContent>
