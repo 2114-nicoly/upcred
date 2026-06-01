@@ -147,9 +147,12 @@ export default function CaixaPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const isClosed = dailyCashStatus === "closed";
-  // Once closed, financial actions are blocked for ALL roles for that day.
-  const cashLocked = isClosed;
+  const cashState: "sem_caixa" | "open" | "closed" =
+    dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
+  const isClosed = cashState === "closed";
+  const isNotStarted = cashState === "sem_caixa";
+  // Block financial actions when closed OR not yet opened.
+  const cashLocked = isClosed || isNotStarted;
   const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
