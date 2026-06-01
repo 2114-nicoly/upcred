@@ -112,8 +112,8 @@ export function useMovementDays(opts: UseMovementDaysOpts = {}) {
         ) as MovementDay["status"];
         const counted = cash?.counted_closing_balance != null ? Number(cash.counted_closing_balance) : null;
         const diff = cash?.closing_difference != null ? Number(cash.closing_difference) : null;
-        // Only include days with actual movement OR an existing non-cancelled daily_cash row.
-        if (events.length === 0 && (!cash || status === "cancelled")) continue;
+        // Skip only truly empty days with no cash row at all.
+        if (events.length === 0 && !cash) continue;
         out.push({
           date,
           status,

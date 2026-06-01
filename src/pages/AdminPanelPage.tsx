@@ -13,8 +13,32 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight,
-  TrendingUp, AlertTriangle, Target } from "lucide-react";
+import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, Wrench,
+  TrendingUp, AlertTriangle, Target, ExternalLink } from "lucide-react";
+import EmptyCashCleanup from "@/components/EmptyCashCleanup";
+
+function MaintenanceTab() {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="p-4 pb-2"><CardTitle className="text-sm flex items-center gap-2"><Wrench className="h-4 w-4" /> Ferramentas de Manutenção</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-2 space-y-2">
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/admin-tools")}>
+            Abrir página de manutenção <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/audit")}>
+            Auditoria <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-cash-history")}>
+            Histórico do Caixa <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        </CardContent>
+      </Card>
+      <EmptyCashCleanup />
+    </div>
+  );
+}
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/loan-utils";
@@ -52,9 +76,10 @@ export default function AdminPanelPage() {
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
       <Tabs defaultValue="workers">
-        <TabsList className="grid grid-cols-2 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="workers" className="text-xs">Equipe</TabsTrigger>
           <TabsTrigger value="overview" className="text-xs">Resumo</TabsTrigger>
+          <TabsTrigger value="maintenance" className="text-xs">Manutenção</TabsTrigger>
         </TabsList>
 
         <TabsContent value="workers" className="mt-3">
@@ -62,6 +87,9 @@ export default function AdminPanelPage() {
         </TabsContent>
         <TabsContent value="overview" className="mt-3">
           <OverviewTab />
+        </TabsContent>
+        <TabsContent value="maintenance" className="mt-3">
+          <MaintenanceTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -158,7 +158,7 @@ function MovementDayRow({
           <div className="flex items-center gap-1.5">
             {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> Fechado</Badge>}
             {day.status === "open" && <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>}
-            {day.status === "cancelled" && <Badge className="bg-orange-200 text-orange-900 text-[9px] h-4">Cancelado</Badge>}
+            {day.status === "cancelled" && <Badge className="bg-orange-200 text-orange-900 text-[9px] h-4">Cancelado vazio</Badge>}
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
         </div>
