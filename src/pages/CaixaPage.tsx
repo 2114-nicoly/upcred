@@ -389,7 +389,7 @@ export default function CaixaPage() {
         </Card>
       )}
       {/* Date navigation */}
-      <DateNavigator date={selectedDate} onChange={handleDateChange} />
+      <DateNavigator date={selectedDate} onChange={handleDateChange} origin="caixa" />
       <NoMovementHint
         date={selectedDate}
         hasMovement={events.length > 0 || !!dailyCashRow}
