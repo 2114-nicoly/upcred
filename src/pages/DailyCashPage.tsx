@@ -1436,6 +1436,12 @@ export default function DailyCashPage() {
         />
       </div>
 
+      {/* Últimos dias trabalhados */}
+      <div className="mb-3">
+        <RecentWorkDays excludeDate={selectedDate} limit={4} />
+      </div>
+
+
       {/* Top summary */}
       <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
         <div className="flex items-center justify-between">
