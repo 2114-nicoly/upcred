@@ -42,6 +42,36 @@ export default function NewLoanPage() {
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
   const [renewPaidAmount, setRenewPaidAmount] = useState<string>("");
 
+  const confirm = useConfirm();
+  const draftKey = renewFromLoanId ? `renew:${renewFromLoanId}` : `new-loan:${clientId ?? "x"}`;
+  const draftValue = {
+    amount, interestType, interestValue, installmentCount, paymentType,
+    loanDate, firstDueDate, fixedDates, observation, renewPaidAmount,
+  };
+  const draft = useFormDraft(draftKey, draftValue);
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    const saved = draft.restore();
+    if (saved) {
+      restoredRef.current = true;
+      setAmount(saved.amount ?? "");
+      setInterestType(saved.interestType ?? "percentage");
+      setInterestValue(saved.interestValue ?? "");
+      setInstallmentCount(saved.installmentCount ?? "");
+      setPaymentType(saved.paymentType ?? "daily");
+      setLoanDate(saved.loanDate ?? format(new Date(), "yyyy-MM-dd"));
+      setFirstDueDate(saved.firstDueDate ?? "");
+      setFixedDates(saved.fixedDates ?? []);
+      setObservation(saved.observation ?? "");
+      setRenewPaidAmount(saved.renewPaidAmount ?? "");
+      toast.info("Rascunho restaurado", {
+        action: { label: "Descartar", onClick: () => { draft.clear(); window.location.reload(); } },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const fetchClient = async () => {
       const { data } = await supabase.from("clients").select("name").eq("id", clientId!).single();
