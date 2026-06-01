@@ -94,6 +94,7 @@ type CashMovementPaymentRow = {
   id: string;
   loan_id: string | null;
   amount: number;
+  created_at: string;
 };
 
 type PaidLoanRow = {
