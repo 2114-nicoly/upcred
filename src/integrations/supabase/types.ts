@@ -387,12 +387,24 @@ export type Database = {
           admin_id: string | null
           cash_date: string
           closed_at: string | null
+          closed_by: string | null
           created_at: string
+          expected_closing_balance: number
           id: string
+          opening_balance: number
+          reopen_reason: string | null
+          reopened_at: string | null
+          reopened_by: string | null
           status: string
           summary: string | null
+          total_events_count: number
+          total_in: number
           total_items_treated: number
+          total_lent: number
+          total_manual_in: number
+          total_manual_out: number
           total_not_paid_count: number
+          total_out: number
           total_penalty_received: number
           total_received: number
           user_id: string | null
@@ -402,12 +414,24 @@ export type Database = {
           admin_id?: string | null
           cash_date: string
           closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
+          expected_closing_balance?: number
           id?: string
+          opening_balance?: number
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
           status?: string
           summary?: string | null
+          total_events_count?: number
+          total_in?: number
           total_items_treated?: number
+          total_lent?: number
+          total_manual_in?: number
+          total_manual_out?: number
           total_not_paid_count?: number
+          total_out?: number
           total_penalty_received?: number
           total_received?: number
           user_id?: string | null
@@ -417,12 +441,24 @@ export type Database = {
           admin_id?: string | null
           cash_date?: string
           closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
+          expected_closing_balance?: number
           id?: string
+          opening_balance?: number
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
           status?: string
           summary?: string | null
+          total_events_count?: number
+          total_in?: number
           total_items_treated?: number
+          total_lent?: number
+          total_manual_in?: number
+          total_manual_out?: number
           total_not_paid_count?: number
+          total_out?: number
           total_penalty_received?: number
           total_received?: number
           user_id?: string | null
@@ -1403,6 +1439,7 @@ export type Database = {
         Returns: number
       }
       archive_worker: { Args: { p_worker_id: string }; Returns: undefined }
+      close_daily_cash: { Args: { p_cash_date: string }; Returns: string }
       delete_worker_if_empty: {
         Args: { p_worker_id: string }
         Returns: undefined
@@ -1506,6 +1543,10 @@ export type Database = {
       redact_old_credentials_log: { Args: never; Returns: number }
       register_recovery_request: {
         Args: { p_email: string; p_login: string; p_nome: string }
+        Returns: string
+      }
+      reopen_daily_cash: {
+        Args: { p_cash_date: string; p_reason: string }
         Returns: string
       }
       reverse_loan_payment: {

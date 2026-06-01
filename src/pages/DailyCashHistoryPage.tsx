@@ -84,7 +84,7 @@ export default function DailyCashHistoryPage() {
             const pagCount = day.events.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa").length;
             const npCount = day.events.filter(e => e.event_type === "nao_pagou").length;
             const newCount = day.events.filter(e => e.event_type === "emprestimo_novo").length;
-            const renCount = day.events.filter(e => e.event_type === "renovacao").length;
+            const renCount = day.events.filter(e => e.event_type === "renovacao" || e.event_type === "renegociacao").length;
 
             return (
               <Card key={day.date}>

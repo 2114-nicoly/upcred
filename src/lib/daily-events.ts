@@ -5,6 +5,7 @@ export type DailyEventType =
   | "pagamento"
   | "nao_pagou"
   | "renovacao"
+  | "renegociacao"
   | "emprestimo_novo"
   | "saida"
   | "entrada_manual"
@@ -14,7 +15,40 @@ export type DailyEventType =
   | "multa_adicionada"
   | "estorno_pagamento"
   | "estorno_manual"
-  | "cancelamento";
+  | "cancelamento"
+  | "cliente_criado"
+  | "cliente_editado"
+  | "parcela_editada"
+  | "transferencia_cliente"
+  | "anexo_adicionado"
+  | "anexo_removido";
+
+/** Event types that move money (have cash_movement + change available_cash). */
+export const FINANCIAL_EVENT_TYPES: DailyEventType[] = [
+  "pagamento",
+  "recebimento_multa",
+  "emprestimo_novo",
+  "renovacao",
+  "saida",
+  "entrada_manual",
+  "saida_manual",
+  "ajuste_manual",
+];
+
+/** Reversal / correction events. */
+export const REVERSAL_EVENT_TYPES: DailyEventType[] = [
+  "estorno_pagamento",
+  "estorno_manual",
+  "cancelamento",
+];
+
+export function isFinancialEvent(type: string): boolean {
+  return (FINANCIAL_EVENT_TYPES as string[]).includes(type);
+}
+
+export function isReversalEvent(type: string): boolean {
+  return (REVERSAL_EVENT_TYPES as string[]).includes(type);
+}
 
 export type DailyEvent = {
   id: string;
@@ -130,9 +164,9 @@ export async function undoDailyEvent(event: DailyEvent) {
       "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
     );
   }
-  if (event.event_type === "renovacao") {
+  if (event.event_type === "renovacao" || event.event_type === "renegociacao") {
     throw new Error(
-      "Não é possível desfazer uma renovação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
+      "Não é possível desfazer uma renovação/renegociação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
     );
   }
 
@@ -233,6 +267,7 @@ export function getEventTypeLabel(type: string): string {
     case "pagamento": return "Pagamento";
     case "nao_pagou": return "Não Pagou";
     case "renovacao": return "Renovação";
+    case "renegociacao": return "Renegociação";
     case "emprestimo_novo": return "Novo Empréstimo";
     case "saida": return "Saída";
     case "entrada_manual": return "Entrada Manual";
@@ -243,6 +278,12 @@ export function getEventTypeLabel(type: string): string {
     case "estorno_pagamento": return "Estorno de Pagamento";
     case "estorno_manual": return "Estorno Manual";
     case "cancelamento": return "Cancelamento";
+    case "cliente_criado": return "Cliente Criado";
+    case "cliente_editado": return "Cliente Editado";
+    case "parcela_editada": return "Parcela Editada";
+    case "transferencia_cliente": return "Transferência de Cliente";
+    case "anexo_adicionado": return "Anexo Adicionado";
+    case "anexo_removido": return "Anexo Removido";
     default: return type;
   }
 }
@@ -252,6 +293,7 @@ export function getEventTypeColor(type: string): string {
     case "pagamento": return "text-success";
     case "nao_pagou": return "text-destructive";
     case "renovacao": return "text-primary";
+    case "renegociacao": return "text-primary";
     case "emprestimo_novo": return "text-primary";
     case "saida": return "text-destructive";
     case "entrada_manual": return "text-success";
@@ -262,6 +304,13 @@ export function getEventTypeColor(type: string): string {
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
     case "cancelamento": return "text-destructive";
+    case "cliente_criado":
+    case "cliente_editado":
+    case "parcela_editada":
+    case "transferencia_cliente":
+    case "anexo_adicionado":
+    case "anexo_removido":
+      return "text-muted-foreground";
     default: return "text-muted-foreground";
   }
 }

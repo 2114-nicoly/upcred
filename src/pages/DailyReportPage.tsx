@@ -32,7 +32,7 @@ type WorkerOpt = { id: string; nome: string; parent_admin_id: string | null };
 type AdminOpt = { id: string; nome: string };
 
 const INCOME_TYPES = new Set(["pagamento", "recebimento_multa", "entrada_manual"]);
-const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "saida", "saida_manual"]);
+const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "renegociacao", "saida", "saida_manual"]);
 
 export default function DailyReportPage() {
   const { workerId: myWorkerId, adminId: myAdminId, isAdmin, isSuperAdmin } = useAuth();
@@ -215,7 +215,7 @@ export default function DailyReportPage() {
       totalOut += Number(e.amount_out || 0);
       if (e.event_type === "pagamento") payments += Number(e.amount_in || 0);
       if (e.event_type === "emprestimo_novo") loans += Number(e.amount_out || 0);
-      if (e.event_type === "renovacao") renewals += Number(e.amount_out || 0);
+      if (e.event_type === "renovacao" || e.event_type === "renegociacao") renewals += Number(e.amount_out || 0);
       if (e.event_type === "recebimento_multa") penalties += Number(e.amount_in || 0);
       if (e.event_type === "nao_pagou") notPaidCount += 1;
     }

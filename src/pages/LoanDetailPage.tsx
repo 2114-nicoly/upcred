@@ -634,7 +634,7 @@ export default function LoanDetailPage() {
       // 6. Daily event (sem movimento de caixa — renegociação não move dinheiro)
       await createDailyEvent({
         cash_date: today,
-        event_type: "renovacao",
+        event_type: "renegociacao",
         client_id: loan.client_id,
         loan_id: newLoan.id,
         amount_in: 0,
