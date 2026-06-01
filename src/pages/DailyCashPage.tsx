@@ -1154,16 +1154,29 @@ export default function DailyCashPage() {
     localActionedLoanIds.current.add(inst.loan_id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
     const currentBalance = Number(inst.loans.remaining_balance);
+    const qTotalAmt = Number(inst.loans.total_amount);
+    const qInstCount = Number(inst.loans.installment_count);
+    const qInstAmt = qInstCount > 0 ? qTotalAmt / qInstCount : 0;
+    const qPaidBefore = Math.max(0, qTotalAmt - currentBalance);
     setPaidGroups(prev => [...prev, {
       movementId: "",
       clientName: inst.loans.clients.name,
       clientId: inst.loans.client_id,
       loanId: inst.loan_id,
       totalPaid: currentBalance,
-      accumulatedPaid: Number(inst.loans.total_amount),
+      accumulatedPaid: qTotalAmt,
       remainingBalance: 0,
-      instAmount: Number(inst.amount),
+      instAmount: qInstAmt,
       installmentIds: [inst.id],
+      totalAmount: qTotalAmt,
+      installmentCount: qInstCount,
+      paidBefore: qPaidBefore,
+      paidAfter: qTotalAmt,
+      remainingBefore: currentBalance,
+      remainingAfter: 0,
+      progressBeforeFormatted: formatProgress(qPaidBefore, qInstAmt, qInstCount),
+      progressAfterFormatted: formatProgress(qTotalAmt, qInstAmt, qInstCount),
+      progressDeltaFormatted: formatDelta(qTotalAmt - qPaidBefore, qInstAmt),
     }]);
     setQuitarDialogId(null);
     toast.success("Empréstimo quitado!");
