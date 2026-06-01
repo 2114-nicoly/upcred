@@ -697,7 +697,24 @@ export default function CaixaPage() {
               <Label>Observação (opcional)</Label>
               <Textarea value={manualObs} onChange={(e) => setManualObs(e.target.value)} placeholder="Descrição..." />
             </div>
-            <Button onClick={handleManualMovement} className="w-full">Confirmar</Button>
+            <Button onClick={handleManualMovement} disabled={submitting} className="w-full">Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reopen cash dialog */}
+      <Dialog open={reopenOpen} onOpenChange={(o) => { if (!o) { setReopenOpen(false); setReopenReason(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reabrir caixa</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Informe o motivo da reabertura. A ação será registrada no histórico de auditoria.</p>
+            <div>
+              <Label>Motivo <span className="text-destructive">*</span></Label>
+              <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="Ex.: ajuste de pagamento recebido após fechamento" />
+            </div>
+            <Button onClick={handleReopenCash} disabled={submitting || reopenReason.trim().length < 3} className="w-full">
+              Confirmar reabertura
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
