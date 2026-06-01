@@ -284,11 +284,19 @@ export default function DailyCashPage() {
 
   useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    if (newDate === today) {
+      setSearchParams({});
+    } else {
+      setSearchParams({ date: newDate });
+    }
+  };
+
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
     const newDate = format(addDays(d, offset), "yyyy-MM-dd");
-    setSelectedDate(newDate);
-    setSearchParams({ date: newDate });
+    handleDateChange(newDate);
   };
 
   const isClosed = dailyCashStatus === "closed";
