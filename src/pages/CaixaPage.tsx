@@ -429,7 +429,7 @@ export default function CaixaPage() {
       {/* Close / Reopen cash actions */}
       <div className="grid grid-cols-2 gap-2">
         {!isClosed ? (
-          <Button onClick={handleCloseCash} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
+          <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
             <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
           </Button>
         ) : (
