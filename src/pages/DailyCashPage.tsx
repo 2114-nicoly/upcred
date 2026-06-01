@@ -1413,7 +1413,7 @@ export default function DailyCashPage() {
         )}
         <NoMovementHint
           date={selectedDate}
-          hasMovement={dailyEvents.length > 0 || pendingInstallments.length > 0 || paidGroups.length > 0 || notPaidMarks.length > 0 || newLoans.length > 0}
+          hasMovement={pendingInstallments.length > 0 || paidGroups.length > 0 || notPaidMarks.length > 0 || newLoans.length > 0 || renewalEvents.length > 0}
           onChange={handleDateChange}
         />
       </div>
