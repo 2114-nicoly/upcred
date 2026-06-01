@@ -217,11 +217,9 @@ export default function NewLoanSelectClientPage() {
             icon={Users}
             message={search ? "Nenhum cliente elegível encontrado" : "Nenhum cliente sem empréstimo ativo"}
             description={search ? "Tente outro termo de busca." : "Cadastre um novo cliente para liberar um empréstimo."}
-            action={
-              !search ? (
-                <Button onClick={() => setNewClientMode(true)}>Cadastrar novo cliente</Button>
-              ) : undefined
-            }
+            actionLabel={!search ? "Cadastrar novo cliente" : undefined}
+            onAction={!search ? () => setNewClientMode(true) : undefined}
+
           />
 
         ) : (
