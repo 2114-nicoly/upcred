@@ -21,7 +21,10 @@ type Client = {
   name: string;
   phone: string | null;
   client_code: number | null;
+  doc_primary_number: string | null;
+  doc_secondary_number: string | null;
 };
+
 
 export default function NewLoanSelectClientPage() {
   const navigate = useNavigate();
