@@ -242,24 +242,30 @@ export default function CaixaPage() {
     }
   };
 
+  const openCloseDialog = () => {
+    if (isClosed) return;
+    setCountedAmount(summary.expected.toFixed(2));
+    setCloseNote("");
+    setCloseOpen(true);
+  };
+
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    const ok = await confirm({
-      title: "Fechar caixa do dia?",
-      description: "Os totais serão calculados a partir das atividades do dia e o caixa será marcado como fechado. Após fechar, ações financeiras serão bloqueadas até a reabertura.",
-      affected: [
-        { label: "Data", value: format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy") },
-        { label: "Atividades", value: String(summary.eventsCount) },
-        { label: "Saldo esperado", value: formatCurrency(summary.expected) },
-      ],
-      confirmText: "Fechar caixa", destructive: false,
-    });
-    if (!ok) return;
+    const counted = parseFloat(countedAmount);
+    if (!isFinite(counted)) { toast.error("Informe o valor contado no caixa"); return; }
+    const diff = counted - summary.expected;
+    if (Math.abs(diff) > 0.01 && closeNote.trim().length < 3) {
+      toast.error("Informe a observação para justificar a diferença"); return;
+    }
     setSubmitting(true);
     try {
-      const { error } = await supabase.rpc("close_daily_cash" as any, { p_cash_date: selectedDate } as any);
+      const { error } = await supabase.rpc(
+        "close_daily_cash_v2" as any,
+        { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
+      );
       if (error) throw error;
-      toast.success("Caixa fechado!");
+      toast.success(`Caixa fechado! Diferença: ${formatCurrency(diff)}`);
+      setCloseOpen(false);
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
