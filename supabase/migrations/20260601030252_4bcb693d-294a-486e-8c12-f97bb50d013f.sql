@@ -1,0 +1,1 @@
+ALTER TABLE public.client_attachments ADD COLUMN IF NOT EXISTS category text;

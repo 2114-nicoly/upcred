@@ -235,6 +235,7 @@ export type Database = {
       client_attachments: {
         Row: {
           admin_id: string | null
+          category: string | null
           client_id: string
           deleted_at: string | null
           deleted_by: string | null
@@ -249,6 +250,7 @@ export type Database = {
         }
         Insert: {
           admin_id?: string | null
+          category?: string | null
           client_id: string
           deleted_at?: string | null
           deleted_by?: string | null
@@ -263,6 +265,7 @@ export type Database = {
         }
         Update: {
           admin_id?: string | null
+          category?: string | null
           client_id?: string
           deleted_at?: string | null
           deleted_by?: string | null

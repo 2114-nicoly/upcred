@@ -15,15 +15,16 @@ type NavItem = { path: string; label: string; icon: any };
 
 // ============= MENU SETS PER ROLE =============
 const workerBottomNav: NavItem[] = [
-  { path: "/", label: "Rota", icon: MapPin },
-  { path: "/caixa", label: "Geral", icon: Wallet },
+  { path: "/", label: "Rota do Dia", icon: MapPin },
+  { path: "/caixa", label: "Caixa do Dia", icon: Wallet },
 ];
 const workerSidebar: NavItem[] = [
   { path: "/", label: "Rota do Dia", icon: MapPin },
-  { path: "/caixa", label: "Geral", icon: Wallet },
+  { path: "/caixa", label: "Caixa do Dia", icon: Wallet },
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
   { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
+  { path: "/daily-cash-history", label: "Histórico do Caixa", icon: CalendarDays },
   { path: "/daily-report", label: "Relatório Diário", icon: FileText },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
@@ -60,9 +61,9 @@ const superAdminSidebar: NavItem[] = [
 // ============= HEADER LABELS PER ROLE =============
 function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<string, string> {
   const base: Record<string, string> = {
-    "/": "Rota",
+    "/": "Rota do Dia",
     "/clients": "Clientes",
-    "/daily-cash-history": "Histórico",
+    "/daily-cash-history": "Histórico do Caixa",
     "/reports": "Relatórios",
     "/admin-tools": "Manutenção",
     "/audit": "Auditoria",
@@ -78,7 +79,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
   if (role === "super_admin") {
     return {
       ...base,
-      "/caixa": "Caixa Geral",
+      "/caixa": "Caixa do Dia",
       "/active-loans": "Empréstimos",
       "/clients": "Clientes",
       "/reports": "Relatórios Gerais",
@@ -89,14 +90,14 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
   if (role === "admin") {
     return {
       ...base,
-      "/caixa": "Caixa da Equipe",
+      "/caixa": "Caixa do Dia",
       "/active-loans": "Empréstimos da Equipe",
       "/clients": "Clientes da Equipe",
       "/admin": "Painel da Equipe",
       "/audit": "Auditoria da Equipe",
     };
   }
-  return { ...base, "/caixa": "Geral", "/active-loans": "Empréstimos Ativos" };
+  return { ...base, "/caixa": "Caixa do Dia", "/active-loans": "Empréstimos Ativos" };
 }
 
 function getRouteLabel(pathname: string, labels: Record<string, string>): string {

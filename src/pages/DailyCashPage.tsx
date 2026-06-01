@@ -30,6 +30,8 @@ import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
+import WorkerDashboard from "@/components/WorkerDashboard";
+import EmptyState from "@/components/EmptyState";
 
 type InstallmentWithLoan = {
   id: string;
@@ -1416,6 +1418,23 @@ export default function DailyCashPage() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Painel de produção do trabalhador */}
+      <div className="mb-3">
+        <WorkerDashboard
+          data={{
+            cashStatus: isClosed ? "closed" : "open",
+            treatedCount: totalTreated,
+            paidCount: paidGroups.length,
+            notPaidCount: notPaidMarks.length,
+            remainingPending: pendingInstallments.length,
+            totalReceived: totalPaidValue,
+            totalLent: newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
+            totalPenaltyReceived: totalPenaltyPaidToday,
+            expectedBalance: openingBalance + manualInToday - manualOutToday + totalPaidValue + totalPenaltyPaidToday - newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
+          }}
+        />
       </div>
 
       {/* Top summary */}

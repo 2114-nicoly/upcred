@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,8 @@ import { logAction } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import { useConfirm } from "@/hooks/useConfirm";
 
 export default function NewLoanPage() {
   const { clientId } = useParams();
@@ -39,6 +41,36 @@ export default function NewLoanPage() {
   // Renewal data
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
   const [renewPaidAmount, setRenewPaidAmount] = useState<string>("");
+
+  const confirm = useConfirm();
+  const draftKey = renewFromLoanId ? `renew:${renewFromLoanId}` : `new-loan:${clientId ?? "x"}`;
+  const draftValue = {
+    amount, interestType, interestValue, installmentCount, paymentType,
+    loanDate, firstDueDate, fixedDates, observation, renewPaidAmount,
+  };
+  const draft = useFormDraft(draftKey, draftValue);
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    const saved = draft.restore();
+    if (saved) {
+      restoredRef.current = true;
+      setAmount(saved.amount ?? "");
+      setInterestType(saved.interestType ?? "percentage");
+      setInterestValue(saved.interestValue ?? "");
+      setInstallmentCount(saved.installmentCount ?? "");
+      setPaymentType(saved.paymentType ?? "daily");
+      setLoanDate(saved.loanDate ?? format(new Date(), "yyyy-MM-dd"));
+      setFirstDueDate(saved.firstDueDate ?? "");
+      setFixedDates(saved.fixedDates ?? []);
+      setObservation(saved.observation ?? "");
+      setRenewPaidAmount(saved.renewPaidAmount ?? "");
+      toast.info("Rascunho restaurado", {
+        action: { label: "Descartar", onClick: () => { draft.clear(); window.location.reload(); } },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -120,6 +152,23 @@ export default function NewLoanPage() {
       toast.error(`Renovação insuficiente. Faltam ${formatCurrency(faltaQuitar - cobreAntigo)} para quitar o empréstimo atual.`);
       return;
     }
+
+    // Confirmação para ações sensíveis: renovação ou liberação alta
+    const cashOutPreview = renewFromLoanId ? valorLiberado : numAmount;
+    const ok = await confirm({
+      title: renewFromLoanId ? "Confirmar renovação?" : "Confirmar novo empréstimo?",
+      description: renewFromLoanId
+        ? "Esta ação encerra o contrato atual e abre um novo."
+        : "Esta ação libera dinheiro e cria parcelas.",
+      affected: [
+        { label: "Cliente", value: clientName },
+        { label: "Valor", value: formatCurrency(numAmount) },
+        { label: "Parcelas", value: `${numInstallments}x ${formatCurrency(calc.installmentAmount)}` },
+        { label: "Liberado em caixa", value: formatCurrency(cashOutPreview) },
+      ],
+      confirmText: renewFromLoanId ? "Renovar" : "Criar",
+    });
+    if (!ok) return;
 
     setSaving(true);
 
@@ -280,6 +329,7 @@ export default function NewLoanPage() {
       renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,
     );
 
+    draft.clear();
     navigate("/");
   };
 
