@@ -223,10 +223,11 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
     await markDailyEventReversed(event.id);
 
     // Counter movement and event (negative amount, opposite in/out)
+    const reasonSuffix = reason ? ` — Motivo: ${reason}` : "";
     const reversalMovement = await createCashMovement({
       type: "estorno_manual" as any,
       amount: -originalAmount,
-      observation: `Estorno: ${getEventTypeLabel(event.event_type)}`,
+      observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
       cash_date: event.cash_date,
     }) as any;
     const reversalEvent = await createDailyEvent({
@@ -234,7 +235,7 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
       event_type: "estorno_manual",
       amount_in: Number(event.amount_out) || 0,
       amount_out: Number(event.amount_in) || 0,
-      observation: `Estorno: ${getEventTypeLabel(event.event_type)}`,
+      observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
       origin: "estorno",
       cash_movement_id: reversalMovement?.id || null,
     } as any) as any;
