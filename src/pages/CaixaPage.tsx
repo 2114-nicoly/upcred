@@ -55,9 +55,12 @@ export default function CaixaPage() {
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
+  const [inheritedOpening, setInheritedOpening] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
+  const [undoReason, setUndoReason] = useState("");
 
   // Manual movement dialog
   const [manualType, setManualType] = useState<"entrada_manual" | "saida_manual" | "ajuste_manual" | null>(null);
@@ -94,6 +97,36 @@ export default function CaixaPage() {
       const dc = (dcRes?.data as any) || null;
       setDailyCashRow(dc);
       setDailyCashStatus(dc?.status || "open");
+
+      // Inherit opening balance from last closed daily_cash if current row is open/missing.
+      const currentOpening = Number(dc?.opening_balance || 0);
+      const currentClosed = dc?.status === "closed";
+      if (!currentClosed && currentOpening <= 0.001) {
+        try {
+          const scope = await getCurrentDailyCashScope();
+          const prevQ = applyDailyCashScope(
+            supabase.from("daily_cash")
+              .select("expected_closing_balance, counted_closing_balance, cash_date, status")
+              .lt("cash_date", selectedDate)
+              .eq("status", "closed")
+              .order("cash_date", { ascending: false })
+              .limit(1),
+            scope
+          );
+          const { data: prev } = await prevQ;
+          const prevRow = (prev?.[0] as any) || null;
+          if (prevRow) {
+            const inh = Number(prevRow.counted_closing_balance ?? prevRow.expected_closing_balance ?? 0);
+            setInheritedOpening(isFinite(inh) ? inh : 0);
+          } else {
+            setInheritedOpening(0);
+          }
+        } catch {
+          setInheritedOpening(0);
+        }
+      } else {
+        setInheritedOpening(0);
+      }
 
       // Fetch client names for all events
       const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
@@ -141,7 +174,7 @@ export default function CaixaPage() {
     notPaidCount: Number(dailyCashRow.total_not_paid_count || 0),
     eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
   } : {
-    opening: 0,
+    opening: inheritedOpening,
     totalIn: liveTotals.entradas,
     totalOut: liveTotals.saidas,
     received: liveTotals.pagamentos,
@@ -149,7 +182,7 @@ export default function CaixaPage() {
     lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
     manualIn: liveTotals.entradasManuais,
     manualOut: liveTotals.saidasManuais,
-    expected: liveTotals.saldoFinalEsperado,
+    expected: inheritedOpening + liveTotals.saldoFinalEsperado,
     notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
@@ -300,26 +333,39 @@ export default function CaixaPage() {
     fetchData();
   };
 
-  const handleUndoEvent = async (event: DailyEvent) => {
+  const handleUndoEvent = (event: DailyEvent) => {
     if (cashLocked) { toast.error("Caixa fechado. Reabra o caixa antes de desfazer lançamentos."); return; }
-    const valor = Number(event.amount_in) || Number(event.amount_out) || 0;
-    const ok = await confirm({
-      title: "Desfazer lançamento?",
-      description: "O saldo do caixa será revertido conforme este evento.",
-      affected: [
-        { label: "Tipo", value: getEventTypeLabel(event.event_type) },
-        ...(valor > 0 ? [{ label: "Valor", value: formatCurrency(valor) }] : []),
-        ...(event.client_id && clientNames[event.client_id] ? [{ label: "Cliente", value: clientNames[event.client_id] }] : []),
-      ],
-      confirmText: "Desfazer", destructive: true,
-    });
-    if (!ok) return;
+    setUndoReason("");
+    setUndoTarget(event);
+  };
+
+  const confirmUndoEvent = async () => {
+    if (!undoTarget || submitting) return;
+    if (undoReason.trim().length < 3) {
+      toast.error("Informe o motivo do estorno (mínimo 3 caracteres).");
+      return;
+    }
+    setSubmitting(true);
     try {
-      await undoDailyEvent(event);
+      await undoDailyEvent(undoTarget, undoReason.trim());
+      await logAction(
+        undoTarget.event_type === "pagamento" || undoTarget.event_type === "recebimento_multa"
+          ? "desfazer_pagamento"
+          : "ajuste_caixa",
+        "cash",
+        undoTarget.id,
+        { event_type: undoTarget.event_type, amount_in: undoTarget.amount_in, amount_out: undoTarget.amount_out },
+        { reversed: true, reason: undoReason.trim() },
+        `Estorno: ${undoReason.trim()}`,
+      );
       toast.success("Lançamento desfeito!");
-      fetchData();
+      setUndoTarget(null);
+      setUndoReason("");
+      await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao desfazer lançamento");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -330,20 +376,25 @@ export default function CaixaPage() {
   return (
     <div className="mx-auto max-w-lg p-3 pb-36 space-y-3">
       {isAdmin && (
-        <Card>
-          <CardContent className="p-3 space-y-2">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase">Filtro hierárquico</p>
-            <WorkerFilterSelect />
-            {(selectedAdminId || selectedWorkerId) && (
-              <p className="text-[10px] text-muted-foreground">
-                Mostrando {scopedEvents.length} de {events.length} eventos do dia
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 px-3 pt-3 pb-2 bg-background/95 backdrop-blur border-b">
+          <Card>
+            <CardContent className="p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">1. Trabalhador/equipe</p>
+              <WorkerFilterSelect />
+              {!selectedWorkerId && !selectedAdminId && isSuperAdmin && (
+                <p className="text-[10px] text-warning">Selecione um trabalhador ou administrador para escopo correto.</p>
+              )}
+              {(selectedAdminId || selectedWorkerId) && (
+                <p className="text-[10px] text-muted-foreground">
+                  Mostrando {scopedEvents.length} de {events.length} eventos do dia
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
       {/* Date navigation */}
-      <DateNavigator date={selectedDate} onChange={handleDateChange} />
+      <DateNavigator date={selectedDate} onChange={handleDateChange} origin="caixa" />
       <NoMovementHint
         date={selectedDate}
         hasMovement={events.length > 0 || !!dailyCashRow}
@@ -770,6 +821,52 @@ export default function CaixaPage() {
               {submitting ? "Salvando..." : "Confirmar fechamento"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo reason dialog */}
+      <Dialog open={!!undoTarget} onOpenChange={(o) => { if (!o) { setUndoTarget(null); setUndoReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Undo2 className="h-4 w-4" /> Desfazer lançamento
+            </DialogTitle>
+          </DialogHeader>
+          {undoTarget && (
+            <div className="space-y-2 text-xs">
+              <div className="rounded border bg-muted/30 p-2 space-y-0.5">
+                <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium">{getEventTypeLabel(undoTarget.event_type)}</span></p>
+                {(Number(undoTarget.amount_in) > 0 || Number(undoTarget.amount_out) > 0) && (
+                  <p>
+                    <span className="text-muted-foreground">Valor:</span>{" "}
+                    <span className="font-medium tabular-nums">{formatCurrency(Number(undoTarget.amount_in) || Number(undoTarget.amount_out))}</span>
+                  </p>
+                )}
+                {undoTarget.client_id && clientNames[undoTarget.client_id] && (
+                  <p><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{clientNames[undoTarget.client_id]}</span></p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs">Motivo do estorno <span className="text-destructive">*</span></Label>
+                <Textarea
+                  value={undoReason}
+                  onChange={(e) => setUndoReason(e.target.value)}
+                  placeholder="Ex.: lançado no cliente errado, valor incorreto..."
+                  className="text-xs"
+                  rows={3}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Mínimo 3 caracteres. Será registrado no histórico e no contra-lançamento.</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" className="flex-1" onClick={() => { setUndoTarget(null); setUndoReason(""); }} disabled={submitting}>
+                  Cancelar
+                </Button>
+                <Button variant="destructive" className="flex-1" onClick={confirmUndoEvent} disabled={submitting || undoReason.trim().length < 3}>
+                  {submitting ? "Estornando..." : "Confirmar estorno"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

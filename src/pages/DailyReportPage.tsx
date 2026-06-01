@@ -274,49 +274,55 @@ export default function DailyReportPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4 space-y-4">
+      {(isAdmin || isSuperAdmin) && (
+        <div className="sticky top-0 z-20 -mx-4 -mt-4 px-4 pt-4 pb-2 bg-background/95 backdrop-blur border-b">
+          <Card>
+            <CardContent className="p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">1. Trabalhador/equipe</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {isSuperAdmin && (
+                  <div>
+                    <Label className="text-xs">Administrador</Label>
+                    <select
+                      className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={selectedAdminId || ""}
+                      onChange={(e) => { setSelectedAdminId(e.target.value || null); setSelectedWorkerId(null); }}
+                    >
+                      <option value="">Todos / Geral</option>
+                      {admins.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <Label className="text-xs">Trabalhador</Label>
+                  <select
+                    className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    value={selectedWorkerId || ""}
+                    onChange={(e) => setSelectedWorkerId(e.target.value || null)}
+                  >
+                    <option value="">— Selecione —</option>
+                    {workers.map((w) => <option key={w.id} value={w.id}>{w.nome}</option>)}
+                  </select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">Relatório Diário</h2>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <Label className="text-xs">Data</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-
-            {isSuperAdmin && (
-              <div>
-                <Label className="text-xs">Administrador</Label>
-                <select
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={selectedAdminId || ""}
-                  onChange={(e) => { setSelectedAdminId(e.target.value || null); setSelectedWorkerId(null); }}
-                >
-                  <option value="">Todos / Geral</option>
-                  {admins.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
-                </select>
-              </div>
-            )}
-
-            {(isAdmin || isSuperAdmin) && (
-              <div>
-                <Label className="text-xs">Trabalhador</Label>
-                <select
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={selectedWorkerId || ""}
-                  onChange={(e) => setSelectedWorkerId(e.target.value || null)}
-                >
-                  <option value="">— Selecione —</option>
-                  {workers.map((w) => <option key={w.id} value={w.id}>{w.nome}</option>)}
-                </select>
-              </div>
-            )}
+          <div>
+            <Label className="text-xs">2. Data</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </CardContent>
       </Card>
+
 
       <Card>
         <CardContent className="p-4 space-y-1">

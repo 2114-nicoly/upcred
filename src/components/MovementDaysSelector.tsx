@@ -5,12 +5,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
 import { formatCurrency } from "@/lib/loan-utils";
 import { CalendarDays, ChevronRight, FileText, Loader2, Lock, Wallet, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { MovementDay, useMovementDays } from "@/hooks/useMovementDays";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
@@ -18,6 +21,8 @@ type Props = {
   onSelectDate: (date: string) => void;
   /** Optional: navigate also offered as inline actions. */
   withActions?: boolean;
+  /** Origin used to navigate when clicking a calendar day with action context. */
+  origin?: "rota" | "caixa" | "relatorio";
 };
 
 function labelFor(dateStr: string) {
@@ -27,7 +32,7 @@ function labelFor(dateStr: string) {
   return format(d, "EEE, dd 'de' MMM", { locale: ptBR });
 }
 
-export default function MovementDaysSelector({ open, onOpenChange, onSelectDate, withActions = false }: Props) {
+export default function MovementDaysSelector({ open, onOpenChange, onSelectDate, withActions = false, origin }: Props) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const { selectedWorkerId, selectedAdminId } = useWorkerFilter();
@@ -36,12 +41,32 @@ export default function MovementDaysSelector({ open, onOpenChange, onSelectDate,
     adminId: isAdmin && !selectedWorkerId ? selectedAdminId : null,
   });
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<"list" | "calendar">("list");
 
   const filtered = useMemo(() => {
     if (!q) return days;
     const term = q.toLowerCase();
     return days.filter((d) => d.date.includes(term) || labelFor(d.date).toLowerCase().includes(term));
   }, [days, q]);
+
+  const byDate = useMemo(() => {
+    const m = new Map<string, MovementDay>();
+    for (const d of days) m.set(d.date, d);
+    return m;
+  }, [days]);
+
+  const closedDates = useMemo(() => days.filter(d => d.status === "closed").map(d => parseISO(d.date + "T12:00:00")), [days]);
+  const openDates = useMemo(() => days.filter(d => d.status === "open").map(d => parseISO(d.date + "T12:00:00")), [days]);
+
+  const handleCalendarSelect = (d?: Date) => {
+    if (!d) return;
+    const dateStr = format(d, "yyyy-MM-dd");
+    onOpenChange(false);
+    if (origin === "rota") navigate(`/?date=${dateStr}`);
+    else if (origin === "caixa") navigate(`/caixa?date=${dateStr}`);
+    else if (origin === "relatorio") navigate(`/daily-report?date=${dateStr}`);
+    else onSelectDate(dateStr);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -51,29 +76,61 @@ export default function MovementDaysSelector({ open, onOpenChange, onSelectDate,
             <CalendarDays className="h-4 w-4" /> Dias com movimento
           </DialogTitle>
         </DialogHeader>
-        <Input placeholder="Filtrar (data ou dia)" value={q} onChange={(e) => setQ(e.target.value)} className="h-8 text-xs" />
-        <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
-          {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-          ) : filtered.length === 0 ? (
-            <p className="text-center text-xs text-muted-foreground py-8">Nenhum dia com movimento encontrado.</p>
-          ) : (
-            filtered.map((d) => (
-              <MovementDayRow
-                key={d.date}
-                day={d}
-                withActions={withActions}
-                onSelect={() => { onSelectDate(d.date); onOpenChange(false); }}
-                onAction={(action) => {
-                  onOpenChange(false);
-                  if (action === "rota") navigate(`/?date=${d.date}`);
-                  else if (action === "caixa") navigate(`/caixa?date=${d.date}`);
-                  else if (action === "relatorio") navigate(`/daily-report?date=${d.date}`);
-                }}
-              />
-            ))
-          )}
-        </div>
+
+        <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="flex flex-col flex-1 overflow-hidden">
+          <TabsList className="grid grid-cols-2 h-8">
+            <TabsTrigger value="list" className="text-xs">Lista</TabsTrigger>
+            <TabsTrigger value="calendar" className="text-xs">Calendário</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="list" className="flex-1 overflow-hidden flex flex-col space-y-2 mt-2">
+            <Input placeholder="Filtrar (data ou dia)" value={q} onChange={(e) => setQ(e.target.value)} className="h-8 text-xs" />
+            <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
+              {loading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : filtered.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground py-8">Nenhum dia com movimento encontrado.</p>
+              ) : (
+                filtered.map((d) => (
+                  <MovementDayRow
+                    key={d.date}
+                    day={d}
+                    withActions={withActions}
+                    onSelect={() => { onSelectDate(d.date); onOpenChange(false); }}
+                    onAction={(action) => {
+                      onOpenChange(false);
+                      if (action === "rota") navigate(`/?date=${d.date}`);
+                      else if (action === "caixa") navigate(`/caixa?date=${d.date}`);
+                      else if (action === "relatorio") navigate(`/daily-report?date=${d.date}`);
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="calendar" className="flex-1 overflow-y-auto mt-2 space-y-2">
+            <div className="flex flex-wrap justify-center gap-2 text-[10px]">
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Fechado</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> Aberto</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-muted" /> Sem movimento</span>
+            </div>
+            <Calendar
+              mode="single"
+              onSelect={handleCalendarSelect}
+              locale={ptBR}
+              modifiers={{ closed: closedDates, openMov: openDates }}
+              modifiersClassNames={{
+                closed: "bg-success/20 text-success-foreground font-semibold ring-1 ring-success/40",
+                openMov: "bg-primary/20 text-primary-foreground font-semibold ring-1 ring-primary/40",
+              }}
+              className={cn("p-2 pointer-events-auto rounded-md border mx-auto")}
+            />
+            <p className="text-center text-[10px] text-muted-foreground">
+              Toque em um dia para abrir.
+            </p>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

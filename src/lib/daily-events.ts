@@ -158,7 +158,7 @@ export async function markDailyEventReversed(id: string) {
  *   reversed and create counter-entries (estorno_manual)
  * - emprestimo_novo/renovacao: BLOCKED — must be undone manually
  */
-export async function undoDailyEvent(event: DailyEvent) {
+export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   if (event.event_type === "emprestimo_novo") {
     throw new Error(
       "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
@@ -177,7 +177,7 @@ export async function undoDailyEvent(event: DailyEvent) {
     if (!event.cash_movement_id) {
       throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
     }
-    await reversePayment({ movementId: event.cash_movement_id });
+    await reversePayment({ movementId: event.cash_movement_id, reason });
     return;
   }
 
@@ -223,10 +223,11 @@ export async function undoDailyEvent(event: DailyEvent) {
     await markDailyEventReversed(event.id);
 
     // Counter movement and event (negative amount, opposite in/out)
+    const reasonSuffix = reason ? ` — Motivo: ${reason}` : "";
     const reversalMovement = await createCashMovement({
       type: "estorno_manual" as any,
       amount: -originalAmount,
-      observation: `Estorno: ${getEventTypeLabel(event.event_type)}`,
+      observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
       cash_date: event.cash_date,
     }) as any;
     const reversalEvent = await createDailyEvent({
@@ -234,7 +235,7 @@ export async function undoDailyEvent(event: DailyEvent) {
       event_type: "estorno_manual",
       amount_in: Number(event.amount_out) || 0,
       amount_out: Number(event.amount_in) || 0,
-      observation: `Estorno: ${getEventTypeLabel(event.event_type)}`,
+      observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
       origin: "estorno",
       cash_movement_id: reversalMovement?.id || null,
     } as any) as any;

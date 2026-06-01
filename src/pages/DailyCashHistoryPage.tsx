@@ -91,14 +91,21 @@ export default function DailyCashHistoryPage() {
   return (
     <div className="mx-auto max-w-lg p-3 space-y-3 pb-24">
       {isAdmin && (
-        <Card><CardContent className="p-3"><WorkerFilterSelect /></CardContent></Card>
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 px-3 pt-3 pb-2 bg-background/95 backdrop-blur border-b">
+          <Card>
+            <CardContent className="p-3 space-y-1">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase">1. Trabalhador/equipe</p>
+              <WorkerFilterSelect />
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <div>
         <h1 className="text-base font-semibold flex items-center gap-2">
           <CalendarDays className="h-4 w-4" /> Dias com movimento
         </h1>
-        <p className="text-xs text-muted-foreground">Apenas dias com lançamentos ou caixa aberto/fechado.</p>
+        <p className="text-xs text-muted-foreground">2. Escolha uma data abaixo. Apenas dias com lançamentos ou caixa aberto/fechado.</p>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
