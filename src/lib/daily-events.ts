@@ -267,6 +267,7 @@ export function getEventTypeLabel(type: string): string {
     case "pagamento": return "Pagamento";
     case "nao_pagou": return "Não Pagou";
     case "renovacao": return "Renovação";
+    case "renegociacao": return "Renegociação";
     case "emprestimo_novo": return "Novo Empréstimo";
     case "saida": return "Saída";
     case "entrada_manual": return "Entrada Manual";
@@ -277,6 +278,12 @@ export function getEventTypeLabel(type: string): string {
     case "estorno_pagamento": return "Estorno de Pagamento";
     case "estorno_manual": return "Estorno Manual";
     case "cancelamento": return "Cancelamento";
+    case "cliente_criado": return "Cliente Criado";
+    case "cliente_editado": return "Cliente Editado";
+    case "parcela_editada": return "Parcela Editada";
+    case "transferencia_cliente": return "Transferência de Cliente";
+    case "anexo_adicionado": return "Anexo Adicionado";
+    case "anexo_removido": return "Anexo Removido";
     default: return type;
   }
 }
@@ -286,6 +293,7 @@ export function getEventTypeColor(type: string): string {
     case "pagamento": return "text-success";
     case "nao_pagou": return "text-destructive";
     case "renovacao": return "text-primary";
+    case "renegociacao": return "text-primary";
     case "emprestimo_novo": return "text-primary";
     case "saida": return "text-destructive";
     case "entrada_manual": return "text-success";
@@ -296,6 +304,13 @@ export function getEventTypeColor(type: string): string {
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
     case "cancelamento": return "text-destructive";
+    case "cliente_criado":
+    case "cliente_editado":
+    case "parcela_editada":
+    case "transferencia_cliente":
+    case "anexo_adicionado":
+    case "anexo_removido":
+      return "text-muted-foreground";
     default: return "text-muted-foreground";
   }
 }
