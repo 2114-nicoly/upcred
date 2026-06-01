@@ -94,6 +94,7 @@ type CashMovementPaymentRow = {
   id: string;
   loan_id: string | null;
   amount: number;
+  created_at: string;
 };
 
 type PaidLoanRow = {
@@ -179,7 +180,32 @@ type PaidGroup = {
   remainingBalance: number;
   instAmount: number;
   installmentIds: string[];
+  // Progress tracking (before/after payment)
+  totalAmount: number;
+  installmentCount: number;
+  paidBefore: number;
+  paidAfter: number;
+  remainingBefore: number;
+  remainingAfter: number;
+  progressBeforeFormatted: string;
+  progressAfterFormatted: string;
+  progressDeltaFormatted: string;
 };
+
+function formatInstFraction(paid: number, instAmount: number): string {
+  if (!instAmount || instAmount <= 0) return "0";
+  const frac = paid / instAmount;
+  const rounded = Math.round(frac * 10) / 10;
+  if (Math.abs(rounded - Math.round(rounded)) < 0.05) return Math.round(rounded).toString();
+  return rounded.toFixed(1).replace(".", ",");
+}
+function formatProgress(paid: number, instAmount: number, count: number): string {
+  return `${formatInstFraction(paid, instAmount)}/${count}`;
+}
+function formatDelta(deltaPaid: number, instAmount: number): string {
+  if (!instAmount || instAmount <= 0 || deltaPaid <= 0) return "+0";
+  return `+${formatInstFraction(deltaPaid, instAmount)}`;
+}
 
 type PendingFilter = "all" | "overdue" | "today";
 
@@ -330,7 +356,7 @@ export default function DailyCashPage() {
           .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
-          .select("id, loan_id, amount")
+          .select("id, loan_id, amount, created_at")
           .eq("cash_date", selectedDate)
           .eq("type", "recebimento_normal")
           .is("reversed_at", null) as unknown as QueryResult<CashMovementPaymentRow>,
@@ -413,20 +439,62 @@ export default function DailyCashPage() {
 
         for (const loan of (paidLoansData || [])) {
           const client = loan.clients;
-          const movements = paidMovementsByLoan.get(loan.id) || [];
-          const base = {
+          const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+          const totalAmount = Number(loan.total_amount);
+          const instCount = Number(loan.installment_count);
+          const instAmount = instCount > 0 ? totalAmount / instCount : 0;
+          const currentRemaining = Number(loan.remaining_balance);
+          const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
+
+          const baseStatic = {
             clientName: client?.name || "Cliente",
             clientId: loan.client_id,
             loanId: loan.id,
-            accumulatedPaid: Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance)),
-            remainingBalance: Number(loan.remaining_balance),
-            instAmount: Number(loan.total_amount) / Number(loan.installment_count),
-            installmentIds: [],
+            accumulatedPaid,
+            remainingBalance: currentRemaining,
+            instAmount,
+            installmentIds: [] as string[],
+            totalAmount,
+            installmentCount: instCount,
           };
+
+          const buildProgress = (totalPaid: number, remainingAfter: number): Partial<PaidGroup> => {
+            const remainingBefore = Math.min(totalAmount, remainingAfter + totalPaid);
+            const paidBefore = Math.max(0, totalAmount - remainingBefore);
+            const paidAfter = Math.max(0, totalAmount - remainingAfter);
+            return {
+              paidBefore, paidAfter, remainingBefore, remainingAfter,
+              progressBeforeFormatted: formatProgress(paidBefore, instAmount, instCount),
+              progressAfterFormatted: formatProgress(paidAfter, instAmount, instCount),
+              progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
+            };
+          };
+
           if (movements.length > 0) {
-            movements.forEach((mov) => paidGroupsList.push({ ...base, movementId: mov.id, totalPaid: Number(mov.amount) }));
+            // Walk forward: remainingBefore for first mov = currentRemaining + sum(all movements today)
+            const totalToday = movements.reduce((s, m) => s + Number(m.amount), 0);
+            let runningRemaining = Math.min(totalAmount, currentRemaining + totalToday);
+            for (const mov of movements) {
+              const amt = Number(mov.amount);
+              const after = Math.max(0, runningRemaining - amt);
+              paidGroupsList.push({
+                ...baseStatic,
+                movementId: mov.id,
+                totalPaid: amt,
+                ...buildProgress(amt, after),
+              } as PaidGroup);
+              runningRemaining = after;
+            }
           } else {
-            paidGroupsList.push({ ...base, movementId: "", totalPaid: paidEventsByLoan.get(loan.id) || 0 });
+            const totalPaid = paidEventsByLoan.get(loan.id) || 0;
+            paidGroupsList.push({
+              ...baseStatic,
+              movementId: "",
+              totalPaid,
+              ...buildProgress(totalPaid, currentRemaining),
+            } as PaidGroup);
           }
         }
 
@@ -615,24 +683,50 @@ export default function DailyCashPage() {
     // Optimistic: move to paid, remove from pending
     localActionedLoanIds.current.add(inst.loan_id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
+    const totalAmt = Number(inst.loans.total_amount);
+    const instCount = Number(inst.loans.installment_count);
+    const instAmt = instCount > 0 ? totalAmt / instCount : 0;
     setPaidGroups(prev => {
       const existing = prev.find(g => g.loanId === inst.loan_id);
       if (existing) {
+        const newTotalPaid = existing.totalPaid + paidValue;
+        const newPaidAfter = Math.max(0, totalAmt - newRemainingBalance);
         return prev.map(g => g.loanId === inst.loan_id
-          ? { ...g, totalPaid: g.totalPaid + paidValue, accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance), remainingBalance: newRemainingBalance }
+          ? {
+              ...g,
+              totalPaid: newTotalPaid,
+              accumulatedPaid: newPaidAfter,
+              remainingBalance: newRemainingBalance,
+              paidAfter: newPaidAfter,
+              remainingAfter: newRemainingBalance,
+              progressAfterFormatted: formatProgress(newPaidAfter, instAmt, instCount),
+              progressDeltaFormatted: formatDelta(newPaidAfter - g.paidBefore, instAmt),
+            }
           : g
         );
       }
+      const remainingBefore = Number(inst.loans.remaining_balance);
+      const paidBefore = Math.max(0, totalAmt - remainingBefore);
+      const paidAfter = Math.max(0, totalAmt - newRemainingBalance);
       return [...prev, {
         movementId: "",
         clientName: inst.loans.clients.name,
         clientId: inst.loans.client_id,
         loanId: inst.loan_id,
         totalPaid: paidValue,
-        accumulatedPaid: Math.max(0, Number(inst.loans.total_amount) - newRemainingBalance),
+        accumulatedPaid: paidAfter,
         remainingBalance: newRemainingBalance,
-        instAmount: Number(inst.amount),
+        instAmount: instAmt,
         installmentIds: [inst.id],
+        totalAmount: totalAmt,
+        installmentCount: instCount,
+        paidBefore,
+        paidAfter,
+        remainingBefore,
+        remainingAfter: newRemainingBalance,
+        progressBeforeFormatted: formatProgress(paidBefore, instAmt, instCount),
+        progressAfterFormatted: formatProgress(paidAfter, instAmt, instCount),
+        progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmt),
       }];
     });
     resetPayDialog();
@@ -1060,16 +1154,29 @@ export default function DailyCashPage() {
     localActionedLoanIds.current.add(inst.loan_id);
     setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
     const currentBalance = Number(inst.loans.remaining_balance);
+    const qTotalAmt = Number(inst.loans.total_amount);
+    const qInstCount = Number(inst.loans.installment_count);
+    const qInstAmt = qInstCount > 0 ? qTotalAmt / qInstCount : 0;
+    const qPaidBefore = Math.max(0, qTotalAmt - currentBalance);
     setPaidGroups(prev => [...prev, {
       movementId: "",
       clientName: inst.loans.clients.name,
       clientId: inst.loans.client_id,
       loanId: inst.loan_id,
       totalPaid: currentBalance,
-      accumulatedPaid: Number(inst.loans.total_amount),
+      accumulatedPaid: qTotalAmt,
       remainingBalance: 0,
-      instAmount: Number(inst.amount),
+      instAmount: qInstAmt,
       installmentIds: [inst.id],
+      totalAmount: qTotalAmt,
+      installmentCount: qInstCount,
+      paidBefore: qPaidBefore,
+      paidAfter: qTotalAmt,
+      remainingBefore: currentBalance,
+      remainingAfter: 0,
+      progressBeforeFormatted: formatProgress(qPaidBefore, qInstAmt, qInstCount),
+      progressAfterFormatted: formatProgress(qTotalAmt, qInstAmt, qInstCount),
+      progressDeltaFormatted: formatDelta(qTotalAmt - qPaidBefore, qInstAmt),
     }]);
     setQuitarDialogId(null);
     toast.success("Empréstimo quitado!");
@@ -1287,11 +1394,15 @@ export default function DailyCashPage() {
 
   // === Paid row ===
   const renderPaidRow = (group: PaidGroup) => {
+    const isSettled = group.remainingAfter <= 0.01;
     return (
-      <div key={`${group.clientId}-${group.loanId}`} className="rounded-lg border border-success/30 bg-card px-3 py-2">
-        <div className="flex items-center justify-between">
+      <div key={`${group.clientId}-${group.loanId}-${group.movementId || "opt"}`} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-sm truncate">{group.clientName}</span>
           <div className="flex items-center gap-2">
+            {isSettled && (
+              <Badge className="bg-success text-success-foreground text-[10px] px-1.5 py-0">Quitado</Badge>
+            )}
             <span className="font-bold text-sm text-success shrink-0">+{formatCurrency(group.totalPaid)}</span>
             {!isClosed && (
               <DropdownMenu>
@@ -1312,9 +1423,16 @@ export default function DailyCashPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[11px] text-muted-foreground tabular-nums">Saldo restante: {formatCurrency(group.remainingBalance)} • Pago: {formatCurrency(group.accumulatedPaid)}</span>
-          <span className="text-[10px] text-muted-foreground tabular-nums">Parcela: {formatCurrency(group.instAmount)}</span>
+        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
+          <div>
+            Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
+            <span className="ml-1 text-success">({group.progressDeltaFormatted} parcela{group.progressDeltaFormatted === "+1" ? "" : "s"})</span>
+          </div>
+          <div>
+            Pago: {formatCurrency(group.paidBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.paidAfter)}</span>
+            <span className="mx-1">•</span>
+            Saldo: {formatCurrency(group.remainingBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.remainingAfter)}</span>
+          </div>
         </div>
       </div>
     );
