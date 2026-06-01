@@ -655,7 +655,7 @@ export default function DailyCashPage() {
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) { setIsSubmitting(false); return; }
 
-    const obs = notPaidObs;
+    const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
     const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
       id: "temp-" + Date.now(),
       mark_date: selectedDate,
@@ -672,6 +672,7 @@ export default function DailyCashPage() {
     setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
     setNotPaidObs("");
     setShowNotPaidObs(false);
+    setNotPaidReason("Não encontrado");
     setNotPaidDialogId(null);
 
     try {
