@@ -3,11 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Paperclip, Upload, Eye, Download, Trash2, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { logAction } from "@/lib/audit-utils";
 import { useConfirm } from "@/hooks/useConfirm";
+import EmptyState from "@/components/EmptyState";
+
+export const ATTACHMENT_CATEGORIES = [
+  { value: "documento", label: "Documento" },
+  { value: "comprovante", label: "Comprovante" },
+  { value: "contrato", label: "Contrato" },
+  { value: "foto", label: "Foto" },
+  { value: "outro", label: "Outro" },
+] as const;
+
+export type AttachmentCategory = typeof ATTACHMENT_CATEGORIES[number]["value"];
+
+export function categoryLabel(c?: string | null) {
+  return ATTACHMENT_CATEGORIES.find((x) => x.value === c)?.label ?? "Outro";
+}
 
 type Attachment = {
   id: string;
@@ -18,6 +35,7 @@ type Attachment = {
   file_size: number | null;
   uploaded_by: string | null;
   uploaded_at: string;
+  category?: string | null;
 };
 
 const BUCKET = "client-attachments";
@@ -29,6 +47,7 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewIsImage, setPreviewIsImage] = useState(true);
+  const [nextCategory, setNextCategory] = useState<AttachmentCategory>("documento");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const confirm = useConfirm();
 
@@ -74,6 +93,7 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
           storage_path: path,
           file_type: file.type || null,
           file_size: file.size,
+          category: nextCategory,
         } as any)
         .select()
         .single();
@@ -84,7 +104,7 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
         continue;
       }
       okCount++;
-      logAction("anexar_arquivo" as any, "client", clientId, null, { file_name: file.name, attachment_id: (ins as any)?.id });
+      logAction("anexar_arquivo" as any, "client", clientId, null, { file_name: file.name, attachment_id: (ins as any)?.id, category: nextCategory });
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -94,10 +114,7 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
 
   const getSignedUrl = async (path: string) => {
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 5);
-    if (error || !data) {
-      toast.error("Não foi possível gerar link");
-      return null;
-    }
+    if (error || !data) { toast.error("Não foi possível gerar link"); return null; }
     return data.signedUrl;
   };
 
@@ -112,19 +129,18 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
     const url = await getSignedUrl(att.storage_path);
     if (!url) return;
     const a = document.createElement("a");
-    a.href = url;
-    a.download = att.file_name;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = att.file_name; a.target = "_blank";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
   const handleDelete = async (att: Attachment) => {
     const ok = await confirm({
       title: "Apagar anexo?",
       description: "Esta ação não pode ser desfeita.",
-      affected: [{ label: "Arquivo", value: att.file_name }],
+      affected: [
+        { label: "Arquivo", value: att.file_name },
+        { label: "Categoria", value: categoryLabel(att.category) },
+      ],
       confirmText: "Apagar", destructive: true,
     });
     if (!ok) return;
@@ -142,14 +158,24 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
           <Paperclip className="h-3.5 w-3.5" /> Anexos ({items.length})
         </h2>
-        <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-          {uploading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
-          Anexar
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Select value={nextCategory} onValueChange={(v) => setNextCategory(v as AttachmentCategory)}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ATTACHMENT_CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
+            Anexar
+          </Button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -163,7 +189,12 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
       {loading ? (
         <p className="text-xs text-muted-foreground">Carregando...</p>
       ) : items.length === 0 ? (
-        <Card><CardContent className="p-4 text-center text-xs text-muted-foreground">Nenhum anexo. Toque em "Anexar" para enviar imagens ou PDFs.</CardContent></Card>
+        <EmptyState
+          compact
+          icon={<Paperclip className="h-5 w-5" />}
+          title="Nenhum anexo"
+          description="Escolha uma categoria e toque em Anexar para enviar imagens ou PDFs."
+        />
       ) : (
         <div className="space-y-1.5">
           {items.map((att) => {
@@ -176,10 +207,13 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium truncate">{att.file_name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {format(new Date(att.uploaded_at), "dd/MM/yyyy HH:mm")}
-                      {att.file_size ? ` • ${(att.file_size / 1024).toFixed(0)} KB` : ""}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{categoryLabel(att.category)}</Badge>
+                      <p className="text-[10px] text-muted-foreground">
+                        {format(new Date(att.uploaded_at), "dd/MM/yyyy HH:mm")}
+                        {att.file_size ? ` • ${(att.file_size / 1024).toFixed(0)} KB` : ""}
+                      </p>
+                    </div>
                   </div>
                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handlePreview(att)}><Eye className="h-3.5 w-3.5" /></Button>
                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownload(att)}><Download className="h-3.5 w-3.5" /></Button>
