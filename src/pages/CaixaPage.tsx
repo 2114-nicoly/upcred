@@ -18,7 +18,9 @@ import {
   getCurrentDailyCashScope,
   applyDailyCashScope,
 } from "@/lib/cash-utils";
-import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, DailyEvent } from "@/lib/daily-events";
+import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, isFinancialEvent, isReversalEvent, DailyEvent } from "@/lib/daily-events";
+import { assertCashOpen } from "@/lib/cash-lock";
+import { logAction } from "@/lib/audit-utils";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw,
