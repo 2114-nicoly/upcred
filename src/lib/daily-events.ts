@@ -158,7 +158,7 @@ export async function markDailyEventReversed(id: string) {
  *   reversed and create counter-entries (estorno_manual)
  * - emprestimo_novo/renovacao: BLOCKED — must be undone manually
  */
-export async function undoDailyEvent(event: DailyEvent) {
+export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   if (event.event_type === "emprestimo_novo") {
     throw new Error(
       "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
