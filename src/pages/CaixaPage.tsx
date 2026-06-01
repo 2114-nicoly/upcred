@@ -34,12 +34,15 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
+import DateNavigator from "@/components/DateNavigator";
+import NoMovementHint from "@/components/NoMovementHint";
+import { computeDailyTotals } from "@/lib/daily-totals";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
 
 export default function CaixaPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers } = useWorkerFilter();
@@ -61,9 +64,21 @@ export default function CaixaPage() {
   const [manualAmount, setManualAmount] = useState("");
   const [manualObs, setManualObs] = useState("");
 
-  const changeDate = (offset: number) => {
-    const d = new Date(selectedDate + "T12:00:00");
-    setSelectedDate(format(addDays(d, offset), "yyyy-MM-dd"));
+  // Close cash dialog
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [countedAmount, setCountedAmount] = useState("");
+  const [closeNote, setCloseNote] = useState("");
+
+  // sync URL ↔ state
+  useEffect(() => {
+    const urlDate = searchParams.get("date") || today;
+    setSelectedDate((current) => (current === urlDate ? current : urlDate));
+  }, [searchParams, today]);
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    if (newDate === today) setSearchParams({});
+    else setSearchParams({ date: newDate });
   };
 
   const fetchData = useCallback(async () => {
@@ -108,15 +123,9 @@ export default function CaixaPage() {
   if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
   if (isAdmin && selectedWorkerId) scopedEvents = scopedEvents.filter((e: any) => e.worker_id === selectedWorkerId);
 
-  // Computed totals from daily_events (live, used when not yet closed).
-  const totalIn = scopedEvents.reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalOut = scopedEvents.reduce((s, e) => s + Number(e.amount_out), 0);
-  const saldoDia = totalIn - totalOut;
-  const totalReceived = scopedEvents.filter(e => e.event_type === "pagamento").reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalPenalty = scopedEvents.filter(e => e.event_type === "recebimento_multa").reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalLent = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type)).reduce((s, e) => s + Number(e.amount_out), 0);
-  const totalManualIn = scopedEvents.filter(e => e.event_type === "entrada_manual").reduce((s, e) => s + Number(e.amount_in), 0);
-  const totalManualOut = scopedEvents.filter(e => e.event_type === "saida_manual").reduce((s, e) => s + Number(e.amount_out), 0);
+  // Unified totals from daily_events (live, used when not yet closed).
+  const liveTotals = computeDailyTotals(scopedEvents as any, 0);
+  const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
   // When closed, prefer authoritative totals stored in daily_cash.
   const summary = isClosed && dailyCashRow ? {
@@ -133,11 +142,15 @@ export default function CaixaPage() {
     eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
   } : {
     opening: 0,
-    totalIn, totalOut,
-    received: totalReceived, penalty: totalPenalty, lent: totalLent,
-    manualIn: totalManualIn, manualOut: totalManualOut,
-    expected: 0 + totalIn - totalOut,
-    notPaidCount: scopedEvents.filter(e => e.event_type === "nao_pagou").length,
+    totalIn: liveTotals.entradas,
+    totalOut: liveTotals.saidas,
+    received: liveTotals.pagamentos,
+    penalty: liveTotals.multas,
+    lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
+    manualIn: liveTotals.entradasManuais,
+    manualOut: liveTotals.saidasManuais,
+    expected: liveTotals.saldoFinalEsperado,
+    notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
 
@@ -227,24 +240,30 @@ export default function CaixaPage() {
     }
   };
 
+  const openCloseDialog = () => {
+    if (isClosed) return;
+    setCountedAmount(summary.expected.toFixed(2));
+    setCloseNote("");
+    setCloseOpen(true);
+  };
+
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    const ok = await confirm({
-      title: "Fechar caixa do dia?",
-      description: "Os totais serão calculados a partir das atividades do dia e o caixa será marcado como fechado. Após fechar, ações financeiras serão bloqueadas até a reabertura.",
-      affected: [
-        { label: "Data", value: format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy") },
-        { label: "Atividades", value: String(summary.eventsCount) },
-        { label: "Saldo esperado", value: formatCurrency(summary.expected) },
-      ],
-      confirmText: "Fechar caixa", destructive: false,
-    });
-    if (!ok) return;
+    const counted = parseFloat(countedAmount);
+    if (!isFinite(counted)) { toast.error("Informe o valor contado no caixa"); return; }
+    const diff = counted - summary.expected;
+    if (Math.abs(diff) > 0.01 && closeNote.trim().length < 3) {
+      toast.error("Informe a observação para justificar a diferença"); return;
+    }
     setSubmitting(true);
     try {
-      const { error } = await supabase.rpc("close_daily_cash" as any, { p_cash_date: selectedDate } as any);
+      const { error } = await supabase.rpc(
+        "close_daily_cash_v2" as any,
+        { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
+      );
       if (error) throw error;
-      toast.success("Caixa fechado!");
+      toast.success(`Caixa fechado! Diferença: ${formatCurrency(diff)}`);
+      setCloseOpen(false);
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
@@ -324,24 +343,12 @@ export default function CaixaPage() {
         </Card>
       )}
       {/* Date navigation */}
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(-1)}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1 text-center">
-          <p className="text-xs font-medium capitalize">
-            {format(new Date(selectedDate + "T12:00:00"), "EEE, dd 'de' MMMM", { locale: ptBR })}
-          </p>
-          {selectedDate !== today && (
-            <button className="text-[10px] text-primary underline" onClick={() => setSelectedDate(today)}>
-              Voltar para hoje
-            </button>
-          )}
-        </div>
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeDate(1)}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+      <DateNavigator date={selectedDate} onChange={handleDateChange} />
+      <NoMovementHint
+        date={selectedDate}
+        hasMovement={events.length > 0 || !!dailyCashRow}
+        onChange={handleDateChange}
+      />
 
       <div className="flex justify-center">
         <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
@@ -420,7 +427,7 @@ export default function CaixaPage() {
       {/* Close / Reopen cash actions */}
       <div className="grid grid-cols-2 gap-2">
         {!isClosed ? (
-          <Button onClick={handleCloseCash} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
+          <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
             <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
           </Button>
         ) : (
@@ -714,6 +721,53 @@ export default function CaixaPage() {
             </div>
             <Button onClick={handleReopenCash} disabled={submitting || reopenReason.trim().length < 3} className="w-full">
               Confirmar reabertura
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close cash dialog */}
+      <Dialog open={closeOpen} onOpenChange={(o) => { if (!o) setCloseOpen(false); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Fechar caixa do dia</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
+              <div className="flex justify-between"><span className="text-muted-foreground">Saldo inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Saldo esperado</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+            </div>
+            <div>
+              <Label>Valor contado no caixa (R$) <span className="text-destructive">*</span></Label>
+              <Input type="number" step="0.01" value={countedAmount} onChange={(e) => setCountedAmount(e.target.value)} placeholder="0.00" />
+            </div>
+            {(() => {
+              const counted = parseFloat(countedAmount);
+              if (!isFinite(counted)) return null;
+              const diff = counted - summary.expected;
+              const hasDiff = Math.abs(diff) > 0.01;
+              return (
+                <div className={`rounded-md border p-2 text-xs ${hasDiff ? "border-destructive/40 bg-destructive/5" : "border-success/40 bg-success/5"}`}>
+                  <div className="flex justify-between font-semibold">
+                    <span>Diferença</span>
+                    <span className={`tabular-nums ${hasDiff ? "text-destructive" : "text-success"}`}>
+                      {diff >= 0 ? "+" : ""}{formatCurrency(diff)}
+                    </span>
+                  </div>
+                  {hasDiff && <p className="text-[10px] mt-1 text-muted-foreground">Observação obrigatória quando há diferença.</p>}
+                </div>
+              );
+            })()}
+            <div>
+              <Label>Observação {(() => {
+                const counted = parseFloat(countedAmount);
+                const diff = isFinite(counted) ? counted - summary.expected : 0;
+                return Math.abs(diff) > 0.01 ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>;
+              })()}</Label>
+              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Motivo da diferença, observações..." />
+            </div>
+            <Button onClick={handleCloseCash} disabled={submitting} className="w-full">
+              {submitting ? "Salvando..." : "Confirmar fechamento"}
             </Button>
           </div>
         </DialogContent>

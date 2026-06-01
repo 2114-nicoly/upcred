@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
+import { computeDailyTotals } from "@/lib/daily-totals";
 import { useAuth } from "@/hooks/useAuth";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -207,19 +208,17 @@ export default function DailyReportPage() {
   }, [events, auditRows, clientNames]);
 
   const totals = useMemo(() => {
-    let totalIn = 0, totalOut = 0;
-    let payments = 0, loans = 0, renewals = 0, penalties = 0, notPaidCount = 0;
-    for (const e of events) {
-      if (e.reversed_at) continue;
-      totalIn += Number(e.amount_in || 0);
-      totalOut += Number(e.amount_out || 0);
-      if (e.event_type === "pagamento") payments += Number(e.amount_in || 0);
-      if (e.event_type === "emprestimo_novo") loans += Number(e.amount_out || 0);
-      if (e.event_type === "renovacao" || e.event_type === "renegociacao") renewals += Number(e.amount_out || 0);
-      if (e.event_type === "recebimento_multa") penalties += Number(e.amount_in || 0);
-      if (e.event_type === "nao_pagou") notPaidCount += 1;
-    }
-    return { totalIn, totalOut, payments, loans, renewals, penalties, notPaidCount, balance: totalIn - totalOut };
+    const t = computeDailyTotals(events as any, 0);
+    return {
+      totalIn: t.entradas,
+      totalOut: t.saidas,
+      payments: t.pagamentos,
+      loans: t.emprestimosLiberados,
+      renewals: t.renovacoes + t.renegociacoes,
+      penalties: t.multas,
+      notPaidCount: t.naoPagos,
+      balance: t.entradas - t.saidas,
+    };
   }, [events]);
 
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);

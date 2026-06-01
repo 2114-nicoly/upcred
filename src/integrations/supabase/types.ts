@@ -391,6 +391,9 @@ export type Database = {
           cash_date: string
           closed_at: string | null
           closed_by: string | null
+          closing_difference: number | null
+          closing_note: string | null
+          counted_closing_balance: number | null
           created_at: string
           expected_closing_balance: number
           id: string
@@ -418,6 +421,9 @@ export type Database = {
           cash_date: string
           closed_at?: string | null
           closed_by?: string | null
+          closing_difference?: number | null
+          closing_note?: string | null
+          counted_closing_balance?: number | null
           created_at?: string
           expected_closing_balance?: number
           id?: string
@@ -445,6 +451,9 @@ export type Database = {
           cash_date?: string
           closed_at?: string | null
           closed_by?: string | null
+          closing_difference?: number | null
+          closing_note?: string | null
+          counted_closing_balance?: number | null
           created_at?: string
           expected_closing_balance?: number
           id?: string
@@ -1447,6 +1456,10 @@ export type Database = {
       }
       archive_worker: { Args: { p_worker_id: string }; Returns: undefined }
       close_daily_cash: { Args: { p_cash_date: string }; Returns: string }
+      close_daily_cash_v2: {
+        Args: { p_cash_date: string; p_counted: number; p_note?: string }
+        Returns: string
+      }
       delete_worker_if_empty: {
         Args: { p_worker_id: string }
         Returns: undefined
