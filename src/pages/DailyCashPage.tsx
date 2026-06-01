@@ -662,77 +662,24 @@ export default function DailyCashPage() {
     };
   }, [selectedDate, fetchData]);
 
-  // === Payment handler with optimistic UI ===
+  // === Payment handler: wait for server confirmation (no premature optimistic UI) ===
   const handlePay = async (id: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
-    if (!inst) { setIsSubmitting(false); return; }
+    if (!inst) return;
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); setIsSubmitting(false); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); setIsSubmitting(false); return; }
+    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
     const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
     const paidValue = parcValue ?? instRemaining;
-    const newRemainingBalance = Math.max(0, Number(inst.loans.remaining_balance) - paidValue);
 
-    // Optimistic: move to paid, remove from pending
-    localActionedLoanIds.current.add(inst.loan_id);
-    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    const totalAmt = Number(inst.loans.total_amount);
-    const instCount = Number(inst.loans.installment_count);
-    const instAmt = instCount > 0 ? totalAmt / instCount : 0;
-    setPaidGroups(prev => {
-      const existing = prev.find(g => g.loanId === inst.loan_id);
-      if (existing) {
-        const newTotalPaid = existing.totalPaid + paidValue;
-        const newPaidAfter = Math.max(0, totalAmt - newRemainingBalance);
-        return prev.map(g => g.loanId === inst.loan_id
-          ? {
-              ...g,
-              totalPaid: newTotalPaid,
-              accumulatedPaid: newPaidAfter,
-              remainingBalance: newRemainingBalance,
-              paidAfter: newPaidAfter,
-              remainingAfter: newRemainingBalance,
-              progressAfterFormatted: formatProgress(newPaidAfter, instAmt, instCount),
-              progressDeltaFormatted: formatDelta(newPaidAfter - g.paidBefore, instAmt),
-            }
-          : g
-        );
-      }
-      const remainingBefore = Number(inst.loans.remaining_balance);
-      const paidBefore = Math.max(0, totalAmt - remainingBefore);
-      const paidAfter = Math.max(0, totalAmt - newRemainingBalance);
-      return [...prev, {
-        movementId: "",
-        clientName: inst.loans.clients.name,
-        clientId: inst.loans.client_id,
-        loanId: inst.loan_id,
-        totalPaid: paidValue,
-        accumulatedPaid: paidAfter,
-        remainingBalance: newRemainingBalance,
-        instAmount: instAmt,
-        installmentIds: [inst.id],
-        totalAmount: totalAmt,
-        installmentCount: instCount,
-        paidBefore,
-        paidAfter,
-        remainingBefore,
-        remainingAfter: newRemainingBalance,
-        progressBeforeFormatted: formatProgress(paidBefore, instAmt, instCount),
-        progressAfterFormatted: formatProgress(paidAfter, instAmt, instCount),
-        progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmt),
-      }];
-    });
-    resetPayDialog();
-
+    setIsSubmitting(true);
     try {
-      // Penalty payment (optional)
       if (multaValue > 0) {
         try {
           await registerPenaltyPayment({
@@ -745,8 +692,6 @@ export default function DailyCashPage() {
           toast.error("Nenhuma multa registrada para abater");
         }
       }
-
-      // Main payment via centralized function
       if (paidValue > 0) {
         await registerPayment({
           loanId: inst.loan_id, amount: paidValue,
@@ -756,16 +701,16 @@ export default function DailyCashPage() {
         });
         toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
-    } catch (err) {
+      resetPayDialog();
+      await fetchData({ silent: true });
+    } catch (err: any) {
       console.error("[handlePay] failed", err);
-      toast.error("Erro ao registrar pagamento. Recarregando dados...");
-      // Rollback optimistic state
-      localActionedLoanIds.current.delete(inst.loan_id);
+      toast.error(err?.message || "Erro ao registrar pagamento. O cliente continua em pendentes.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
+
 
   const resetPayDialog = () => {
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
@@ -774,31 +719,12 @@ export default function DailyCashPage() {
   const handleNotPaid = async (id: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === id);
-    if (!inst) { setIsSubmitting(false); return; }
+    if (!inst) return;
 
     const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
-    const optimisticMark: NotPaidMark & { installment?: InstallmentWithLoan } = {
-      id: "temp-" + Date.now(),
-      mark_date: selectedDate,
-      installment_id: inst.id,
-      loan_id: inst.loan_id,
-      client_id: inst.loans.client_id,
-      observation: obs || null,
-      created_at: new Date().toISOString(),
-      installment: inst,
-    };
-    localActionedLoanIds.current.add(inst.loan_id);
-    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    setNotPaidMarks(prev => [...prev, optimisticMark]);
-    setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
-    setNotPaidObs("");
-    setShowNotPaidObs(false);
-    setNotPaidReason("Não encontrado");
-    setNotPaidDialogId(null);
-
+    setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const { error: insertErr } = await supabase
@@ -819,60 +745,40 @@ export default function DailyCashPage() {
         observation: obs || `Não pagou - ${inst.loans.clients.name}`,
         origin: "rota",
       });
+      setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setNotPaidObs("");
+      setShowNotPaidObs(false);
+      setNotPaidReason("Não encontrado");
+      setNotPaidDialogId(null);
       toast.info("Marcado como 'Não Pagou'");
-    } catch (err) {
+      await fetchData({ silent: true });
+    } catch (err: any) {
       console.error("[handleNotPaid] failed", err);
-      toast.error("Erro ao marcar como 'Não Pagou'. Recarregando dados...");
-      // Rollback optimistic state
-      setNotPaidMarks(prev => prev.filter(m => m.id !== optimisticMark.id));
-      localActionedLoanIds.current.delete(inst.loan_id);
+      toast.error(err?.message || "Erro ao marcar como 'Não Pagou'.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
 
   const handleBatchNotPaid = async () => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
-    if (selectedInsts.length === 0) { setIsSubmitting(false); return; }
+    if (selectedInsts.length === 0) return;
 
     const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
-    const optimisticMarks = selectedInsts.map(inst => ({
-      id: "temp-" + Date.now() + "-" + inst.id,
-      mark_date: selectedDate,
-      installment_id: inst.id,
-      loan_id: inst.loan_id,
-      client_id: inst.loans.client_id,
-      observation: obs || null,
-      created_at: new Date().toISOString(),
-      installment: inst,
-    }));
-
-    const batchLoanIds = new Set(selectedInsts.map(i => i.loan_id));
-    selectedInsts.forEach(i => localActionedLoanIds.current.add(i.loan_id));
-    setPendingInstallments(prev => prev.filter(i => !selectedForNotPaid.has(i.id) && !batchLoanIds.has(i.loan_id)));
-    setNotPaidMarks(prev => [...prev, ...optimisticMarks]);
-    setSelectedForNotPaid(new Set());
-    setBatchNotPaidDialogOpen(false);
-    setBatchNotPaidObs("");
-    setShowBatchNotPaidObs(false);
-    setBatchNotPaidReason("Não encontrado");
-
-    const { data: { session: s2 } } = await supabase.auth.getSession();
-    const inserts = selectedInsts.map(inst => ({
-      mark_date: selectedDate,
-      installment_id: inst.id,
-      loan_id: inst.loan_id,
-      client_id: inst.loans.client_id,
-      observation: obs || null,
-      user_id: s2?.user?.id,
-    }));
-    const optimisticIds = new Set(optimisticMarks.map(m => m.id));
+    setIsSubmitting(true);
     try {
+      const { data: { session: s2 } } = await supabase.auth.getSession();
+      const inserts = selectedInsts.map(inst => ({
+        mark_date: selectedDate,
+        installment_id: inst.id,
+        loan_id: inst.loan_id,
+        client_id: inst.loans.client_id,
+        observation: obs || null,
+        user_id: s2?.user?.id,
+      }));
       const { error: insertErr } = await supabase
         .from("not_paid_marks")
         .upsert(inserts, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
@@ -888,18 +794,21 @@ export default function DailyCashPage() {
           origin: "rota",
         });
       }
+      setSelectedForNotPaid(new Set());
+      setBatchNotPaidDialogOpen(false);
+      setBatchNotPaidObs("");
+      setShowBatchNotPaidObs(false);
+      setBatchNotPaidReason("Não encontrado");
       toast.info(`${selectedInsts.length} parcela(s) marcada(s) como 'Não Pagou'`);
-    } catch (err) {
+      await fetchData({ silent: true });
+    } catch (err: any) {
       console.error("[handleBatchNotPaid] failed", err);
-      toast.error("Erro ao marcar parcelas. Recarregando dados...");
-      // Rollback optimistic marks
-      setNotPaidMarks(prev => prev.filter(m => !optimisticIds.has(m.id)));
-      selectedInsts.forEach(i => localActionedLoanIds.current.delete(i.loan_id));
+      toast.error(err?.message || "Erro ao marcar parcelas.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
+
 
   const toggleSelectForNotPaid = (id: string) => {
     setSelectedForNotPaid(prev => {
@@ -1145,42 +1054,11 @@ export default function DailyCashPage() {
   const handleQuitarEmprestimo = async (instId: string) => {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
-    setIsSubmitting(true);
 
     const inst = pendingInstallments.find(i => i.id === instId);
-    if (!inst) { setIsSubmitting(false); return; }
+    if (!inst) return;
 
-    // Optimistic
-    localActionedLoanIds.current.add(inst.loan_id);
-    setPendingInstallments(prev => prev.filter(i => i.loan_id !== inst.loan_id));
-    const currentBalance = Number(inst.loans.remaining_balance);
-    const qTotalAmt = Number(inst.loans.total_amount);
-    const qInstCount = Number(inst.loans.installment_count);
-    const qInstAmt = qInstCount > 0 ? qTotalAmt / qInstCount : 0;
-    const qPaidBefore = Math.max(0, qTotalAmt - currentBalance);
-    setPaidGroups(prev => [...prev, {
-      movementId: "",
-      clientName: inst.loans.clients.name,
-      clientId: inst.loans.client_id,
-      loanId: inst.loan_id,
-      totalPaid: currentBalance,
-      accumulatedPaid: qTotalAmt,
-      remainingBalance: 0,
-      instAmount: qInstAmt,
-      installmentIds: [inst.id],
-      totalAmount: qTotalAmt,
-      installmentCount: qInstCount,
-      paidBefore: qPaidBefore,
-      paidAfter: qTotalAmt,
-      remainingBefore: currentBalance,
-      remainingAfter: 0,
-      progressBeforeFormatted: formatProgress(qPaidBefore, qInstAmt, qInstCount),
-      progressAfterFormatted: formatProgress(qTotalAmt, qInstAmt, qInstCount),
-      progressDeltaFormatted: formatDelta(qTotalAmt - qPaidBefore, qInstAmt),
-    }]);
-    setQuitarDialogId(null);
-    toast.success("Empréstimo quitado!");
-
+    setIsSubmitting(true);
     try {
       await settleLoan({
         loanId: inst.loan_id,
@@ -1190,13 +1068,17 @@ export default function DailyCashPage() {
         origin: "rota",
         installmentId: inst.id,
       });
-    } catch {
-      toast.error("Erro ao quitar, recarregando...");
+      setQuitarDialogId(null);
+      toast.success("Empréstimo quitado!");
+      await fetchData({ silent: true });
+    } catch (err: any) {
+      console.error("[handleQuitarEmprestimo] failed", err);
+      toast.error(err?.message || "Erro ao quitar empréstimo.");
     } finally {
       setIsSubmitting(false);
-      refreshDataInBackground();
     }
   };
+
 
   // Summary values
   const totalPaidValue = paidGroups.reduce((s, g) => s + g.totalPaid, 0);

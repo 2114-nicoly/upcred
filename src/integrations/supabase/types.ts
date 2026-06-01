@@ -1370,6 +1370,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _cash_is_closed_for: {
+        Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
+        Returns: boolean
+      }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_create_client: {
         Args: {
