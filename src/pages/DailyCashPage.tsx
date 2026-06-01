@@ -35,6 +35,7 @@ import RecentWorkDays from "@/components/RecentWorkDays";
 import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
+import OpenCashBanner from "@/components/OpenCashBanner";
 
 type InstallmentWithLoan = {
   id: string;
@@ -302,7 +303,9 @@ export default function DailyCashPage() {
     handleDateChange(newDate);
   };
 
-  const isClosed = dailyCashStatus === "closed";
+  const isNotStarted = dailyCashStatus === "sem_caixa";
+  const isClosed = dailyCashStatus === "closed" || isNotStarted;
+  const isReallyClosed = dailyCashStatus === "closed";
 
   const getOverdueDays = useCallback((inst: InstallmentWithLoan) => {
     const due = new Date(inst.due_date + "T12:00:00");
@@ -375,7 +378,7 @@ export default function DailyCashPage() {
 
       if (isStale()) return;
 
-      const status = dcData?.status || "open";
+      const status = dcData ? (dcData.status || "open") : "sem_caixa";
       setDailyCashStatus(status);
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
       // Opening balance: from yesterday's closed daily_cash for same scope.
@@ -1405,11 +1408,16 @@ export default function DailyCashPage() {
       {/* Date navigation */}
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
-        {isClosed && (
+        {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-1.5 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
               <Lock className="h-3 w-3" /> Caixa Fechado
             </p>
+          </div>
+        )}
+        {isNotStarted && (
+          <div className="mt-2">
+            <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
           </div>
         )}
         <NoMovementHint

@@ -36,6 +36,7 @@ import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
+import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals } from "@/lib/daily-totals";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
@@ -96,7 +97,7 @@ export default function CaixaPage() {
       setEvents(dayEvents);
       const dc = (dcRes?.data as any) || null;
       setDailyCashRow(dc);
-      setDailyCashStatus(dc?.status || "open");
+      setDailyCashStatus(dc ? (dc.status || "open") : "sem_caixa");
 
       // Inherit opening balance from last closed daily_cash if current row is open/missing.
       const currentOpening = Number(dc?.opening_balance || 0);
@@ -146,9 +147,12 @@ export default function CaixaPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const isClosed = dailyCashStatus === "closed";
-  // Once closed, financial actions are blocked for ALL roles for that day.
-  const cashLocked = isClosed;
+  const cashState: "sem_caixa" | "open" | "closed" =
+    dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
+  const isClosed = cashState === "closed";
+  const isNotStarted = cashState === "sem_caixa";
+  // Block financial actions when closed OR not yet opened.
+  const cashLocked = isClosed || isNotStarted;
   const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
@@ -402,10 +406,22 @@ export default function CaixaPage() {
       />
 
       <div className="flex justify-center">
-        <Badge className={isClosed ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}>
-          {isClosed ? "Caixa Fechado" : "Caixa Aberto"}
+        <Badge
+          className={
+            isClosed
+              ? "bg-destructive text-destructive-foreground"
+              : isNotStarted
+                ? "bg-warning text-warning-foreground"
+                : "bg-success text-success-foreground"
+          }
+        >
+          {isClosed ? "Caixa Fechado" : isNotStarted ? "Caixa do dia ainda não iniciado" : "Caixa Aberto"}
         </Badge>
       </div>
+
+      {isNotStarted && (
+        <OpenCashBanner cashDate={selectedDate} onOpened={fetchData} />
+      )}
 
       {/* Global balance cards */}
       {balance && (
@@ -476,22 +492,24 @@ export default function CaixaPage() {
       </Card>
 
       {/* Close / Reopen cash actions */}
-      <div className="grid grid-cols-2 gap-2">
-        {!isClosed ? (
-          <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
-            <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
-          </Button>
-        ) : (
-          <Button
-            onClick={() => setReopenOpen(true)}
-            disabled={submitting || (!isAdmin && !isSuperAdmin)}
-            variant="outline"
-            className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-          >
-            <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
-          </Button>
-        )}
-      </div>
+      {!isNotStarted && (
+        <div className="grid grid-cols-2 gap-2">
+          {!isClosed ? (
+            <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
+              <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setReopenOpen(true)}
+              disabled={submitting || (!isAdmin && !isSuperAdmin)}
+              variant="outline"
+              className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+            >
+              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
+            </Button>
+          )}
+        </div>
+      )}
 
 
       {/* Section tabs */}

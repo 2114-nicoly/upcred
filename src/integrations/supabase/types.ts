@@ -397,6 +397,8 @@ export type Database = {
           created_at: string
           expected_closing_balance: number
           id: string
+          opened_at: string | null
+          opened_by: string | null
           opening_balance: number
           reopen_reason: string | null
           reopened_at: string | null
@@ -427,6 +429,8 @@ export type Database = {
           created_at?: string
           expected_closing_balance?: number
           id?: string
+          opened_at?: string | null
+          opened_by?: string | null
           opening_balance?: number
           reopen_reason?: string | null
           reopened_at?: string | null
@@ -457,6 +461,8 @@ export type Database = {
           created_at?: string
           expected_closing_balance?: number
           id?: string
+          opened_at?: string | null
+          opened_by?: string | null
           opening_balance?: number
           reopen_reason?: string | null
           reopened_at?: string | null
@@ -1383,6 +1389,10 @@ export type Database = {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
       }
+      _cash_is_open_for: {
+        Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
+        Returns: boolean
+      }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_create_client: {
         Args: {
@@ -1560,6 +1570,7 @@ export type Database = {
         }
         Returns: string
       }
+      open_daily_cash: { Args: { p_cash_date: string }; Returns: string }
       redact_old_credentials_log: { Args: never; Returns: number }
       register_recovery_request: {
         Args: { p_email: string; p_login: string; p_nome: string }

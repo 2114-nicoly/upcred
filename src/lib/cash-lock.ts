@@ -33,3 +33,16 @@ export async function assertCashOpen(cashDate: string): Promise<void> {
     );
   }
 }
+
+/**
+ * Opens (or returns existing open id) the daily_cash row for the current
+ * user's scope on the given date. Server-side RPC enforces scope and
+ * inherits opening_balance from last closed day.
+ */
+export async function openDailyCash(cashDate: string): Promise<string> {
+  const { data, error } = await supabase.rpc("open_daily_cash" as any, {
+    p_cash_date: cashDate,
+  } as any);
+  if (error) throw error;
+  return (data as unknown as string) || "";
+}
