@@ -55,9 +55,12 @@ export default function CaixaPage() {
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
+  const [inheritedOpening, setInheritedOpening] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
+  const [undoReason, setUndoReason] = useState("");
 
   // Manual movement dialog
   const [manualType, setManualType] = useState<"entrada_manual" | "saida_manual" | "ajuste_manual" | null>(null);
