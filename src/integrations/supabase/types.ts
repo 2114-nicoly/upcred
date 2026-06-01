@@ -388,6 +388,9 @@ export type Database = {
       daily_cash: {
         Row: {
           admin_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           cash_date: string
           closed_at: string | null
           closed_by: string | null
@@ -420,6 +423,9 @@ export type Database = {
         }
         Insert: {
           admin_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           cash_date: string
           closed_at?: string | null
           closed_by?: string | null
@@ -452,6 +458,9 @@ export type Database = {
         }
         Update: {
           admin_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           cash_date?: string
           closed_at?: string | null
           closed_by?: string | null
