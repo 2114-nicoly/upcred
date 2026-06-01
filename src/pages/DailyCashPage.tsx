@@ -990,6 +990,7 @@ export default function DailyCashPage() {
       toast.success("Caixa do dia fechado!");
       setDailyCashStatus("closed");
       setPendingInstallments([]);
+      setCloseCashDialogOpen(false);
     } catch (err) {
       console.error("[handleCloseCash] failed", err);
       toast.error("Não foi possível fechar o caixa. Tente novamente.");
