@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, RefreshCw, Users, Landmark, FileText, Shield, Loader2, AlertTriangle } from "lucide-react";
+import EmptyCashCleanup from "@/components/EmptyCashCleanup";
 
 type TaskStatus = "idle" | "running" | "done" | "error";
 type Orphan = { entity_type: string; entity_id: string; label: string; missing: string; created_at: string };
