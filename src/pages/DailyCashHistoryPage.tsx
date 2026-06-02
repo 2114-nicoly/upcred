@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-type Filter = "all" | "today" | "yesterday" | "week" | "month" | "custom" | "closed" | "open";
+type Filter = "all" | "today" | "yesterday" | "week" | "month" | "custom" | "closed" | "open" | "cancelled";
 
 function labelFor(dateStr: string) {
   const d = parseISO(dateStr + "T12:00:00");
@@ -54,6 +54,7 @@ export default function DailyCashHistoryPage() {
         case "custom": return (!customFrom || d.date >= customFrom) && (!customTo || d.date <= customTo);
         case "closed": return d.status === "closed";
         case "open": return d.status === "open";
+        case "cancelled": return d.status === "cancelled";
         default: return true;
       }
     });
@@ -109,11 +110,11 @@ export default function DailyCashHistoryPage() {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {(["all","today","yesterday","week","month","open","closed","custom"] as Filter[]).map((f) => (
+        {(["all","today","yesterday","week","month","open","closed","cancelled","custom"] as Filter[]).map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "default" : "outline"} className="h-7 text-[10px]" onClick={() => setFilter(f)}>
             {{
               all: "Todos", today: "Hoje", yesterday: "Ontem", week: "Semana",
-              month: "Mês", open: "Aberto", closed: "Fechado", custom: "Personalizado",
+              month: "Mês", open: "Aberto", closed: "Fechado", cancelled: "Cancelados", custom: "Personalizado",
             }[f]}
           </Button>
         ))}
@@ -144,6 +145,7 @@ export default function DailyCashHistoryPage() {
                     <div className="flex items-center gap-1.5">
                       {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> Fechado</Badge>}
                       {day.status === "open" && <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>}
+                      {day.status === "cancelled" && <Badge className="bg-orange-200 text-orange-900 text-[9px] h-4">Cancelado vazio</Badge>}
                       {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                     </div>
                   </div>

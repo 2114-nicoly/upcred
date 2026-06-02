@@ -97,7 +97,11 @@ export default function CaixaPage() {
       setEvents(dayEvents);
       const dc = (dcRes?.data as any) || null;
       setDailyCashRow(dc);
-      setDailyCashStatus(dc ? (dc.status || "open") : "sem_caixa");
+      setDailyCashStatus(
+        dc && dc.status !== "cancelled_empty" && dc.status !== "void"
+          ? (dc.status || "open")
+          : "sem_caixa"
+      );
 
       // Inherit opening balance from last closed daily_cash if current row is open/missing.
       const currentOpening = Number(dc?.opening_balance || 0);
