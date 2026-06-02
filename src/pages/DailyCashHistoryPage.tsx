@@ -54,6 +54,7 @@ export default function DailyCashHistoryPage() {
         case "custom": return (!customFrom || d.date >= customFrom) && (!customTo || d.date <= customTo);
         case "closed": return d.status === "closed";
         case "open": return d.status === "open";
+        case "cancelled": return d.status === "cancelled";
         default: return true;
       }
     });
