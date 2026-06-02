@@ -145,6 +145,7 @@ export default function DailyCashHistoryPage() {
                     <div className="flex items-center gap-1.5">
                       {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> Fechado</Badge>}
                       {day.status === "open" && <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>}
+                      {day.status === "cancelled" && <Badge className="bg-orange-200 text-orange-900 text-[9px] h-4">Cancelado vazio</Badge>}
                       {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                     </div>
                   </div>
