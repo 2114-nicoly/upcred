@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -43,6 +44,7 @@ export default function EmptyCashCleanup() {
   const [admins, setAdmins] = useState<Array<{ id: string; nome: string }>>([]);
   const [workers, setWorkers] = useState<Array<{ id: string; nome: string; parent_admin_id: string | null }>>([]);
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -73,10 +75,24 @@ export default function EmptyCashCleanup() {
   const emptyRows = useMemo(() => (rows ?? []).filter((r) => r.is_empty), [rows]);
   const nonEmptyRows = useMemo(() => (rows ?? []).filter((r) => !r.is_empty), [rows]);
   const allWorkersLabel = isSuperAdmin && adminId === "__all__" ? "Todos os trabalhadores" : "Toda a equipe";
+  const allEmptySelected = emptyRows.length > 0 && emptyRows.every((r) => selected.has(r.id));
+
+  function toggleOne(id: string, value: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (value) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+  function toggleAllEmpty(value: boolean) {
+    if (!value) { setSelected(new Set()); return; }
+    setSelected(new Set(emptyRows.map((r) => r.id)));
+  }
 
   async function preview() {
     setLoading(true);
     setRows(null);
+    setSelected(new Set());
     setErrorMsg(null);
     try {
       const { data, error } = await supabase.rpc("admin_find_empty_daily_cash" as any, {
@@ -100,14 +116,13 @@ export default function EmptyCashCleanup() {
     setCleaning(true);
     setErrorMsg(null);
     try {
-      const { data, error } = await supabase.rpc("admin_cleanup_empty_daily_cash" as any, {
-        p_start: start,
-        p_end: end,
-        p_admin_id: adminId === "__all__" ? null : adminId,
-        p_worker_id: workerId === "__all__" ? null : workerId,
+      const ids = Array.from(selected);
+      const { data, error } = await supabase.rpc("admin_cleanup_empty_daily_cash_ids" as any, {
+        p_cash_ids: ids,
       });
       if (error) throw error;
       toast({ title: "Cancelamento concluído", description: `${Number(data ?? 0)} caixa(s) vazios cancelados.` });
+      setSelected(new Set());
       await preview();
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Erro no cancelamento");
@@ -124,8 +139,8 @@ export default function EmptyCashCleanup() {
           <Sparkles className="h-4 w-4" /> Cancelar Caixas Vazios
         </CardTitle>
         <CardDescription className="text-xs">
-          Lista todos os caixas <strong>abertos</strong> no período. Os marcados como “vazio” podem ser cancelados
-          (status <code>cancelled_empty</code>) — nenhuma movimentação é apagada.
+          Lista todos os caixas <strong>abertos</strong> no período. Selecione os marcados como “vazio” para cancelar
+          (status <code>cancelled_empty</code>) — nenhuma movimentação é apagada e o dia volta ao estado neutro.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 pt-2 space-y-3">
@@ -177,10 +192,10 @@ export default function EmptyCashCleanup() {
             size="sm"
             className="flex-1 gap-2"
             onClick={() => setConfirmOpen(true)}
-            disabled={cleaning || emptyRows.length === 0}
+            disabled={cleaning || selected.size === 0}
           >
             {cleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-            Cancelar {emptyRows.length ? `(${emptyRows.length})` : ""}
+            Cancelar {selected.size ? `(${selected.size})` : ""}
           </Button>
         </div>
 
@@ -192,13 +207,25 @@ export default function EmptyCashCleanup() {
 
         {rows !== null && (
           <>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span><strong className="text-foreground">{rows.length}</strong> caixa(s) abertos</span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+              <span><strong className="text-foreground">{rows.length}</strong> aberto(s)</span>
               <span>·</span>
-              <span><strong className="text-success">{emptyRows.length}</strong> candidato(s)</span>
+              <span><strong className="text-success">{emptyRows.length}</strong> vazio(s)</span>
               <span>·</span>
               <span><strong>{nonEmptyRows.length}</strong> com movimento</span>
+              <span>·</span>
+              <span><strong className="text-destructive">{selected.size}</strong> selecionado(s)</span>
             </div>
+
+            {emptyRows.length > 0 && (
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={allEmptySelected}
+                  onCheckedChange={(v) => toggleAllEmpty(Boolean(v))}
+                />
+                <span>Selecionar todos os vazios ({emptyRows.length})</span>
+              </label>
+            )}
 
             <div className="border rounded text-xs max-h-72 overflow-auto">
               {rows.length === 0 ? (
@@ -210,6 +237,14 @@ export default function EmptyCashCleanup() {
                   {rows.map((it) => (
                     <li key={it.id} className="p-2 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
+                        {it.is_empty ? (
+                          <Checkbox
+                            checked={selected.has(it.id)}
+                            onCheckedChange={(v) => toggleOne(it.id, Boolean(v))}
+                          />
+                        ) : (
+                          <span className="inline-block h-4 w-4 shrink-0" />
+                        )}
                         <span className="font-mono">{it.cash_date}</span>
                         <span className="text-muted-foreground truncate">
                           {it.worker_nome ?? "—"}
@@ -239,9 +274,8 @@ export default function EmptyCashCleanup() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar cancelamento</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão marcados como <strong>cancelled_empty</strong> <strong>{emptyRows.length}</strong> caixa(s) vazio(s)
-              entre {start} e {end}. Nenhuma movimentação será apagada — o dia volta ao estado neutro
-              e pode ser reaberto manualmente.
+              Serão marcados como <strong>cancelled_empty</strong> <strong>{selected.size}</strong> caixa(s) selecionado(s).
+              Nenhuma movimentação será apagada — o dia volta ao estado neutro e pode ser reaberto manualmente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
