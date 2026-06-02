@@ -378,7 +378,9 @@ export default function DailyCashPage() {
 
       if (isStale()) return;
 
-      const status = dcData ? (dcData.status || "open") : "sem_caixa";
+      const status = dcData && dcData.status !== "cancelled_empty" && dcData.status !== "void"
+        ? (dcData.status || "open")
+        : "sem_caixa";
       setDailyCashStatus(status);
       setNewLoans((newLoanData as NewLoanInfo[]) || []);
       // Opening balance: from yesterday's closed daily_cash for same scope.
