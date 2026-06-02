@@ -1179,10 +1179,10 @@ export default function DailyCashPage() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setQuitarDialogId(inst.id)}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; setQuitarDialogId(inst.id); }} title={actionsBlockedTitle || undefined}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
                 <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
