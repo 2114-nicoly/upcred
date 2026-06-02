@@ -1197,9 +1197,9 @@ export default function DailyCashPage() {
 
         {/* Action buttons */}
         <div className="flex border-t border-border">
-          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
+          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { if (o && isClosed) return; setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
             <DialogTrigger asChild>
-              <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
+              <button type="button" disabled={isClosed} title={actionsBlockedTitle || undefined} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
                 <CheckCircle className="h-3.5 w-3.5" /> PAGOU
               </button>
             </DialogTrigger>
