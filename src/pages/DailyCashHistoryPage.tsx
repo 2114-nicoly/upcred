@@ -110,11 +110,11 @@ export default function DailyCashHistoryPage() {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {(["all","today","yesterday","week","month","open","closed","custom"] as Filter[]).map((f) => (
+        {(["all","today","yesterday","week","month","open","closed","cancelled","custom"] as Filter[]).map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "default" : "outline"} className="h-7 text-[10px]" onClick={() => setFilter(f)}>
             {{
               all: "Todos", today: "Hoje", yesterday: "Ontem", week: "Semana",
-              month: "Mês", open: "Aberto", closed: "Fechado", custom: "Personalizado",
+              month: "Mês", open: "Aberto", closed: "Fechado", cancelled: "Cancelados", custom: "Personalizado",
             }[f]}
           </Button>
         ))}
