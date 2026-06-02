@@ -1534,18 +1534,20 @@ export default function DailyCashPage() {
             <h2 className="text-xs font-semibold text-foreground flex items-center gap-1 uppercase tracking-wider">
               <Clock className="h-3 w-3" /> Pendentes ({pendingInstallments.length})
             </h2>
-            {isClosed ? (
-              <div className="flex flex-col items-center py-6">
-                <Lock className="mb-2 h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Caixa fechado — sem pendentes</p>
-              </div>
-            ) : pendingInstallments.length === 0 ? (
+            {pendingInstallments.length === 0 ? (
               <div className="flex flex-col items-center py-6">
                 <CheckCircle className="mb-2 h-8 w-8 text-success" />
                 <p className="text-sm font-medium">Tudo tratado!</p>
               </div>
             ) : (
               <>
+                {isClosed && (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    {isNotStarted
+                      ? "Consulta somente — abra o caixa para registrar pagamentos."
+                      : "Somente visualização — reabra o caixa para registrar."}
+                  </p>
+                )}
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
@@ -1567,21 +1569,23 @@ export default function DailyCashPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
-                    <Checkbox
-                      checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
-                      onCheckedChange={toggleSelectAll}
-                      className="h-3.5 w-3.5"
-                    />
-                    Selecionar exibidos
-                  </label>
-                  {selectedForNotPaid.size > 0 && (
-                    <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setSelectedForNotPaid(new Set())}>
-                      Limpar ({selectedForNotPaid.size})
-                    </button>
-                  )}
-                </div>
+                {!isClosed && (
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                      <Checkbox
+                        checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
+                        onCheckedChange={toggleSelectAll}
+                        className="h-3.5 w-3.5"
+                      />
+                      Selecionar exibidos
+                    </label>
+                    {selectedForNotPaid.size > 0 && (
+                      <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setSelectedForNotPaid(new Set())}>
+                        Limpar ({selectedForNotPaid.size})
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {renderPendingSections()}
               </>
