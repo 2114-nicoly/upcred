@@ -1131,6 +1131,7 @@ export default function DailyCashPage() {
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
+            disabled={isClosed}
             className="shrink-0 h-4 w-4"
           />
           <div className="flex-1 min-w-0">
