@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-type Filter = "all" | "today" | "yesterday" | "week" | "month" | "custom" | "closed" | "open";
+type Filter = "all" | "today" | "yesterday" | "week" | "month" | "custom" | "closed" | "open" | "cancelled";
 
 function labelFor(dateStr: string) {
   const d = parseISO(dateStr + "T12:00:00");
