@@ -1417,6 +1417,10 @@ export type Database = {
         }
         Returns: number
       }
+      admin_cleanup_empty_daily_cash_ids: {
+        Args: { p_cash_ids: string[] }
+        Returns: number
+      }
       admin_create_client: {
         Args: {
           p_address?: string
