@@ -1416,15 +1416,35 @@ export default function DailyCashPage() {
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
         {isReallyClosed && (
-          <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-1.5 text-center">
+          <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
               <Lock className="h-3 w-3" /> Caixa Fechado
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Somente visualização. Reabra para alterar.
             </p>
           </div>
         )}
         {isNotStarted && (
-          <div className="mt-2">
-            <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
+          <>
+            <div className="mt-1.5 rounded-md bg-warning/10 border border-warning/30 p-2 text-center">
+              <p className="text-xs font-medium text-warning flex items-center justify-center gap-1">
+                <LockOpen className="h-3 w-3" /> Caixa não iniciado
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Você pode consultar a rota. Abra o caixa para registrar.
+              </p>
+            </div>
+            <div className="mt-2">
+              <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
+            </div>
+          </>
+        )}
+        {!isClosed && (
+          <div className="mt-1.5 rounded-md bg-primary/5 border border-primary/20 p-1.5 text-center">
+            <p className="text-[11px] font-medium text-primary flex items-center justify-center gap-1">
+              <LockOpen className="h-3 w-3" /> Caixa aberto para registros
+            </p>
           </div>
         )}
         <NoMovementHint
