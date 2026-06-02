@@ -306,6 +306,11 @@ export default function DailyCashPage() {
   const isNotStarted = dailyCashStatus === "sem_caixa";
   const isClosed = dailyCashStatus === "closed" || isNotStarted;
   const isReallyClosed = dailyCashStatus === "closed";
+  const actionsBlockedTitle = isNotStarted
+    ? "Abra o caixa para registrar"
+    : isReallyClosed
+    ? "Caixa fechado: somente visualização"
+    : "";
 
   const getOverdueDays = useCallback((inst: InstallmentWithLoan) => {
     const due = new Date(inst.due_date + "T12:00:00");
