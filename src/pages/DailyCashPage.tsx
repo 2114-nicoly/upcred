@@ -1230,9 +1230,9 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); setNotPaidReason("Não encontrado"); } }}>
+          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { if (o && isClosed) return; setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); setNotPaidReason("Não encontrado"); } }}>
             <DialogTrigger asChild>
-              <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
+              <button type="button" disabled={isClosed} title={actionsBlockedTitle || undefined} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
                 <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
               </button>
             </DialogTrigger>
