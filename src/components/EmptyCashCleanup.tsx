@@ -195,13 +195,20 @@ export default function EmptyCashCleanup() {
             disabled={cleaning || selected.size === 0}
           >
             {cleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-            Cancelar {selected.size ? `(${selected.size})` : ""}
+            Cancelar selecionados ({selected.size})
           </Button>
         </div>
 
         {errorMsg && (
           <div className="text-xs rounded border border-destructive/40 bg-destructive/10 text-destructive p-2">
             {errorMsg}
+          </div>
+        )}
+
+        {rows !== null && emptyRows.length === 0 && rows.length > 0 && (
+          <div className="text-xs rounded border border-warning/40 bg-warning/10 text-warning-foreground p-2">
+            Nenhum caixa vazio encontrado no período. Todos os caixas abertos têm movimentação real
+            e por isso não podem ser cancelados.
           </div>
         )}
 
