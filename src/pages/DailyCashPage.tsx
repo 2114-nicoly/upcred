@@ -306,6 +306,11 @@ export default function DailyCashPage() {
   const isNotStarted = dailyCashStatus === "sem_caixa";
   const isClosed = dailyCashStatus === "closed" || isNotStarted;
   const isReallyClosed = dailyCashStatus === "closed";
+  const actionsBlockedTitle = isNotStarted
+    ? "Abra o caixa para registrar"
+    : isReallyClosed
+    ? "Caixa fechado: somente visualização"
+    : "";
 
   const getOverdueDays = useCallback((inst: InstallmentWithLoan) => {
     const due = new Date(inst.due_date + "T12:00:00");
@@ -1126,6 +1131,7 @@ export default function DailyCashPage() {
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => toggleSelectForNotPaid(inst.id)}
+            disabled={isClosed}
             className="shrink-0 h-4 w-4"
           />
           <div className="flex-1 min-w-0">
@@ -1173,10 +1179,10 @@ export default function DailyCashPage() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setQuitarDialogId(inst.id)}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; setQuitarDialogId(inst.id); }} title={actionsBlockedTitle || undefined}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`)}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
                 <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
@@ -1191,9 +1197,9 @@ export default function DailyCashPage() {
 
         {/* Action buttons */}
         <div className="flex border-t border-border">
-          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
+          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { if (o && isClosed) return; setPayDialogId(o ? inst.id : null); if (!o) resetPayDialog(); }}>
             <DialogTrigger asChild>
-              <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border">
+              <button type="button" disabled={isClosed} title={actionsBlockedTitle || undefined} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-success hover:bg-success/5 transition-colors border-r border-border disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
                 <CheckCircle className="h-3.5 w-3.5" /> PAGOU
               </button>
             </DialogTrigger>
@@ -1224,9 +1230,9 @@ export default function DailyCashPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); setNotPaidReason("Não encontrado"); } }}>
+          <Dialog open={notPaidDialogId === inst.id} onOpenChange={(o) => { if (o && isClosed) return; setNotPaidDialogId(o ? inst.id : null); if (!o) { setNotPaidObs(""); setShowNotPaidObs(false); setNotPaidReason("Não encontrado"); } }}>
             <DialogTrigger asChild>
-              <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors">
+              <button type="button" disabled={isClosed} title={actionsBlockedTitle || undefined} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
                 <XCircle className="h-3.5 w-3.5" /> NÃO PAGOU
               </button>
             </DialogTrigger>
@@ -1411,15 +1417,35 @@ export default function DailyCashPage() {
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
         {isReallyClosed && (
-          <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-1.5 text-center">
+          <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
               <Lock className="h-3 w-3" /> Caixa Fechado
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Somente visualização. Reabra para alterar.
             </p>
           </div>
         )}
         {isNotStarted && (
-          <div className="mt-2">
-            <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
+          <>
+            <div className="mt-1.5 rounded-md bg-warning/10 border border-warning/30 p-2 text-center">
+              <p className="text-xs font-medium text-warning flex items-center justify-center gap-1">
+                <LockOpen className="h-3 w-3" /> Caixa não iniciado
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Você pode consultar a rota. Abra o caixa para registrar.
+              </p>
+            </div>
+            <div className="mt-2">
+              <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
+            </div>
+          </>
+        )}
+        {!isClosed && (
+          <div className="mt-1.5 rounded-md bg-primary/5 border border-primary/20 p-1.5 text-center">
+            <p className="text-[11px] font-medium text-primary flex items-center justify-center gap-1">
+              <LockOpen className="h-3 w-3" /> Caixa aberto para registros
+            </p>
           </div>
         )}
         <NoMovementHint
@@ -1509,18 +1535,20 @@ export default function DailyCashPage() {
             <h2 className="text-xs font-semibold text-foreground flex items-center gap-1 uppercase tracking-wider">
               <Clock className="h-3 w-3" /> Pendentes ({pendingInstallments.length})
             </h2>
-            {isClosed ? (
-              <div className="flex flex-col items-center py-6">
-                <Lock className="mb-2 h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Caixa fechado — sem pendentes</p>
-              </div>
-            ) : pendingInstallments.length === 0 ? (
+            {pendingInstallments.length === 0 ? (
               <div className="flex flex-col items-center py-6">
                 <CheckCircle className="mb-2 h-8 w-8 text-success" />
                 <p className="text-sm font-medium">Tudo tratado!</p>
               </div>
             ) : (
               <>
+                {isClosed && (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    {isNotStarted
+                      ? "Consulta somente — abra o caixa para registrar pagamentos."
+                      : "Somente visualização — reabra o caixa para registrar."}
+                  </p>
+                )}
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
@@ -1542,21 +1570,23 @@ export default function DailyCashPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
-                    <Checkbox
-                      checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
-                      onCheckedChange={toggleSelectAll}
-                      className="h-3.5 w-3.5"
-                    />
-                    Selecionar exibidos
-                  </label>
-                  {selectedForNotPaid.size > 0 && (
-                    <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setSelectedForNotPaid(new Set())}>
-                      Limpar ({selectedForNotPaid.size})
-                    </button>
-                  )}
-                </div>
+                {!isClosed && (
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                      <Checkbox
+                        checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
+                        onCheckedChange={toggleSelectAll}
+                        className="h-3.5 w-3.5"
+                      />
+                      Selecionar exibidos
+                    </label>
+                    {selectedForNotPaid.size > 0 && (
+                      <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setSelectedForNotPaid(new Set())}>
+                        Limpar ({selectedForNotPaid.size})
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {renderPendingSections()}
               </>
