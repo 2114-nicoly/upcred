@@ -1472,9 +1472,11 @@ export default function DailyCashPage() {
         />
       </div>
 
-      {/* Últimos dias trabalhados */}
-      <div className="mb-3">
-        <RecentWorkDays excludeDate={selectedDate} limit={4} />
+      {/* Últimos dias trabalhados (link discreto) */}
+      <div className="mb-3 flex justify-end">
+        <Button variant="link" size="sm" className="text-xs h-auto p-0" onClick={() => navigate("/daily-cash-history")}>
+          Ver últimos dias trabalhados →
+        </Button>
       </div>
 
 
