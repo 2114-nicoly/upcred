@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import WorkerDashboard from "@/components/WorkerDashboard";
-import RecentWorkDays from "@/components/RecentWorkDays";
+
 import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
