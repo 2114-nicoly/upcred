@@ -51,6 +51,53 @@ export default function WorkersPage() {
 
   const [creds, setCreds] = useState<GeneratedCreds | null>(null);
 
+  const [editing, setEditing] = useState<Worker | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editLogin, setEditLogin] = useState("");
+  const [editNotas, setEditNotas] = useState("");
+  const [editActive, setEditActive] = useState(true);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function openEdit(w: Worker) {
+    setEditing(w);
+    setEditNome(w.nome);
+    setEditLogin(w.login_codigo);
+    setEditNotas(w.notas ?? "");
+    setEditActive(w.active);
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const nome = editNome.trim();
+    const login = editLogin.trim();
+    if (!nome) return toast({ title: "Nome obrigatório", variant: "destructive" });
+    if (!login) return toast({ title: "Login obrigatório", variant: "destructive" });
+    if (!/^\d{4}$/.test(login)) return toast({ title: "Login deve ter 4 dígitos", variant: "destructive" });
+
+    setSavingEdit(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-edit-worker", {
+        body: {
+          worker_id: editing.id,
+          nome,
+          login_codigo: login,
+          notas: editNotas.trim() || null,
+          active: editActive,
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao salvar");
+      toast({ title: "Trabalhador atualizado" });
+      setEditing(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/");
   }, [authLoading, isAdmin, navigate]);
