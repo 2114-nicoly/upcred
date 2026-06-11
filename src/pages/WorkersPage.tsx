@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, KeyRound, RefreshCw, Inbox, Archive, ArchiveRestore, Trash2, Eye } from "lucide-react";
+import { Loader2, Plus, KeyRound, RefreshCw, Inbox, Archive, ArchiveRestore, Trash2, Eye, Pencil } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
