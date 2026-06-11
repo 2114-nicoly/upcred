@@ -121,11 +121,14 @@ Deno.serve(async (req) => {
 
       // determina parent_admin_id
       let parentAdminId: string | null = body.parent_admin_id ?? null;
-      if (!isSuper) {
+      if (!isSuper || !parentAdminId) {
         const { data: myAdmin } = await admin.from("admins").select("id").eq("auth_user_id", callerId).maybeSingle();
-        if (myAdmin?.id) parentAdminId = myAdmin.id;
+        if (myAdmin?.id && !isSuper) parentAdminId = myAdmin.id;
+        if (myAdmin?.id && isSuper && !parentAdminId) parentAdminId = myAdmin.id;
       }
-      if (!parentAdminId) return json(400, { error: "Equipe (admin) não definida" });
+      if (!parentAdminId) {
+        return json(400, { error: "Equipe (admin) não definida. Selecione um admin responsável pelo trabalhador." });
+      }
 
       const { data: codeData } = await admin.rpc("generate_worker_login_codigo");
       const loginCodigo = codeData as string;
