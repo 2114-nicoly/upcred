@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, KeyRound, RefreshCw, Inbox, Archive, ArchiveRestore, Trash2, Eye } from "lucide-react";
+import { Loader2, Plus, KeyRound, RefreshCw, Inbox, Archive, ArchiveRestore, Trash2, Eye, Pencil } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -50,6 +50,53 @@ export default function WorkersPage() {
   const [parentAdminId, setParentAdminId] = useState<string>("");
 
   const [creds, setCreds] = useState<GeneratedCreds | null>(null);
+
+  const [editing, setEditing] = useState<Worker | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editLogin, setEditLogin] = useState("");
+  const [editNotas, setEditNotas] = useState("");
+  const [editActive, setEditActive] = useState(true);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function openEdit(w: Worker) {
+    setEditing(w);
+    setEditNome(w.nome);
+    setEditLogin(w.login_codigo);
+    setEditNotas(w.notas ?? "");
+    setEditActive(w.active);
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const nome = editNome.trim();
+    const login = editLogin.trim();
+    if (!nome) return toast({ title: "Nome obrigatório", variant: "destructive" });
+    if (!login) return toast({ title: "Login obrigatório", variant: "destructive" });
+    if (!/^\d{4}$/.test(login)) return toast({ title: "Login deve ter 4 dígitos", variant: "destructive" });
+
+    setSavingEdit(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-edit-worker", {
+        body: {
+          worker_id: editing.id,
+          nome,
+          login_codigo: login,
+          notas: editNotas.trim() || null,
+          active: editActive,
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao salvar");
+      toast({ title: "Trabalhador atualizado" });
+      setEditing(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/");
@@ -279,6 +326,11 @@ export default function WorkersPage() {
                     <Button size="sm" variant="default" className="h-7 text-xs flex-1" onClick={() => navigate(isSuperAdmin ? `/super-admin/worker/${w.id}` : `/admin/worker/${w.id}`)}>
                       <Eye className="h-3.5 w-3.5 mr-1" /> Ver trabalhador
                     </Button>
+                    {!isArchived && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(w)} title="Editar trabalhador">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
                       <KeyRound className="h-4 w-4" />
                     </Button>
@@ -338,6 +390,38 @@ export default function WorkersPage() {
             <DialogFooter>
               <Button type="submit" disabled={creating} className="w-full">
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar trabalhador</DialogTitle>
+            <DialogDescription>Alterar o login atualiza imediatamente a credencial usada para entrar no app. Histórico e dados são preservados.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-3">
+            <div>
+              <Label htmlFor="edit-nome">Nome</Label>
+              <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="edit-login">Login (4 dígitos)</Label>
+              <Input id="edit-login" required inputMode="numeric" pattern="\d{4}" maxLength={4} value={editLogin} onChange={(e) => setEditLogin(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+            </div>
+            <div>
+              <Label htmlFor="edit-notas">Observação</Label>
+              <Textarea id="edit-notas" value={editNotas} onChange={(e) => setEditNotas(e.target.value)} rows={2} />
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Switch checked={editActive} onCheckedChange={setEditActive} />
+              <span>Ativo</span>
+            </label>
+            <DialogFooter>
+              <Button type="submit" disabled={savingEdit} className="w-full">
+                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}
               </Button>
             </DialogFooter>
           </form>
