@@ -326,6 +326,11 @@ export default function WorkersPage() {
                     <Button size="sm" variant="default" className="h-7 text-xs flex-1" onClick={() => navigate(isSuperAdmin ? `/super-admin/worker/${w.id}` : `/admin/worker/${w.id}`)}>
                       <Eye className="h-3.5 w-3.5 mr-1" /> Ver trabalhador
                     </Button>
+                    {!isArchived && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(w)} title="Editar trabalhador">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
                       <KeyRound className="h-4 w-4" />
                     </Button>
