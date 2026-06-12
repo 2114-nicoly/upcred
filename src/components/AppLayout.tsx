@@ -148,8 +148,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-card px-4 shadow-sm">
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <header className="relative z-40 flex h-14 shrink-0 items-center border-b bg-card px-4 shadow-sm">
         {!isMainPage && (
           <button
             onClick={handleBack}
