@@ -474,6 +474,38 @@ function WorkersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar trabalhador</DialogTitle>
+            <DialogDescription>Alterar o login atualiza imediatamente a credencial de entrada. Histórico e dados são preservados.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-3">
+            <div>
+              <Label htmlFor="edit-nome">Nome</Label>
+              <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="edit-login">Login (4 dígitos)</Label>
+              <Input id="edit-login" required inputMode="numeric" pattern="\d{4}" maxLength={4} value={editLogin} onChange={(e) => setEditLogin(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+            </div>
+            <div>
+              <Label htmlFor="edit-notas">Observação</Label>
+              <Textarea id="edit-notas" value={editNotas} onChange={(e) => setEditNotas(e.target.value)} rows={2} />
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Switch checked={editActive} onCheckedChange={setEditActive} />
+              <span>Ativo</span>
+            </label>
+            <DialogFooter>
+              <Button type="submit" disabled={savingEdit} className="w-full">
+                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
