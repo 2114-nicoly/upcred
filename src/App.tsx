@@ -25,7 +25,7 @@ import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
 import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
 import AdminPage from "@/pages/AdminPage";
-import WorkersPage from "@/pages/WorkersPage";
+
 import AdminPanelPage from "@/pages/AdminPanelPage";
 import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
