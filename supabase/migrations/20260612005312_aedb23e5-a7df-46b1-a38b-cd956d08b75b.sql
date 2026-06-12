@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.open_daily_cash(date);
