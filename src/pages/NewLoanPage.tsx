@@ -529,6 +529,41 @@ export default function NewLoanPage() {
           />
         </div>
 
+        {isOngoing && (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Empréstimo em andamento</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div>
+                <Label>Valor já pago antes do cadastro (R$)</Label>
+                <Input
+                  type="number"
+                  value={amountAlreadyPaid}
+                  onChange={(e) => setAmountAlreadyPaid(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+              {calc && (
+                <div className="border-t pt-2 space-y-1">
+                  <div className="flex justify-between"><span>Valor total:</span><span>{formatCurrency(calc.totalAmount)}</span></div>
+                  <div className="flex justify-between"><span>Já pago:</span><span>{formatCurrency(numAlreadyPaid)}</span></div>
+                  <div className="flex justify-between font-bold">
+                    <span>Saldo restante:</span>
+                    <span className="text-primary">{formatCurrency(ongoingRemaining)}</span>
+                  </div>
+                  {numAlreadyPaid > calc.totalAmount + 0.01 && (
+                    <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>Valor já pago é maior que o valor total do empréstimo.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {calc && (
           <Card className="border-primary/30 bg-accent">
             <CardHeader className="pb-2">
