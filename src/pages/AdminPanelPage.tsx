@@ -187,10 +187,12 @@ function MiniStat({ label, value, valueClass }: { label: string; value: number; 
 
 
 /* ============= WORKERS TAB ============= */
+type WorkerRow = Worker & { archived_at?: string | null };
+
 function WorkersTab() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const [workers, setWorkers] = useState<(Worker & { archived_at?: string | null })[]>([]);
+  const [workers, setWorkers] = useState<WorkerRow[]>([]);
   // resetRequests removed: handled by PasswordRecoveryBell in header
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
   const [loading, setLoading] = useState(true);
@@ -200,6 +202,46 @@ function WorkersTab() {
   const [nome, setNome] = useState("");
   const [notas, setNotas] = useState("");
   const [creds, setCreds] = useState<CredsToShow | null>(null);
+
+  // Edição de trabalhador
+  const [editing, setEditing] = useState<WorkerRow | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editLogin, setEditLogin] = useState("");
+  const [editNotas, setEditNotas] = useState("");
+  const [editActive, setEditActive] = useState(true);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function openEdit(w: WorkerRow) {
+    setEditing(w);
+    setEditNome(w.nome);
+    setEditLogin(w.login_codigo);
+    setEditNotas(w.notas ?? "");
+    setEditActive(w.active);
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const n = editNome.trim();
+    const login = editLogin.trim();
+    if (!n) return toast({ title: "Nome obrigatório", variant: "destructive" });
+    if (!/^\d{4}$/.test(login)) return toast({ title: "Login deve ter 4 dígitos", variant: "destructive" });
+    setSavingEdit(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-edit-worker", {
+        body: { worker_id: editing.id, nome: n, login_codigo: login, notas: editNotas.trim() || null, active: editActive },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao salvar");
+      toast({ title: "Trabalhador atualizado" });
+      setEditing(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -359,15 +401,24 @@ function WorkersTab() {
                     {!w.archived_at && (
                       <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
                     )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {!w.archived_at && (
-                      <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha"><KeyRound className="h-4 w-4" /></Button>
-                    )}
-                    {(!w.active || w.archived_at) && (
-                      <Button size="sm" variant="outline" className="h-8 text-[10px] px-2" onClick={() => handleArchive(w)}>
-                        {w.archived_at ? "Desarquivar" : "Arquivar"}
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(w)}>
+                        Editar Trabalhador
                       </Button>
                     )}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
+                    {!w.archived_at && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResetPassword(w)}>
+                        <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
+                      </Button>
+                    )}
+                    {(!w.active || w.archived_at) && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleArchive(w)}>
+                        {w.archived_at ? "Desarquivar Trabalhador" : "Arquivar Trabalhador"}
+                      </Button>
+                    )}
                   </div>
                   {s && (
                     <div className="grid grid-cols-4 gap-1 text-[10px] border-t pt-2">
@@ -421,6 +472,38 @@ function WorkersTab() {
             <Button variant="outline" onClick={copyCreds}><Copy className="h-4 w-4 mr-1" /> Copiar</Button>
             <Button onClick={() => setCreds(null)}>Fechar</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar trabalhador</DialogTitle>
+            <DialogDescription>Alterar o login atualiza imediatamente a credencial de entrada. Histórico e dados são preservados.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-3">
+            <div>
+              <Label htmlFor="edit-nome">Nome</Label>
+              <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="edit-login">Login (4 dígitos)</Label>
+              <Input id="edit-login" required inputMode="numeric" pattern="\d{4}" maxLength={4} value={editLogin} onChange={(e) => setEditLogin(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+            </div>
+            <div>
+              <Label htmlFor="edit-notas">Observação</Label>
+              <Textarea id="edit-notas" value={editNotas} onChange={(e) => setEditNotas(e.target.value)} rows={2} />
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Switch checked={editActive} onCheckedChange={setEditActive} />
+              <span>Ativo</span>
+            </label>
+            <DialogFooter>
+              <Button type="submit" disabled={savingEdit} className="w-full">
+                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

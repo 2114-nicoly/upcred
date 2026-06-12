@@ -25,7 +25,7 @@ import NewLoanSelectClientPage from "@/pages/NewLoanSelectClientPage";
 import CaixaPage from "@/pages/CaixaPage";
 import CashHistoryPage from "@/pages/CashHistoryPage";
 import AdminPage from "@/pages/AdminPage";
-import WorkersPage from "@/pages/WorkersPage";
+
 import AdminPanelPage from "@/pages/AdminPanelPage";
 import AdminWorkerDetailPage from "@/pages/AdminWorkerDetailPage";
 import SuperAdminPage from "@/pages/SuperAdminPage";
@@ -131,7 +131,7 @@ function AppRoutes() {
                 <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
                 <Route path="/account" element={<WrappedRoute element={<AccountPage />} />} />
                 <Route path="/daily-report" element={<WrappedRoute element={<DailyReportPage />} />} />
-                <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
+                
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
                 <Route path="/super-admin" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminPage />} /></SuperAdminRoute>} />
