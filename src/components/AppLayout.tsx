@@ -237,7 +237,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       <ScopeIndicator />
       <Breadcrumb />
-      <main className="flex-1 overflow-auto pb-20">{children}</main>
+      <main key={location.pathname} className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
+        {children}
+      </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card shadow-lg">
         <div className="mx-auto flex max-w-lg items-center justify-around">
