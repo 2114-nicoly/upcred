@@ -269,7 +269,12 @@ export default function NewLoanPage() {
       .select()
       .single();
 
-    if (loanError || !loan) { toast.error("Erro ao criar empréstimo"); setSaving(false); return; }
+    if (loanError || !loan) {
+      console.error("Erro ao criar empréstimo:", loanError);
+      toast.error(`Erro ao criar empréstimo${loanError?.message ? `: ${loanError.message}` : ""}`);
+      setSaving(false);
+      return;
+    }
 
     // Para empréstimos importados, ajustar remaining_balance para refletir o saldo já abatido
     if (isOngoing && numAlreadyPaid > 0) {
