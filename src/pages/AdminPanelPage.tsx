@@ -401,15 +401,24 @@ function WorkersTab() {
                     {!w.archived_at && (
                       <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
                     )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {!w.archived_at && (
-                      <Button size="icon" variant="ghost" onClick={() => handleResetPassword(w)} title="Gerar nova senha"><KeyRound className="h-4 w-4" /></Button>
-                    )}
-                    {(!w.active || w.archived_at) && (
-                      <Button size="sm" variant="outline" className="h-8 text-[10px] px-2" onClick={() => handleArchive(w)}>
-                        {w.archived_at ? "Desarquivar" : "Arquivar"}
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(w)}>
+                        Editar Trabalhador
                       </Button>
                     )}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
+                    {!w.archived_at && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResetPassword(w)}>
+                        <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
+                      </Button>
+                    )}
+                    {(!w.active || w.archived_at) && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleArchive(w)}>
+                        {w.archived_at ? "Desarquivar Trabalhador" : "Arquivar Trabalhador"}
+                      </Button>
+                    )}
                   </div>
                   {s && (
                     <div className="grid grid-cols-4 gap-1 text-[10px] border-t pt-2">
