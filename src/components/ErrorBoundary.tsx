@@ -10,28 +10,36 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  errorInfo: ErrorInfo | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught:", error, errorInfo);
+    // Always log the full error + component stack so it isn't hidden by the boundary
+    console.error("[ErrorBoundary] Caught error:", error);
+    if (error?.stack) console.error("[ErrorBoundary] Stack:\n", error.stack);
+    if (errorInfo?.componentStack) {
+      console.error("[ErrorBoundary] Component stack:", errorInfo.componentStack);
+    }
+    this.setState({ errorInfo });
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, errorInfo: null });
   };
 
   render() {
     if (this.state.hasError) {
+      const isDev = import.meta.env.DEV;
       return (
         <div className="flex flex-col items-center justify-center gap-4 p-8 text-center">
           <AlertTriangle className="h-12 w-12 text-destructive" />
@@ -41,6 +49,15 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-muted-foreground max-w-md">
             Ocorreu um erro inesperado. Tente recarregar a página.
           </p>
+          {isDev && this.state.error && (
+            <pre className="max-w-2xl overflow-auto rounded border border-destructive/30 bg-destructive/5 p-3 text-left text-xs text-destructive">
+              {this.state.error.message}
+              {this.state.error.stack ? `\n\n${this.state.error.stack}` : ""}
+              {this.state.errorInfo?.componentStack
+                ? `\n\nComponent stack:${this.state.errorInfo.componentStack}`
+                : ""}
+            </pre>
+          )}
           <div className="flex gap-2">
             <Button onClick={this.handleReset} variant="outline" size="sm">
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -58,7 +75,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// Wrapper for individual routes
+// Wrapper for individual routes. Parent must pass `key={location.pathname}`
+// so the boundary fully remounts on navigation and a stale error is cleared.
 export function PageErrorBoundary({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary fallbackMessage="Erro ao carregar esta página">
