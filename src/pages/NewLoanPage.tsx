@@ -426,13 +426,23 @@ export default function NewLoanPage() {
         {!renewFromLoanId && (
           <div>
             <Label>Tipo de cadastro</Label>
-            <Select value={registrationType} onValueChange={(v) => setRegistrationType(v as "new" | "ongoing")}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">Empréstimo novo</SelectItem>
-                <SelectItem value="ongoing">Empréstimo em andamento</SelectItem>
-              </SelectContent>
-            </Select>
+            {(() => { console.log("registrationType atual:", registrationType); return null; })()}
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => setRegistrationType("new")}
+                className={`rounded-md border px-3 py-2 text-sm ${registrationType === "new" ? "bg-primary text-primary-foreground border-primary" : "bg-background"}`}
+              >
+                Empréstimo novo
+              </button>
+              <button
+                type="button"
+                onClick={() => setRegistrationType("ongoing")}
+                className={`rounded-md border px-3 py-2 text-sm ${registrationType === "ongoing" ? "bg-primary text-primary-foreground border-primary" : "bg-background"}`}
+              >
+                Empréstimo em andamento
+              </button>
+            </div>
             {isOngoing && (
               <p className="text-[11px] text-muted-foreground mt-1">
                 Cadastro de empréstimo antigo. Não exige caixa aberto e não movimenta o caixa de hoje.
