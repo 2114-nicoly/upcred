@@ -48,7 +48,9 @@ const queryClient = new QueryClient({
 });
 
 function WrappedRoute({ element }: { element: React.ReactNode }) {
-  return <PageErrorBoundary>{element}</PageErrorBoundary>;
+  const location = useLocation();
+  // key by pathname so each route mounts fresh and the ErrorBoundary resets
+  return <PageErrorBoundary key={location.pathname}>{element}</PageErrorBoundary>;
 }
 
 /** Trabalhador-only: admin/super_admin é redirecionado para seu dashboard. */

@@ -51,27 +51,34 @@ export default function NewLoanPage() {
   const draftValue = {
     amount, interestType, interestValue, installmentCount, paymentType,
     loanDate, firstDueDate, fixedDates, observation, renewPaidAmount,
+    registrationType, amountAlreadyPaid,
   };
   const draft = useFormDraft(draftKey, draftValue);
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current) return;
-    const saved = draft.restore();
-    if (saved) {
-      restoredRef.current = true;
-      setAmount(saved.amount ?? "");
-      setInterestType(saved.interestType ?? "percentage");
-      setInterestValue(saved.interestValue ?? "");
-      setInstallmentCount(saved.installmentCount ?? "");
-      setPaymentType(saved.paymentType ?? "daily");
-      setLoanDate(saved.loanDate ?? format(new Date(), "yyyy-MM-dd"));
-      setFirstDueDate(saved.firstDueDate ?? "");
-      setFixedDates(saved.fixedDates ?? []);
-      setObservation(saved.observation ?? "");
-      setRenewPaidAmount(saved.renewPaidAmount ?? "");
-      toast.info("Rascunho restaurado", {
-        action: { label: "Descartar", onClick: () => { draft.clear(); window.location.reload(); } },
-      });
+    try {
+      const saved = draft.restore() as Partial<typeof draftValue> | null;
+      if (saved && typeof saved === "object") {
+        restoredRef.current = true;
+        if (typeof saved.amount === "string") setAmount(saved.amount);
+        if (saved.interestType === "percentage" || saved.interestType === "fixed") setInterestType(saved.interestType);
+        if (typeof saved.interestValue === "string") setInterestValue(saved.interestValue);
+        if (typeof saved.installmentCount === "string") setInstallmentCount(saved.installmentCount);
+        if (typeof saved.paymentType === "string") setPaymentType(saved.paymentType as typeof paymentType);
+        if (typeof saved.loanDate === "string") setLoanDate(saved.loanDate);
+        if (typeof saved.firstDueDate === "string") setFirstDueDate(saved.firstDueDate);
+        if (Array.isArray(saved.fixedDates)) setFixedDates(saved.fixedDates);
+        if (typeof saved.observation === "string") setObservation(saved.observation);
+        if (typeof saved.renewPaidAmount === "string") setRenewPaidAmount(saved.renewPaidAmount);
+        if (saved.registrationType === "new" || saved.registrationType === "ongoing") setRegistrationType(saved.registrationType);
+        if (typeof saved.amountAlreadyPaid === "string") setAmountAlreadyPaid(saved.amountAlreadyPaid);
+        toast.info("Rascunho restaurado", {
+          action: { label: "Descartar", onClick: () => { draft.clear(); window.location.reload(); } },
+        });
+      }
+    } catch (err) {
+      console.warn("[NewLoanPage] Falha ao restaurar rascunho, ignorando:", err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -262,7 +269,12 @@ export default function NewLoanPage() {
       .select()
       .single();
 
-    if (loanError || !loan) { toast.error("Erro ao criar empréstimo"); setSaving(false); return; }
+    if (loanError || !loan) {
+      console.error("Erro ao criar empréstimo:", loanError);
+      toast.error(`Erro ao criar empréstimo${loanError?.message ? `: ${loanError.message}` : ""}`);
+      setSaving(false);
+      return;
+    }
 
     // Para empréstimos importados, ajustar remaining_balance para refletir o saldo já abatido
     if (isOngoing && numAlreadyPaid > 0) {
