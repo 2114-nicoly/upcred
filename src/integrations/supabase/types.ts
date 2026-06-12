@@ -851,14 +851,18 @@ export type Database = {
         Row: {
           admin_id: string | null
           amount: number
+          amount_already_paid: number
           client_id: string
           created_at: string
           first_due_date: string | null
           id: string
+          imported_at: string | null
+          initial_remaining_balance: number | null
           installment_count: number
           interest_type: string
           interest_value: number
           is_cravo: boolean
+          is_imported_ongoing: boolean
           loan_date: string
           observation: string | null
           payment_type: string
@@ -874,14 +878,18 @@ export type Database = {
         Insert: {
           admin_id?: string | null
           amount: number
+          amount_already_paid?: number
           client_id: string
           created_at?: string
           first_due_date?: string | null
           id?: string
+          imported_at?: string | null
+          initial_remaining_balance?: number | null
           installment_count: number
           interest_type: string
           interest_value: number
           is_cravo?: boolean
+          is_imported_ongoing?: boolean
           loan_date?: string
           observation?: string | null
           payment_type: string
@@ -897,14 +905,18 @@ export type Database = {
         Update: {
           admin_id?: string | null
           amount?: number
+          amount_already_paid?: number
           client_id?: string
           created_at?: string
           first_due_date?: string | null
           id?: string
+          imported_at?: string | null
+          initial_remaining_balance?: number | null
           installment_count?: number
           interest_type?: string
           interest_value?: number
           is_cravo?: boolean
+          is_imported_ongoing?: boolean
           loan_date?: string
           observation?: string | null
           payment_type?: string
