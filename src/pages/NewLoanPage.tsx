@@ -147,10 +147,20 @@ export default function NewLoanPage() {
   const cobreAntigo = renewPaid + numAmount;
   const renovacaoQuita = renewFromLoanId ? cobreAntigo + 0.01 >= faltaQuitar : true;
 
+  // Ongoing (importado) helpers
+  const isOngoing = registrationType === "ongoing" && !renewFromLoanId;
+  const numAlreadyPaid = parseFloat(amountAlreadyPaid) || 0;
+  const ongoingRemaining = calc ? Math.max(0, calc.totalAmount - numAlreadyPaid) : 0;
+
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error("Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
+
+    if (isOngoing && numAlreadyPaid > calc.totalAmount + 0.01) {
+      toast.error(`Valor já pago (${formatCurrency(numAlreadyPaid)}) é maior que o valor total (${formatCurrency(calc.totalAmount)}).`);
+      return;
+    }
 
     if (renewFromLoanId && !renovacaoQuita) {
       toast.error(`Renovação insuficiente. Faltam ${formatCurrency(faltaQuitar - cobreAntigo)} para quitar o empréstimo atual.`);
@@ -160,29 +170,35 @@ export default function NewLoanPage() {
     // Confirmação para ações sensíveis: renovação ou liberação alta
     const cashOutPreview = renewFromLoanId ? valorLiberado : numAmount;
     const ok = await confirm({
-      title: renewFromLoanId ? "Confirmar renovação?" : "Confirmar novo empréstimo?",
+      title: renewFromLoanId ? "Confirmar renovação?" : isOngoing ? "Cadastrar empréstimo em andamento?" : "Confirmar novo empréstimo?",
       description: renewFromLoanId
         ? "Esta ação encerra o contrato atual e abre um novo."
-        : "Esta ação libera dinheiro e cria parcelas.",
+        : isOngoing
+          ? "Cadastra um empréstimo já existente. Não movimenta o caixa do dia."
+          : "Esta ação libera dinheiro e cria parcelas.",
       affected: [
         { label: "Cliente", value: clientName },
         { label: "Valor", value: formatCurrency(numAmount) },
         { label: "Parcelas", value: `${numInstallments}x ${formatCurrency(calc.installmentAmount)}` },
-        { label: "Liberado em caixa", value: formatCurrency(cashOutPreview) },
+        isOngoing
+          ? { label: "Saldo restante", value: formatCurrency(ongoingRemaining) }
+          : { label: "Liberado em caixa", value: formatCurrency(cashOutPreview) },
       ],
-      confirmText: renewFromLoanId ? "Renovar" : "Criar",
+      confirmText: renewFromLoanId ? "Renovar" : isOngoing ? "Cadastrar" : "Criar",
     });
     if (!ok) return;
 
     setSaving(true);
 
-    // Guard: caixa do dia do empréstimo precisa estar aberto
-    try {
-      await assertCashOpen(loanDate);
-    } catch (err: any) {
-      toast.error(err?.message || "Caixa fechado para esta data");
-      setSaving(false);
-      return;
+    // Guard: caixa do dia do empréstimo precisa estar aberto (não exigir para importado)
+    if (!isOngoing) {
+      try {
+        await assertCashOpen(loanDate);
+      } catch (err: any) {
+        toast.error(err?.message || "Caixa fechado para esta data");
+        setSaving(false);
+        return;
+      }
     }
 
     // Guard: only 1 active loan per client (renewal allowed when targeting the existing active loan)
@@ -218,6 +234,11 @@ export default function NewLoanPage() {
     }
 
     // ===== Criar novo empréstimo =====
+    const importedObs = isOngoing
+      ? `Empréstimo em andamento cadastrado no sistema. Valor já pago antes do cadastro: ${formatCurrency(numAlreadyPaid)}.`
+      : null;
+    const finalObservation = [observation, importedObs].filter(Boolean).join("\n") || null;
+
     const { data: loan, error: loanError } = await supabase
       .from("loans")
       .insert({
@@ -231,13 +252,25 @@ export default function NewLoanPage() {
         loan_date: loanDate,
         first_due_date: paymentType !== "fixed_dates" ? firstDueDate : null,
         renewed_from_loan_id: renewFromLoanId || null,
-        observation: observation || null,
+        observation: finalObservation,
         user_id: userId,
+        is_imported_ongoing: isOngoing,
+        amount_already_paid: isOngoing ? numAlreadyPaid : 0,
+        imported_at: isOngoing ? new Date().toISOString() : null,
+        initial_remaining_balance: isOngoing ? ongoingRemaining : null,
       } as any)
       .select()
       .single();
 
     if (loanError || !loan) { toast.error("Erro ao criar empréstimo"); setSaving(false); return; }
+
+    // Para empréstimos importados, ajustar remaining_balance para refletir o saldo já abatido
+    if (isOngoing && numAlreadyPaid > 0) {
+      await supabase
+        .from("loans")
+        .update({ remaining_balance: ongoingRemaining } as any)
+        .eq("id", loan.id);
+    }
 
     const installments = dueDates.map((date, i) => ({
       loan_id: loan.id,
@@ -250,46 +283,47 @@ export default function NewLoanPage() {
     const { error: instError } = await supabase.from("installments").insert(installments);
     if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
 
-    // Cash balance: empréstimo novo sai numAmount em caixa.
-    // Renovação: o que sai do caixa real é apenas valorLiberado.
-    const interest = calc.totalAmount - numAmount;
-    const cashOut = renewFromLoanId ? valorLiberado : numAmount;
-    await updateCashBalance({
-      available_cash: -cashOut,
-      money_lent: numAmount,
-      interest_receivable: interest,
-    });
+    // Para importados: NÃO movimentar caixa, NÃO criar daily_event de empréstimo novo.
+    if (!isOngoing) {
+      const interest = calc.totalAmount - numAmount;
+      const cashOut = renewFromLoanId ? valorLiberado : numAmount;
+      await updateCashBalance({
+        available_cash: -cashOut,
+        money_lent: numAmount,
+        interest_receivable: interest,
+      });
 
-    let movementId: string | null = null;
-    if (cashOut > 0) {
-      const mv = await createCashMovement({
-        type: "emprestimo",
-        amount: -cashOut,
+      let movementId: string | null = null;
+      if (cashOut > 0) {
+        const mv = await createCashMovement({
+          type: "emprestimo",
+          amount: -cashOut,
+          client_id: clientId!,
+          loan_id: loan.id,
+          observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
+          cash_date: loanDate,
+        }) as any;
+        movementId = mv?.id || null;
+      }
+
+      const renewObs = renewFromLoanId
+        ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
+        : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+
+      const evt = await createDailyEvent({
+        cash_date: loanDate,
+        event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
         client_id: clientId!,
         loan_id: loan.id,
-        observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
-        cash_date: loanDate,
+        amount_in: 0,
+        amount_out: cashOut,
+        observation: renewObs,
+        origin: "novo_emprestimo",
+        cash_movement_id: movementId,
       }) as any;
-      movementId = mv?.id || null;
-    }
-
-    const renewObs = renewFromLoanId
-      ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
-      : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
-
-    const evt = await createDailyEvent({
-      cash_date: loanDate,
-      event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
-      client_id: clientId!,
-      loan_id: loan.id,
-      amount_in: 0,
-      amount_out: cashOut,
-      observation: renewObs,
-      origin: "novo_emprestimo",
-      cash_movement_id: movementId,
-    }) as any;
-    if (movementId && evt?.id) {
-      await linkCashMovementToDailyEvent(movementId, evt.id);
+      if (movementId && evt?.id) {
+        await linkCashMovementToDailyEvent(movementId, evt.id);
+      }
     }
 
     // Se ainda restou saldo no antigo após o pagamento, quitar (absorvido pelo novo)
@@ -312,6 +346,8 @@ export default function NewLoanPage() {
         await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
       }
       toast.success("Empréstimo renovado com sucesso!");
+    } else if (isOngoing) {
+      toast.success("Empréstimo em andamento cadastrado!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
     }
