@@ -131,7 +131,7 @@ function AppRoutes() {
                 <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
                 <Route path="/account" element={<WrappedRoute element={<AccountPage />} />} />
                 <Route path="/daily-report" element={<WrappedRoute element={<DailyReportPage />} />} />
-                <Route path="/workers" element={<AdminRoute><WrappedRoute element={<WorkersPage />} /></AdminRoute>} />
+                
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
                 <Route path="/super-admin" element={<SuperAdminRoute><WrappedRoute element={<SuperAdminPage />} /></SuperAdminRoute>} />
