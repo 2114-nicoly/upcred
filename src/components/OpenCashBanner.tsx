@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 type Props = {
   cashDate: string;
+  workerId?: string | null;
   onOpened?: () => void;
   disabled?: boolean;
   compact?: boolean;
@@ -16,14 +17,14 @@ type Props = {
  * Banner shown when the day has no daily_cash row yet (neutral state).
  * Renders the "Abrir Caixa do Dia" CTA which calls open_daily_cash RPC.
  */
-export default function OpenCashBanner({ cashDate, onOpened, disabled, compact }: Props) {
+export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact }: Props) {
   const [loading, setLoading] = useState(false);
 
   const handleOpen = async () => {
     if (loading) return;
     setLoading(true);
     try {
-      await openDailyCash(cashDate);
+      await openDailyCash(cashDate, workerId ?? undefined);
       toast.success("Caixa do dia aberto!");
       onOpened?.();
     } catch (err: any) {
