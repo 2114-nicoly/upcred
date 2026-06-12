@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
+import ScrollToTop from "@/components/ScrollToTop";
 import { ErrorBoundary, PageErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import DailyCashPage from "@/pages/DailyCashPage";
@@ -49,8 +50,9 @@ const queryClient = new QueryClient({
 
 function WrappedRoute({ element }: { element: React.ReactNode }) {
   const location = useLocation();
-  // key by pathname so each route mounts fresh and the ErrorBoundary resets
-  return <PageErrorBoundary key={location.pathname}>{element}</PageErrorBoundary>;
+  // key by full URL so each route mounts fresh and the ErrorBoundary resets
+  const k = location.pathname + location.search;
+  return <PageErrorBoundary key={k}>{element}</PageErrorBoundary>;
 }
 
 /** Trabalhador-only: admin/super_admin é redirecionado para seu dashboard. */
@@ -155,6 +157,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <ScrollToTop />
         <ErrorBoundary>
           <AuthProvider>
             <WorkerFilterProvider>

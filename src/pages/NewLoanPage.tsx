@@ -284,15 +284,37 @@ export default function NewLoanPage() {
         .eq("id", loan.id);
     }
 
-    const installments = dueDates.map((date, i) => ({
-      loan_id: loan.id,
-      number: i + 1,
-      amount: calc.installmentAmount,
-      due_date: format(date, "yyyy-MM-dd"),
-      status: "pending" as const,
-    }));
+    // Build installments. For "ongoing", consume amountAlreadyPaid against
+    // earliest installments first so the sum of pending installments matches
+    // the remaining_balance exactly.
+    let remainingToConsume = isOngoing ? numAlreadyPaid : 0;
+    const installments = dueDates.map((date, i) => {
+      const value = calc.installmentAmount;
+      let paid = 0;
+      let status: "pending" | "paid" | "partial" = "pending";
+      if (remainingToConsume > 0) {
+        if (remainingToConsume >= value - 0.01) {
+          paid = value;
+          status = "paid";
+          remainingToConsume -= value;
+        } else {
+          paid = remainingToConsume;
+          status = "partial";
+          remainingToConsume = 0;
+        }
+      }
+      return {
+        loan_id: loan.id,
+        number: i + 1,
+        amount: value,
+        due_date: format(date, "yyyy-MM-dd"),
+        status,
+        paid_amount: paid,
+        paid_date: status === "paid" ? loanDate : null,
+      };
+    });
 
-    const { error: instError } = await supabase.from("installments").insert(installments);
+    const { error: instError } = await supabase.from("installments").insert(installments as any);
     if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
 
     // Para importados: NÃO movimentar caixa, NÃO criar daily_event de empréstimo novo.

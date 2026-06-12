@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
+import React, { Component, ErrorInfo, ReactNode, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -75,11 +76,16 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// Wrapper for individual routes. Parent must pass `key={location.pathname}`
-// so the boundary fully remounts on navigation and a stale error is cleared.
+// Wrapper for individual routes. Auto-resets when the URL changes so a stale
+// error from a previous page never leaks into the new one.
 export function PageErrorBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const boundaryRef = useRef<ErrorBoundary>(null);
+  useEffect(() => {
+    boundaryRef.current?.handleReset();
+  }, [location.pathname, location.search]);
   return (
-    <ErrorBoundary fallbackMessage="Erro ao carregar esta página">
+    <ErrorBoundary ref={boundaryRef} fallbackMessage="Erro ao carregar esta página">
       {children}
     </ErrorBoundary>
   );
