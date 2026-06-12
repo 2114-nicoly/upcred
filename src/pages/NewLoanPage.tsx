@@ -38,6 +38,10 @@ export default function NewLoanPage() {
   const [saving, setSaving] = useState(false);
   const [observation, setObservation] = useState("");
 
+  // Tipo de cadastro: novo ou em andamento (importado)
+  const [registrationType, setRegistrationType] = useState<"new" | "ongoing">("new");
+  const [amountAlreadyPaid, setAmountAlreadyPaid] = useState("");
+
   // Renewal data
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
   const [renewPaidAmount, setRenewPaidAmount] = useState<string>("");
