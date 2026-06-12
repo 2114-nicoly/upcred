@@ -45,7 +45,6 @@ export default function Breadcrumb() {
     "/cash-history": "Histórico do Caixa",
     "/payment-history": "Pagamentos",
     "/reports": "Relatórios",
-    "/workers": "Trabalhadores",
     "/admin-tools": "Manutenção",
     "/today-summary": "Resumo do Dia",
     "/daily-cash-history": "Histórico do Caixa",
