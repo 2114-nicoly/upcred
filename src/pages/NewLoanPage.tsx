@@ -389,6 +389,24 @@ export default function NewLoanPage() {
       {clientName && <p className="mb-4 text-sm text-muted-foreground">Cliente: <span className="font-medium text-foreground">{clientName}</span></p>}
 
       <div className="space-y-4">
+        {!renewFromLoanId && (
+          <div>
+            <Label>Tipo de cadastro</Label>
+            <Select value={registrationType} onValueChange={(v) => setRegistrationType(v as "new" | "ongoing")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">Empréstimo novo</SelectItem>
+                <SelectItem value="ongoing">Empréstimo em andamento</SelectItem>
+              </SelectContent>
+            </Select>
+            {isOngoing && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Cadastro de empréstimo antigo. Não exige caixa aberto e não movimenta o caixa de hoje.
+              </p>
+            )}
+          </div>
+        )}
+
         <div>
           <Label>Valor Emprestado (R$)</Label>
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
