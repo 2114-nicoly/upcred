@@ -1616,7 +1616,12 @@ export type Database = {
         }
         Returns: string
       }
-      open_daily_cash: { Args: { p_cash_date: string }; Returns: string }
+      open_daily_cash:
+        | { Args: { p_cash_date: string }; Returns: string }
+        | {
+            Args: { p_cash_date: string; p_worker_id?: string }
+            Returns: string
+          }
       redact_old_credentials_log: { Args: never; Returns: number }
       register_recovery_request: {
         Args: { p_email: string; p_login: string; p_nome: string }
