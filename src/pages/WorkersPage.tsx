@@ -323,20 +323,20 @@ export default function WorkersPage() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    <Button size="sm" variant="default" className="h-7 text-xs flex-1" onClick={() => navigate(isSuperAdmin ? `/super-admin/worker/${w.id}` : `/admin/worker/${w.id}`)}>
+                    <Button size="sm" variant="default" className="h-7 text-xs w-full" onClick={() => navigate(isSuperAdmin ? `/super-admin/worker/${w.id}` : `/admin/worker/${w.id}`)}>
                       <Eye className="h-3.5 w-3.5 mr-1" /> Ver trabalhador
                     </Button>
                     {!isArchived && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(w)} title="Editar trabalhador">
-                        <Pencil className="h-4 w-4" />
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(w)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Editar Trabalhador
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleResetPassword(w)} title="Gerar nova senha">
-                      <KeyRound className="h-4 w-4" />
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResetPassword(w)}>
+                      <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
                     </Button>
                     {!isArchived && !w.active && (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleArchive(w)}>
-                        <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
+                        <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar Trabalhador
                       </Button>
                     )}
                     {isArchived && (
