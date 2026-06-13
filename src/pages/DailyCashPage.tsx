@@ -765,6 +765,12 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
+    if (!isValidRouteInstallment(inst)) {
+      toast.error("Registro incompleto: empréstimo ou cliente ausente.");
+      return;
+    }
+    const safeClientId = getInstClientId(inst)!;
+    const safeClientName = getInstClientName(inst);
 
     const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
     setIsSubmitting(true);
@@ -774,7 +780,7 @@ export default function DailyCashPage() {
         .from("not_paid_marks")
         .upsert({
           mark_date: selectedDate, installment_id: inst.id,
-          loan_id: inst.loan_id, client_id: inst.loans.client_id,
+          loan_id: inst.loan_id, client_id: safeClientId,
           observation: obs || null,
           user_id: session?.user?.id,
         }, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
@@ -782,10 +788,10 @@ export default function DailyCashPage() {
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
-        client_id: inst.loans.client_id,
+        client_id: safeClientId,
         loan_id: inst.loan_id,
         installment_id: inst.id,
-        observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+        observation: obs || `Não pagou - ${safeClientName}`,
         origin: "rota",
       });
       setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
