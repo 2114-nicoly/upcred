@@ -354,17 +354,17 @@ export default function DailyCashPage() {
       : pendingInstallments;
     const q = clientSearch.trim().toLowerCase();
     if (!q) return base;
-    return base.filter((i) => i.loans.clients.name.toLowerCase().includes(q));
+    return base.filter((i) => getInstClientName(i).toLowerCase().includes(q));
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments, clientSearch]);
 
   const filteredOverdue = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
-    return q ? overdueItems.filter((i) => i.loans.clients.name.toLowerCase().includes(q)) : overdueItems;
+    return q ? overdueItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : overdueItems;
   }, [overdueItems, clientSearch]);
 
   const filteredToday = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
-    return q ? todayItems.filter((i) => i.loans.clients.name.toLowerCase().includes(q)) : todayItems;
+    return q ? todayItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : todayItems;
   }, [todayItems, clientSearch]);
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
