@@ -591,7 +591,13 @@ export default function DailyCashPage() {
       // This avoids loading every overdue installment when switching days.
       const { data: routeRows, error: routeError } = await (supabase as unknown as RouteRpcClient)
         .rpc("get_route_installments", { p_cash_date: selectedDate });
-      if (routeError) throw routeError;
+      if (routeError) {
+        console.error("Erro ao carregar rota do dia:", routeError);
+        toast.error("Não foi possível carregar a rota do dia. Tente novamente.");
+        setPendingInstallments([]);
+        setSelectedForNotPaid(new Set());
+        return;
+      }
 
       let routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
       if (isSunday(selectedDate)) {
