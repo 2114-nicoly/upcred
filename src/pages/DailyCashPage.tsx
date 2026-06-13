@@ -1108,13 +1108,17 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === instId);
     if (!inst) return;
+    if (!isValidRouteInstallment(inst)) {
+      toast.error("Registro incompleto: empréstimo ou cliente ausente.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       await settleLoan({
         loanId: inst.loan_id,
-        clientId: inst.loans.client_id,
-        clientName: inst.loans.clients.name,
+        clientId: getInstClientId(inst)!,
+        clientName: getInstClientName(inst),
         cashDate: quitarDate,
         origin: "rota",
         installmentId: inst.id,
