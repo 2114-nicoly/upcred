@@ -93,9 +93,11 @@ export default function ActiveLoansPage() {
       toast.error("Senha incorreta!");
       return;
     }
+    let cancelledCount = 0;
     for (const loanId of selectedIds) {
       try {
         await cancelLoan({ loanId, reason: "Cancelamento em massa" });
+        cancelledCount += 1;
       } catch (err: any) {
         console.error("Falha ao cancelar empréstimo", loanId, err);
         toast.error(`Falha ao cancelar: ${err?.message || "erro"}`);
@@ -103,7 +105,7 @@ export default function ActiveLoansPage() {
     }
     // Recalculate cash balance after bulk deletion
     await recalculateCashBalanceFromLedger();
-    toast.success(`${selectedIds.size} empréstimo(s) cancelado(s)!`);
+    if (cancelledCount > 0) toast.success(`${cancelledCount} empréstimo(s) cancelado(s)!`);
     setSelectedIds(new Set());
     setSelectMode(false);
     setShowDeleteDialog(false);
