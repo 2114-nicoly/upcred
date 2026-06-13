@@ -1194,7 +1194,7 @@ export default function DailyCashPage() {
             className="shrink-0 h-4 w-4"
           />
           <div className="flex-1 min-w-0">
-            <span className="font-bold text-base truncate block">{inst.loans.clients.name}</span>
+            <span className="font-bold text-base truncate block">{clientName}</span>
             <div className="flex items-center justify-between gap-2 mt-1">
               <span className="text-sm font-extrabold tabular-nums text-foreground">
                 Saldo: {formatCurrency(remainingBalance)}
@@ -1241,13 +1241,13 @@ export default function DailyCashPage() {
               <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; setQuitarDialogId(inst.id); }} title={actionsBlockedTitle || undefined}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${clientId}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
                 <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalhes
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/clients/${clientId}`)}>
                 <History className="mr-2 h-4 w-4" /> Histórico do cliente
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -1266,7 +1266,7 @@ export default function DailyCashPage() {
               <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {inst.loans.clients.name} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
+                  {clientName} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
                 <div>
                   <Label>Valor recebido</Label>
@@ -1299,7 +1299,7 @@ export default function DailyCashPage() {
               <DialogHeader><DialogTitle>Marcar Não Pagou</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(instAmount)}
+                  {clientName} — Parcela {inst.number} — {formatCurrency(instAmount)}
                 </p>
                 <div>
                   <Label>Motivo</Label>
@@ -1335,7 +1335,7 @@ export default function DailyCashPage() {
           <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
             <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <p className="text-sm font-medium">{inst.loans.clients.name}</p>
+              <p className="text-sm font-medium">{clientName}</p>
               <div className="rounded-lg border p-3 space-y-1 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Saldo restante:</span><span className="font-bold text-foreground">{formatCurrency(remainingBalance)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Parcela:</span><span className="text-muted-foreground">{formatCurrency(instAmount)}</span></div>
