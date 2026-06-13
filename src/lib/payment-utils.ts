@@ -532,6 +532,17 @@ export async function cancelLoan(params: {
     .is("reversed_at", null);
   throwIfError("Buscar movimentações do empréstimo", movementsError);
 
+  // Mark existing non-reversed daily_events before creating new cancellation events.
+  const { data: events, error: eventsError } = await (supabase.from("daily_events" as any)
+    .select("id").eq("loan_id", loanId).is("reversed_at", null) as any);
+  throwIfError("Buscar eventos do empréstimo", eventsError);
+  for (const e of (events || []) as any[]) {
+    const { error } = await (supabase.from("daily_events" as any)
+      .update({ reversed_at: new Date().toISOString() } as any)
+      .eq("id", e.id) as any);
+    throwIfError("Marcar evento como estornado", error);
+  }
+
   for (const mov of (movements || []) as any[]) {
     try {
       if (mov.type === "recebimento_normal" || mov.type === "recebimento_multa") {
@@ -584,18 +595,7 @@ export async function cancelLoan(params: {
     }
   }
 
-  // 2. Mark any remaining non-reversed daily_events for this loan as reversed
-  const { data: events, error: eventsError } = await (supabase.from("daily_events" as any)
-    .select("id").eq("loan_id", loanId).is("reversed_at", null) as any);
-  throwIfError("Buscar eventos do empréstimo", eventsError);
-  for (const e of (events || []) as any[]) {
-    const { error } = await (supabase.from("daily_events" as any)
-      .update({ reversed_at: new Date().toISOString() } as any)
-      .eq("id", e.id) as any);
-    throwIfError("Marcar evento como estornado", error);
-  }
-
-  // 3. Cancel installments that are not paid
+  // 2. Cancel installments that are not paid
   const { error: installmentsError } = await supabase
     .from("installments")
     .update({ status: "cancelled" } as any)
