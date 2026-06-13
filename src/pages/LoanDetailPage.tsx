@@ -803,7 +803,7 @@ export default function LoanDetailPage() {
             </Button>
           )}
           <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
-            <Trash2 className="mr-1 h-4 w-4" /> Excluir
+            <Trash2 className="mr-1 h-4 w-4" /> Cancelar Empréstimo
           </Button>
         </div>
       </div>

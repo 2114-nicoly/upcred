@@ -79,9 +79,10 @@ export default function OverdueLoansPage() {
     try {
       let q = supabase
         .from("installments")
-        .select("*, loans!inner(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, clients(id, name))")
+        .select("*, loans!inner(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, status, clients(id, name))")
         .lt("due_date", today)
-        .neq("status", "paid")
+        .not("status", "in", "(paid,cancelled)")
+        .not("loans.status", "in", "(paid,cancelled,renegotiated)")
         .eq("is_penalty", false);
       // Worker scope: explicit filter on top of RLS for double protection
       if (!isAdmin && !isSuperAdmin && workerId) q = q.eq("loans.worker_id", workerId);

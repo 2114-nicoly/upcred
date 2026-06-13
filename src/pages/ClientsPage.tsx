@@ -64,7 +64,7 @@ export default function ClientsPage() {
     const { data: loans } = await supabase
       .from("loans")
       .select("client_id, total_amount, status")
-      .neq("status", "paid");
+      .not("status", "in", "(paid,cancelled,renegotiated)");
 
     const summaries: Record<string, LoanSummary> = {};
     (loans || []).forEach((l: any) => {
