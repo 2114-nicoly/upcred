@@ -81,8 +81,9 @@ export default function OverdueLoansPage() {
         .from("installments")
         .select("*, loans!inner(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, status, clients(id, name))")
         .lt("due_date", today)
-        .not("status", "in", "(paid,cancelled)")
+        .not("status", "in", "(paid,cancelled,renegotiated)")
         .not("loans.status", "in", "(paid,cancelled,renegotiated)")
+        .gt("loans.remaining_balance", 0.01)
         .eq("is_penalty", false);
       // Worker scope: explicit filter on top of RLS for double protection
       if (!isAdmin && !isSuperAdmin && workerId) q = q.eq("loans.worker_id", workerId);
