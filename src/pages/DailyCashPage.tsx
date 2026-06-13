@@ -595,7 +595,7 @@ export default function DailyCashPage() {
 
       let routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
       if (isSunday(selectedDate)) {
-        routeInstallments = routeInstallments.filter((i) => i.loans.payment_type !== "daily");
+        routeInstallments = routeInstallments.filter((i) => getInstLoan(i)?.payment_type !== "daily");
       }
       if (isStale()) return;
 
