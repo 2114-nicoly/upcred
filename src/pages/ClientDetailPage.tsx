@@ -186,9 +186,13 @@ export default function ClientDetailPage() {
     setEditOpen(true);
   };
 
-  const activeLoans = loans.filter((l) => l.status !== "paid");
+  const activeLoans = loans.filter(
+    (l) => l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated"
+  );
   const activeLoan = activeLoans[0] || null;
-  const historyLoans = loans.filter((l) => l.status === "paid");
+  const historyLoans = loans.filter(
+    (l) => l.status === "paid" || l.status === "cancelled" || l.status === "renegotiated"
+  );
 
   if (loading || !client) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
 
