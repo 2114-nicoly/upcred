@@ -209,7 +209,7 @@ export function getOverdueDatesList(
   return dates;
 }
 
-// Helper: returns the active loan for a client (status != 'paid'), or null.
+// Helper: returns the active loan for a client, or null.
 // Used to enforce the "1 active loan per client" rule across the UI.
 import { supabase } from "@/integrations/supabase/client";
 
@@ -218,7 +218,8 @@ export async function getActiveLoanForClient(clientId: string) {
     .from("loans")
     .select("id, status, total_amount, remaining_balance, loan_date")
     .eq("client_id", clientId)
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,renegotiated)")
+    .gt("remaining_balance", 0.01)
     .order("loan_date", { ascending: false })
     .limit(1);
   return data && data.length > 0 ? data[0] : null;
