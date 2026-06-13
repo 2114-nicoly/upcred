@@ -521,7 +521,7 @@ export default function ActiveLoansPage() {
         </Button>
         {selectMode && selectedIds.size > 0 && (
           <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-            <Trash2 className="mr-1 h-4 w-4" /> Excluir ({selectedIds.size})
+            <Trash2 className="mr-1 h-4 w-4" /> Cancelar ({selectedIds.size})
           </Button>
         )}
         <Button
