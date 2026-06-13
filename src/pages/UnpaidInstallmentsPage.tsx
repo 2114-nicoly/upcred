@@ -97,7 +97,7 @@ export default function UnpaidInstallmentsPage() {
           loanId: loanId!,
           amount: multaValue,
           clientId: loan.client_id,
-          clientName: loan.clients.name,
+          clientName: (loan.clients?.name ?? "Cliente removido"),
           cashDate: payDate,
           origin: "parcelas_pendentes",
         });
@@ -112,7 +112,7 @@ export default function UnpaidInstallmentsPage() {
             loanId: loanId!,
             amount: paidValue,
             clientId: loan.client_id,
-            clientName: loan.clients.name,
+            clientName: (loan.clients?.name ?? "Cliente removido"),
             cashDate: payDate,
             origin: "parcelas_pendentes",
             installmentId: inst.id,
@@ -176,7 +176,7 @@ export default function UnpaidInstallmentsPage() {
 
       {loan && (
         <p className="mb-4 text-sm text-muted-foreground">
-          Cliente: <span className="font-medium text-foreground">{loan.clients.name}</span>
+          Cliente: <span className="font-medium text-foreground">{(loan.clients?.name ?? "Cliente removido")}</span>
         </p>
       )}
 

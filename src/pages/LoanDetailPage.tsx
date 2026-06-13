@@ -314,7 +314,7 @@ export default function LoanDetailPage() {
         try {
           await registerPenaltyPayment({
             loanId: loanId!, amount: multaValue,
-            clientId: loan.client_id, clientName: loan.clients.name,
+            clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
             cashDate: payDate, origin: "detalhe_emprestimo",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
@@ -325,7 +325,7 @@ export default function LoanDetailPage() {
       if (paidValue > 0 && firstUnpaid) {
         await registerPayment({
           loanId: loanId!, amount: paidValue,
-          clientId: loan.client_id, clientName: loan.clients.name,
+          clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
           cashDate: payDate, origin: "detalhe_emprestimo",
           installmentId: firstUnpaid.id,
           startInstNumber: firstUnpaid.number,
@@ -375,7 +375,7 @@ export default function LoanDetailPage() {
     setIsSubmitting(true);
     try {
       await editPayment({
-        loanId: loanId!, clientId: loan.client_id, clientName: loan.clients.name,
+        loanId: loanId!, clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
         cashDate: editPayEntry.cashDate, newAmount,
         origin: "detalhe_emprestimo", movementId: editPayEntry.movementId,
       });
@@ -395,7 +395,7 @@ export default function LoanDetailPage() {
     try {
       await settleLoan({
         loanId: loanId!, clientId: loan.client_id,
-        clientName: loan.clients.name, cashDate: quitarDate,
+        clientName: (loan.clients?.name ?? "Cliente removido"), cashDate: quitarDate,
         origin: "detalhe_emprestimo",
       });
       toast.success("Empréstimo quitado!");
@@ -841,15 +841,15 @@ export default function LoanDetailPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">
               <button className="hover:underline text-primary cursor-pointer text-left" onClick={() => navigate(`/clients/${loan.client_id}`)}>
-                {loan.clients.name}
+                {(loan.clients?.name ?? "Cliente removido")}
               </button>
             </CardTitle>
             <Badge className={getLoanStatusColor(loan.status)}>{getStatusLabel(loan.status)}</Badge>
           </div>
-          {(loan.clients.full_name || loan.clients.phone) && (
+          {(loan.clients?.full_name || loan.clients?.phone) && (
             <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
-              {loan.clients.full_name && <p>{loan.clients.full_name}</p>}
-              {loan.clients.phone && <p>📞 {loan.clients.phone}</p>}
+              {loan.clients?.full_name && <p>{loan.clients?.full_name}</p>}
+              {loan.clients?.phone && <p>📞 {loan.clients?.phone}</p>}
             </div>
           )}
         </CardHeader>
@@ -1458,7 +1458,7 @@ export default function LoanDetailPage() {
         <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm font-medium">{loan.clients.name}</p>
+            <p className="text-sm font-medium">{(loan.clients?.name ?? "Cliente removido")}</p>
             <div className="rounded-lg border p-3 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{loan.installment_count - Math.floor(loanProgress.fractionalProgress)}/{loan.installment_count}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Valor restante:</span><span className="font-bold">{formatCurrency(Math.max(0, remainingLoan))}</span></div>

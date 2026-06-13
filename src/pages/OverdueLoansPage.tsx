@@ -110,7 +110,7 @@ export default function OverdueLoansPage() {
           const pm = penaltyMap[inst.loan_id] || { total: 0, paid: 0 };
           grouped[inst.loan_id] = {
             loanId: inst.loan_id,
-            clientName: inst.loans.clients.name,
+            clientName: (inst.loans?.clients?.name ?? "Cliente removido"),
             paymentType: inst.loans.payment_type,
             totalAmount: Number(inst.loans.total_amount),
             workerId: (inst.loans as any).worker_id ?? null,
@@ -162,7 +162,7 @@ export default function OverdueLoansPage() {
           loanId: inst.loan_id,
           amount: multaValue,
           clientId: inst.loans.client_id,
-          clientName: inst.loans.clients.name,
+          clientName: (inst.loans?.clients?.name ?? "Cliente removido"),
           cashDate: payDate,
           origin: "atrasadas",
         });
@@ -184,7 +184,7 @@ export default function OverdueLoansPage() {
           loanId: inst.loan_id,
           amount: paidValue,
           clientId: inst.loans.client_id,
-          clientName: inst.loans.clients.name,
+          clientName: (inst.loans?.clients?.name ?? "Cliente removido"),
           cashDate: payDate,
           origin: "atrasadas",
           installmentId: inst.id,
