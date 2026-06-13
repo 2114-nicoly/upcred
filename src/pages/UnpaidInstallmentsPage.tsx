@@ -31,6 +31,8 @@ type Loan = {
   id: string;
   client_id: string;
   total_amount: number;
+  remaining_balance: number;
+  status: string;
   clients: { name: string };
 };
 
@@ -50,15 +52,27 @@ export default function UnpaidInstallmentsPage() {
   const [editInstDueDate, setEditInstDueDate] = useState("");
 
   const fetchData = async () => {
-    const { data: l } = await supabase.from("loans").select("id, client_id, total_amount, clients(name)").eq("id", loanId!).single();
+    const { data: l } = await supabase
+      .from("loans")
+      .select("id, client_id, total_amount, remaining_balance, status, clients(name)")
+      .eq("id", loanId!)
+      .not("status", "in", "(paid,cancelled,renegotiated)")
+      .gt("remaining_balance", 0.01)
+      .maybeSingle();
     setLoan(l as unknown as Loan);
+
+    if (!l) {
+      setInstallments([]);
+      setLoading(false);
+      return;
+    }
 
     const { data: insts } = await supabase
       .from("installments")
       .select("*")
       .eq("loan_id", loanId!)
       .eq("is_penalty", false)
-      .not("status", "in", "(paid,cancelled)")
+      .not("status", "in", "(paid,cancelled,renegotiated)")
       .order("number");
 
     // Filter: unpaid or partially paid (not fully paid)
