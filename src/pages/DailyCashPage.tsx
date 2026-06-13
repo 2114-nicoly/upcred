@@ -77,6 +77,22 @@ function isValidRouteInstallment(inst: any): boolean {
 
 const safeKey = (...parts: unknown[]) => parts.map(p => String(p ?? "null")).join("-");
 
+function parseLocalNoonDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value.includes("T") ? value : `${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatRouteDate(value: string | null | undefined, pattern = "dd/MM"): string {
+  const date = parseLocalNoonDate(value);
+  if (!date) return "Sem data";
+  try {
+    return format(date, pattern);
+  } catch {
+    return "Sem data";
+  }
+}
+
 
 type NotPaidMark = {
   id: string;
@@ -291,6 +307,7 @@ export default function DailyCashPage() {
   const localActionedLoanIds = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
   const refreshTimerRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [isReopening, setIsReopening] = useState(false);
@@ -299,6 +316,18 @@ export default function DailyCashPage() {
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      fetchSeqRef.current += 1;
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const urlDate = dateParam || today;
@@ -332,8 +361,9 @@ export default function DailyCashPage() {
     : "";
 
   const getOverdueDays = useCallback((inst: InstallmentWithLoan) => {
-    const due = new Date(inst.due_date + "T12:00:00");
-    const sel = new Date(selectedDate + "T12:00:00");
+    const due = parseLocalNoonDate(inst.due_date);
+    const sel = parseLocalNoonDate(selectedDate);
+    if (!due || !sel) return 0;
     if (sel <= due) return 0;
     if (getInstLoan(inst)?.payment_type === "daily") {
       return calculateOverdueDays(inst.due_date, "daily");
@@ -372,7 +402,8 @@ export default function DailyCashPage() {
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++fetchSeqRef.current;
-    const isStale = () => requestId !== fetchSeqRef.current;
+    const isStale = () => !isMountedRef.current || requestId !== fetchSeqRef.current;
+    if (!isMountedRef.current) return;
     if (!silent) setLoading(true);
     if (silent) setIsRefreshing(true);
 
@@ -423,9 +454,10 @@ export default function DailyCashPage() {
               .limit(1),
             scope
           );
+          if (isStale()) return;
           const p = (prior || [])[0] as any;
           setOpeningBalance(p ? Number(p.expected_closing_balance) || 0 : 0);
-        } catch { setOpeningBalance(0); }
+        } catch { if (!isStale()) setOpeningBalance(0); }
       }
       // Manual in/out totals from events (non-reversed)
       let mIn = 0, mOut = 0;
@@ -594,9 +626,10 @@ export default function DailyCashPage() {
       // This avoids loading every overdue installment when switching days.
       const { data: routeRows, error: routeError } = await (supabase as unknown as RouteRpcClient)
         .rpc("get_route_installments", { p_cash_date: selectedDate });
+      if (isStale()) return;
       if (routeError) {
-        console.error("Erro ao carregar rota do dia:", routeError);
-        toast.error("Não foi possível carregar a rota do dia. Tente novamente.");
+        console.error("[DailyCashPage] get_route_installments failed:", routeError);
+        if (!silent) toast.error("Não foi possível carregar a rota do dia. Tente novamente.");
         setPendingInstallments([]);
         setSelectedForNotPaid(new Set());
         return;
@@ -606,8 +639,6 @@ export default function DailyCashPage() {
       if (isSunday(selectedDate)) {
         routeInstallments = routeInstallments.filter((i) => getInstLoan(i)?.payment_type !== "daily");
       }
-      if (isStale()) return;
-
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
       const allCandidates = routeInstallments.filter(
         i => !paidLoanIds.has(i.loan_id)
@@ -660,6 +691,14 @@ export default function DailyCashPage() {
           created_at: p.created_at,
         })));
       }
+    } catch (err) {
+      console.error("[DailyCashPage] fetchData failed:", err);
+      if (!isStale()) {
+        setPendingInstallments([]);
+        setSelectedForNotPaid(new Set());
+        setPendingPenalties([]);
+        if (!silent) toast.error("Erro ao carregar rota do dia. Tente atualizar.");
+      }
     } finally {
       if (!isStale()) {
         if (!silent) setLoading(false);
@@ -671,13 +710,18 @@ export default function DailyCashPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const refreshDataInBackground = useCallback(() => {
+    if (!isMountedRef.current) return;
     void fetchData({ silent: true });
   }, [fetchData]);
 
   useEffect(() => {
     const scheduleRefresh = () => {
+      if (!isMountedRef.current) return;
       if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = window.setTimeout(() => fetchData({ silent: true }), 250);
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshTimerRef.current = null;
+        if (isMountedRef.current) void fetchData({ silent: true });
+      }, 250);
     };
 
     // Use an opaque, per-session random channel topic so other authenticated
@@ -695,14 +739,17 @@ export default function DailyCashPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_cash" }, scheduleRefresh)
       .subscribe();
 
-    const handleFocus = () => fetchData({ silent: true });
+    const handleFocus = () => { if (isMountedRef.current) void fetchData({ silent: true }); };
     const handleVisibility = () => { if (document.visibilityState === "visible") handleFocus(); };
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-      supabase.removeChannel(channel);
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
@@ -1236,7 +1283,7 @@ export default function DailyCashPage() {
                 {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)} • Pago: {formatCurrency(accumulatedPaid)}
               </span>
               <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
-                Vence: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+                Vence: {formatRouteDate(inst.due_date)}
               </span>
             </div>
           </div>
