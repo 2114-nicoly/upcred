@@ -166,7 +166,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   if (!admin) return <div className="p-4 text-sm text-muted-foreground">Administrador não encontrado.</div>;
 
   const total = consolidate(stats);
-  const activeLoans = loans.filter((l) => l.status !== "paid" && Number(l.remaining_balance) > 0.01);
+  const activeLoans = loans.filter((l) => l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated" && Number(l.remaining_balance) > 0.01);
   const closedLoans = loans.filter((l) => l.status === "paid" || Number(l.remaining_balance) <= 0.01);
   const workerName = (id: string | null) => workers.find((w) => w.id === id)?.nome ?? "—";
 

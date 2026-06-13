@@ -102,7 +102,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!worker) return <div className="p-4 text-sm text-muted-foreground">Trabalhador não encontrado.</div>;
 
-  const activeLoans = loans.filter((l) => l.status !== "paid" && Number(l.remaining_balance) > 0.01);
+  const activeLoans = loans.filter((l) => l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated" && Number(l.remaining_balance) > 0.01);
   const closedLoans = loans.filter((l) => l.status === "paid" || Number(l.remaining_balance) <= 0.01);
 
   return (
