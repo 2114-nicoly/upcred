@@ -402,7 +402,8 @@ export default function DailyCashPage() {
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++fetchSeqRef.current;
-    const isStale = () => requestId !== fetchSeqRef.current;
+    const isStale = () => !isMountedRef.current || requestId !== fetchSeqRef.current;
+    if (!isMountedRef.current) return;
     if (!silent) setLoading(true);
     if (silent) setIsRefreshing(true);
 
@@ -690,6 +691,14 @@ export default function DailyCashPage() {
           created_at: p.created_at,
         })));
       }
+    } catch (err) {
+      console.error("[DailyCashPage] fetchData failed:", err);
+      if (!isStale()) {
+        setPendingInstallments([]);
+        setSelectedForNotPaid(new Set());
+        setPendingPenalties([]);
+        if (!silent) toast.error("Erro ao carregar rota do dia. Tente atualizar.");
+      }
     } finally {
       if (!isStale()) {
         if (!silent) setLoading(false);
@@ -701,13 +710,18 @@ export default function DailyCashPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const refreshDataInBackground = useCallback(() => {
+    if (!isMountedRef.current) return;
     void fetchData({ silent: true });
   }, [fetchData]);
 
   useEffect(() => {
     const scheduleRefresh = () => {
+      if (!isMountedRef.current) return;
       if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = window.setTimeout(() => fetchData({ silent: true }), 250);
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshTimerRef.current = null;
+        if (isMountedRef.current) void fetchData({ silent: true });
+      }, 250);
     };
 
     // Use an opaque, per-session random channel topic so other authenticated
@@ -725,14 +739,17 @@ export default function DailyCashPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_cash" }, scheduleRefresh)
       .subscribe();
 
-    const handleFocus = () => fetchData({ silent: true });
+    const handleFocus = () => { if (isMountedRef.current) void fetchData({ silent: true }); };
     const handleVisibility = () => { if (document.visibilityState === "visible") handleFocus(); };
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-      supabase.removeChannel(channel);
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
