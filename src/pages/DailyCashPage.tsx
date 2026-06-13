@@ -454,9 +454,10 @@ export default function DailyCashPage() {
               .limit(1),
             scope
           );
+          if (isStale()) return;
           const p = (prior || [])[0] as any;
           setOpeningBalance(p ? Number(p.expected_closing_balance) || 0 : 0);
-        } catch { setOpeningBalance(0); }
+        } catch { if (!isStale()) setOpeningBalance(0); }
       }
       // Manual in/out totals from events (non-reversed)
       let mIn = 0, mOut = 0;
@@ -625,9 +626,10 @@ export default function DailyCashPage() {
       // This avoids loading every overdue installment when switching days.
       const { data: routeRows, error: routeError } = await (supabase as unknown as RouteRpcClient)
         .rpc("get_route_installments", { p_cash_date: selectedDate });
+      if (isStale()) return;
       if (routeError) {
-        console.error("Erro ao carregar rota do dia:", routeError);
-        toast.error("Não foi possível carregar a rota do dia. Tente novamente.");
+        console.error("[DailyCashPage] get_route_installments failed:", routeError);
+        if (!silent) toast.error("Não foi possível carregar a rota do dia. Tente novamente.");
         setPendingInstallments([]);
         setSelectedForNotPaid(new Set());
         return;
@@ -637,8 +639,6 @@ export default function DailyCashPage() {
       if (isSunday(selectedDate)) {
         routeInstallments = routeInstallments.filter((i) => getInstLoan(i)?.payment_type !== "daily");
       }
-      if (isStale()) return;
-
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
       const allCandidates = routeInstallments.filter(
         i => !paidLoanIds.has(i.loan_id)
