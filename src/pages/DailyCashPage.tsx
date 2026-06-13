@@ -120,6 +120,8 @@ type NewLoanInfo = {
   id: string;
   amount: number;
   total_amount: number;
+  remaining_balance: number;
+  status: string;
   installment_count: number;
   payment_type: string;
   loan_date: string;
@@ -422,7 +424,7 @@ export default function DailyCashPage() {
         getDailyEvents(selectedDate, { includeReversed: true }),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
         supabase.from("loans")
-          .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
+          .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
           .select("id, loan_id, amount, created_at")
