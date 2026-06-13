@@ -103,7 +103,7 @@ export default function ActiveLoansPage() {
     }
     // Recalculate cash balance after bulk deletion
     await recalculateCashBalanceFromLedger();
-    toast.success(`${selectedIds.size} empréstimo(s) excluído(s)!`);
+    toast.success(`${selectedIds.size} empréstimo(s) cancelado(s)!`);
     setSelectedIds(new Set());
     setSelectMode(false);
     setShowDeleteDialog(false);
