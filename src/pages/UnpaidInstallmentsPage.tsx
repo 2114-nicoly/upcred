@@ -58,7 +58,7 @@ export default function UnpaidInstallmentsPage() {
       .select("*")
       .eq("loan_id", loanId!)
       .eq("is_penalty", false)
-      .neq("status", "paid")
+      .not("status", "in", "(paid,cancelled)")
       .order("number");
 
     // Filter: unpaid or partially paid (not fully paid)
