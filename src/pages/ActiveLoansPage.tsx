@@ -679,18 +679,18 @@ export default function ActiveLoansPage() {
       <Dialog open={showDeleteDialog} onOpenChange={(o) => { if (!o) { setShowDeleteDialog(false); setDeletePassword(""); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar Exclusão em Massa</DialogTitle>
+            <DialogTitle>Confirmar Cancelamento em Massa</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Você está prestes a excluir <span className="font-bold text-destructive">{selectedIds.size}</span> empréstimo(s) e todos os registros associados. Esta ação não pode ser desfeita.
+              Você está prestes a cancelar <span className="font-bold text-destructive">{selectedIds.size}</span> empréstimo(s). O histórico financeiro é preservado para auditoria.
             </p>
             <div>
               <Label>Digite a senha para confirmar:</Label>
               <Input type="password" placeholder="Senha" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} />
             </div>
             <Button variant="destructive" className="w-full" onClick={handleBulkDelete}>
-              <Trash2 className="mr-1 h-4 w-4" /> Excluir {selectedIds.size} empréstimo(s)
+              <Trash2 className="mr-1 h-4 w-4" /> Cancelar {selectedIds.size} empréstimo(s)
             </Button>
           </div>
         </DialogContent>
