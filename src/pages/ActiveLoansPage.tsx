@@ -117,7 +117,8 @@ export default function ActiveLoansPage() {
       let lq = supabase
         .from("loans")
         .select("*, clients(id, name)")
-        .neq("status", "paid");
+        .not("status", "in", "(paid,cancelled,renegotiated)")
+        .gt("remaining_balance", 0.01);
       if (!isAdmin && !isSuperAdmin && workerId) lq = lq.eq("worker_id", workerId);
       const { data: loansData } = await lq.order("loan_date", { ascending: false });
 
