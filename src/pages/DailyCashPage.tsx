@@ -75,6 +75,9 @@ function isValidRouteInstallment(inst: any): boolean {
   return !!(inst && inst.loan_id && getInstLoan(inst) && getInstClientId(inst));
 }
 
+const safeKey = (...parts: unknown[]) => parts.map(p => String(p ?? "null")).join("-");
+
+
 type NotPaidMark = {
   id: string;
   mark_date: string;
@@ -1154,7 +1157,7 @@ export default function DailyCashPage() {
     if (!isValidRouteInstallment(inst)) {
       return (
         <div
-          key={inst.id}
+          key={safeKey("pending-incomplete", inst.id, inst.loan_id)}
           className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 flex items-center justify-between"
         >
           <div className="min-w-0">
@@ -1189,7 +1192,7 @@ export default function DailyCashPage() {
 
     return (
       <div
-        key={inst.id}
+        key={safeKey("pending", inst.id, inst.loan_id)}
         className={`rounded-lg border overflow-hidden transition-all ${isOverdue ? "bg-card-overdue-bg border-destructive/30" : "bg-card-due-today-bg border-border"} ${isSelected ? "ring-2 ring-primary/40" : ""}`}
       >
         <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
@@ -1365,7 +1368,7 @@ export default function DailyCashPage() {
   const renderPaidRow = (group: PaidGroup) => {
     const isSettled = group.remainingAfter <= 0.01;
     return (
-      <div key={`${group.clientId}-${group.loanId}-${group.movementId || "opt"}`} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+      <div key={safeKey("paid", group.loanId, group.movementId || group.totalPaid, group.paidAfter, group.remainingAfter)} className="rounded-lg border border-success/30 bg-card px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-sm truncate">{group.clientName}</span>
           <div className="flex items-center gap-2">
@@ -1411,7 +1414,7 @@ export default function DailyCashPage() {
   const renderNotPaidRow = (mark: NotPaidMark & { installment?: InstallmentWithLoan }) => {
     const inst = mark.installment;
     return (
-      <div key={mark.id} className="flex items-center justify-between rounded-lg border border-destructive/30 bg-card px-3 py-2">
+      <div key={safeKey("not-paid", mark.id, mark.installment_id, mark.loan_id)} className="flex items-center justify-between rounded-lg border border-destructive/30 bg-card px-3 py-2">
         <div className="min-w-0">
           <span className="font-semibold text-sm truncate block">{inst ? getInstClientName(inst) : "Cliente"}</span>
           {mark.observation && <p className="text-[10px] text-muted-foreground italic">"{mark.observation}"</p>}
@@ -1687,7 +1690,7 @@ export default function DailyCashPage() {
                 <AlertTriangle className="h-3 w-3" /> Multas Pendentes ({pendingPenalties.length})
               </h2>
               {pendingPenalties.map((p) => (
-                <div key={p.id} className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                <div key={safeKey("penalty", p.id, p.loan_id, p.created_at)} className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
                       <button
@@ -1724,7 +1727,7 @@ export default function DailyCashPage() {
                 {newLoans.filter(r => !r.renewed_from_loan_id).map(r => {
                   const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
                   return (
-                    <div key={r.id} className="rounded-lg border border-success/30 bg-card p-3">
+                    <div key={safeKey("loan", r.id, r.renewed_from_loan_id || "new")} className="rounded-lg border border-success/30 bg-card p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
@@ -1767,7 +1770,7 @@ export default function DailyCashPage() {
                   const pago = pagoMatch ? parseBR(pagoMatch[1]) : 0;
                   const faltava = faltavaMatch ? parseBR(faltavaMatch[1]) : 0;
                   return (
-                    <div key={r.id} className="rounded-lg border border-primary/30 bg-card p-3">
+                    <div key={safeKey("loan", r.id, r.renewed_from_loan_id || "new")} className="rounded-lg border border-primary/30 bg-card p-3">
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="font-semibold text-sm">{r.clients?.name || "Cliente"}</p>
                         <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-primary/10 text-primary">Renovação</Badge>
@@ -1920,7 +1923,7 @@ export default function DailyCashPage() {
             {reversedEvents.map((ev) => {
               const valor = Number(ev.amount_in) || Number(ev.amount_out) || 0;
               return (
-                <div key={ev.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <div key={safeKey("reversed", ev.id, ev.event_type)} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-muted-foreground">{getEventTypeLabel(ev.event_type)}</p>
