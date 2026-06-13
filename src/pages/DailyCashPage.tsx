@@ -437,7 +437,10 @@ export default function DailyCashPage() {
         ? (dcData.status || "open")
         : "sem_caixa";
       setDailyCashStatus(status);
-      setNewLoans((newLoanData as NewLoanInfo[]) || []);
+      const visibleNewLoans = ((newLoanData as NewLoanInfo[]) || []).filter(
+        (loan: any) => loan.status !== "paid" && loan.status !== "cancelled" && loan.status !== "renegotiated" && Number(loan.remaining_balance ?? loan.total_amount) > 0.01
+      );
+      setNewLoans(visibleNewLoans);
       // Opening balance: from yesterday's closed daily_cash for same scope.
       const dcAny = dcData as any;
       if (dcAny?.opening_balance != null) {
