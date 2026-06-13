@@ -50,12 +50,11 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-muted-foreground max-w-md">
             Ocorreu um erro inesperado. Tente recarregar a página.
           </p>
-          {isDev && this.state.error && (
+          {this.state.error && (
             <pre className="max-w-2xl overflow-auto rounded border border-destructive/30 bg-destructive/5 p-3 text-left text-xs text-destructive">
               {this.state.error.message}
-              {this.state.error.stack ? `\n\n${this.state.error.stack}` : ""}
               {this.state.errorInfo?.componentStack
-                ? `\n\nComponent stack:${this.state.errorInfo.componentStack}`
+                ? `\n\n${this.state.errorInfo.componentStack.split("\n").slice(0, 5).join("\n")}`
                 : ""}
             </pre>
           )}

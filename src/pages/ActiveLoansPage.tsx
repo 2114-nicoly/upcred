@@ -239,7 +239,7 @@ export default function ActiveLoansPage() {
           try {
             await registerPenaltyPayment({
               loanId: payLoanId, amount: multaValue,
-              clientId: (loan.clients?.id ?? loan.client_id), clientName: (loan.clients?.name ?? "Cliente removido"),
+              clientId: (loan.clients?.id ?? ""), clientName: (loan.clients?.name ?? "Cliente removido"),
               cashDate: payDate, origin: "emprestimos_ativos",
             });
             toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
@@ -260,7 +260,7 @@ export default function ActiveLoansPage() {
 
           const result = await registerPayment({
             loanId: payLoanId, amount: parcValue,
-            clientId: (loan.clients?.id ?? loan.client_id), clientName: (loan.clients?.name ?? "Cliente removido"),
+            clientId: (loan.clients?.id ?? ""), clientName: (loan.clients?.name ?? "Cliente removido"),
             cashDate: payDate, origin: "emprestimos_ativos",
             installmentId: firstUnpaid?.id,
             startInstNumber: firstUnpaid?.number,
@@ -291,7 +291,7 @@ export default function ActiveLoansPage() {
     try {
       await settleLoan({
         loanId: quitarLoanId,
-        clientId: (loan.clients?.id ?? loan.client_id),
+        clientId: (loan.clients?.id ?? ""),
         clientName: (loan.clients?.name ?? "Cliente removido"),
         cashDate: quitarDate,
         origin: "emprestimos_ativos",
@@ -460,7 +460,7 @@ export default function ActiveLoansPage() {
               <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${(loan.clients?.id ?? loan.client_id)}/new-loan?renewFrom=${loan.id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/clients/${(loan.clients?.id ?? "")}/new-loan?renewFrom=${loan.id}`)}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
