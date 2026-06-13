@@ -706,6 +706,12 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
+    if (!isValidRouteInstallment(inst)) {
+      toast.error("Registro incompleto: empréstimo ou cliente ausente.");
+      return;
+    }
+    const safeClientId = getInstClientId(inst)!;
+    const safeClientName = getInstClientName(inst);
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
@@ -721,7 +727,7 @@ export default function DailyCashPage() {
         try {
           await registerPenaltyPayment({
             loanId: inst.loan_id, amount: multaValue,
-            clientId: inst.loans.client_id, clientName: inst.loans.clients.name,
+            clientId: safeClientId, clientName: safeClientName,
             cashDate: payDate, origin: "rota",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
@@ -732,7 +738,7 @@ export default function DailyCashPage() {
       if (paidValue > 0) {
         await registerPayment({
           loanId: inst.loan_id, amount: paidValue,
-          clientId: inst.loans.client_id, clientName: inst.loans.clients.name,
+          clientId: safeClientId, clientName: safeClientName,
           cashDate: payDate, origin: "rota",
           installmentId: inst.id, startInstNumber: inst.number,
         });
