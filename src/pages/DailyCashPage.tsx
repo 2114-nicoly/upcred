@@ -1144,15 +1144,40 @@ export default function DailyCashPage() {
 
   // === Compact pending row ===
   const renderPendingRow = (inst: InstallmentWithLoan) => {
-    const remainingBalance = Number(inst.loans.remaining_balance);
+    // Defensive: render minimal "incomplete record" row if loan/client are missing
+    if (!isValidRouteInstallment(inst)) {
+      return (
+        <div
+          key={inst.id}
+          className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 flex items-center justify-between"
+        >
+          <div className="min-w-0">
+            <span className="font-semibold text-sm block truncate">Registro incompleto</span>
+            <span className="text-[11px] text-muted-foreground">
+              Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
+            </span>
+          </div>
+          {inst.loan_id && (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/loans/${inst.loan_id}`)}>
+              <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalhes
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    const loan = getInstLoan(inst)!;
+    const clientName = getInstClientName(inst);
+    const clientId = getInstClientId(inst)!;
+    const remainingBalance = Number(loan.remaining_balance);
     const instAmount = Number(inst.amount);
     const overdueDays = getOverdueDays(inst);
     const isOverdue = overdueDays > 0;
     const isSelected = selectedForNotPaid.has(inst.id);
     const progress = calculateLoanProgress({
-      totalAmount: Number(inst.loans.total_amount),
+      totalAmount: Number(loan.total_amount),
       remainingBalance,
-      installmentCount: inst.loans.installment_count,
+      installmentCount: loan.installment_count,
     });
     const accumulatedPaid = progress.totalPaid;
 
