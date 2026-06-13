@@ -813,7 +813,9 @@ export default function DailyCashPage() {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
-    const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
+    const selectedInsts = pendingInstallments
+      .filter(i => selectedForNotPaid.has(i.id))
+      .filter(isValidRouteInstallment);
     if (selectedInsts.length === 0) return;
 
     const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
@@ -824,7 +826,7 @@ export default function DailyCashPage() {
         mark_date: selectedDate,
         installment_id: inst.id,
         loan_id: inst.loan_id,
-        client_id: inst.loans.client_id,
+        client_id: getInstClientId(inst)!,
         observation: obs || null,
         user_id: s2?.user?.id,
       }));
@@ -836,10 +838,10 @@ export default function DailyCashPage() {
         await createDailyEvent({
           cash_date: selectedDate,
           event_type: "nao_pagou",
-          client_id: inst.loans.client_id,
+          client_id: getInstClientId(inst)!,
           loan_id: inst.loan_id,
           installment_id: inst.id,
-          observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+          observation: obs || `Não pagou - ${getInstClientName(inst)}`,
           origin: "rota",
         });
       }
