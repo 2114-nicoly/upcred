@@ -1283,7 +1283,7 @@ export default function DailyCashPage() {
                 {progress.progressFormatted} • Parcela: {formatCurrency(instAmount)} • Pago: {formatCurrency(accumulatedPaid)}
               </span>
               <span className={`text-[11px] font-medium tabular-nums ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
-                Vence: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM")}
+                Vence: {formatRouteDate(inst.due_date)}
               </span>
             </div>
           </div>
