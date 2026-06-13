@@ -239,7 +239,7 @@ export default function ActiveLoansPage() {
           try {
             await registerPenaltyPayment({
               loanId: payLoanId, amount: multaValue,
-              clientId: loan.clients.id, clientName: loan.clients.name,
+              clientId: (loan.clients?.id ?? loan.client_id), clientName: (loan.clients?.name ?? "Cliente removido"),
               cashDate: payDate, origin: "emprestimos_ativos",
             });
             toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
@@ -260,7 +260,7 @@ export default function ActiveLoansPage() {
 
           const result = await registerPayment({
             loanId: payLoanId, amount: parcValue,
-            clientId: loan.clients.id, clientName: loan.clients.name,
+            clientId: (loan.clients?.id ?? loan.client_id), clientName: (loan.clients?.name ?? "Cliente removido"),
             cashDate: payDate, origin: "emprestimos_ativos",
             installmentId: firstUnpaid?.id,
             startInstNumber: firstUnpaid?.number,
@@ -291,8 +291,8 @@ export default function ActiveLoansPage() {
     try {
       await settleLoan({
         loanId: quitarLoanId,
-        clientId: loan.clients.id,
-        clientName: loan.clients.name,
+        clientId: (loan.clients?.id ?? loan.client_id),
+        clientName: (loan.clients?.name ?? "Cliente removido"),
         cashDate: quitarDate,
         origin: "emprestimos_ativos",
       });
@@ -385,7 +385,7 @@ export default function ActiveLoansPage() {
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
             {/* Row 1: Client name + cravo icon */}
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-bold text-base truncate">{loan.clients.name}</span>
+              <span className="font-bold text-base truncate">{(loan.clients?.name ?? "Cliente removido")}</span>
               {loan.is_cravo && <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />}
             </div>
 
@@ -460,7 +460,7 @@ export default function ActiveLoansPage() {
               <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${loan.clients.id}/new-loan?renewFrom=${loan.id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/clients/${(loan.clients?.id ?? loan.client_id)}/new-loan?renewFrom=${loan.id}`)}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
@@ -642,7 +642,7 @@ export default function ActiveLoansPage() {
             const lp = progressMap[payLoanId];
             return (
               <div className="space-y-3">
-                <p className="text-sm font-medium">{loan?.clients.name}</p>
+                <p className="text-sm font-medium">{(loan?.clients?.name ?? "Cliente removido")}</p>
                 {lp && (
                   <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
                     <div className="flex justify-between"><span>Resta (parcelas):</span><span>{formatCurrency(Math.max(0, lp.remaining))}</span></div>
@@ -707,7 +707,7 @@ export default function ActiveLoansPage() {
             const penaltyPending = lp ? Math.max(0, lp.penaltyTotal - lp.penaltyPaid) : 0;
             return (
               <div className="space-y-3">
-                <p className="text-sm font-medium">{loan?.clients.name}</p>
+                <p className="text-sm font-medium">{(loan?.clients?.name ?? "Cliente removido")}</p>
                 <div className="rounded-lg border p-3 space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{lp ? lp.total - Math.floor(lp.progress) : "..."}/{lp?.total ?? loan?.installment_count}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Valor restante parcelas:</span><span className="font-bold text-foreground">{formatCurrency(lp?.remaining ?? 0)}</span></div>

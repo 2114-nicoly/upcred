@@ -103,7 +103,7 @@ export default function TodaySummaryPage() {
                   <Card key={inst.id} className="border-success/20">
                     <CardContent className="p-3 flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-sm">{inst.loans.clients.name}</p>
+                        <p className="font-medium text-sm">{(inst.loans?.clients?.name ?? "Cliente removido")}</p>
                         <p className="text-xs text-muted-foreground">
                           Parcela {inst.number} • {formatCurrency(Number(inst.paid_amount))}
                         </p>
@@ -126,7 +126,7 @@ export default function TodaySummaryPage() {
                   <Card key={inst.id} className="border-destructive/20">
                     <CardContent className="p-3 flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-sm">{inst.loans.clients.name}</p>
+                        <p className="font-medium text-sm">{(inst.loans?.clients?.name ?? "Cliente removido")}</p>
                         <p className="text-xs text-muted-foreground">
                           Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
                         </p>

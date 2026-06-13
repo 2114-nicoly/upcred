@@ -94,7 +94,7 @@ export default function LoanOverdueDetailPage() {
         try {
           await registerPenaltyPayment({
             loanId: loanId!, amount: multaValue,
-            clientId: loan.client_id, clientName: loan.clients.name,
+            clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
             cashDate: payDate, origin: "detalhe_atrasados",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
@@ -108,7 +108,7 @@ export default function LoanOverdueDetailPage() {
         if (paidValue > 0) {
           await registerPayment({
             loanId: loanId!, amount: paidValue,
-            clientId: loan.client_id, clientName: loan.clients.name,
+            clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
             cashDate: payDate, origin: "detalhe_atrasados",
             installmentId: inst.id, startInstNumber: inst.number,
           });
@@ -167,7 +167,7 @@ export default function LoanOverdueDetailPage() {
 
       {loan && (
         <p className="mb-4 text-sm text-muted-foreground">
-          Cliente: <span className="font-medium text-foreground">{loan.clients.name}</span>
+          Cliente: <span className="font-medium text-foreground">{(loan.clients?.name ?? "Cliente removido")}</span>
         </p>
       )}
 
@@ -189,7 +189,7 @@ export default function LoanOverdueDetailPage() {
                 <CardContent className="p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex-1">
-                      <p className="font-semibold">{loan?.clients.name}</p>
+                      <p className="font-semibold">{(loan?.clients?.name ?? "Cliente removido")}</p>
                       <p className="text-sm text-muted-foreground">
                         Parcela {inst.number} • Valor: {formatCurrency(Number(inst.amount))}
                       </p>
@@ -230,7 +230,7 @@ export default function LoanOverdueDetailPage() {
                       <DialogContent>
                         <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
                         <div className="space-y-3">
-                          <p className="text-sm text-muted-foreground">{loan?.clients.name} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}</p>
+                          <p className="text-sm text-muted-foreground">{(loan?.clients?.name ?? "Cliente removido")} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}</p>
                           {Number(inst.paid_amount) > 0 && <p className="text-sm">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
                           <div>
                             <Label>Valor da parcela recebido</Label>
