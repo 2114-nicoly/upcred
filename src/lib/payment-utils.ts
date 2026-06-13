@@ -570,7 +570,13 @@ export async function cancelLoan(params: {
           origin: "cancelamento",
           cash_movement_id: reversal?.id || null,
         } as any) as any;
-        if (reversal?.id && evt?.id) await linkCashMovementToDailyEvent(reversal.id, evt.id);
+        if (reversal?.id && evt?.id) {
+          const { error: linkError } = await supabase
+            .from("cash_movements")
+            .update({ daily_event_id: evt.id } as any)
+            .eq("id", reversal.id);
+          throwIfError("Vincular estorno ao evento diário", linkError);
+        }
       }
     } catch (err) {
       console.error("[cancelLoan] reverse movement failed", err);
