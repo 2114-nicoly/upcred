@@ -59,6 +59,22 @@ type InstallmentWithLoan = {
   };
 };
 
+// ===== Safe accessors for InstallmentWithLoan (defensive against null loans/clients) =====
+function getInstLoan(inst: any): any | null {
+  return inst && inst.loans ? inst.loans : null;
+}
+function getInstClientName(inst: any): string {
+  const loan = getInstLoan(inst);
+  return loan?.clients?.name || "Cliente removido";
+}
+function getInstClientId(inst: any): string | null {
+  const loan = getInstLoan(inst);
+  return loan?.client_id ?? loan?.clients?.id ?? null;
+}
+function isValidRouteInstallment(inst: any): boolean {
+  return !!(inst && inst.loan_id && getInstLoan(inst) && getInstClientId(inst));
+}
+
 type NotPaidMark = {
   id: string;
   mark_date: string;
