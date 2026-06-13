@@ -30,6 +30,8 @@ type Installment = {
 type Loan = {
   id: string;
   total_amount: number;
+  remaining_balance: number;
+  status: string;
   payment_type: string;
   client_id: string;
   clients: { name: string };
@@ -51,8 +53,20 @@ export default function LoanOverdueDetailPage() {
   const [editInstDueDate, setEditInstDueDate] = useState("");
 
   const fetchData = async () => {
-    const { data: l } = await supabase.from("loans").select("id, total_amount, payment_type, client_id, clients(name)").eq("id", loanId!).single();
+    const { data: l } = await supabase
+      .from("loans")
+      .select("id, total_amount, remaining_balance, status, payment_type, client_id, clients(name)")
+      .eq("id", loanId!)
+      .not("status", "in", "(paid,cancelled,renegotiated)")
+      .gt("remaining_balance", 0.01)
+      .maybeSingle();
     setLoan(l as unknown as Loan);
+
+    if (!l) {
+      setInstallments([]);
+      setLoading(false);
+      return;
+    }
 
     const today = format(new Date(), "yyyy-MM-dd");
     const { data: insts } = await supabase
@@ -60,7 +74,7 @@ export default function LoanOverdueDetailPage() {
       .select("*")
       .eq("loan_id", loanId!)
       .eq("is_penalty", false)
-      .neq("status", "paid")
+      .not("status", "in", "(paid,cancelled,renegotiated)")
       .lt("due_date", today)
       .order("number");
 

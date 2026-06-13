@@ -187,7 +187,7 @@ export default function ClientDetailPage() {
   };
 
   const activeLoans = loans.filter(
-    (l) => l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated"
+    (l) => l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated" && Number(l.remaining_balance) > 0.01
   );
   const activeLoan = activeLoans[0] || null;
   const historyLoans = loans.filter(

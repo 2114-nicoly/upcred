@@ -63,8 +63,9 @@ export default function ClientsPage() {
 
     const { data: loans } = await supabase
       .from("loans")
-      .select("client_id, total_amount, status")
-      .not("status", "in", "(paid,cancelled,renegotiated)");
+      .select("client_id, total_amount, status, remaining_balance")
+      .not("status", "in", "(paid,cancelled,renegotiated)")
+      .gt("remaining_balance", 0.01);
 
     const summaries: Record<string, LoanSummary> = {};
     (loans || []).forEach((l: any) => {

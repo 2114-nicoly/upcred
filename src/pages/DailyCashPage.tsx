@@ -120,6 +120,8 @@ type NewLoanInfo = {
   id: string;
   amount: number;
   total_amount: number;
+  remaining_balance: number;
+  status: string;
   installment_count: number;
   payment_type: string;
   loan_date: string;
@@ -422,7 +424,7 @@ export default function DailyCashPage() {
         getDailyEvents(selectedDate, { includeReversed: true }),
         supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
         supabase.from("loans")
-          .select("id, amount, total_amount, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
+          .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
         supabase.from("cash_movements")
           .select("id, loan_id, amount, created_at")
@@ -437,7 +439,10 @@ export default function DailyCashPage() {
         ? (dcData.status || "open")
         : "sem_caixa";
       setDailyCashStatus(status);
-      setNewLoans((newLoanData as NewLoanInfo[]) || []);
+      const visibleNewLoans = ((newLoanData as NewLoanInfo[]) || []).filter(
+        (loan: any) => loan.status !== "paid" && loan.status !== "cancelled" && loan.status !== "renegotiated" && Number(loan.remaining_balance ?? loan.total_amount) > 0.01
+      );
+      setNewLoans(visibleNewLoans);
       // Opening balance: from yesterday's closed daily_cash for same scope.
       const dcAny = dcData as any;
       if (dcAny?.opening_balance != null) {
@@ -676,20 +681,22 @@ export default function DailyCashPage() {
       // Pending penalties (unpaid) for loans the user has scope on
       const { data: penData } = await supabase
         .from("penalties")
-        .select("id, amount, loan_id, created_at, loans:loan_id(client_id, clients:client_id(id, name))")
+        .select("id, amount, loan_id, created_at, loans:loan_id(client_id, status, remaining_balance, clients:client_id(id, name))")
         .eq("paid", false)
         .lte("created_at", selectedDate + "T23:59:59")
         .order("created_at", { ascending: false })
         .limit(100);
       if (!isStale()) {
-        setPendingPenalties(((penData as any[]) || []).map((p) => ({
-          id: p.id,
-          amount: Number(p.amount),
-          loan_id: p.loan_id,
-          clientId: p.loans?.client_id ?? "",
-          clientName: p.loans?.clients?.name ?? "Cliente",
-          created_at: p.created_at,
-        })));
+        setPendingPenalties(((penData as any[]) || [])
+          .filter((p) => p.loans?.status !== "paid" && p.loans?.status !== "cancelled" && p.loans?.status !== "renegotiated" && Number(p.loans?.remaining_balance ?? 0) > 0.01)
+          .map((p) => ({
+            id: p.id,
+            amount: Number(p.amount),
+            loan_id: p.loan_id,
+            clientId: p.loans?.client_id ?? "",
+            clientName: p.loans?.clients?.name ?? "Cliente",
+            created_at: p.created_at,
+          })));
       }
     } catch (err) {
       console.error("[DailyCashPage] fetchData failed:", err);

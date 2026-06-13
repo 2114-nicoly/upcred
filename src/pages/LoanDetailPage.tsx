@@ -762,7 +762,7 @@ export default function LoanDetailPage() {
       const { cancelLoan } = await import("@/lib/payment-utils");
       await cancelLoan({ loanId: loanId!, reason: "Cancelado pelo usuário" });
       toast.success("Empréstimo cancelado!");
-      navigate(-1);
+      navigate(loan?.client_id ? `/clients/${loan.client_id}` : "/active-loans", { replace: true });
     } catch (err: any) {
       console.error(err);
       toast.error(`Erro ao cancelar: ${err?.message || "erro"}`);
