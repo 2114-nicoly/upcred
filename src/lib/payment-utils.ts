@@ -507,10 +507,12 @@ export async function cancelLoan(params: {
 
   const { data: loan } = await supabase
     .from("loans")
-    .select("id, client_id, remaining_balance, status")
+    .select("id, client_id, remaining_balance, status, is_imported_ongoing, amount_already_paid, initial_remaining_balance")
     .eq("id", loanId)
     .single();
   if (!loan) throw new Error("Empréstimo não encontrado");
+
+  const isImportedOngoing = Boolean((loan as any).is_imported_ongoing);
 
   // 1. Reverse each non-reversed cash_movement linked to the loan
   const { data: movements } = await supabase
@@ -522,7 +524,12 @@ export async function cancelLoan(params: {
   for (const mov of (movements || []) as any[]) {
     try {
       if (mov.type === "recebimento_normal" || mov.type === "recebimento_multa") {
+        // Payments received are always reversed (money actually moved)
         await reversePayment({ movementId: mov.id });
+      } else if (isImportedOngoing && mov.type === "emprestimo") {
+        // Imported ongoing loans never moved cash on creation — do not create a counter-entry.
+        // Just mark any stray "emprestimo" movement as reversed for cleanliness.
+        await markCashMovementReversed(mov.id);
       } else {
         // emprestimo / other: mark reversed + counter-entry
         await markCashMovementReversed(mov.id);
