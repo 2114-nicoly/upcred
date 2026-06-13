@@ -59,6 +59,22 @@ type InstallmentWithLoan = {
   };
 };
 
+// ===== Safe accessors for InstallmentWithLoan (defensive against null loans/clients) =====
+function getInstLoan(inst: any): any | null {
+  return inst && inst.loans ? inst.loans : null;
+}
+function getInstClientName(inst: any): string {
+  const loan = getInstLoan(inst);
+  return loan?.clients?.name || "Cliente removido";
+}
+function getInstClientId(inst: any): string | null {
+  const loan = getInstLoan(inst);
+  return loan?.client_id ?? loan?.clients?.id ?? null;
+}
+function isValidRouteInstallment(inst: any): boolean {
+  return !!(inst && inst.loan_id && getInstLoan(inst) && getInstClientId(inst));
+}
+
 type NotPaidMark = {
   id: string;
   mark_date: string;
@@ -316,7 +332,7 @@ export default function DailyCashPage() {
     const due = new Date(inst.due_date + "T12:00:00");
     const sel = new Date(selectedDate + "T12:00:00");
     if (sel <= due) return 0;
-    if (inst.loans.payment_type === "daily") {
+    if (getInstLoan(inst)?.payment_type === "daily") {
       return calculateOverdueDays(inst.due_date, "daily");
     }
     return differenceInCalendarDays(sel, due);
@@ -338,17 +354,17 @@ export default function DailyCashPage() {
       : pendingInstallments;
     const q = clientSearch.trim().toLowerCase();
     if (!q) return base;
-    return base.filter((i) => i.loans.clients.name.toLowerCase().includes(q));
+    return base.filter((i) => getInstClientName(i).toLowerCase().includes(q));
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments, clientSearch]);
 
   const filteredOverdue = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
-    return q ? overdueItems.filter((i) => i.loans.clients.name.toLowerCase().includes(q)) : overdueItems;
+    return q ? overdueItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : overdueItems;
   }, [overdueItems, clientSearch]);
 
   const filteredToday = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
-    return q ? todayItems.filter((i) => i.loans.clients.name.toLowerCase().includes(q)) : todayItems;
+    return q ? todayItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : todayItems;
   }, [todayItems, clientSearch]);
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -579,7 +595,7 @@ export default function DailyCashPage() {
 
       let routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
       if (isSunday(selectedDate)) {
-        routeInstallments = routeInstallments.filter((i) => i.loans.payment_type !== "daily");
+        routeInstallments = routeInstallments.filter((i) => getInstLoan(i)?.payment_type !== "daily");
       }
       if (isStale()) return;
 
@@ -690,6 +706,12 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
+    if (!isValidRouteInstallment(inst)) {
+      toast.error("Registro incompleto: empréstimo ou cliente ausente.");
+      return;
+    }
+    const safeClientId = getInstClientId(inst)!;
+    const safeClientName = getInstClientName(inst);
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
@@ -705,7 +727,7 @@ export default function DailyCashPage() {
         try {
           await registerPenaltyPayment({
             loanId: inst.loan_id, amount: multaValue,
-            clientId: inst.loans.client_id, clientName: inst.loans.clients.name,
+            clientId: safeClientId, clientName: safeClientName,
             cashDate: payDate, origin: "rota",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
@@ -716,7 +738,7 @@ export default function DailyCashPage() {
       if (paidValue > 0) {
         await registerPayment({
           loanId: inst.loan_id, amount: paidValue,
-          clientId: inst.loans.client_id, clientName: inst.loans.clients.name,
+          clientId: safeClientId, clientName: safeClientName,
           cashDate: payDate, origin: "rota",
           installmentId: inst.id, startInstNumber: inst.number,
         });
@@ -743,6 +765,12 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
+    if (!isValidRouteInstallment(inst)) {
+      toast.error("Registro incompleto: empréstimo ou cliente ausente.");
+      return;
+    }
+    const safeClientId = getInstClientId(inst)!;
+    const safeClientName = getInstClientName(inst);
 
     const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
     setIsSubmitting(true);
@@ -752,7 +780,7 @@ export default function DailyCashPage() {
         .from("not_paid_marks")
         .upsert({
           mark_date: selectedDate, installment_id: inst.id,
-          loan_id: inst.loan_id, client_id: inst.loans.client_id,
+          loan_id: inst.loan_id, client_id: safeClientId,
           observation: obs || null,
           user_id: session?.user?.id,
         }, { onConflict: "mark_date,installment_id", ignoreDuplicates: true });
@@ -760,10 +788,10 @@ export default function DailyCashPage() {
       await createDailyEvent({
         cash_date: selectedDate,
         event_type: "nao_pagou",
-        client_id: inst.loans.client_id,
+        client_id: safeClientId,
         loan_id: inst.loan_id,
         installment_id: inst.id,
-        observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+        observation: obs || `Não pagou - ${safeClientName}`,
         origin: "rota",
       });
       setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
@@ -785,7 +813,9 @@ export default function DailyCashPage() {
     if (isSubmitting) return;
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
-    const selectedInsts = pendingInstallments.filter(i => selectedForNotPaid.has(i.id));
+    const selectedInsts = pendingInstallments
+      .filter(i => selectedForNotPaid.has(i.id))
+      .filter(isValidRouteInstallment);
     if (selectedInsts.length === 0) return;
 
     const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
@@ -796,7 +826,7 @@ export default function DailyCashPage() {
         mark_date: selectedDate,
         installment_id: inst.id,
         loan_id: inst.loan_id,
-        client_id: inst.loans.client_id,
+        client_id: getInstClientId(inst)!,
         observation: obs || null,
         user_id: s2?.user?.id,
       }));
@@ -808,10 +838,10 @@ export default function DailyCashPage() {
         await createDailyEvent({
           cash_date: selectedDate,
           event_type: "nao_pagou",
-          client_id: inst.loans.client_id,
+          client_id: getInstClientId(inst)!,
           loan_id: inst.loan_id,
           installment_id: inst.id,
-          observation: obs || `Não pagou - ${inst.loans.clients.name}`,
+          observation: obs || `Não pagou - ${getInstClientName(inst)}`,
           origin: "rota",
         });
       }
@@ -1078,13 +1108,17 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === instId);
     if (!inst) return;
+    if (!isValidRouteInstallment(inst)) {
+      toast.error("Registro incompleto: empréstimo ou cliente ausente.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       await settleLoan({
         loanId: inst.loan_id,
-        clientId: inst.loans.client_id,
-        clientName: inst.loans.clients.name,
+        clientId: getInstClientId(inst)!,
+        clientName: getInstClientName(inst),
         cashDate: quitarDate,
         origin: "rota",
         installmentId: inst.id,
@@ -1110,15 +1144,40 @@ export default function DailyCashPage() {
 
   // === Compact pending row ===
   const renderPendingRow = (inst: InstallmentWithLoan) => {
-    const remainingBalance = Number(inst.loans.remaining_balance);
+    // Defensive: render minimal "incomplete record" row if loan/client are missing
+    if (!isValidRouteInstallment(inst)) {
+      return (
+        <div
+          key={inst.id}
+          className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 flex items-center justify-between"
+        >
+          <div className="min-w-0">
+            <span className="font-semibold text-sm block truncate">Registro incompleto</span>
+            <span className="text-[11px] text-muted-foreground">
+              Parcela {inst.number} • {formatCurrency(Number(inst.amount))}
+            </span>
+          </div>
+          {inst.loan_id && (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/loans/${inst.loan_id}`)}>
+              <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalhes
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    const loan = getInstLoan(inst)!;
+    const clientName = getInstClientName(inst);
+    const clientId = getInstClientId(inst)!;
+    const remainingBalance = Number(loan.remaining_balance);
     const instAmount = Number(inst.amount);
     const overdueDays = getOverdueDays(inst);
     const isOverdue = overdueDays > 0;
     const isSelected = selectedForNotPaid.has(inst.id);
     const progress = calculateLoanProgress({
-      totalAmount: Number(inst.loans.total_amount),
+      totalAmount: Number(loan.total_amount),
       remainingBalance,
-      installmentCount: inst.loans.installment_count,
+      installmentCount: loan.installment_count,
     });
     const accumulatedPaid = progress.totalPaid;
 
@@ -1135,7 +1194,7 @@ export default function DailyCashPage() {
             className="shrink-0 h-4 w-4"
           />
           <div className="flex-1 min-w-0">
-            <span className="font-bold text-base truncate block">{inst.loans.clients.name}</span>
+            <span className="font-bold text-base truncate block">{clientName}</span>
             <div className="flex items-center justify-between gap-2 mt-1">
               <span className="text-sm font-extrabold tabular-nums text-foreground">
                 Saldo: {formatCurrency(remainingBalance)}
@@ -1182,13 +1241,13 @@ export default function DailyCashPage() {
               <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; setQuitarDialogId(inst.id); }} title={actionsBlockedTitle || undefined}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${inst.loans.client_id}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${clientId}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
                 <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalhes
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${inst.loans.client_id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/clients/${clientId}`)}>
                 <History className="mr-2 h-4 w-4" /> Histórico do cliente
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -1207,7 +1266,7 @@ export default function DailyCashPage() {
               <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {inst.loans.clients.name} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
+                  {clientName} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
                 <div>
                   <Label>Valor recebido</Label>
@@ -1240,7 +1299,7 @@ export default function DailyCashPage() {
               <DialogHeader><DialogTitle>Marcar Não Pagou</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {inst.loans.clients.name} — Parcela {inst.number} — {formatCurrency(instAmount)}
+                  {clientName} — Parcela {inst.number} — {formatCurrency(instAmount)}
                 </p>
                 <div>
                   <Label>Motivo</Label>
@@ -1276,7 +1335,7 @@ export default function DailyCashPage() {
           <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
             <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <p className="text-sm font-medium">{inst.loans.clients.name}</p>
+              <p className="text-sm font-medium">{clientName}</p>
               <div className="rounded-lg border p-3 space-y-1 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Saldo restante:</span><span className="font-bold text-foreground">{formatCurrency(remainingBalance)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Parcela:</span><span className="text-muted-foreground">{formatCurrency(instAmount)}</span></div>
@@ -1348,7 +1407,7 @@ export default function DailyCashPage() {
     return (
       <div key={mark.id} className="flex items-center justify-between rounded-lg border border-destructive/30 bg-card px-3 py-2">
         <div className="min-w-0">
-          <span className="font-semibold text-sm truncate block">{inst?.loans.clients.name || "Cliente"}</span>
+          <span className="font-semibold text-sm truncate block">{inst ? getInstClientName(inst) : "Cliente"}</span>
           {mark.observation && <p className="text-[10px] text-muted-foreground italic">"{mark.observation}"</p>}
         </div>
         {!isClosed && (
