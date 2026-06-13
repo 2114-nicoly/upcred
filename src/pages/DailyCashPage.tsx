@@ -681,20 +681,22 @@ export default function DailyCashPage() {
       // Pending penalties (unpaid) for loans the user has scope on
       const { data: penData } = await supabase
         .from("penalties")
-        .select("id, amount, loan_id, created_at, loans:loan_id(client_id, clients:client_id(id, name))")
+        .select("id, amount, loan_id, created_at, loans:loan_id(client_id, status, remaining_balance, clients:client_id(id, name))")
         .eq("paid", false)
         .lte("created_at", selectedDate + "T23:59:59")
         .order("created_at", { ascending: false })
         .limit(100);
       if (!isStale()) {
-        setPendingPenalties(((penData as any[]) || []).map((p) => ({
-          id: p.id,
-          amount: Number(p.amount),
-          loan_id: p.loan_id,
-          clientId: p.loans?.client_id ?? "",
-          clientName: p.loans?.clients?.name ?? "Cliente",
-          created_at: p.created_at,
-        })));
+        setPendingPenalties(((penData as any[]) || [])
+          .filter((p) => p.loans?.status !== "paid" && p.loans?.status !== "cancelled" && p.loans?.status !== "renegotiated" && Number(p.loans?.remaining_balance ?? 0) > 0.01)
+          .map((p) => ({
+            id: p.id,
+            amount: Number(p.amount),
+            loan_id: p.loan_id,
+            clientId: p.loans?.client_id ?? "",
+            clientName: p.loans?.clients?.name ?? "Cliente",
+            created_at: p.created_at,
+          })));
       }
     } catch (err) {
       console.error("[DailyCashPage] fetchData failed:", err);
