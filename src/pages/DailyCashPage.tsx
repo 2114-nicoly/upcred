@@ -77,6 +77,22 @@ function isValidRouteInstallment(inst: any): boolean {
 
 const safeKey = (...parts: unknown[]) => parts.map(p => String(p ?? "null")).join("-");
 
+function parseLocalNoonDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value.includes("T") ? value : `${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatRouteDate(value: string | null | undefined, pattern = "dd/MM"): string {
+  const date = parseLocalNoonDate(value);
+  if (!date) return "Sem data";
+  try {
+    return format(date, pattern);
+  } catch {
+    return "Sem data";
+  }
+}
+
 
 type NotPaidMark = {
   id: string;
@@ -291,6 +307,7 @@ export default function DailyCashPage() {
   const localActionedLoanIds = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
   const refreshTimerRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [isReopening, setIsReopening] = useState(false);
@@ -299,6 +316,18 @@ export default function DailyCashPage() {
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      fetchSeqRef.current += 1;
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const urlDate = dateParam || today;
@@ -332,8 +361,9 @@ export default function DailyCashPage() {
     : "";
 
   const getOverdueDays = useCallback((inst: InstallmentWithLoan) => {
-    const due = new Date(inst.due_date + "T12:00:00");
-    const sel = new Date(selectedDate + "T12:00:00");
+    const due = parseLocalNoonDate(inst.due_date);
+    const sel = parseLocalNoonDate(selectedDate);
+    if (!due || !sel) return 0;
     if (sel <= due) return 0;
     if (getInstLoan(inst)?.payment_type === "daily") {
       return calculateOverdueDays(inst.due_date, "daily");
