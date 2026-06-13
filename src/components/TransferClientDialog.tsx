@@ -54,6 +54,7 @@ export default function TransferClientDialog({
         .select("id, amount, remaining_balance, status")
         .eq("client_id", clientId)
         .not("status", "in", "(paid,cancelled,renegotiated)")
+        .gt("remaining_balance", 0.01)
         .order("created_at", { ascending: false })
         .limit(1);
       const ln = (loans as ActiveLoan[])?.[0] ?? null;
@@ -64,7 +65,7 @@ export default function TransferClientDialog({
           .from("installments")
           .select("id", { count: "exact", head: true })
           .eq("loan_id", ln.id)
-          .not("status", "in", "(paid,cancelled)");
+          .not("status", "in", "(paid,cancelled,renegotiated)");
         if (!cancel) setPendingCount(count || 0);
       } else {
         setPendingCount(0);
