@@ -332,7 +332,7 @@ export default function DailyCashPage() {
     const due = new Date(inst.due_date + "T12:00:00");
     const sel = new Date(selectedDate + "T12:00:00");
     if (sel <= due) return 0;
-    if (inst.loans.payment_type === "daily") {
+    if (getInstLoan(inst)?.payment_type === "daily") {
       return calculateOverdueDays(inst.due_date, "daily");
     }
     return differenceInCalendarDays(sel, due);
