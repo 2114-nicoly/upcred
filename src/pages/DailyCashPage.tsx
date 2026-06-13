@@ -1407,7 +1407,7 @@ export default function DailyCashPage() {
     return (
       <div key={mark.id} className="flex items-center justify-between rounded-lg border border-destructive/30 bg-card px-3 py-2">
         <div className="min-w-0">
-          <span className="font-semibold text-sm truncate block">{inst?.loans.clients.name || "Cliente"}</span>
+          <span className="font-semibold text-sm truncate block">{inst ? getInstClientName(inst) : "Cliente"}</span>
           {mark.observation && <p className="text-[10px] text-muted-foreground italic">"{mark.observation}"</p>}
         </div>
         {!isClosed && (
