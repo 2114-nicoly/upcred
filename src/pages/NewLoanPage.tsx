@@ -706,13 +706,53 @@ export default function NewLoanPage() {
                     <span>Saldo restante:</span>
                     <span className="text-primary">{formatCurrency(ongoingRemaining)}</span>
                   </div>
+
+                  {ongoingPlan && ongoingRemaining > 0.01 && (
+                    <div className="border-t pt-2 mt-2 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Parcelas quitadas:</span>
+                        <span className="font-medium">{ongoingPlan.fullPaid} de {numInstallments}</span>
+                      </div>
+                      {ongoingPlan.hasPartial && (
+                        <>
+                          <div className="flex justify-between">
+                            <span>Parcela parcial:</span>
+                            <span className="font-medium">#{ongoingPlan.firstPendingNumber}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Saldo da parcial:</span>
+                            <span className="font-medium text-warning">{formatCurrency(ongoingPlan.partialRemaining)}</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Próxima cobrança:</span>
+                        <span className="font-medium">
+                          Parcela #{ongoingPlan.firstPendingNumber}
+                          {firstDueDate ? ` em ${format(new Date(firstDueDate + "T12:00:00"), "dd/MM/yyyy")}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Parcelas pendentes:</span>
+                        <span className="font-medium">{ongoingPlan.pendingCount}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {numAlreadyPaid > calc.totalAmount + 0.01 && (
                     <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
                       <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                       <span>Valor já pago é maior que o valor total do empréstimo.</span>
                     </div>
                   )}
+                  {calc.totalAmount - numAlreadyPaid <= 0.01 && numAlreadyPaid > 0 && (
+                    <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>Este empréstimo já está quitado.</span>
+                    </div>
+                  )}
                 </div>
+
               )}
             </CardContent>
           </Card>
