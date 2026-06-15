@@ -5,20 +5,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   History, Loader2, DollarSign, AlertTriangle, CalendarClock,
-  FileText, RefreshCw, Filter,
+  FileText, RefreshCw, Filter, Trash2, Download, User as UserIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/loan-utils";
 
+type TimelineKind = "payment" | "penalty" | "reschedule" | "audit" | "renegotiation" | "delete" | "cash";
+
 type TimelineItem = {
   id: string;
   date: string; // ISO
-  kind: "payment" | "penalty" | "reschedule" | "audit" | "renegotiation";
+  kind: TimelineKind;
   title: string;
   detail?: string;
   amount?: number | null;
   badge?: string;
   meta?: string;
+  actor?: string;
+  destructive?: boolean;
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -44,17 +48,26 @@ const ACTION_LABEL: Record<string, string> = {
   alterar_data_parcela: "Data da parcela alterada",
   multa_aplicada: "Multa aplicada",
   multa_paga: "Multa paga",
+  multa_cancelada: "Multa cancelada",
+  editar_multa: "Multa editada",
   reagendamento_solicitado: "Reagendamento solicitado",
   reagendamento_aprovado: "Reagendamento aprovado",
   reagendamento_recusado: "Reagendamento recusado",
 };
 
+const SOFT_DELETE_ACTIONS = new Set([
+  "excluir_cliente", "excluir_emprestimo", "excluir_anexo",
+  "desfazer_pagamento", "multa_cancelada",
+]);
+
 const KIND_COLORS: Record<string, string> = {
-  payment: "bg-success/15 text-success border-success/30",
-  penalty: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  reschedule: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  audit: "bg-muted text-muted-foreground border-border",
-  renegotiation: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
+  payment: "border-l-success/60",
+  penalty: "border-l-amber-500/60",
+  reschedule: "border-l-blue-500/60",
+  audit: "border-l-border",
+  renegotiation: "border-l-purple-500/60",
+  delete: "border-l-destructive/70",
+  cash: "border-l-emerald-500/60",
 };
 
 const KIND_ICON = {
@@ -63,20 +76,30 @@ const KIND_ICON = {
   reschedule: CalendarClock,
   audit: FileText,
   renegotiation: RefreshCw,
+  delete: Trash2,
+  cash: Download,
 };
 
-type Filter = "all" | "payment" | "penalty" | "reschedule" | "renegotiation" | "audit";
+type FilterKey = "all" | "payment" | "penalty" | "reschedule" | "renegotiation" | "audit" | "delete";
+
+function extractAmount(v: any): number | null {
+  if (!v || typeof v !== "object") return null;
+  for (const k of ["amount", "total_amount", "paid_amount", "value", "diff"]) {
+    if (typeof v[k] === "number") return v[k];
+    if (typeof v[k] === "string" && !isNaN(Number(v[k]))) return Number(v[k]);
+  }
+  return null;
+}
 
 export default function ClientHistory({ clientId }: { clientId: string }) {
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // fetch all loans for this client to join related tables
         const { data: loans } = await supabase
           .from("loans")
           .select("id")
@@ -86,13 +109,13 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
         const [auditRes, movRes, penRes, reschRes] = await Promise.all([
           supabase
             .from("audit_logs")
-            .select("id, created_at, action_type, user_role, old_value, new_value, observation, entity_type, entity_id")
+            .select("id, created_at, action_type, user_id, user_role, old_value, new_value, observation, entity_type, entity_id")
             .or(
               `and(entity_type.eq.client,entity_id.eq.${clientId})` +
               (loanIds.length ? `,and(entity_type.eq.loan,entity_id.in.(${loanIds.join(",")}))` : "")
             )
             .order("created_at", { ascending: false })
-            .limit(200),
+            .limit(300),
           loanIds.length
             ? supabase
                 .from("cash_movements")
@@ -120,16 +143,41 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
             : Promise.resolve({ data: [] as any[] }),
         ]);
 
+        // Resolve actor names
+        const userIds = Array.from(new Set((auditRes.data || []).map((l: any) => l.user_id).filter(Boolean)));
+        const actorMap = new Map<string, string>();
+        if (userIds.length) {
+          const ids = userIds as string[];
+          const [wRes, aRes] = await Promise.all([
+            (supabase.from("workers") as any).select("user_id, name, username").in("user_id", ids),
+            (supabase.from("admins") as any).select("user_id, name, username").in("user_id", ids),
+          ]);
+          (wRes.data || []).forEach((w: any) => actorMap.set(w.user_id, w.name || w.username));
+          (aRes.data || []).forEach((a: any) => { if (!actorMap.has(a.user_id)) actorMap.set(a.user_id, a.name || a.username); });
+        }
+
         const out: TimelineItem[] = [];
 
         (auditRes.data || []).forEach((l: any) => {
-          const isReneg = l.action_type === "renegociacao_emprestimo" || l.action_type === "renovacao_emprestimo";
+          const isReneg = l.action_type === "renegociacao_emprestimo" || l.action_type === "renovacao_emprestimo" || l.action_type === "renovar_emprestimo";
+          const isDelete = SOFT_DELETE_ACTIONS.has(l.action_type);
+          const nv: any = l.new_value || {};
+          const isImported = l.action_type === "criar_emprestimo" && nv?.imported_ongoing === true;
+          const title = isImported
+            ? "Empréstimo importado (em andamento)"
+            : (ACTION_LABEL[l.action_type] || l.action_type);
+          const amt = extractAmount(l.new_value) ?? extractAmount(l.old_value);
+          const actor = actorMap.get(l.user_id) || l.user_role || undefined;
           out.push({
             id: `a-${l.id}`,
             date: l.created_at,
-            kind: isReneg ? "renegotiation" : "audit",
-            title: ACTION_LABEL[l.action_type] || l.action_type,
+            kind: isDelete ? "delete" : (isReneg ? "renegotiation" : "audit"),
+            title,
             detail: l.observation || undefined,
+            amount: amt,
+            actor,
+            destructive: isDelete,
+            badge: isImported ? "Importado" : (isDelete ? "Excluído" : undefined),
             meta: l.user_role || undefined,
           });
         });
@@ -207,22 +255,24 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
   );
 
   const totals = useMemo(() => {
-    let payments = 0, penaltiesPaid = 0, penaltiesApplied = 0;
+    let payments = 0, penaltiesPaid = 0, penaltiesApplied = 0, deletes = 0;
     items.forEach((i) => {
       if (i.kind === "payment" && i.title === "Pagamento") payments += i.amount || 0;
       if (i.kind === "penalty" && i.title === "Multa quitada") penaltiesPaid += i.amount || 0;
       if (i.kind === "penalty" && i.title === "Multa aplicada") penaltiesApplied += i.amount || 0;
+      if (i.kind === "delete") deletes += 1;
     });
-    return { payments, penaltiesPaid, penaltiesApplied };
+    return { payments, penaltiesPaid, penaltiesApplied, deletes };
   }, [items]);
 
-  const FILTERS: { key: Filter; label: string }[] = [
+  const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "all", label: "Tudo" },
     { key: "payment", label: "Pagamentos" },
     { key: "penalty", label: "Multas" },
-    { key: "reschedule", label: "Reagendamentos" },
-    { key: "renegotiation", label: "Renegociações" },
+    { key: "reschedule", label: "Reagend." },
+    { key: "renegotiation", label: "Renov." },
     { key: "audit", label: "Cadastro" },
+    { key: "delete", label: `Exclusões${totals.deletes ? ` (${totals.deletes})` : ""}` },
   ];
 
   return (
@@ -233,7 +283,7 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
 
       {!loading && items.length > 0 && (
         <Card>
-          <CardContent className="p-2.5 grid grid-cols-3 gap-2 text-center">
+          <CardContent className="p-2.5 grid grid-cols-4 gap-2 text-center">
             <div>
               <p className="text-[10px] text-muted-foreground">Recebido</p>
               <p className="text-xs font-bold text-success tabular-nums">{formatCurrency(totals.payments)}</p>
@@ -243,8 +293,12 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
               <p className="text-xs font-bold text-amber-600 tabular-nums">{formatCurrency(totals.penaltiesPaid)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Multas aplicadas</p>
+              <p className="text-[10px] text-muted-foreground">Multas aplic.</p>
               <p className="text-xs font-bold tabular-nums">{formatCurrency(totals.penaltiesApplied)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Exclusões</p>
+              <p className={`text-xs font-bold tabular-nums ${totals.deletes ? "text-destructive" : ""}`}>{totals.deletes}</p>
             </div>
           </CardContent>
         </Card>
@@ -274,26 +328,35 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
           {filtered.map((i) => {
             const Icon = KIND_ICON[i.kind];
             return (
-              <Card key={i.id} className={`border-l-2 ${KIND_COLORS[i.kind].split(" ").find(c => c.startsWith("border-"))}`}>
+              <Card key={i.id} className={`border-l-2 ${KIND_COLORS[i.kind]} ${i.destructive ? "bg-destructive/5" : ""}`}>
                 <CardContent className="p-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-1.5 min-w-0 flex-1">
-                      <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <Icon className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${i.destructive ? "text-destructive" : ""}`} />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium leading-tight">{i.title}</p>
-                        {i.detail && <p className="text-[10px] text-muted-foreground mt-0.5">{i.detail}</p>}
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {format(new Date(i.date), "dd/MM/yyyy HH:mm")}
-                          {i.meta ? ` • ${i.meta}` : ""}
+                        <p className={`text-xs font-medium leading-tight ${i.destructive ? "text-destructive" : ""}`}>{i.title}</p>
+                        {i.detail && <p className="text-[10px] text-muted-foreground mt-0.5 break-words">{i.detail}</p>}
+                        <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
+                          <span>{format(new Date(i.date), "dd/MM/yyyy HH:mm")}</span>
+                          {i.actor && (
+                            <span className="inline-flex items-center gap-0.5">
+                              • <UserIcon className="h-2.5 w-2.5" /> {i.actor}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
-                      {i.amount != null && (
+                      {i.amount != null && i.amount !== 0 && (
                         <span className="text-xs font-bold tabular-nums">{formatCurrency(i.amount)}</span>
                       )}
                       {i.badge && (
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">{i.badge}</Badge>
+                        <Badge
+                          variant={i.destructive ? "destructive" : "outline"}
+                          className="text-[9px] px-1.5 py-0 h-4"
+                        >
+                          {i.badge}
+                        </Badge>
                       )}
                     </div>
                   </div>
