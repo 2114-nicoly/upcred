@@ -59,8 +59,7 @@ export function computeDailyTotals(
     // Empréstimo importado é informativo: não entra em entradas/saídas/pagamentos/liberados.
     if (e.event_type === "emprestimo_importado") {
       t.emprestimosImportados += 1;
-      // Valor a receber é codificado como amount_in apenas para agregação informativa.
-      // Mesmo assim, NÃO somar em entradas (já saímos do fluxo acima).
+      // Caso futuramente venha valor metadado em amount_in, agregamos aqui sem afetar caixa.
       t.valorImportadoAReceber += ain;
       continue;
     }
