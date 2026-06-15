@@ -955,9 +955,11 @@ export default function LoanDetailPage() {
       )}
 
       {/* === RECALCULATE BUTTON === */}
-      <Button variant="outline" className="w-full mb-4" onClick={handleFullRecalculate} disabled={isSubmitting}>
-        <Calculator className="mr-2 h-4 w-4" /> Atualizar
-      </Button>
+      {loanActive && (
+        <Button variant="outline" className="w-full mb-4" onClick={handleFullRecalculate} disabled={isSubmitting}>
+          <Calculator className="mr-2 h-4 w-4" /> Atualizar
+        </Button>
+      )}
 
       {/* === INSTALLMENTS SECTION === */}
       <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
@@ -1020,18 +1022,20 @@ export default function LoanDetailPage() {
                         Vencimento: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
                       </p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                        setEditInstId(inst.id);
-                        setEditInstAmount(String(inst.amount));
-                        setEditInstDueDate(inst.due_date);
-                      }}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteInstallment(inst.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
+                    {loanActive && (
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                          setEditInstId(inst.id);
+                          setEditInstAmount(String(inst.amount));
+                          setEditInstDueDate(inst.due_date);
+                        }}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteInstallment(inst.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Amount details */}
@@ -1116,18 +1120,20 @@ export default function LoanDetailPage() {
                       <p className="text-xs text-muted-foreground italic mt-0.5">"{entry.observation}"</p>
                     )}
                   </div>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                      setEditPayEntry(entry);
-                      setEditPayNewAmount(String(entry.amount));
-                      setEditPayOpen(true);
-                    }} disabled={isSubmitting}>
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleUndoHistoryPayment(entry)} disabled={isSubmitting}>
-                      <Undo2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  {loanActive && (
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                        setEditPayEntry(entry);
+                        setEditPayNewAmount(String(entry.amount));
+                        setEditPayOpen(true);
+                      }} disabled={isSubmitting}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleUndoHistoryPayment(entry)} disabled={isSubmitting}>
+                        <Undo2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
