@@ -481,6 +481,8 @@ export default function NewLoanPage() {
       }
       toast.success("Empréstimo renovado com sucesso!");
     } else if (isOngoing) {
+      // Importado: não toca em caixa, mas precisa refrescar A Receber / Empréstimos Ativos
+      try { await recalculateCashBalanceFromLedger(); } catch (e) { console.warn("[NewLoan] recalc ledger falhou:", e); }
       toast.success("Empréstimo em andamento cadastrado!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
@@ -499,9 +501,17 @@ export default function NewLoanPage() {
         payment_type: paymentType,
         loan_date: loanDate,
         released: renewFromLoanId ? valorLiberado : numAmount,
+        ...(isOngoing ? {
+          imported_ongoing: true,
+          amount_already_paid: numAlreadyPaid,
+          initial_remaining_balance: ongoingRemaining,
+          first_pending_installment: ongoingPlan?.firstPendingNumber ?? null,
+          partial_remaining: ongoingPlan?.partialRemaining ?? 0,
+        } : {}),
       },
-      renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,
+      renewFromLoanId ? `Renovação - ${clientName}` : isOngoing ? `Empréstimo em andamento - ${clientName}` : `Novo empréstimo - ${clientName}`,
     );
+
 
     draft.clear();
     navigate("/");
