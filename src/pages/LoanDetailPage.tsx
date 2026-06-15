@@ -455,6 +455,14 @@ export default function LoanDetailPage() {
         origin: "detalhe_emprestimo",
       });
     } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }
+    await logAction(
+      "multa_aplicada",
+      "penalty",
+      installmentId,
+      null,
+      { loan_id: loanId, installment_id: installmentId, amount: penAmount, observation: penObs || null, client_id: loan?.client_id ?? null },
+      `Multa aplicada ${formatCurrency(penAmount)}${penObs ? ` — ${penObs}` : ""}`,
+    );
     toast.success("Multa adicionada!");
     setPenaltyAmount(""); setPenaltyObservation("");
     fetchData();
