@@ -23,6 +23,8 @@ export type DailyTotals = {
   entradasManuais: number;   // event_type = 'entrada_manual'
   saidasManuais: number;     // event_type = 'saida_manual'
   naoPagos: number;          // contagem event_type = 'nao_pagou'
+  emprestimosImportados: number;   // contagem event_type = 'emprestimo_importado'
+  valorImportadoAReceber: number;  // soma do saldo restante adicionado ao A Receber via importações
   saldoFinalEsperado: number; // opening + entradas - saidas
 };
 
