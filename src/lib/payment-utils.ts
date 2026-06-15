@@ -221,32 +221,42 @@ export async function registerPenaltyPayment(params: {
 
   const newPaid = Number(penaltyInst.paid_amount) + amount;
   const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-  await supabase.from("installments").update({
-    paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-    status: fullyPaid ? "paid" : newPaid > 0.01 ? "partial" : penaltyInst.status,
-    paid_at: fullyPaid ? new Date(cashDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-  }).eq("id", penaltyInst.id);
-
-  await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
-  const movement = await createCashMovement({
-    type: "recebimento_multa",
-    amount,
-    client_id: clientId,
-    loan_id: loanId,
-    observation: `Pagamento de multa - ${clientName}`,
-    cash_date: cashDate,
-  }) as any;
-  const event = await createDailyEvent({
-    cash_date: cashDate,
-    event_type: "recebimento_multa",
-    client_id: clientId,
-    loan_id: loanId,
-    amount_in: amount,
-    observation: `Multa - ${clientName}`,
-    origin,
-    cash_movement_id: movement?.id || null,
-  } as any) as any;
-  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+  let movement: any = null;
+  let event: any = null;
+  try {
+    movement = await createCashMovement({
+      type: "recebimento_multa",
+      amount,
+      client_id: clientId,
+      loan_id: loanId,
+      observation: `Pagamento de multa - ${clientName}`,
+      cash_date: cashDate,
+    }) as any;
+    event = await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "recebimento_multa",
+      client_id: clientId,
+      loan_id: loanId,
+      amount_in: amount,
+      observation: `Multa - ${clientName}`,
+      origin,
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (!movement?.id || !event?.id) throw new Error("Pagamento de multa sem movimentação/evento financeiro vinculado.");
+    await linkCashMovementToDailyEvent(movement.id, event.id);
+    await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
+    const { error: instError } = await supabase.from("installments").update({
+      paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
+      status: fullyPaid ? INSTALLMENT_STATUS.PAID : newPaid > 0.01 ? INSTALLMENT_STATUS.PARTIAL : penaltyInst.status,
+      paid_at: fullyPaid ? new Date(cashDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
+    }).eq("id", penaltyInst.id);
+    if (instError) throw instError;
+  } catch (err) {
+    if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+    if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+    await recalculateCashBalanceFromLedger();
+    throw err;
+  }
   await recalculateCashBalanceFromLedger();
 }
 
