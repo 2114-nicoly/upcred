@@ -488,6 +488,14 @@ export default function LoanDetailPage() {
       }
     }
     await updateCashBalance({ penalty_receivable: diff });
+    await logAction(
+      "editar_multa",
+      "penalty",
+      penaltyId,
+      { amount: penalty.amount, observation: penalty.observation ?? null },
+      { amount: newAmount, observation: editPenaltyObs || penalty.observation, diff },
+      `Multa editada: ${formatCurrency(Number(penalty.amount))} → ${formatCurrency(newAmount)}`,
+    );
     toast.success("Multa atualizada!");
     setEditingPenalty(null); setEditPenaltyValue(""); setEditPenaltyObs("");
     fetchData();
