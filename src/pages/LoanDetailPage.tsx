@@ -596,7 +596,7 @@ export default function LoanDetailPage() {
         .from("installments")
         .update({ status: "renegotiated" } as any)
         .eq("loan_id", loan.id)
-        .in("status", ["pending", "partial", "overdue"]);
+        .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[]);
 
       // 3. Create the new loan
       const { data: newLoan, error: newErr } = await supabase.from("loans").insert({
@@ -793,7 +793,7 @@ export default function LoanDetailPage() {
     <div className="mx-auto max-w-lg p-4">
       {/* Action buttons */}
       <div className="mb-2 flex items-center justify-between">
-        {loan.status !== "paid" && (
+        {loanActive && (
           <div className="flex gap-1">
             <Button size="sm" className="bg-success hover:bg-success/90" onClick={() => setQuitarOpen(true)}>
               <DollarSign className="mr-1 h-4 w-4" /> Quitar
@@ -804,14 +804,16 @@ export default function LoanDetailPage() {
           </div>
         )}
         <div className="flex gap-1 ml-auto">
-          {loan.status !== "paid" && (
+          {loanActive && (
             <Button variant="ghost" size="sm" onClick={openRenegotiate}>
               <RefreshCw className="mr-1 h-4 w-4" /> Renegociar
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
-            <Trash2 className="mr-1 h-4 w-4" /> Cancelar Empréstimo
-          </Button>
+          {loanActive && (
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
+              <Trash2 className="mr-1 h-4 w-4" /> Cancelar Empréstimo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -944,7 +946,7 @@ export default function LoanDetailPage() {
       </Button>
 
       {/* === REGISTER PAYMENT BUTTON === */}
-      {loan.status !== "paid" && (
+      {loanActive && (
         <Button className="w-full mb-2 bg-success hover:bg-success/90" size="lg" onClick={() => setPayOpen(true)}>
           <Plus className="mr-2 h-5 w-5" /> Registrar Pagamento
         </Button>
