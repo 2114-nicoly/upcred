@@ -365,7 +365,7 @@ export default function NewLoanPage() {
       }));
     }
 
-    if (installments.length === 0 && !isOngoing) {
+    if (installments.length === 0) {
       await rollbackLoan();
       toast.error("Erro ao criar parcelas. O empréstimo não foi salvo.");
       setSaving(false);
