@@ -26,14 +26,17 @@ import {
 export async function recalculateInstallments(loanId: string) {
   const { data: loan } = await supabase
     .from("loans")
-    .select("total_amount, remaining_balance, is_imported_ongoing, initial_remaining_balance")
+    .select("total_amount, remaining_balance, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
     .eq("id", loanId)
     .single();
 
   if (!loan) return;
 
+  const importedInitialRemaining = (loan as any).initial_remaining_balance != null
+    ? Number((loan as any).initial_remaining_balance)
+    : Math.max(0, Number(loan.total_amount) - Number((loan as any).amount_already_paid || 0));
   const paidBase = (loan as any).is_imported_ongoing
-    ? Number((loan as any).initial_remaining_balance ?? loan.remaining_balance)
+    ? importedInitialRemaining
     : Number(loan.total_amount);
   const totalPaid = Math.max(0, paidBase - Number(loan.remaining_balance));
   const today = new Date().toISOString().split("T")[0];
