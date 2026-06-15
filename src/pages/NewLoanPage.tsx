@@ -55,6 +55,20 @@ export default function NewLoanPage() {
   };
   const draft = useFormDraft(draftKey, draftValue);
   const restoredRef = useRef(false);
+  const resetForm = () => {
+    setAmount("");
+    setInterestType("percentage");
+    setInterestValue("");
+    setInstallmentCount("");
+    setPaymentType("daily");
+    setLoanDate(format(new Date(), "yyyy-MM-dd"));
+    setFirstDueDate("");
+    setFixedDates([]);
+    setObservation("");
+    setRegistrationType("new");
+    setAmountAlreadyPaid("");
+    setRenewPaidAmount("");
+  };
   useEffect(() => {
     if (restoredRef.current) return;
     try {
@@ -74,7 +88,7 @@ export default function NewLoanPage() {
         if (saved.registrationType === "new" || saved.registrationType === "ongoing") setRegistrationType(saved.registrationType);
         if (typeof saved.amountAlreadyPaid === "string") setAmountAlreadyPaid(saved.amountAlreadyPaid);
         toast.info("Rascunho restaurado", {
-          action: { label: "Descartar", onClick: () => { draft.clear(); window.location.reload(); } },
+          action: { label: "Descartar", onClick: () => { draft.clear(); resetForm(); } },
         });
       }
     } catch (err) {
