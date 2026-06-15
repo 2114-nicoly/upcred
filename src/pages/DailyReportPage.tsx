@@ -54,7 +54,12 @@ export default function DailyReportPage() {
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [workerName, setWorkerName] = useState<string>("");
   const [cashStatus, setCashStatus] = useState<string | null>(null);
+  const [cashSummary, setCashSummary] = useState<{
+    opening: number; expected: number; counted: number | null; diff: number | null;
+    closingObs: string | null;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   // Load admins (super_admin only)
   useEffect(() => {
