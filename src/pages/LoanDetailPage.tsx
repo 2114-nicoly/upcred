@@ -940,10 +940,12 @@ export default function LoanDetailPage() {
       </Card>
 
       {/* Penalty button */}
-      <Button variant="outline" className="w-full mb-4 border-warning/50 text-warning hover:bg-warning/10" onClick={() => setPenaltyDetailOpen(true)}>
-        <AlertTriangle className="mr-2 h-4 w-4" />
-        🔶 Multas {penaltyInst ? `(${formatCurrency(penaltyTotal - penaltyPaid)} pendente)` : ""}
-      </Button>
+      {loanActive && (
+        <Button variant="outline" className="w-full mb-4 border-warning/50 text-warning hover:bg-warning/10" onClick={() => setPenaltyDetailOpen(true)}>
+          <AlertTriangle className="mr-2 h-4 w-4" />
+          🔶 Multas {penaltyInst ? `(${formatCurrency(penaltyTotal - penaltyPaid)} pendente)` : ""}
+        </Button>
+      )}
 
       {/* === REGISTER PAYMENT BUTTON === */}
       {loanActive && (
@@ -1199,7 +1201,7 @@ export default function LoanDetailPage() {
                 <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} className="min-h-[60px]" />
               </div>
               <Button size="sm" className="w-full" onClick={() => {
-                const target = regularInstallments.filter((i) => i.status !== "paid").sort((a, b) => a.number - b.number)[0];
+                const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
                 if (!target) { toast.error("Nenhuma parcela disponível"); return; }
                 handleAddPenalty(target.id);
               }}>
