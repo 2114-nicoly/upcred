@@ -7,6 +7,7 @@ export type DailyEventType =
   | "renovacao"
   | "renegociacao"
   | "emprestimo_novo"
+  | "emprestimo_importado"
   | "saida"
   | "entrada_manual"
   | "saida_manual"
