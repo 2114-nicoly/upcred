@@ -851,10 +851,19 @@ export default function NewLoanPage() {
               <div className="flex justify-between"><span>Valor de cada parcela:</span><span className="font-semibold">{formatCurrency(calc.installmentAmount)}</span></div>
               {dueDates.length > 0 && (
                 <div className="mt-2 border-t pt-2">
-                  <p className="mb-1 font-medium">Vencimentos previstos:</p>
-                  {dueDates.map((d, i) => (
-                    <p key={i} className="text-muted-foreground">Parcela {i + 1}: {format(d, "dd/MM/yyyy")}</p>
-                  ))}
+                  <p className="mb-1 font-medium">Vencimentos previstos{isOngoing ? " (parcelas pendentes)" : ""}:</p>
+                  {dueDates.map((d, i) => {
+                    const number = isOngoing && ongoingPlan ? ongoingPlan.firstPendingNumber + i : i + 1;
+                    const amount = isOngoing && ongoingPlan
+                      ? (i === 0 && ongoingPlan.hasPartial ? ongoingPlan.partialRemaining : ongoingPlan.value)
+                      : calc.installmentAmount;
+                    return (
+                      <p key={i} className="text-muted-foreground">
+                        Parcela {number}: {format(d, "dd/MM/yyyy")} — {formatCurrency(amount)}
+                        {isOngoing && i === 0 && ongoingPlan?.hasPartial ? " (saldo parcial)" : ""}
+                      </p>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
