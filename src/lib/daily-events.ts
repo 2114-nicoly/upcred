@@ -303,6 +303,7 @@ export function getEventTypeColor(type: string): string {
     case "renovacao": return "text-primary";
     case "renegociacao": return "text-primary";
     case "emprestimo_novo": return "text-primary";
+    case "emprestimo_importado": return "text-muted-foreground";
     case "saida": return "text-destructive";
     case "entrada_manual": return "text-success";
     case "saida_manual": return "text-destructive";
