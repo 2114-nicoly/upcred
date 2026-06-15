@@ -48,12 +48,22 @@ export function computeDailyTotals(
     entradasManuais: 0,
     saidasManuais: 0,
     naoPagos: 0,
+    emprestimosImportados: 0,
+    valorImportadoAReceber: 0,
     saldoFinalEsperado: 0,
   };
   for (const e of events || []) {
     if (e.reversed_at) continue; // estornado: não soma
     const ain = num(e.amount_in);
     const aout = num(e.amount_out);
+    // Empréstimo importado é informativo: não entra em entradas/saídas/pagamentos/liberados.
+    if (e.event_type === "emprestimo_importado") {
+      t.emprestimosImportados += 1;
+      // Valor a receber é codificado como amount_in apenas para agregação informativa.
+      // Mesmo assim, NÃO somar em entradas (já saímos do fluxo acima).
+      t.valorImportadoAReceber += ain;
+      continue;
+    }
     t.entradas += ain;
     t.saidas += aout;
     switch (e.event_type) {
