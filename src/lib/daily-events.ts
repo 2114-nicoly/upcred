@@ -274,6 +274,7 @@ export function getEventTypeLabel(type: string): string {
     case "renovacao": return "Renovação";
     case "renegociacao": return "Renegociação";
     case "emprestimo_novo": return "Novo Empréstimo";
+    case "emprestimo_importado": return "Empréstimo importado";
     case "saida": return "Saída";
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
