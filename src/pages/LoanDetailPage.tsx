@@ -681,48 +681,80 @@ export default function LoanDetailPage() {
     fetchData();
   };
 
-  // --- Full recalculate after manual edits ---
-  const handleFullRecalculate = async () => {
+  // --- Reorganize overdue installments (no financial impact) ---
+  const handleReorganizeOverdue = async () => {
     if (isSubmitting || !loan) return;
+    if (!loanActive) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const collectible = installments.filter(
+      (i) => !i.is_penalty && isInstallmentCollectibleStatus(i.status)
+    );
+    const overdueList = collectible.filter((i) => {
+      const due = new Date(i.due_date + "T00:00:00");
+      return i.status === "overdue" || due < today;
+    });
+    if (overdueList.length === 0) {
+      toast.error("Nenhuma parcela atrasada para reorganizar.");
+      return;
+    }
+
+    const ok = await confirm({
+      title: "Reorganizar parcelas atrasadas",
+      description:
+        "Esta ação move as parcelas atrasadas para o final do plano, seguindo a frequência do empréstimo. Não registra pagamento, não altera saldo, não mexe no caixa e não muda o valor total da dívida. Apenas reorganiza as datas para o empréstimo não ficar em atraso.",
+      confirmText: "Reorganizar",
+    });
+    if (!ok) return;
+
     setIsSubmitting(true);
     try {
-      // 1. Sum all regular installment amounts to get new total_amount
-      const { data: currentInsts } = await supabase
-        .from("installments")
-        .select("amount")
-        .eq("loan_id", loanId!)
-        .eq("is_penalty", false);
-      const newTotalAmount = (currentInsts || []).reduce((s: number, i: any) => s + Number(i.amount), 0);
+      const overdueIds = new Set(overdueList.map((i) => i.id));
+      const futureCollectible = collectible.filter((i) => !overdueIds.has(i.id));
 
-      // 2. Get total paid from cash_movements
-      const { data: movs } = await supabase
-        .from("cash_movements")
-        .select("amount")
-        .eq("loan_id", loanId!)
-        .eq("type", "recebimento_normal");
-      const totalPaid = (movs || []).reduce((s: number, m: any) => s + Number(m.amount), 0);
+      let anchorDate: Date;
+      if (futureCollectible.length > 0) {
+        const maxTs = futureCollectible
+          .map((i) => new Date(i.due_date + "T12:00:00").getTime())
+          .reduce((a, b) => Math.max(a, b), 0);
+        anchorDate = new Date(maxTs);
+      } else {
+        anchorDate = new Date(today);
+        anchorDate.setHours(12, 0, 0, 0);
+      }
 
-      // 3. Update loan total_amount and remaining_balance
-      const newRemainingBalance = Math.max(0, newTotalAmount - totalPaid);
-      const newStatus = newRemainingBalance <= 0.01 ? "paid" : "open";
-      await supabase.from("loans").update({
-        total_amount: newTotalAmount,
-        remaining_balance: newRemainingBalance,
-        status: newStatus,
-      }).eq("id", loanId!);
+      const pt = loan.payment_type as string;
+      const ptForDates = (["daily", "weekly", "biweekly", "monthly"] as const).includes(pt as any)
+        ? (pt as "daily" | "weekly" | "biweekly" | "monthly")
+        : "monthly";
 
-      // 4. Recalculate installment distribution
-      await recalculateInstallments(loanId!);
+      const newDates = generateDueDates(anchorDate, overdueList.length + 1, ptForDates).slice(1);
+      const sortedOverdue = [...overdueList].sort((a, b) => a.number - b.number);
 
-      // 5. Recalculate cash balance
-      await recalculateCashBalanceFromLedger();
+      for (let i = 0; i < sortedOverdue.length; i++) {
+        const inst = sortedOverdue[i];
+        const d = newDates[i];
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        const due_date = `${yyyy}-${mm}-${dd}`;
+        const newStatus = Number(inst.paid_amount) > 0 ? "partial" : "pending";
+        const { error } = await supabase
+          .from("installments")
+          .update({ due_date, status: newStatus })
+          .eq("id", inst.id);
+        if (error) throw error;
+      }
 
-      toast.success("Empréstimo atualizado e recalculado!");
+      toast.success("Parcelas atrasadas reorganizadas.");
+      await fetchData();
     } catch {
-      toast.error("Erro ao atualizar empréstimo");
+      toast.error("Erro ao reorganizar parcelas.");
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
-    fetchData();
   };
 
   const handleDeleteInstallment = async (id: string) => {
