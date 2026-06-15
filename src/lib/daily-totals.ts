@@ -23,6 +23,8 @@ export type DailyTotals = {
   entradasManuais: number;   // event_type = 'entrada_manual'
   saidasManuais: number;     // event_type = 'saida_manual'
   naoPagos: number;          // contagem event_type = 'nao_pagou'
+  emprestimosImportados: number;   // contagem event_type = 'emprestimo_importado'
+  valorImportadoAReceber: number;  // soma do saldo restante adicionado ao A Receber via importações
   saldoFinalEsperado: number; // opening + entradas - saidas
 };
 
@@ -46,12 +48,21 @@ export function computeDailyTotals(
     entradasManuais: 0,
     saidasManuais: 0,
     naoPagos: 0,
+    emprestimosImportados: 0,
+    valorImportadoAReceber: 0,
     saldoFinalEsperado: 0,
   };
   for (const e of events || []) {
     if (e.reversed_at) continue; // estornado: não soma
     const ain = num(e.amount_in);
     const aout = num(e.amount_out);
+    // Empréstimo importado é informativo: não entra em entradas/saídas/pagamentos/liberados.
+    if (e.event_type === "emprestimo_importado") {
+      t.emprestimosImportados += 1;
+      // Caso futuramente venha valor metadado em amount_in, agregamos aqui sem afetar caixa.
+      t.valorImportadoAReceber += ain;
+      continue;
+    }
     t.entradas += ain;
     t.saidas += aout;
     switch (e.event_type) {

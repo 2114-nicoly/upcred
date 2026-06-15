@@ -7,6 +7,7 @@ export type DailyEventType =
   | "renovacao"
   | "renegociacao"
   | "emprestimo_novo"
+  | "emprestimo_importado"
   | "saida"
   | "entrada_manual"
   | "saida_manual"
@@ -82,8 +83,11 @@ export async function createDailyEvent(event: {
 }) {
   const userId = await getCurrentUserId();
   const { resolveScope } = await import("@/lib/cash-utils");
-  // Financial events require scope; operational events still try to scope.
-  const operationalOnly = event.event_type === "nao_pagou" || event.event_type === "multa_adicionada";
+  // Financial events require scope; operational/informational events still try to scope.
+  const operationalOnly =
+    event.event_type === "nao_pagou" ||
+    event.event_type === "multa_adicionada" ||
+    event.event_type === "emprestimo_importado";
   const isFinancial = !operationalOnly;
   const { worker_id, admin_id } = await resolveScope({
     loan_id: event.loan_id,
@@ -270,6 +274,7 @@ export function getEventTypeLabel(type: string): string {
     case "renovacao": return "Renovação";
     case "renegociacao": return "Renegociação";
     case "emprestimo_novo": return "Novo Empréstimo";
+    case "emprestimo_importado": return "Empréstimo importado";
     case "saida": return "Saída";
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
@@ -298,6 +303,7 @@ export function getEventTypeColor(type: string): string {
     case "renovacao": return "text-primary";
     case "renegociacao": return "text-primary";
     case "emprestimo_novo": return "text-primary";
+    case "emprestimo_importado": return "text-muted-foreground";
     case "saida": return "text-destructive";
     case "entrada_manual": return "text-success";
     case "saida_manual": return "text-destructive";
