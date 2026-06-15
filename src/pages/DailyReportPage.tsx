@@ -143,15 +143,25 @@ export default function DailyReportPage() {
           setClientNames({});
         }
 
-        // daily_cash status (worker scope)
+        // daily_cash status (worker scope) + closing details
+        let dcRow: any = null;
         if (selectedWorkerId) {
-          const { data: dc } = await supabase.from("daily_cash").select("status").eq("cash_date", date).eq("worker_id", selectedWorkerId).maybeSingle();
-          setCashStatus((dc as any)?.status || null);
+          const { data: dc } = await supabase.from("daily_cash").select("*").eq("cash_date", date).eq("worker_id", selectedWorkerId).maybeSingle();
+          dcRow = dc;
         } else if (isSuperAdmin && selectedAdminId) {
-          const { data: dc } = await supabase.from("daily_cash").select("status").eq("cash_date", date).eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
-          setCashStatus((dc as any)?.status || null);
+          const { data: dc } = await supabase.from("daily_cash").select("*").eq("cash_date", date).eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
+          dcRow = dc;
+        }
+        if (dcRow) {
+          setCashStatus(dcRow.status || null);
+          const opening = Number(dcRow.opening_balance || 0);
+          const expected = Number(dcRow.expected_closing_balance ?? (opening + Number(dcRow.total_in || 0) - Number(dcRow.total_out || 0)));
+          const counted = dcRow.counted_closing_balance != null ? Number(dcRow.counted_closing_balance) : null;
+          const diff = counted != null ? counted - expected : null;
+          setCashSummary({ opening, expected, counted, diff, closingObs: dcRow.closing_observation || null });
         } else {
           setCashStatus(null);
+          setCashSummary(null);
         }
       } catch (err: any) {
         console.error(err);
