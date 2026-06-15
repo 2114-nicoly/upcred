@@ -418,6 +418,15 @@ export async function settleLoan(params: {
   await recalculateInstallments(loanId);
   await recalculateCashBalanceFromLedger();
 
+  await logAction(
+    "quitar_emprestimo",
+    "loan",
+    loanId,
+    { remaining_balance: realBalance, status: loanData.status },
+    { status: "paid", remaining_balance: 0, regular_paid: realBalance, penalty_paid: totalPenaltyPaying, cash_date: cashDate },
+    `Quitação ${formatCurrency(realBalance + totalPenaltyPaying)} - ${clientName}`,
+  );
+
   return { regularPaid: realBalance, penaltyPaid: totalPenaltyPaying };
 }
 
