@@ -290,6 +290,7 @@ export default function LoanDetailPage() {
   // --- Register payment (auto-distribute) ---
   const handleRegisterPayment = async () => {
     if (isSubmitting || !loan) return;
+    if (!loanActive) { toast.error("Empréstimo inativo não permite pagamento."); return; }
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
 
@@ -393,6 +394,7 @@ export default function LoanDetailPage() {
   // --- Quitar ---
   const handleQuitarEmprestimo = async () => {
     if (isSubmitting || !loan) return;
+    if (!loanActive) { toast.error("Empréstimo inativo não pode ser quitado."); return; }
     setIsSubmitting(true);
     try {
       await settleLoan({
@@ -412,6 +414,7 @@ export default function LoanDetailPage() {
 
   // --- Penalties ---
   const handleAddPenalty = async (installmentId: string, amount?: number, observation?: string) => {
+    if (!loanActive) { toast.error("Empréstimo inativo não permite multa."); return; }
     const penAmount = amount ?? parseFloat(penaltyAmount);
     const penObs = observation ?? penaltyObservation;
     if (!penAmount || penAmount <= 0) { toast.error("Informe um valor válido para a multa"); return; }
@@ -503,7 +506,7 @@ export default function LoanDetailPage() {
   const handleAddPenaltyFromDate = async () => {
     const amount = parseFloat(overduePenaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
-    const target = regularInstallments.filter((i) => i.status !== "paid").sort((a, b) => a.number - b.number)[0];
+    const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
     if (!target) { toast.error("Nenhuma parcela disponível"); return; }
     const obs = overduePenaltyObs ? `${overduePenaltyObs} (Ref: ${overduePenaltyDate})` : `Multa ref. atraso ${overduePenaltyDate}`;
     await handleAddPenalty(target.id, amount, obs);
@@ -531,6 +534,7 @@ export default function LoanDetailPage() {
 
   const openRenegotiate = () => {
     if (!loan) return;
+    if (!loanActive) { toast.error("Empréstimo inativo não pode ser renegociado."); return; }
     setRenegStep(1);
     setRenegInterestType((loan.interest_type as "percentage" | "fixed") || "percentage");
     setRenegInterestValue("");
@@ -748,6 +752,7 @@ export default function LoanDetailPage() {
   };
 
   const handleDeleteLoan = async () => {
+    if (!loanActive) { toast.error("Empréstimo inativo não pode ser cancelado."); return; }
     const ok = await confirm({
       title: "Cancelar empréstimo?",
       description: "O empréstimo será cancelado. Pagamentos e movimentações serão estornados; o histórico financeiro permanece preservado para auditoria.",
