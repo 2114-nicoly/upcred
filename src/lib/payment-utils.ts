@@ -128,43 +128,49 @@ export async function registerPayment(params: {
   });
   if (rpcError) throw rpcError;
 
-  // 2. Cash balance: interest first, then principal
-  if (loanData) {
-    const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
-    const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
-    const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-    const toInterest = Math.min(applied, interestRemaining);
-    const toPrincipal = applied - toInterest;
+  const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
+  const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
+  const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+  const toInterest = Math.min(applied, interestRemaining);
+  const toPrincipal = applied - toInterest;
 
+  let movement: any = null;
+  let event: any = null;
+  try {
+    movement = await createCashMovement({
+      type: "recebimento_normal",
+      amount: applied,
+      client_id: clientId,
+      loan_id: loanId,
+      installment_id: installmentId || null,
+      observation: `Pagamento - ${clientName}`,
+      cash_date: cashDate,
+    }) as any;
+    event = await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "pagamento",
+      client_id: clientId,
+      loan_id: loanId,
+      installment_id: installmentId || null,
+      amount_in: applied,
+      observation: `Pagamento - ${clientName}`,
+      origin,
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (!movement?.id || !event?.id) throw new Error("Pagamento sem movimentação/evento financeiro vinculado.");
+    await linkCashMovementToDailyEvent(movement.id, event.id);
     await updateCashBalance({
       available_cash: applied,
       interest_receivable: -toInterest,
       money_lent: -toPrincipal,
     });
+  } catch (err) {
+    if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+    if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: applied });
+    await recalculateInstallments(loanId);
+    throw err;
   }
-
-  // 3. Linked cash movement + daily event
-  const movement = await createCashMovement({
-    type: "recebimento_normal",
-    amount: applied,
-    client_id: clientId,
-    loan_id: loanId,
-    installment_id: installmentId || null,
-    observation: `Pagamento - ${clientName}`,
-    cash_date: cashDate,
-  }) as any;
-  const event = await createDailyEvent({
-    cash_date: cashDate,
-    event_type: "pagamento",
-    client_id: clientId,
-    loan_id: loanId,
-    installment_id: installmentId || null,
-    amount_in: applied,
-    observation: `Pagamento - ${clientName}`,
-    origin,
-    cash_movement_id: movement?.id || null,
-  } as any) as any;
-  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
 
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
