@@ -422,6 +422,26 @@ export default function NewLoanPage() {
       }
     }
 
+    // ===== RENOVAÇÃO: novo empréstimo já criado com sucesso → registra pagamento do antigo =====
+    if (renewFromLoanId && renewPaid > 0) {
+      try {
+        await registerPayment({
+          loanId: renewFromLoanId,
+          amount: Math.min(renewPaid, faltaQuitar),
+          clientId: clientId!,
+          clientName: clientName,
+          cashDate: loanDate,
+          origin: "renovacao",
+        });
+      } catch (err: any) {
+        console.error("Erro ao registrar pagamento da renovação:", err);
+        await rollbackLoan();
+        toast.error(`Erro ao registrar pagamento da renovação. Renovação cancelada.${err?.message ? ` (${err.message})` : ""}`);
+        setSaving(false);
+        return;
+      }
+    }
+
     // Se ainda restou saldo no antigo após o pagamento, quitar (absorvido pelo novo)
     if (renewFromLoanId) {
       const { data: oldLoanState } = await supabase
