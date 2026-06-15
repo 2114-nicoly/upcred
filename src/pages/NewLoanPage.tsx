@@ -173,6 +173,23 @@ export default function NewLoanPage() {
   const numAlreadyPaid = parseFloat(amountAlreadyPaid) || 0;
   const ongoingRemaining = calc ? Math.max(0, calc.totalAmount - numAlreadyPaid) : 0;
 
+  // Sequência correta das parcelas para importado:
+  // - fullPaid = parcelas inteiras já quitadas
+  // - partialRemaining = quanto falta na parcela parcial atual (0 se nenhuma)
+  // - firstPendingNumber = número da próxima parcela a cobrar
+  const ongoingPlan = useMemo(() => {
+    if (!isOngoing || !calc || numInstallments <= 0) return null;
+    const value = calc.installmentAmount;
+    const fullPaid = Math.min(numInstallments, Math.floor((numAlreadyPaid + 0.0001) / value));
+    const partialPaid = +(numAlreadyPaid - fullPaid * value).toFixed(2);
+    const hasPartial = partialPaid > 0.01 && fullPaid < numInstallments;
+    const partialRemaining = hasPartial ? +(value - partialPaid).toFixed(2) : 0;
+    const firstPendingNumber = fullPaid + 1;
+    const pendingCount = Math.max(0, numInstallments - fullPaid);
+    return { value, fullPaid, partialPaid, hasPartial, partialRemaining, firstPendingNumber, pendingCount };
+  }, [isOngoing, calc, numInstallments, numAlreadyPaid]);
+
+
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error(isOngoing ? "Informe a data da próxima cobrança" : "Informe a data do primeiro vencimento"); return; }
@@ -316,20 +333,20 @@ export default function NewLoanPage() {
     //   Não marca parcelas como pagas — o valor já pago é apenas ajuste inicial.
     let installments: any[];
     if (isOngoing) {
-      const value = calc.installmentAmount;
-      const remaining = ongoingRemaining;
-      const needed = remaining <= 0.01 ? 0 : Math.ceil((remaining - 0.01) / value);
-      // Garantir que temos datas suficientes; se a quantidade informada for menor, estender.
+      const plan = ongoingPlan!;
+      const needed = plan.pendingCount;
+      // Garantir datas suficientes a partir de firstDueDate (para a primeira parcela pendente real)
       let dates = dueDates.slice(0, needed);
       if (dates.length < needed && (paymentType === "daily" || paymentType === "weekly" || paymentType === "biweekly" || paymentType === "monthly") && firstDueDate) {
         dates = generateDueDates(new Date(firstDueDate + "T12:00:00"), needed, paymentType);
       }
       installments = dates.map((date, i) => {
-        const isLast = i === needed - 1;
-        const amountThis = isLast ? Math.max(0, +(remaining - value * (needed - 1)).toFixed(2)) : value;
+        // Primeira parcela pendente: se houver parcial, vale só o restante (e number = fullPaid+1)
+        const isFirstPending = i === 0;
+        const amountThis = isFirstPending && plan.hasPartial ? plan.partialRemaining : plan.value;
         return {
           loan_id: loan.id,
-          number: i + 1,
+          number: plan.firstPendingNumber + i,
           amount: amountThis,
           due_date: format(date, "yyyy-MM-dd"),
           status: "pending",
@@ -348,6 +365,7 @@ export default function NewLoanPage() {
         paid_at: null,
       }));
     }
+
 
     if (installments.length === 0) {
       await rollbackLoan();
@@ -463,6 +481,8 @@ export default function NewLoanPage() {
       }
       toast.success("Empréstimo renovado com sucesso!");
     } else if (isOngoing) {
+      // Importado: não toca em caixa, mas precisa refrescar A Receber / Empréstimos Ativos
+      try { await recalculateCashBalanceFromLedger(); } catch (e) { console.warn("[NewLoan] recalc ledger falhou:", e); }
       toast.success("Empréstimo em andamento cadastrado!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
@@ -481,9 +501,17 @@ export default function NewLoanPage() {
         payment_type: paymentType,
         loan_date: loanDate,
         released: renewFromLoanId ? valorLiberado : numAmount,
+        ...(isOngoing ? {
+          imported_ongoing: true,
+          amount_already_paid: numAlreadyPaid,
+          initial_remaining_balance: ongoingRemaining,
+          first_pending_installment: ongoingPlan?.firstPendingNumber ?? null,
+          partial_remaining: ongoingPlan?.partialRemaining ?? 0,
+        } : {}),
       },
-      renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,
+      renewFromLoanId ? `Renovação - ${clientName}` : isOngoing ? `Empréstimo em andamento - ${clientName}` : `Novo empréstimo - ${clientName}`,
     );
+
 
     draft.clear();
     navigate("/");
@@ -678,13 +706,53 @@ export default function NewLoanPage() {
                     <span>Saldo restante:</span>
                     <span className="text-primary">{formatCurrency(ongoingRemaining)}</span>
                   </div>
+
+                  {ongoingPlan && ongoingRemaining > 0.01 && (
+                    <div className="border-t pt-2 mt-2 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Parcelas quitadas:</span>
+                        <span className="font-medium">{ongoingPlan.fullPaid} de {numInstallments}</span>
+                      </div>
+                      {ongoingPlan.hasPartial && (
+                        <>
+                          <div className="flex justify-between">
+                            <span>Parcela parcial:</span>
+                            <span className="font-medium">#{ongoingPlan.firstPendingNumber}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Saldo da parcial:</span>
+                            <span className="font-medium text-warning">{formatCurrency(ongoingPlan.partialRemaining)}</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Próxima cobrança:</span>
+                        <span className="font-medium">
+                          Parcela #{ongoingPlan.firstPendingNumber}
+                          {firstDueDate ? ` em ${format(new Date(firstDueDate + "T12:00:00"), "dd/MM/yyyy")}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Parcelas pendentes:</span>
+                        <span className="font-medium">{ongoingPlan.pendingCount}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {numAlreadyPaid > calc.totalAmount + 0.01 && (
                     <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
                       <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                       <span>Valor já pago é maior que o valor total do empréstimo.</span>
                     </div>
                   )}
+                  {calc.totalAmount - numAlreadyPaid <= 0.01 && numAlreadyPaid > 0 && (
+                    <div className="flex items-start gap-1.5 mt-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>Este empréstimo já está quitado.</span>
+                    </div>
+                  )}
                 </div>
+
               )}
             </CardContent>
           </Card>
