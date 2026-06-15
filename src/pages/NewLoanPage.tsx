@@ -239,24 +239,8 @@ export default function NewLoanPage() {
     const userId = session?.user?.id;
     if (!userId) { toast.error("Sessão expirada"); setSaving(false); return; }
 
-    // ===== RENOVAÇÃO: registrar pagamento em dinheiro do cliente no antigo (se houver) =====
-    if (renewFromLoanId && renewPaid > 0) {
-      try {
-        await registerPayment({
-          loanId: renewFromLoanId,
-          amount: Math.min(renewPaid, faltaQuitar),
-          clientId: clientId!,
-          clientName: clientName,
-          cashDate: loanDate,
-          origin: "renovacao",
-        });
-      } catch (err) {
-        console.error("Erro ao registrar pagamento da renovação:", err);
-        toast.error("Erro ao registrar pagamento da renovação");
-        setSaving(false);
-        return;
-      }
-    }
+    // (renovação: o pagamento do antigo é registrado SÓ após o novo empréstimo estar criado com sucesso)
+
 
     // ===== Criar novo empréstimo =====
     const importedObs = isOngoing
