@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
+import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 
 type Loan = {
   id: string;
@@ -260,7 +261,7 @@ export default function LoanDetailPage() {
   const regularInstallments = installments.filter((i) => !i.is_penalty);
   const penaltyInst = installments.find((i) => i.is_penalty);
 
-  const pendingInstallments = regularInstallments.filter((i) => i.status !== "paid");
+  const pendingInstallments = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status));
   const paidInstallments = regularInstallments.filter((i) => i.status === "paid");
 
   const loanProgress = loan ? calculateLoanProgress({
@@ -284,10 +285,12 @@ export default function LoanDetailPage() {
     ? getOverdueDatesList(oldestOverdue.due_date, loan.payment_type)
     : [];
   const overdueDaysCount = overdueDatesList.length;
+  const loanActive = loan ? isLoanActive(loan) : false;
 
   // --- Register payment (auto-distribute) ---
   const handleRegisterPayment = async () => {
     if (isSubmitting || !loan) return;
+    if (!loanActive) { toast.error("Empréstimo inativo não permite pagamento."); return; }
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
 
@@ -391,6 +394,7 @@ export default function LoanDetailPage() {
   // --- Quitar ---
   const handleQuitarEmprestimo = async () => {
     if (isSubmitting || !loan) return;
+    if (!loanActive) { toast.error("Empréstimo inativo não pode ser quitado."); return; }
     setIsSubmitting(true);
     try {
       await settleLoan({
@@ -410,6 +414,7 @@ export default function LoanDetailPage() {
 
   // --- Penalties ---
   const handleAddPenalty = async (installmentId: string, amount?: number, observation?: string) => {
+    if (!loanActive) { toast.error("Empréstimo inativo não permite multa."); return; }
     const penAmount = amount ?? parseFloat(penaltyAmount);
     const penObs = observation ?? penaltyObservation;
     if (!penAmount || penAmount <= 0) { toast.error("Informe um valor válido para a multa"); return; }
@@ -501,7 +506,7 @@ export default function LoanDetailPage() {
   const handleAddPenaltyFromDate = async () => {
     const amount = parseFloat(overduePenaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
-    const target = regularInstallments.filter((i) => i.status !== "paid").sort((a, b) => a.number - b.number)[0];
+    const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
     if (!target) { toast.error("Nenhuma parcela disponível"); return; }
     const obs = overduePenaltyObs ? `${overduePenaltyObs} (Ref: ${overduePenaltyDate})` : `Multa ref. atraso ${overduePenaltyDate}`;
     await handleAddPenalty(target.id, amount, obs);
@@ -529,6 +534,7 @@ export default function LoanDetailPage() {
 
   const openRenegotiate = () => {
     if (!loan) return;
+    if (!loanActive) { toast.error("Empréstimo inativo não pode ser renegociado."); return; }
     setRenegStep(1);
     setRenegInterestType((loan.interest_type as "percentage" | "fixed") || "percentage");
     setRenegInterestValue("");
@@ -590,7 +596,7 @@ export default function LoanDetailPage() {
         .from("installments")
         .update({ status: "renegotiated" } as any)
         .eq("loan_id", loan.id)
-        .in("status", ["pending", "partial", "overdue"]);
+        .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[]);
 
       // 3. Create the new loan
       const { data: newLoan, error: newErr } = await supabase.from("loans").insert({
@@ -746,6 +752,7 @@ export default function LoanDetailPage() {
   };
 
   const handleDeleteLoan = async () => {
+    if (!loanActive) { toast.error("Empréstimo inativo não pode ser cancelado."); return; }
     const ok = await confirm({
       title: "Cancelar empréstimo?",
       description: "O empréstimo será cancelado. Pagamentos e movimentações serão estornados; o histórico financeiro permanece preservado para auditoria.",
@@ -786,7 +793,7 @@ export default function LoanDetailPage() {
     <div className="mx-auto max-w-lg p-4">
       {/* Action buttons */}
       <div className="mb-2 flex items-center justify-between">
-        {loan.status !== "paid" && (
+        {loanActive && (
           <div className="flex gap-1">
             <Button size="sm" className="bg-success hover:bg-success/90" onClick={() => setQuitarOpen(true)}>
               <DollarSign className="mr-1 h-4 w-4" /> Quitar
@@ -797,14 +804,16 @@ export default function LoanDetailPage() {
           </div>
         )}
         <div className="flex gap-1 ml-auto">
-          {loan.status !== "paid" && (
+          {loanActive && (
             <Button variant="ghost" size="sm" onClick={openRenegotiate}>
               <RefreshCw className="mr-1 h-4 w-4" /> Renegociar
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
-            <Trash2 className="mr-1 h-4 w-4" /> Cancelar Empréstimo
-          </Button>
+          {loanActive && (
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDeleteLoan}>
+              <Trash2 className="mr-1 h-4 w-4" /> Cancelar Empréstimo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -931,22 +940,26 @@ export default function LoanDetailPage() {
       </Card>
 
       {/* Penalty button */}
-      <Button variant="outline" className="w-full mb-4 border-warning/50 text-warning hover:bg-warning/10" onClick={() => setPenaltyDetailOpen(true)}>
-        <AlertTriangle className="mr-2 h-4 w-4" />
-        🔶 Multas {penaltyInst ? `(${formatCurrency(penaltyTotal - penaltyPaid)} pendente)` : ""}
-      </Button>
+      {loanActive && (
+        <Button variant="outline" className="w-full mb-4 border-warning/50 text-warning hover:bg-warning/10" onClick={() => setPenaltyDetailOpen(true)}>
+          <AlertTriangle className="mr-2 h-4 w-4" />
+          🔶 Multas {penaltyInst ? `(${formatCurrency(penaltyTotal - penaltyPaid)} pendente)` : ""}
+        </Button>
+      )}
 
       {/* === REGISTER PAYMENT BUTTON === */}
-      {loan.status !== "paid" && (
+      {loanActive && (
         <Button className="w-full mb-2 bg-success hover:bg-success/90" size="lg" onClick={() => setPayOpen(true)}>
           <Plus className="mr-2 h-5 w-5" /> Registrar Pagamento
         </Button>
       )}
 
       {/* === RECALCULATE BUTTON === */}
-      <Button variant="outline" className="w-full mb-4" onClick={handleFullRecalculate} disabled={isSubmitting}>
-        <Calculator className="mr-2 h-4 w-4" /> Atualizar
-      </Button>
+      {loanActive && (
+        <Button variant="outline" className="w-full mb-4" onClick={handleFullRecalculate} disabled={isSubmitting}>
+          <Calculator className="mr-2 h-4 w-4" /> Atualizar
+        </Button>
+      )}
 
       {/* === INSTALLMENTS SECTION === */}
       <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
@@ -1009,18 +1022,20 @@ export default function LoanDetailPage() {
                         Vencimento: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
                       </p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                        setEditInstId(inst.id);
-                        setEditInstAmount(String(inst.amount));
-                        setEditInstDueDate(inst.due_date);
-                      }}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteInstallment(inst.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
+                    {loanActive && (
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                          setEditInstId(inst.id);
+                          setEditInstAmount(String(inst.amount));
+                          setEditInstDueDate(inst.due_date);
+                        }}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteInstallment(inst.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Amount details */}
@@ -1105,18 +1120,20 @@ export default function LoanDetailPage() {
                       <p className="text-xs text-muted-foreground italic mt-0.5">"{entry.observation}"</p>
                     )}
                   </div>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                      setEditPayEntry(entry);
-                      setEditPayNewAmount(String(entry.amount));
-                      setEditPayOpen(true);
-                    }} disabled={isSubmitting}>
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleUndoHistoryPayment(entry)} disabled={isSubmitting}>
-                      <Undo2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  {loanActive && (
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                        setEditPayEntry(entry);
+                        setEditPayNewAmount(String(entry.amount));
+                        setEditPayOpen(true);
+                      }} disabled={isSubmitting}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleUndoHistoryPayment(entry)} disabled={isSubmitting}>
+                        <Undo2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1190,7 +1207,7 @@ export default function LoanDetailPage() {
                 <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} className="min-h-[60px]" />
               </div>
               <Button size="sm" className="w-full" onClick={() => {
-                const target = regularInstallments.filter((i) => i.status !== "paid").sort((a, b) => a.number - b.number)[0];
+                const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
                 if (!target) { toast.error("Nenhuma parcela disponível"); return; }
                 handleAddPenalty(target.id);
               }}>

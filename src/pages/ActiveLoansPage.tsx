@@ -17,7 +17,7 @@ import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, cancelLoan } from "@/lib/payment-utils";
-import { INSTALLMENT_COLLECTIBLE_STATUSES } from "@/lib/status-constants";
+import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -153,7 +153,7 @@ export default function ActiveLoansPage() {
           const instValue = regular.length > 0 ? Number(regular[0].amount) : 1;
 
           const unpaidRegular = regular
-            .filter((i: any) => i.status !== "paid")
+            .filter((i: any) => isInstallmentCollectibleStatus(i.status))
             .sort((a: any, b: any) => a.due_date.localeCompare(b.due_date));
           const nextDueDate = unpaidRegular.length > 0 ? unpaidRegular[0].due_date : null;
 
@@ -365,6 +365,7 @@ export default function ActiveLoansPage() {
   const totalOverdueValue = overdueLoans.reduce((s, l) => s + Math.max(0, progressMap[l.id]?.remaining ?? 0), 0);
 
   const renderLoanCard = (loan: LoanWithClient) => {
+    const loanCanReceiveActions = isLoanActive(loan);
     const lp = progressMap[loan.id];
     const progress = calculateLoanProgress({
       totalAmount: Number(loan.total_amount),
@@ -458,19 +459,23 @@ export default function ActiveLoansPage() {
               <DropdownMenuItem onClick={() => navigate(`/loans/${loan.id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalhes
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setPayLoanId(loan.id)}>
-                <DollarSign className="mr-2 h-4 w-4" /> Pagar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
-                <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/clients/${(loan.clients?.id ?? "")}/new-loan?renewFrom=${loan.id}`)}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Renovar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
-                <XCircle className="mr-2 h-4 w-4" /> Não Pagou
-              </DropdownMenuItem>
-              {loan.status === "overdue" && (
+              {loanCanReceiveActions && (
+                <>
+                  <DropdownMenuItem onClick={() => setPayLoanId(loan.id)}>
+                    <DollarSign className="mr-2 h-4 w-4" /> Pagar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setQuitarLoanId(loan.id)}>
+                    <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate(`/clients/${(loan.clients?.id ?? "")}/new-loan?renewFrom=${loan.id}`)}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Renovar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNotPaidFromList(loan.id)}>
+                    <XCircle className="mr-2 h-4 w-4" /> Não Pagou
+                  </DropdownMenuItem>
+                </>
+              )}
+              {loanCanReceiveActions && loan.status === "overdue" && (
                 <DropdownMenuItem onClick={() => handleUndoNotPaid(loan.id)}>
                   <Undo2 className="mr-2 h-4 w-4" /> Desfazer Atraso
                 </DropdownMenuItem>

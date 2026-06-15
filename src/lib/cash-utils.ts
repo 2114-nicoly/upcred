@@ -134,12 +134,13 @@ export async function updateCashBalance(changes: {
   interest_receivable?: number;
   penalty_receivable?: number;
 }) {
-  await supabase.rpc("update_cash_balance_atomic", {
+  const { error } = await supabase.rpc("update_cash_balance_atomic", {
     p_available_cash: changes.available_cash ?? 0,
     p_money_lent: changes.money_lent ?? 0,
     p_interest_receivable: changes.interest_receivable ?? 0,
     p_penalty_receivable: changes.penalty_receivable ?? 0,
   });
+  if (error) throw error;
 }
 
 export async function createCashMovement(movement: {
@@ -176,7 +177,8 @@ export async function createCashMovement(movement: {
 }
 
 export async function linkCashMovementToDailyEvent(movementId: string, eventId: string) {
-  await supabase.from("cash_movements").update({ daily_event_id: eventId } as any).eq("id", movementId);
+  const { error } = await supabase.from("cash_movements").update({ daily_event_id: eventId } as any).eq("id", movementId);
+  if (error) throw error;
 }
 
 /**

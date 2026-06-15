@@ -4,9 +4,11 @@ import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction } from "@/lib/audit-utils";
 import {
+  INSTALLMENT_LOCKED_STATUSES,
   INSTALLMENT_COLLECTIBLE_STATUSES,
   INSTALLMENT_STATUS,
   LOAN_STATUS,
+  isLoanActive,
 } from "@/lib/status-constants";
 
 
@@ -18,18 +20,25 @@ import {
 /**
  * Recalculate installment paid_amount/status based on the loan's remaining_balance.
  * This is the SINGLE SOURCE OF TRUTH for installment progress.
- * totalPaid = total_amount - remaining_balance, then distributed in order.
+ * Normal loan: paidInsideApp = total_amount - remaining_balance.
+ * Imported/ongoing loan: paidInsideApp = initial_remaining_balance - remaining_balance.
  */
 export async function recalculateInstallments(loanId: string) {
   const { data: loan } = await supabase
     .from("loans")
-    .select("total_amount, remaining_balance")
+    .select("total_amount, remaining_balance, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
     .eq("id", loanId)
     .single();
 
   if (!loan) return;
 
-  const totalPaid = Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance));
+  const importedInitialRemaining = (loan as any).initial_remaining_balance != null
+    ? Number((loan as any).initial_remaining_balance)
+    : Math.max(0, Number(loan.total_amount) - Number((loan as any).amount_already_paid || 0));
+  const paidBase = (loan as any).is_imported_ongoing
+    ? importedInitialRemaining
+    : Number(loan.total_amount);
+  const totalPaid = Math.max(0, paidBase - Number(loan.remaining_balance));
   const today = new Date().toISOString().split("T")[0];
 
   const { data: insts } = await supabase
@@ -44,15 +53,16 @@ export async function recalculateInstallments(loanId: string) {
   let remaining = totalPaid;
 
   for (const inst of insts) {
+    if ((INSTALLMENT_LOCKED_STATUSES as readonly string[]).includes(inst.status)) continue;
     const instAmount = Number(inst.amount);
     if (remaining >= instAmount - 0.01) {
       // Fully paid
       const newPaid = instAmount;
-      const needsUpdate = Number(inst.paid_amount) !== newPaid || inst.status !== "paid";
+      const needsUpdate = Number(inst.paid_amount) !== newPaid || inst.status !== INSTALLMENT_STATUS.PAID;
       if (needsUpdate) {
         await supabase.from("installments").update({
           paid_amount: newPaid,
-          status: "paid",
+          status: INSTALLMENT_STATUS.PAID,
           paid_at: inst.paid_at || new Date().toISOString(),
         }).eq("id", inst.id);
       }
@@ -104,11 +114,12 @@ export async function registerPayment(params: {
 
   const { data: loanData } = await supabase
     .from("loans")
-    .select("amount, total_amount, remaining_balance")
+    .select("amount, total_amount, remaining_balance, status")
     .eq("id", loanId)
     .single();
 
   if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode receber pagamento.");
 
   const applied = Math.min(amount, Math.max(0, Number(loanData.remaining_balance)));
   if (applied <= 0.01) return { applied: 0, newBalance: Number(loanData.remaining_balance) };
@@ -120,43 +131,49 @@ export async function registerPayment(params: {
   });
   if (rpcError) throw rpcError;
 
-  // 2. Cash balance: interest first, then principal
-  if (loanData) {
-    const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
-    const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
-    const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-    const toInterest = Math.min(applied, interestRemaining);
-    const toPrincipal = applied - toInterest;
+  const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
+  const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
+  const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+  const toInterest = Math.min(applied, interestRemaining);
+  const toPrincipal = applied - toInterest;
 
+  let movement: any = null;
+  let event: any = null;
+  try {
+    movement = await createCashMovement({
+      type: "recebimento_normal",
+      amount: applied,
+      client_id: clientId,
+      loan_id: loanId,
+      installment_id: installmentId || null,
+      observation: `Pagamento - ${clientName}`,
+      cash_date: cashDate,
+    }) as any;
+    event = await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "pagamento",
+      client_id: clientId,
+      loan_id: loanId,
+      installment_id: installmentId || null,
+      amount_in: applied,
+      observation: `Pagamento - ${clientName}`,
+      origin,
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (!movement?.id || !event?.id) throw new Error("Pagamento sem movimentação/evento financeiro vinculado.");
+    await linkCashMovementToDailyEvent(movement.id, event.id);
     await updateCashBalance({
       available_cash: applied,
       interest_receivable: -toInterest,
       money_lent: -toPrincipal,
     });
+  } catch (err) {
+    if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+    if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: applied });
+    await recalculateInstallments(loanId);
+    throw err;
   }
-
-  // 3. Linked cash movement + daily event
-  const movement = await createCashMovement({
-    type: "recebimento_normal",
-    amount: applied,
-    client_id: clientId,
-    loan_id: loanId,
-    installment_id: installmentId || null,
-    observation: `Pagamento - ${clientName}`,
-    cash_date: cashDate,
-  }) as any;
-  const event = await createDailyEvent({
-    cash_date: cashDate,
-    event_type: "pagamento",
-    client_id: clientId,
-    loan_id: loanId,
-    installment_id: installmentId || null,
-    amount_in: applied,
-    observation: `Pagamento - ${clientName}`,
-    origin,
-    cash_movement_id: movement?.id || null,
-  } as any) as any;
-  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
 
   // Recalculate installment distribution based on remaining_balance
   await recalculateInstallments(loanId);
@@ -188,6 +205,14 @@ export async function registerPenaltyPayment(params: {
   const { loanId, amount, clientId, clientName, cashDate, origin } = params;
   if (amount <= 0) return;
 
+  const { data: loanData } = await supabase
+    .from("loans")
+    .select("status, remaining_balance")
+    .eq("id", loanId)
+    .single();
+  if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode receber pagamento de multa.");
+
   const { data: penaltyInsts } = await supabase
     .from("installments")
     .select("*")
@@ -199,32 +224,42 @@ export async function registerPenaltyPayment(params: {
 
   const newPaid = Number(penaltyInst.paid_amount) + amount;
   const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
-  await supabase.from("installments").update({
-    paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
-    status: fullyPaid ? "paid" : newPaid > 0.01 ? "partial" : penaltyInst.status,
-    paid_at: fullyPaid ? new Date(cashDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
-  }).eq("id", penaltyInst.id);
-
-  await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
-  const movement = await createCashMovement({
-    type: "recebimento_multa",
-    amount,
-    client_id: clientId,
-    loan_id: loanId,
-    observation: `Pagamento de multa - ${clientName}`,
-    cash_date: cashDate,
-  }) as any;
-  const event = await createDailyEvent({
-    cash_date: cashDate,
-    event_type: "recebimento_multa",
-    client_id: clientId,
-    loan_id: loanId,
-    amount_in: amount,
-    observation: `Multa - ${clientName}`,
-    origin,
-    cash_movement_id: movement?.id || null,
-  } as any) as any;
-  if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+  let movement: any = null;
+  let event: any = null;
+  try {
+    movement = await createCashMovement({
+      type: "recebimento_multa",
+      amount,
+      client_id: clientId,
+      loan_id: loanId,
+      observation: `Pagamento de multa - ${clientName}`,
+      cash_date: cashDate,
+    }) as any;
+    event = await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "recebimento_multa",
+      client_id: clientId,
+      loan_id: loanId,
+      amount_in: amount,
+      observation: `Multa - ${clientName}`,
+      origin,
+      cash_movement_id: movement?.id || null,
+    } as any) as any;
+    if (!movement?.id || !event?.id) throw new Error("Pagamento de multa sem movimentação/evento financeiro vinculado.");
+    await linkCashMovementToDailyEvent(movement.id, event.id);
+    await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
+    const { error: instError } = await supabase.from("installments").update({
+      paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
+      status: fullyPaid ? INSTALLMENT_STATUS.PAID : newPaid > 0.01 ? INSTALLMENT_STATUS.PARTIAL : penaltyInst.status,
+      paid_at: fullyPaid ? new Date(cashDate + "T12:00:00").toISOString() : penaltyInst.paid_at,
+    }).eq("id", penaltyInst.id);
+    if (instError) throw instError;
+  } catch (err) {
+    if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+    if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+    await recalculateCashBalanceFromLedger();
+    throw err;
+  }
   await recalculateCashBalanceFromLedger();
 }
 
@@ -245,11 +280,12 @@ export async function settleLoan(params: {
   // Get real remaining balance
   const { data: loanData } = await supabase
     .from("loans")
-    .select("remaining_balance, amount, total_amount")
+    .select("remaining_balance, amount, total_amount, status")
     .eq("id", loanId)
     .single();
 
   if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode ser quitado.");
 
   const realBalance = Number(loanData.remaining_balance);
 
@@ -261,67 +297,76 @@ export async function settleLoan(params: {
     .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[])
     .order("number");
 
-
-  if (!allUnpaid || allUnpaid.length === 0) return { regularPaid: 0, penaltyPaid: 0 };
-
-  const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
-  const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
-
-  // Mark all regular installments as paid
-  for (const i of regularUnpaid) {
-    await supabase.from("installments").update({
-      paid_amount: Number(i.amount),
-      status: "paid",
-      paid_at: new Date(cashDate + "T12:00:00").toISOString(),
-    }).eq("id", i.id);
+  const regularUnpaid = (allUnpaid || []).filter((i: any) => !i.is_penalty);
+  const penaltyUnpaid = (allUnpaid || []).filter((i: any) => i.is_penalty);
+  if (realBalance > 0.01 && regularUnpaid.length === 0) {
+    throw new Error("Empréstimo ativo sem parcelas cobraveis. Corrija as parcelas antes de quitar.");
   }
+  if (realBalance <= 0.01 && penaltyUnpaid.length === 0) return { regularPaid: 0, penaltyPaid: 0 };
 
   // Apply remaining balance via RPC
   if (realBalance > 0) {
-    await supabase.rpc("apply_loan_payment", { p_loan_id: loanId, p_amount: realBalance });
+    const { error: rpcError } = await supabase.rpc("apply_loan_payment", { p_loan_id: loanId, p_amount: realBalance });
+    if (rpcError) throw rpcError;
 
     // Cash balance
     const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
-    const { data: allInsts } = await supabase
-      .from("installments")
-      .select("paid_amount")
-      .eq("loan_id", loanId)
-      .eq("is_penalty", false);
-    const totalPaidNow = (allInsts || []).reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
-    const totalPaidBefore = totalPaidNow - realBalance;
+    const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
     const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
     const toInterest = Math.min(realBalance, interestRemaining);
     const toPrincipal = realBalance - toInterest;
 
-    await updateCashBalance({
-      available_cash: realBalance,
-      interest_receivable: -toInterest,
-      money_lent: -toPrincipal,
-    });
-    const movement = await createCashMovement({
-      type: "recebimento_normal",
-      amount: realBalance,
-      client_id: clientId,
-      loan_id: loanId,
-      installment_id: installmentId || null,
-      observation: `Quitação empréstimo - ${clientName}`,
-      cash_date: cashDate,
-    }) as any;
-    const event = await createDailyEvent({
-      cash_date: cashDate,
-      event_type: "pagamento",
-      client_id: clientId,
-      loan_id: loanId,
-      installment_id: installmentId || null,
-      amount_in: realBalance,
-      observation: `Quitação empréstimo - ${clientName}`,
-      origin,
-      cash_movement_id: movement?.id || null,
-    } as any) as any;
-    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+    let movement: any = null;
+    let event: any = null;
+    try {
+      movement = await createCashMovement({
+        type: "recebimento_normal",
+        amount: realBalance,
+        client_id: clientId,
+        loan_id: loanId,
+        installment_id: installmentId || null,
+        observation: `Quitação empréstimo - ${clientName}`,
+        cash_date: cashDate,
+      }) as any;
+      event = await createDailyEvent({
+        cash_date: cashDate,
+        event_type: "pagamento",
+        client_id: clientId,
+        loan_id: loanId,
+        installment_id: installmentId || null,
+        amount_in: realBalance,
+        observation: `Quitação empréstimo - ${clientName}`,
+        origin,
+        cash_movement_id: movement?.id || null,
+      } as any) as any;
+      if (!movement?.id || !event?.id) throw new Error("Quitação sem movimentação/evento financeiro vinculado.");
+      await linkCashMovementToDailyEvent(movement.id, event.id);
+      await updateCashBalance({
+        available_cash: realBalance,
+        interest_receivable: -toInterest,
+        money_lent: -toPrincipal,
+      });
+    } catch (err) {
+      if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+      if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+      await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: realBalance });
+      await recalculateInstallments(loanId);
+      throw err;
+    }
   } else {
     // Balance already zero, just mark as paid
-    await supabase.from("loans").update({ status: "paid" }).eq("id", loanId);
+    const { error: paidError } = await supabase.from("loans").update({ status: "paid" }).eq("id", loanId);
+    if (paidError) throw paidError;
+  }
+
+  // Mark all regular installments as paid after the financial movement is safely registered.
+  for (const i of regularUnpaid) {
+    const { error: instError } = await supabase.from("installments").update({
+      paid_amount: Number(i.amount),
+      status: INSTALLMENT_STATUS.PAID,
+      paid_at: new Date(cashDate + "T12:00:00").toISOString(),
+    }).eq("id", i.id);
+    if (instError) throw instError;
   }
 
   // Handle penalties
@@ -338,26 +383,36 @@ export async function settleLoan(params: {
   }
 
   if (totalPenaltyPaying > 0) {
-    await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-    const movement = await createCashMovement({
-      type: "recebimento_multa",
-      amount: totalPenaltyPaying,
-      client_id: clientId,
-      loan_id: loanId,
-      observation: `Quitação multa - ${clientName}`,
-      cash_date: cashDate,
-    }) as any;
-    const event = await createDailyEvent({
-      cash_date: cashDate,
-      event_type: "recebimento_multa",
-      client_id: clientId,
-      loan_id: loanId,
-      amount_in: totalPenaltyPaying,
-      observation: `Quitação multa - ${clientName}`,
-      origin,
-      cash_movement_id: movement?.id || null,
-    } as any) as any;
-    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+    let movement: any = null;
+    let event: any = null;
+    try {
+      movement = await createCashMovement({
+        type: "recebimento_multa",
+        amount: totalPenaltyPaying,
+        client_id: clientId,
+        loan_id: loanId,
+        observation: `Quitação multa - ${clientName}`,
+        cash_date: cashDate,
+      }) as any;
+      event = await createDailyEvent({
+        cash_date: cashDate,
+        event_type: "recebimento_multa",
+        client_id: clientId,
+        loan_id: loanId,
+        amount_in: totalPenaltyPaying,
+        observation: `Quitação multa - ${clientName}`,
+        origin,
+        cash_movement_id: movement?.id || null,
+      } as any) as any;
+      if (!movement?.id || !event?.id) throw new Error("Quitação de multa sem movimentação/evento financeiro vinculado.");
+      await linkCashMovementToDailyEvent(movement.id, event.id);
+      await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
+    } catch (err) {
+      if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+      if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+      await recalculateCashBalanceFromLedger();
+      throw err;
+    }
   }
 
   await recalculateInstallments(loanId);
@@ -656,6 +711,7 @@ export async function cancelLoan(params: {
   const isImportedOngoing = Boolean((loan as any).is_imported_ongoing);
   const prevStatus = String(loan.status);
   const prevBalance = Number(loan.remaining_balance);
+  if (!isLoanActive(loan)) throw new Error("Empréstimo inativo não pode ser cancelado.");
 
   await markOpenDailyEventsReversed();
   await handleFinancialReversal(loan.client_id, isImportedOngoing);

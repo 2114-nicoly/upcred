@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
@@ -55,6 +55,20 @@ export default function NewLoanPage() {
   };
   const draft = useFormDraft(draftKey, draftValue);
   const restoredRef = useRef(false);
+  const resetForm = () => {
+    setAmount("");
+    setInterestType("percentage");
+    setInterestValue("");
+    setInstallmentCount("");
+    setPaymentType("daily");
+    setLoanDate(format(new Date(), "yyyy-MM-dd"));
+    setFirstDueDate("");
+    setFixedDates([]);
+    setObservation("");
+    setRegistrationType("new");
+    setAmountAlreadyPaid("");
+    setRenewPaidAmount("");
+  };
   useEffect(() => {
     if (restoredRef.current) return;
     try {
@@ -74,7 +88,7 @@ export default function NewLoanPage() {
         if (saved.registrationType === "new" || saved.registrationType === "ongoing") setRegistrationType(saved.registrationType);
         if (typeof saved.amountAlreadyPaid === "string") setAmountAlreadyPaid(saved.amountAlreadyPaid);
         toast.info("Rascunho restaurado", {
-          action: { label: "Descartar", onClick: () => { draft.clear(); window.location.reload(); } },
+          action: { label: "Descartar", onClick: () => { draft.clear(); resetForm(); } },
         });
       }
     } catch (err) {
@@ -161,11 +175,15 @@ export default function NewLoanPage() {
 
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
-    if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error("Informe a data do primeiro vencimento"); return; }
+    if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error(isOngoing ? "Informe a data da próxima cobrança" : "Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
 
     if (isOngoing && numAlreadyPaid > calc.totalAmount + 0.01) {
       toast.error(`Valor já pago (${formatCurrency(numAlreadyPaid)}) é maior que o valor total (${formatCurrency(calc.totalAmount)}).`);
+      return;
+    }
+    if (isOngoing && calc.totalAmount - numAlreadyPaid <= 0.01) {
+      toast.error("Este empréstimo já está quitado. Cadastre apenas empréstimos em andamento com saldo restante.");
       return;
     }
 
@@ -276,11 +294,17 @@ export default function NewLoanPage() {
       return;
     }
 
+    const createdMovementIds: string[] = [];
+    const createdEventIds: string[] = [];
+
     // Helper: rollback the just-created loan if any subsequent step fails.
     const rollbackLoan = async () => {
       try {
+        if (createdEventIds.length > 0) await supabase.from("daily_events" as any).delete().in("id", createdEventIds as any);
+        if (createdMovementIds.length > 0) await supabase.from("cash_movements").delete().in("id", createdMovementIds);
         await supabase.from("installments").delete().eq("loan_id", loan.id);
         await supabase.from("loans").delete().eq("id", loan.id);
+        await recalculateCashBalanceFromLedger();
       } catch (e) {
         console.error("[NewLoan] rollback falhou:", e);
       }
@@ -341,7 +365,7 @@ export default function NewLoanPage() {
       }));
     }
 
-    if (installments.length === 0 && !isOngoing) {
+    if (installments.length === 0) {
       await rollbackLoan();
       toast.error("Erro ao criar parcelas. O empréstimo não foi salvo.");
       setSaving(false);
@@ -361,44 +385,56 @@ export default function NewLoanPage() {
 
     // Para importados: NÃO movimentar caixa, NÃO criar daily_event de empréstimo novo.
     if (!isOngoing) {
-      const interest = calc.totalAmount - numAmount;
-      const cashOut = renewFromLoanId ? valorLiberado : numAmount;
-      await updateCashBalance({
-        available_cash: -cashOut,
-        money_lent: numAmount,
-        interest_receivable: interest,
-      });
+      try {
+        const interest = calc.totalAmount - numAmount;
+        const cashOut = renewFromLoanId ? valorLiberado : numAmount;
 
-      let movementId: string | null = null;
-      if (cashOut > 0) {
-        const mv = await createCashMovement({
-          type: "emprestimo",
-          amount: -cashOut,
+        let movementId: string | null = null;
+        if (cashOut > 0) {
+          const mv = await createCashMovement({
+            type: "emprestimo",
+            amount: -cashOut,
+            client_id: clientId!,
+            loan_id: loan.id,
+            observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
+            cash_date: loanDate,
+          }) as any;
+          movementId = mv?.id || null;
+          if (!movementId) throw new Error("Movimentação de caixa não foi criada.");
+          createdMovementIds.push(movementId);
+        }
+
+        const renewObs = renewFromLoanId
+          ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
+          : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+
+        const evt = await createDailyEvent({
+          cash_date: loanDate,
+          event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
           client_id: clientId!,
           loan_id: loan.id,
-          observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
-          cash_date: loanDate,
+          amount_in: 0,
+          amount_out: cashOut,
+          observation: renewObs,
+          origin: "novo_emprestimo",
+          cash_movement_id: movementId,
         }) as any;
-        movementId = mv?.id || null;
-      }
+        if (!evt?.id) throw new Error("Evento diário não foi criado.");
+        createdEventIds.push(evt.id);
 
-      const renewObs = renewFromLoanId
-        ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
-        : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+        if (movementId) await linkCashMovementToDailyEvent(movementId, evt.id);
 
-      const evt = await createDailyEvent({
-        cash_date: loanDate,
-        event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
-        client_id: clientId!,
-        loan_id: loan.id,
-        amount_in: 0,
-        amount_out: cashOut,
-        observation: renewObs,
-        origin: "novo_emprestimo",
-        cash_movement_id: movementId,
-      }) as any;
-      if (movementId && evt?.id) {
-        await linkCashMovementToDailyEvent(movementId, evt.id);
+        await updateCashBalance({
+          available_cash: -cashOut,
+          money_lent: numAmount,
+          interest_receivable: interest,
+        });
+      } catch (err: any) {
+        console.error("Erro ao criar movimentação/evento do empréstimo:", err);
+        await rollbackLoan();
+        toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
+        setSaving(false);
+        return;
       }
     }
 
@@ -541,7 +577,7 @@ export default function NewLoanPage() {
 
         {paymentType !== "fixed_dates" && (
           <div>
-            <Label>Data do Primeiro Vencimento</Label>
+            <Label>{isOngoing ? "Data da próxima cobrança" : "Data do Primeiro Vencimento"}</Label>
             <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} />
           </div>
         )}

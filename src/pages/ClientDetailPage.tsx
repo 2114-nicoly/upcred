@@ -24,6 +24,7 @@ import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } fro
 import ClientAttachments from "@/components/ClientAttachments";
 import ClientHistory from "@/components/ClientHistory";
 import { logAction } from "@/lib/audit-utils";
+import { isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 
 type Loan = {
   id: string;
@@ -128,7 +129,7 @@ export default function ClientDetailPage() {
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     const overdueInsts = insts
-      .filter((i) => !i.is_penalty && i.status !== "paid")
+      .filter((i) => !i.is_penalty && isInstallmentCollectibleStatus(i.status))
       .filter((i) => new Date(i.due_date + "T12:00:00") < today)
       .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
     if (overdueInsts.length === 0) return 0;
@@ -136,7 +137,7 @@ export default function ClientDetailPage() {
   };
 
   const getNextDueDate = (loan: Loan): string | null => {
-    const insts = (installmentsByLoan[loan.id] || []).filter((i) => !i.is_penalty && i.status !== "paid");
+    const insts = (installmentsByLoan[loan.id] || []).filter((i) => !i.is_penalty && isInstallmentCollectibleStatus(i.status));
     if (insts.length === 0) return null;
     return insts.sort((a, b) => a.due_date.localeCompare(b.due_date))[0].due_date;
   };
@@ -186,9 +187,7 @@ export default function ClientDetailPage() {
     setEditOpen(true);
   };
 
-  const activeLoans = loans.filter(
-    (l) => l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated" && Number(l.remaining_balance) > 0.01
-  );
+  const activeLoans = loans.filter(isLoanActive);
   const activeLoan = activeLoans[0] || null;
   const historyLoans = loans.filter(
     (l) => l.status === "paid" || l.status === "cancelled" || l.status === "renegotiated"
