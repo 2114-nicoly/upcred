@@ -75,6 +75,11 @@ function getInstClientId(inst: any): string | null {
 function isValidRouteInstallment(inst: any): boolean {
   return !!(inst && inst.loan_id && getInstLoan(inst) && getInstClientId(inst));
 }
+function canActOnRouteInstallment(inst: any): boolean {
+  return isValidRouteInstallment(inst)
+    && isInstallmentCollectibleStatus(inst.status)
+    && Number(getInstLoan(inst)?.remaining_balance ?? 0) > 0.01;
+}
 
 const safeKey = (...parts: unknown[]) => parts.map(p => String(p ?? "null")).join("-");
 
@@ -772,7 +777,7 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
-    if (!isValidRouteInstallment(inst)) {
+    if (!canActOnRouteInstallment(inst)) {
       toast.error("Registro incompleto: empréstimo ou cliente ausente.");
       return;
     }
@@ -831,7 +836,7 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === id);
     if (!inst) return;
-    if (!isValidRouteInstallment(inst)) {
+    if (!canActOnRouteInstallment(inst)) {
       toast.error("Registro incompleto: empréstimo ou cliente ausente.");
       return;
     }
@@ -881,7 +886,7 @@ export default function DailyCashPage() {
 
     const selectedInsts = pendingInstallments
       .filter(i => selectedForNotPaid.has(i.id))
-      .filter(isValidRouteInstallment);
+      .filter(canActOnRouteInstallment);
     if (selectedInsts.length === 0) return;
 
     const obs = composeNotPaidObservation(batchNotPaidReason, batchNotPaidObs);
@@ -1174,7 +1179,7 @@ export default function DailyCashPage() {
 
     const inst = pendingInstallments.find(i => i.id === instId);
     if (!inst) return;
-    if (!isValidRouteInstallment(inst)) {
+    if (!canActOnRouteInstallment(inst)) {
       toast.error("Registro incompleto: empréstimo ou cliente ausente.");
       return;
     }
