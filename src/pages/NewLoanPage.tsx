@@ -481,7 +481,58 @@ export default function NewLoanPage() {
       }
       toast.success("Empréstimo renovado com sucesso!");
     } else if (isOngoing) {
-      // Importado: não toca em caixa, mas precisa refrescar A Receber / Empréstimos Ativos
+      // ===== Empréstimo IMPORTADO (em andamento) =====
+      // Regras: NÃO movimenta caixa, NÃO cria cash_movement, NÃO marca valor já pago como recebido.
+      // O que falta receber entra em A Receber (money_lent + interest_receivable) e
+      // gera um daily_event INFORMATIVO no histórico (amount_in=0, amount_out=0).
+      try {
+        const interestPortion = Math.max(0, calc.totalAmount - numAmount);
+        const totalPaidBefore = Math.max(0, numAlreadyPaid);
+        const interestPaid = Math.min(interestPortion, totalPaidBefore);
+        const principalPaid = Math.max(0, totalPaidBefore - interestPaid);
+        const principalReceivable = Math.max(0, numAmount - principalPaid);
+        const interestReceivable = Math.max(0, interestPortion - interestPaid);
+
+        await updateCashBalance({
+          money_lent: principalReceivable,
+          interest_receivable: interestReceivable,
+        });
+
+        const firstPending = ongoingPlan?.firstPendingNumber ?? null;
+        const nextDueStr = paymentType !== "fixed_dates" ? firstDueDate : (fixedDates[0] || null);
+        const importInfo = [
+          `Empréstimo importado - ${clientName}`,
+          `Valor original: ${formatCurrency(numAmount)}`,
+          `Total com juros: ${formatCurrency(calc.totalAmount)}`,
+          `Já pago antes do cadastro: ${formatCurrency(numAlreadyPaid)}`,
+          `Valor a receber adicionado: ${formatCurrency(ongoingRemaining)}`,
+          `Principal a receber: ${formatCurrency(principalReceivable)}`,
+          `Juros a receber: ${formatCurrency(interestReceivable)}`,
+          firstPending != null ? `Primeira parcela pendente: ${firstPending}` : null,
+          nextDueStr ? `Próxima cobrança: ${nextDueStr}` : null,
+        ].filter(Boolean).join(" | ");
+
+        const evt = await createDailyEvent({
+          cash_date: loanDate,
+          event_type: "emprestimo_importado",
+          client_id: clientId!,
+          loan_id: loan.id,
+          amount_in: 0,
+          amount_out: 0,
+          observation: importInfo,
+          origin: "emprestimo_em_andamento",
+        }) as any;
+        if (!evt?.id) throw new Error("Evento informativo do empréstimo importado não foi criado.");
+        createdEventIds.push(evt.id);
+      } catch (err: any) {
+        console.error("[NewLoan] Falha ao registrar empréstimo importado em A Receber:", err);
+        await rollbackLoan();
+        toast.error(`Erro ao registrar empréstimo importado no A Receber. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
+        setSaving(false);
+        return;
+      }
+
+      // Safety net: garante consistência total de A Receber a partir do ledger.
       try { await recalculateCashBalanceFromLedger(); } catch (e) { console.warn("[NewLoan] recalc ledger falhou:", e); }
       toast.success("Empréstimo em andamento cadastrado!");
     } else {
