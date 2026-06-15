@@ -688,15 +688,20 @@ export default function NewLoanPage() {
           </div>
         )}
 
-        {paymentType === "fixed_dates" && numInstallments > 0 && (
+        {paymentType === "fixed_dates" && datesNeeded > 0 && (
           <div className="space-y-2">
-            <Label>Datas de Vencimento</Label>
-            {fixedDates.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-16 text-sm text-muted-foreground">Parcela {i + 1}</span>
-                <Input type="date" value={d} onChange={(e) => handleFixedDateChange(i, e.target.value)} />
-              </div>
-            ))}
+            <Label>Datas de Vencimento{isOngoing ? " (apenas parcelas pendentes)" : ""}</Label>
+            {fixedDates.map((d, i) => {
+              const installmentNumber = isOngoing && ongoingPlan
+                ? ongoingPlan.firstPendingNumber + i
+                : i + 1;
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-20 text-sm text-muted-foreground">Parcela {installmentNumber}</span>
+                  <Input type="date" value={d} onChange={(e) => handleFixedDateChange(i, e.target.value)} />
+                </div>
+              );
+            })}
           </div>
         )}
 
