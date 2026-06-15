@@ -986,15 +986,32 @@ export default function LoanDetailPage() {
         </Button>
       )}
 
-      {/* === RECALCULATE BUTTON === */}
-      {loanActive && (
-        <Button variant="outline" className="w-full mb-4" onClick={handleFullRecalculate} disabled={isSubmitting}>
-          <Calculator className="mr-2 h-4 w-4" /> Atualizar
-        </Button>
-      )}
-
       {/* === INSTALLMENTS SECTION === */}
       <h2 className="mb-3 text-lg font-semibold">Parcelas</h2>
+
+      {/* === REORGANIZE OVERDUE INSTALLMENTS BUTTON === */}
+      {loanActive && (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const hasOverdue = installments.some((i) => {
+          if (i.is_penalty) return false;
+          if (!isInstallmentCollectibleStatus(i.status)) return false;
+          const due = new Date(i.due_date + "T00:00:00");
+          return i.status === "overdue" || due < today;
+        });
+        if (!hasOverdue) return null;
+        return (
+          <Button
+            variant="outline"
+            className="w-full mb-3"
+            onClick={handleReorganizeOverdue}
+            disabled={isSubmitting}
+          >
+            <Calendar className="mr-2 h-4 w-4" /> Reorganizar parcelas atrasadas
+          </Button>
+        );
+      })()}
+
 
       {/* Paid installments (collapsible) */}
       {paidInstallments.length > 0 && (
