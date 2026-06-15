@@ -522,7 +522,14 @@ export default function LoanDetailPage() {
       else await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
     }
     await updateCashBalance({ penalty_receivable: -Number(penalty.amount) });
-    logAction("multa_paga", "penalty", penaltyId, { amount: penalty.amount }, { cancelled: true }, "Multa cancelada (soft delete)");
+    await logAction(
+      "multa_cancelada",
+      "penalty",
+      penaltyId,
+      { amount: penalty.amount, observation: penalty.observation ?? null, installment_id: penalty.installment_id },
+      { cancelled: true, cancelled_by: uid, reason: "Cancelada pelo usuário" },
+      `Multa cancelada ${formatCurrency(Number(penalty.amount))}`,
+    );
     toast.success("Multa cancelada!");
     fetchData();
   };
