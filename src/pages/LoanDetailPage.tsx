@@ -740,6 +740,7 @@ export default function LoanDetailPage() {
 
       const newDates = generateDueDates(anchorDate, overdueList.length + 1, ptForDates).slice(1);
       const sortedOverdue = [...overdueList].sort((a, b) => a.number - b.number);
+      const changes: Array<{ id: string; number: number; old_due: string; new_due: string }> = [];
 
       for (let i = 0; i < sortedOverdue.length; i++) {
         const inst = sortedOverdue[i];
@@ -754,7 +755,17 @@ export default function LoanDetailPage() {
           .update({ due_date, status: newStatus })
           .eq("id", inst.id);
         if (error) throw error;
+        changes.push({ id: inst.id, number: inst.number, old_due: inst.due_date, new_due: due_date });
       }
+
+      await logAction(
+        "alterar_data_parcela",
+        "loan",
+        loan.id,
+        null,
+        { reorganized_count: changes.length, changes },
+        `Reorganização de ${changes.length} parcela(s) atrasada(s)`,
+      );
 
       toast.success("Parcelas atrasadas reorganizadas.");
       await fetchData();
