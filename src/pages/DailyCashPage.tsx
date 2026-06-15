@@ -19,6 +19,7 @@ import { createDailyEvent, deleteDailyEvent, getDailyEvents, getEventTypeLabel, 
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { logAction } from "@/lib/audit-utils";
 import { isCashClosed } from "@/lib/cash-lock";
+import { isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CalendarDays, CheckCircle, XCircle, DollarSign, AlertTriangle,
@@ -440,7 +441,7 @@ export default function DailyCashPage() {
         : "sem_caixa";
       setDailyCashStatus(status);
       const visibleNewLoans = ((newLoanData as NewLoanInfo[]) || []).filter(
-        (loan: any) => loan.status !== "paid" && loan.status !== "cancelled" && loan.status !== "renegotiated" && Number(loan.remaining_balance ?? loan.total_amount) > 0.01
+        (loan: any) => isLoanActive(loan)
       );
       setNewLoans(visibleNewLoans);
       // Opening balance: from yesterday's closed daily_cash for same scope.
@@ -646,7 +647,9 @@ export default function DailyCashPage() {
       }
       // ANTI-REAPPEARANCE: remove any loan that already has payment or not-paid event today
       const allCandidates = routeInstallments.filter(
-        i => !paidLoanIds.has(i.loan_id)
+        i => isInstallmentCollectibleStatus(i.status)
+          && Number(getInstLoan(i)?.remaining_balance ?? 0) > 0.01
+          && !paidLoanIds.has(i.loan_id)
           && !npLoanIds.has(i.loan_id)
           && !localActionedLoanIds.current.has(i.loan_id)
       );
@@ -688,7 +691,7 @@ export default function DailyCashPage() {
         .limit(100);
       if (!isStale()) {
         setPendingPenalties(((penData as any[]) || [])
-          .filter((p) => p.loans?.status !== "paid" && p.loans?.status !== "cancelled" && p.loans?.status !== "renegotiated" && Number(p.loans?.remaining_balance ?? 0) > 0.01)
+          .filter((p) => isLoanActive(p.loans || {}))
           .map((p) => ({
             id: p.id,
             amount: Number(p.amount),
