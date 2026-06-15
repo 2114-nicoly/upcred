@@ -708,6 +708,7 @@ export async function cancelLoan(params: {
   const isImportedOngoing = Boolean((loan as any).is_imported_ongoing);
   const prevStatus = String(loan.status);
   const prevBalance = Number(loan.remaining_balance);
+  if (!isLoanActive(loan)) throw new Error("Empréstimo inativo não pode ser cancelado.");
 
   await markOpenDailyEventsReversed();
   await handleFinancialReversal(loan.client_id, isImportedOngoing);
