@@ -34,7 +34,8 @@ const ACTION_LABELS: Record<string, string> = {
   renovar_emprestimo: "Renovar empréstimo", quitar_emprestimo: "Quitar empréstimo",
   pagamento: "Pagamento", editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
   editar_parcela: "Editar parcela", alterar_data_parcela: "Alterar data parcela",
-  aporte: "Aporte na rota", retirada: "Retirada da rota", ajuste_caixa: "Ajuste de caixa", fechar_caixa: "Fechar caixa",
+  multa_aplicada: "Multa aplicada", multa_paga: "Multa paga", multa_cancelada: "Multa cancelada", editar_multa: "Editar multa",
+  aporte: "Aporte na rota", retirada: "Retirada da rota", ajuste_caixa: "Ajuste de caixa", fechar_caixa: "Fechar caixa", reabrir_caixa: "Reabrir caixa",
   criar_trabalhador: "Criar trabalhador", reset_senha_trabalhador: "Reset senha",
   ativar_trabalhador: "Ativar trabalhador", desativar_trabalhador: "Desativar trabalhador",
 };
