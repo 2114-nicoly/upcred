@@ -135,48 +135,17 @@ export default function NewLoanPage() {
     return calculateLoan(numAmount, interestType, numInterest, numInstallments);
   }, [numAmount, interestType, numInterest, numInstallments]);
 
-  const dueDates = useMemo(() => {
-    if (paymentType === "fixed_dates") return fixedDates.filter((d) => d).map((d) => new Date(d + "T12:00:00"));
-    if (!firstDueDate || numInstallments <= 0) return [];
-    return generateDueDates(new Date(firstDueDate + "T12:00:00"), numInstallments, paymentType);
-  }, [firstDueDate, numInstallments, paymentType, fixedDates]);
-
-  const handleFixedDateChange = (index: number, value: string) => {
-    const newDates = [...fixedDates];
-    newDates[index] = value;
-    setFixedDates(newDates);
-  };
-
-  useEffect(() => {
-    if (paymentType === "fixed_dates" && numInstallments > 0) {
-      setFixedDates((prev) => {
-        const arr = [...prev];
-        while (arr.length < numInstallments) arr.push("");
-        return arr.slice(0, numInstallments);
-      });
-    }
-  }, [numInstallments, paymentType]);
-
-  // Renewal computed values
-  const renewPaid = parseFloat(renewPaidAmount) || 0;
-  const faltaQuitar = renewOldRemaining;
-  // Quanto do principal do novo empréstimo será absorvido para quitar o antigo
-  const absorvidoDoNovo = renewFromLoanId ? Math.max(0, faltaQuitar - renewPaid) : 0;
-  // Dinheiro real liberado ao cliente
-  const valorLiberado = renewFromLoanId ? Math.max(0, numAmount - absorvidoDoNovo) : numAmount;
-  // Quanto a renovação consegue cobrir do antigo
-  const cobreAntigo = renewPaid + numAmount;
-  const renovacaoQuita = renewFromLoanId ? cobreAntigo + 0.01 >= faltaQuitar : true;
-
-  // Ongoing (importado) helpers
+  // Ongoing (importado) helpers — declared early so dueDates can size by pendingCount
   const isOngoing = registrationType === "ongoing" && !renewFromLoanId;
   const numAlreadyPaid = parseFloat(amountAlreadyPaid) || 0;
   const ongoingRemaining = calc ? Math.max(0, calc.totalAmount - numAlreadyPaid) : 0;
 
   // Sequência correta das parcelas para importado:
-  // - fullPaid = parcelas inteiras já quitadas
-  // - partialRemaining = quanto falta na parcela parcial atual (0 se nenhuma)
-  // - firstPendingNumber = número da próxima parcela a cobrar
+  // - fullPaid = parcelas inteiras já quitadas antes do cadastro
+  // - hasPartial = existe uma parcela parcialmente paga
+  // - partialRemaining = quanto falta na parcela parcial atual
+  // - firstPendingNumber = número REAL da próxima parcela a cobrar (continua a numeração do contrato)
+  // - pendingCount = quantas parcelas precisam ser criadas
   const ongoingPlan = useMemo(() => {
     if (!isOngoing || !calc || numInstallments <= 0) return null;
     const value = calc.installmentAmount;
@@ -188,6 +157,75 @@ export default function NewLoanPage() {
     const pendingCount = Math.max(0, numInstallments - fullPaid);
     return { value, fullPaid, partialPaid, hasPartial, partialRemaining, firstPendingNumber, pendingCount };
   }, [isOngoing, calc, numInstallments, numAlreadyPaid]);
+
+  // Quantas datas o formulário precisa coletar:
+  // - novo: numInstallments
+  // - em andamento: apenas pendingCount (datas correspondem às parcelas pendentes reais)
+  const datesNeeded = isOngoing ? (ongoingPlan?.pendingCount ?? 0) : numInstallments;
+
+  const dueDates = useMemo(() => {
+    if (paymentType === "fixed_dates") return fixedDates.filter((d) => d).map((d) => new Date(d + "T12:00:00"));
+    if (!firstDueDate || datesNeeded <= 0) return [];
+    return generateDueDates(new Date(firstDueDate + "T12:00:00"), datesNeeded, paymentType);
+  }, [firstDueDate, datesNeeded, paymentType, fixedDates]);
+
+  const handleFixedDateChange = (index: number, value: string) => {
+    const newDates = [...fixedDates];
+    newDates[index] = value;
+    setFixedDates(newDates);
+  };
+
+  useEffect(() => {
+    if (paymentType === "fixed_dates" && datesNeeded > 0) {
+      setFixedDates((prev) => {
+        const arr = [...prev];
+        while (arr.length < datesNeeded) arr.push("");
+        return arr.slice(0, datesNeeded);
+      });
+    }
+  }, [datesNeeded, paymentType]);
+
+  // Renewal computed values
+  const renewPaid = parseFloat(renewPaidAmount) || 0;
+  const faltaQuitar = renewOldRemaining;
+  const absorvidoDoNovo = renewFromLoanId ? Math.max(0, faltaQuitar - renewPaid) : 0;
+  const valorLiberado = renewFromLoanId ? Math.max(0, numAmount - absorvidoDoNovo) : numAmount;
+  const cobreAntigo = renewPaid + numAmount;
+  const renovacaoQuita = renewFromLoanId ? cobreAntigo + 0.01 >= faltaQuitar : true;
+
+  // Função única para montar parcelas de empréstimo importado.
+  // Garante:
+  //  - numeração continua do contrato original (firstPendingNumber, +1, +2, ...)
+  //  - nunca cria parcelas já quitadas antes do cadastro
+  //  - primeira parcela parcial vale apenas o restante
+  //  - última parcela absorve qualquer resíduo de arredondamento para que
+  //    soma das parcelas === remaining_balance
+  const buildOngoingInstallments = (loanId: string, dates: Date[]) => {
+    if (!ongoingPlan) return [];
+    const { value, hasPartial, partialRemaining, firstPendingNumber, pendingCount } = ongoingPlan;
+    if (pendingCount === 0 || dates.length === 0) return [];
+    const amounts: number[] = [];
+    for (let i = 0; i < pendingCount; i++) {
+      if (i === 0 && hasPartial) amounts.push(partialRemaining);
+      else amounts.push(value);
+    }
+    const sum = +amounts.reduce((a, b) => a + b, 0).toFixed(2);
+    const diff = +(ongoingRemaining - sum).toFixed(2);
+    if (Math.abs(diff) >= 0.01) {
+      amounts[amounts.length - 1] = +(amounts[amounts.length - 1] + diff).toFixed(2);
+    }
+    return dates.slice(0, pendingCount).map((date, i) => ({
+      loan_id: loanId,
+      number: firstPendingNumber + i,
+      amount: amounts[i],
+      due_date: format(date, "yyyy-MM-dd"),
+      status: "pending",
+      paid_amount: 0,
+      paid_at: null,
+    }));
+  };
+
+
 
 
   const handleSave = async () => {
@@ -333,27 +371,12 @@ export default function NewLoanPage() {
     //   Não marca parcelas como pagas — o valor já pago é apenas ajuste inicial.
     let installments: any[];
     if (isOngoing) {
-      const plan = ongoingPlan!;
-      const needed = plan.pendingCount;
-      // Garantir datas suficientes a partir de firstDueDate (para a primeira parcela pendente real)
+      const needed = ongoingPlan!.pendingCount;
       let dates = dueDates.slice(0, needed);
       if (dates.length < needed && (paymentType === "daily" || paymentType === "weekly" || paymentType === "biweekly" || paymentType === "monthly") && firstDueDate) {
         dates = generateDueDates(new Date(firstDueDate + "T12:00:00"), needed, paymentType);
       }
-      installments = dates.map((date, i) => {
-        // Primeira parcela pendente: se houver parcial, vale só o restante (e number = fullPaid+1)
-        const isFirstPending = i === 0;
-        const amountThis = isFirstPending && plan.hasPartial ? plan.partialRemaining : plan.value;
-        return {
-          loan_id: loan.id,
-          number: plan.firstPendingNumber + i,
-          amount: amountThis,
-          due_date: format(date, "yyyy-MM-dd"),
-          status: "pending",
-          paid_amount: 0,
-          paid_at: null,
-        };
-      });
+      installments = buildOngoingInstallments(loan.id, dates);
     } else {
       installments = dueDates.map((date, i) => ({
         loan_id: loan.id,
@@ -665,15 +688,20 @@ export default function NewLoanPage() {
           </div>
         )}
 
-        {paymentType === "fixed_dates" && numInstallments > 0 && (
+        {paymentType === "fixed_dates" && datesNeeded > 0 && (
           <div className="space-y-2">
-            <Label>Datas de Vencimento</Label>
-            {fixedDates.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-16 text-sm text-muted-foreground">Parcela {i + 1}</span>
-                <Input type="date" value={d} onChange={(e) => handleFixedDateChange(i, e.target.value)} />
-              </div>
-            ))}
+            <Label>Datas de Vencimento{isOngoing ? " (apenas parcelas pendentes)" : ""}</Label>
+            {fixedDates.map((d, i) => {
+              const installmentNumber = isOngoing && ongoingPlan
+                ? ongoingPlan.firstPendingNumber + i
+                : i + 1;
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-20 text-sm text-muted-foreground">Parcela {installmentNumber}</span>
+                  <Input type="date" value={d} onChange={(e) => handleFixedDateChange(i, e.target.value)} />
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -823,10 +851,19 @@ export default function NewLoanPage() {
               <div className="flex justify-between"><span>Valor de cada parcela:</span><span className="font-semibold">{formatCurrency(calc.installmentAmount)}</span></div>
               {dueDates.length > 0 && (
                 <div className="mt-2 border-t pt-2">
-                  <p className="mb-1 font-medium">Vencimentos previstos:</p>
-                  {dueDates.map((d, i) => (
-                    <p key={i} className="text-muted-foreground">Parcela {i + 1}: {format(d, "dd/MM/yyyy")}</p>
-                  ))}
+                  <p className="mb-1 font-medium">Vencimentos previstos{isOngoing ? " (parcelas pendentes)" : ""}:</p>
+                  {dueDates.map((d, i) => {
+                    const number = isOngoing && ongoingPlan ? ongoingPlan.firstPendingNumber + i : i + 1;
+                    const amount = isOngoing && ongoingPlan
+                      ? (i === 0 && ongoingPlan.hasPartial ? ongoingPlan.partialRemaining : ongoingPlan.value)
+                      : calc.installmentAmount;
+                    return (
+                      <p key={i} className="text-muted-foreground">
+                        Parcela {number}: {format(d, "dd/MM/yyyy")} — {formatCurrency(amount)}
+                        {isOngoing && i === 0 && ongoingPlan?.hasPartial ? " (saldo parcial)" : ""}
+                      </p>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
