@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
@@ -182,6 +182,10 @@ export default function NewLoanPage() {
       toast.error(`Valor já pago (${formatCurrency(numAlreadyPaid)}) é maior que o valor total (${formatCurrency(calc.totalAmount)}).`);
       return;
     }
+    if (isOngoing && calc.totalAmount - numAlreadyPaid <= 0.01) {
+      toast.error("Este empréstimo já está quitado. Cadastre apenas empréstimos em andamento com saldo restante.");
+      return;
+    }
 
     if (renewFromLoanId && !renovacaoQuita) {
       toast.error(`Renovação insuficiente. Faltam ${formatCurrency(faltaQuitar - cobreAntigo)} para quitar o empréstimo atual.`);
@@ -290,11 +294,17 @@ export default function NewLoanPage() {
       return;
     }
 
+    const createdMovementIds: string[] = [];
+    const createdEventIds: string[] = [];
+
     // Helper: rollback the just-created loan if any subsequent step fails.
     const rollbackLoan = async () => {
       try {
+        if (createdEventIds.length > 0) await supabase.from("daily_events" as any).delete().in("id", createdEventIds as any);
+        if (createdMovementIds.length > 0) await supabase.from("cash_movements").delete().in("id", createdMovementIds);
         await supabase.from("installments").delete().eq("loan_id", loan.id);
         await supabase.from("loans").delete().eq("id", loan.id);
+        await recalculateCashBalanceFromLedger();
       } catch (e) {
         console.error("[NewLoan] rollback falhou:", e);
       }
