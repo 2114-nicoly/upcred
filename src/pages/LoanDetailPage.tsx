@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
+import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 
 type Loan = {
   id: string;
@@ -260,7 +261,7 @@ export default function LoanDetailPage() {
   const regularInstallments = installments.filter((i) => !i.is_penalty);
   const penaltyInst = installments.find((i) => i.is_penalty);
 
-  const pendingInstallments = regularInstallments.filter((i) => i.status !== "paid");
+  const pendingInstallments = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status));
   const paidInstallments = regularInstallments.filter((i) => i.status === "paid");
 
   const loanProgress = loan ? calculateLoanProgress({
@@ -284,6 +285,7 @@ export default function LoanDetailPage() {
     ? getOverdueDatesList(oldestOverdue.due_date, loan.payment_type)
     : [];
   const overdueDaysCount = overdueDatesList.length;
+  const loanActive = loan ? isLoanActive(loan) : false;
 
   // --- Register payment (auto-distribute) ---
   const handleRegisterPayment = async () => {
