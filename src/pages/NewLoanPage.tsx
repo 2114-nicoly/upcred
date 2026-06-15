@@ -173,6 +173,23 @@ export default function NewLoanPage() {
   const numAlreadyPaid = parseFloat(amountAlreadyPaid) || 0;
   const ongoingRemaining = calc ? Math.max(0, calc.totalAmount - numAlreadyPaid) : 0;
 
+  // Sequência correta das parcelas para importado:
+  // - fullPaid = parcelas inteiras já quitadas
+  // - partialRemaining = quanto falta na parcela parcial atual (0 se nenhuma)
+  // - firstPendingNumber = número da próxima parcela a cobrar
+  const ongoingPlan = useMemo(() => {
+    if (!isOngoing || !calc || numInstallments <= 0) return null;
+    const value = calc.installmentAmount;
+    const fullPaid = Math.min(numInstallments, Math.floor((numAlreadyPaid + 0.0001) / value));
+    const partialPaid = +(numAlreadyPaid - fullPaid * value).toFixed(2);
+    const hasPartial = partialPaid > 0.01 && fullPaid < numInstallments;
+    const partialRemaining = hasPartial ? +(value - partialPaid).toFixed(2) : 0;
+    const firstPendingNumber = fullPaid + 1;
+    const pendingCount = Math.max(0, numInstallments - fullPaid);
+    return { value, fullPaid, partialPaid, hasPartial, partialRemaining, firstPendingNumber, pendingCount };
+  }, [isOngoing, calc, numInstallments, numAlreadyPaid]);
+
+
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error(isOngoing ? "Informe a data da próxima cobrança" : "Informe a data do primeiro vencimento"); return; }
