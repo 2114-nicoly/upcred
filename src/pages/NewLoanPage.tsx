@@ -239,24 +239,8 @@ export default function NewLoanPage() {
     const userId = session?.user?.id;
     if (!userId) { toast.error("Sessão expirada"); setSaving(false); return; }
 
-    // ===== RENOVAÇÃO: registrar pagamento em dinheiro do cliente no antigo (se houver) =====
-    if (renewFromLoanId && renewPaid > 0) {
-      try {
-        await registerPayment({
-          loanId: renewFromLoanId,
-          amount: Math.min(renewPaid, faltaQuitar),
-          clientId: clientId!,
-          clientName: clientName,
-          cashDate: loanDate,
-          origin: "renovacao",
-        });
-      } catch (err) {
-        console.error("Erro ao registrar pagamento da renovação:", err);
-        toast.error("Erro ao registrar pagamento da renovação");
-        setSaving(false);
-        return;
-      }
-    }
+    // (renovação: o pagamento do antigo é registrado SÓ após o novo empréstimo estar criado com sucesso)
+
 
     // ===== Criar novo empréstimo =====
     const importedObs = isOngoing
@@ -433,6 +417,26 @@ export default function NewLoanPage() {
         console.error("Erro ao criar movimentação/evento do empréstimo:", err);
         await rollbackLoan();
         toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
+        setSaving(false);
+        return;
+      }
+    }
+
+    // ===== RENOVAÇÃO: novo empréstimo já criado com sucesso → registra pagamento do antigo =====
+    if (renewFromLoanId && renewPaid > 0) {
+      try {
+        await registerPayment({
+          loanId: renewFromLoanId,
+          amount: Math.min(renewPaid, faltaQuitar),
+          clientId: clientId!,
+          clientName: clientName,
+          cashDate: loanDate,
+          origin: "renovacao",
+        });
+      } catch (err: any) {
+        console.error("Erro ao registrar pagamento da renovação:", err);
+        await rollbackLoan();
+        toast.error(`Erro ao registrar pagamento da renovação. Renovação cancelada.${err?.message ? ` (${err.message})` : ""}`);
         setSaving(false);
         return;
       }

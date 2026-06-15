@@ -317,6 +317,8 @@ export type Database = {
         Row: {
           address: string | null
           admin_id: string | null
+          archived_at: string | null
+          archived_by: string | null
           client_code: number | null
           created_at: string
           doc_primary_number: string | null
@@ -335,6 +337,8 @@ export type Database = {
         Insert: {
           address?: string | null
           admin_id?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           client_code?: number | null
           created_at?: string
           doc_primary_number?: string | null
@@ -353,6 +357,8 @@ export type Database = {
         Update: {
           address?: string | null
           admin_id?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           client_code?: number | null
           created_at?: string
           doc_primary_number?: string | null
@@ -1078,6 +1084,9 @@ export type Database = {
           admin_id: string | null
           amount: number
           base_amount: number | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           created_at: string
           id: string
           installment_id: string
@@ -1095,6 +1104,9 @@ export type Database = {
           admin_id?: string | null
           amount: number
           base_amount?: number | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
           id?: string
           installment_id: string
@@ -1112,6 +1124,9 @@ export type Database = {
           admin_id?: string | null
           amount?: number
           base_amount?: number | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
           id?: string
           installment_id?: string

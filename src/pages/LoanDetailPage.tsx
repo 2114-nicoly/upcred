@@ -474,7 +474,7 @@ export default function LoanDetailPage() {
     if (penaltyInst) {
       const newPenaltyTotal = Math.max(0, Number(penaltyInst.amount) + diff);
       if (newPenaltyTotal <= 0.01) {
-        await supabase.from("installments").delete().eq("id", penaltyInst.id);
+        await supabase.from("installments").update({ status: "cancelled" } as any).eq("id", penaltyInst.id);
       } else {
         await supabase.from("installments").update({ amount: newPenaltyTotal }).eq("id", penaltyInst.id);
       }
@@ -488,18 +488,26 @@ export default function LoanDetailPage() {
   const handleDeletePenalty = async (penaltyId: string) => {
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
-    await supabase.from("penalties").delete().eq("id", penaltyId);
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id || null;
+    // Soft-cancel: preserva histórico financeiro
+    await supabase.from("penalties").update({
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: uid,
+      cancellation_reason: "Cancelada pelo usuário",
+    } as any).eq("id", penaltyId);
     const srcInst = installments.find((i) => i.id === penalty.installment_id);
     if (srcInst) {
       await supabase.from("installments").update({ penalty_amount: Math.max(0, Number(srcInst.penalty_amount) - Number(penalty.amount)) }).eq("id", srcInst.id);
     }
     if (penaltyInst) {
       const newAmount = Number(penaltyInst.amount) - Number(penalty.amount);
-      if (newAmount <= 0.01) await supabase.from("installments").delete().eq("id", penaltyInst.id);
+      if (newAmount <= 0.01) await supabase.from("installments").update({ status: "cancelled" } as any).eq("id", penaltyInst.id);
       else await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
     }
     await updateCashBalance({ penalty_receivable: -Number(penalty.amount) });
-    toast.success("Multa removida!");
+    logAction("multa_paga", "penalty", penaltyId, { amount: penalty.amount }, { cancelled: true }, "Multa cancelada (soft delete)");
+    toast.success("Multa cancelada!");
     fetchData();
   };
 
@@ -732,6 +740,7 @@ export default function LoanDetailPage() {
 
       const newDates = generateDueDates(anchorDate, overdueList.length + 1, ptForDates).slice(1);
       const sortedOverdue = [...overdueList].sort((a, b) => a.number - b.number);
+      const changes: Array<{ id: string; number: number; old_due: string; new_due: string }> = [];
 
       for (let i = 0; i < sortedOverdue.length; i++) {
         const inst = sortedOverdue[i];
@@ -746,7 +755,17 @@ export default function LoanDetailPage() {
           .update({ due_date, status: newStatus })
           .eq("id", inst.id);
         if (error) throw error;
+        changes.push({ id: inst.id, number: inst.number, old_due: inst.due_date, new_due: due_date });
       }
+
+      await logAction(
+        "alterar_data_parcela",
+        "loan",
+        loan.id,
+        null,
+        { reorganized_count: changes.length, changes },
+        `Reorganização de ${changes.length} parcela(s) atrasada(s)`,
+      );
 
       toast.success("Parcelas atrasadas reorganizadas.");
       await fetchData();
@@ -760,26 +779,35 @@ export default function LoanDetailPage() {
   const handleDeleteInstallment = async (id: string) => {
     const inst = installments.find((i) => i.id === id);
     const ok = await confirm({
-      title: "Excluir parcela?",
-      description: "Esta ação não pode ser desfeita. Multas associadas a esta parcela também serão removidas.",
+      title: "Cancelar parcela?",
+      description: "A parcela será marcada como cancelada e não aparecerá mais nas cobranças. Multas vinculadas também serão canceladas. O histórico financeiro é preservado.",
       affected: [
         { label: "Parcela", value: inst ? `#${inst.number}` : "—" },
         { label: "Valor", value: inst ? formatCurrency(Number(inst.amount)) : "—" },
         { label: "Vencimento", value: inst ? format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy") : "—" },
       ],
-      confirmText: "Excluir", destructive: true,
+      confirmText: "Cancelar parcela", destructive: true,
     });
     if (!ok) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id || null;
     const relatedPenalties = penalties.filter(p => p.installment_id === id);
     const totalPenaltyRemoved = relatedPenalties.reduce((s, p) => s + Number(p.amount), 0);
-    await supabase.from("penalties").delete().eq("installment_id", id);
+    if (relatedPenalties.length > 0) {
+      await supabase.from("penalties").update({
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: uid,
+        cancellation_reason: "Parcela cancelada",
+      } as any).in("id", relatedPenalties.map(p => p.id));
+    }
     if (totalPenaltyRemoved > 0 && penaltyInst) {
       const newAmount = Number(penaltyInst.amount) - totalPenaltyRemoved;
-      if (newAmount <= 0.01) await supabase.from("installments").delete().eq("id", penaltyInst.id);
+      if (newAmount <= 0.01) await supabase.from("installments").update({ status: "cancelled" } as any).eq("id", penaltyInst.id);
       else await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
     }
-    await supabase.from("installments").delete().eq("id", id);
-    toast.success("Parcela excluída!");
+    await supabase.from("installments").update({ status: "cancelled" } as any).eq("id", id);
+    logAction("editar_parcela", "installment", id, inst ? { status: inst.status, amount: inst.amount } : null, { status: "cancelled" }, "Parcela cancelada (soft delete)");
+    toast.success("Parcela cancelada!");
     fetchData();
   };
 

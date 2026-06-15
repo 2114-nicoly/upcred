@@ -57,7 +57,7 @@ export default function ClientsPage() {
   const [filterActive, setFilterActive] = useState(false);
 
   const fetchClients = async () => {
-    const { data } = await supabase.from("clients").select("*").order("client_code");
+    const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
     setClients(data || []);
     setLoading(false);
 
@@ -175,11 +175,17 @@ export default function ClientsPage() {
     fetchClients();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este cliente? Todos os empréstimos serão removidos.")) return;
-    await supabase.from("clients").delete().eq("id", id);
-    logAction("excluir_cliente", "client", id);
-    toast.success("Cliente excluído!");
+  const handleArchive = async (id: string) => {
+    if (!confirm("Arquivar este cliente? Ele deixará de aparecer nas listas, mas todo o histórico (empréstimos, pagamentos, caixa) será preservado.")) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id || null;
+    const { error } = await supabase
+      .from("clients")
+      .update({ archived_at: new Date().toISOString(), archived_by: uid } as any)
+      .eq("id", id);
+    if (error) { toast.error("Erro ao arquivar cliente"); return; }
+    logAction("excluir_cliente", "client", id, null, { archived: true }, "Arquivamento (soft delete)");
+    toast.success("Cliente arquivado!");
     fetchClients();
   };
 
@@ -379,7 +385,7 @@ export default function ClientsPage() {
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => handleDelete(client.id)}>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                       <Link to={`/clients/${client.id}`}>
