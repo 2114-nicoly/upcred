@@ -13,6 +13,7 @@ import { ArrowLeft, Plus, XCircle, Undo2, Pencil, Trash2, Clock } from "lucide-r
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
+import { isInstallmentCollectibleStatus } from "@/lib/status-constants";
 
 type Installment = {
   id: string;
@@ -89,7 +90,7 @@ export default function LoanOverdueDetailPage() {
     if (!inst) return;
     const todayStr = format(new Date(), "yyyy-MM-dd");
     const allPaid = inst.every((i: any) => i.status === "paid");
-    const hasOverdue = inst.some((i: any) => i.status === "overdue" || (i.status !== "paid" && i.due_date < todayStr));
+    const hasOverdue = inst.some((i: any) => i.status === "overdue" || (isInstallmentCollectibleStatus(i.status) && i.due_date < todayStr));
     let newStatus = "open";
     if (allPaid) newStatus = "paid";
     else if (hasOverdue) newStatus = "overdue";
