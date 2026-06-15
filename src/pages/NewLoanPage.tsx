@@ -577,7 +577,7 @@ export default function NewLoanPage() {
 
         {paymentType !== "fixed_dates" && (
           <div>
-            <Label>Data do Primeiro Vencimento</Label>
+            <Label>{isOngoing ? "Data da próxima cobrança" : "Data do Primeiro Vencimento"}</Label>
             <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} />
           </div>
         )}
