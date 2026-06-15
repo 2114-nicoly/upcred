@@ -175,11 +175,17 @@ export default function ClientsPage() {
     fetchClients();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este cliente? Todos os empréstimos serão removidos.")) return;
-    await supabase.from("clients").delete().eq("id", id);
-    logAction("excluir_cliente", "client", id);
-    toast.success("Cliente excluído!");
+  const handleArchive = async (id: string) => {
+    if (!confirm("Arquivar este cliente? Ele deixará de aparecer nas listas, mas todo o histórico (empréstimos, pagamentos, caixa) será preservado.")) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id || null;
+    const { error } = await supabase
+      .from("clients")
+      .update({ archived_at: new Date().toISOString(), archived_by: uid } as any)
+      .eq("id", id);
+    if (error) { toast.error("Erro ao arquivar cliente"); return; }
+    logAction("excluir_cliente", "client", id, null, { archived: true }, "Arquivamento (soft delete)");
+    toast.success("Cliente arquivado!");
     fetchClients();
   };
 
