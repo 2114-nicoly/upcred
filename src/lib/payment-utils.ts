@@ -4,9 +4,11 @@ import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction } from "@/lib/audit-utils";
 import {
+  INSTALLMENT_LOCKED_STATUSES,
   INSTALLMENT_COLLECTIBLE_STATUSES,
   INSTALLMENT_STATUS,
   LOAN_STATUS,
+  isLoanActive,
 } from "@/lib/status-constants";
 
 
@@ -18,18 +20,22 @@ import {
 /**
  * Recalculate installment paid_amount/status based on the loan's remaining_balance.
  * This is the SINGLE SOURCE OF TRUTH for installment progress.
- * totalPaid = total_amount - remaining_balance, then distributed in order.
+ * Normal loan: paidInsideApp = total_amount - remaining_balance.
+ * Imported/ongoing loan: paidInsideApp = initial_remaining_balance - remaining_balance.
  */
 export async function recalculateInstallments(loanId: string) {
   const { data: loan } = await supabase
     .from("loans")
-    .select("total_amount, remaining_balance")
+    .select("total_amount, remaining_balance, is_imported_ongoing, initial_remaining_balance")
     .eq("id", loanId)
     .single();
 
   if (!loan) return;
 
-  const totalPaid = Math.max(0, Number(loan.total_amount) - Number(loan.remaining_balance));
+  const paidBase = (loan as any).is_imported_ongoing
+    ? Number((loan as any).initial_remaining_balance ?? loan.remaining_balance)
+    : Number(loan.total_amount);
+  const totalPaid = Math.max(0, paidBase - Number(loan.remaining_balance));
   const today = new Date().toISOString().split("T")[0];
 
   const { data: insts } = await supabase
@@ -44,15 +50,16 @@ export async function recalculateInstallments(loanId: string) {
   let remaining = totalPaid;
 
   for (const inst of insts) {
+    if ((INSTALLMENT_LOCKED_STATUSES as readonly string[]).includes(inst.status)) continue;
     const instAmount = Number(inst.amount);
     if (remaining >= instAmount - 0.01) {
       // Fully paid
       const newPaid = instAmount;
-      const needsUpdate = Number(inst.paid_amount) !== newPaid || inst.status !== "paid";
+      const needsUpdate = Number(inst.paid_amount) !== newPaid || inst.status !== INSTALLMENT_STATUS.PAID;
       if (needsUpdate) {
         await supabase.from("installments").update({
           paid_amount: newPaid,
-          status: "paid",
+          status: INSTALLMENT_STATUS.PAID,
           paid_at: inst.paid_at || new Date().toISOString(),
         }).eq("id", inst.id);
       }
