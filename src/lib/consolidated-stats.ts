@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isLoanActive } from "@/lib/status-constants";
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
 } from "date-fns";
@@ -127,7 +128,7 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
   ((loansRes.data as any[]) || []).forEach((l) => {
     const wid = l.worker_id ?? null;
     const s = get(wid);
-    if (l.status !== "paid" && l.status !== "cancelled" && l.status !== "renegotiated" && Number(l.remaining_balance || 0) > 0.01) {
+    if (isLoanActive(l)) {
       s.emprestimosAtivos += 1;
       if (l.status === "overdue") s.atrasados += 1;
     }
