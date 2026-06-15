@@ -371,27 +371,12 @@ export default function NewLoanPage() {
     //   Não marca parcelas como pagas — o valor já pago é apenas ajuste inicial.
     let installments: any[];
     if (isOngoing) {
-      const plan = ongoingPlan!;
-      const needed = plan.pendingCount;
-      // Garantir datas suficientes a partir de firstDueDate (para a primeira parcela pendente real)
+      const needed = ongoingPlan!.pendingCount;
       let dates = dueDates.slice(0, needed);
       if (dates.length < needed && (paymentType === "daily" || paymentType === "weekly" || paymentType === "biweekly" || paymentType === "monthly") && firstDueDate) {
         dates = generateDueDates(new Date(firstDueDate + "T12:00:00"), needed, paymentType);
       }
-      installments = dates.map((date, i) => {
-        // Primeira parcela pendente: se houver parcial, vale só o restante (e number = fullPaid+1)
-        const isFirstPending = i === 0;
-        const amountThis = isFirstPending && plan.hasPartial ? plan.partialRemaining : plan.value;
-        return {
-          loan_id: loan.id,
-          number: plan.firstPendingNumber + i,
-          amount: amountThis,
-          due_date: format(date, "yyyy-MM-dd"),
-          status: "pending",
-          paid_amount: 0,
-          paid_at: null,
-        };
-      });
+      installments = buildOngoingInstallments(loan.id, dates);
     } else {
       installments = dueDates.map((date, i) => ({
         loan_id: loan.id,
