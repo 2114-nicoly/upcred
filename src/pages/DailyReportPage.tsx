@@ -158,7 +158,7 @@ export default function DailyReportPage() {
           const expected = Number(dcRow.expected_closing_balance ?? (opening + Number(dcRow.total_in || 0) - Number(dcRow.total_out || 0)));
           const counted = dcRow.counted_closing_balance != null ? Number(dcRow.counted_closing_balance) : null;
           const diff = counted != null ? counted - expected : null;
-          setCashSummary({ opening, expected, counted, diff, closingObs: dcRow.closing_observation || null });
+          setCashSummary({ opening, expected, counted, diff, closingObs: dcRow.closing_note || null });
         } else {
           setCashStatus(null);
           setCashSummary(null);
