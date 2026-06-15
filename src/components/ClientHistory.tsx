@@ -147,9 +147,10 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
         const userIds = Array.from(new Set((auditRes.data || []).map((l: any) => l.user_id).filter(Boolean)));
         const actorMap = new Map<string, string>();
         if (userIds.length) {
+          const ids = userIds as string[];
           const [wRes, aRes] = await Promise.all([
-            supabase.from("workers").select("user_id, name, username").in("user_id", userIds as string[]),
-            supabase.from("admins").select("user_id, name, username").in("user_id", userIds as string[]),
+            (supabase.from("workers") as any).select("user_id, name, username").in("user_id", ids),
+            (supabase.from("admins") as any).select("user_id, name, username").in("user_id", ids),
           ]);
           (wRes.data || []).forEach((w: any) => actorMap.set(w.user_id, w.name || w.username));
           (aRes.data || []).forEach((a: any) => { if (!actorMap.has(a.user_id)) actorMap.set(a.user_id, a.name || a.username); });
