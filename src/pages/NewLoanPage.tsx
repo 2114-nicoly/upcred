@@ -426,7 +426,7 @@ export default function NewLoanPage() {
         {!renewFromLoanId && (
           <div>
             <Label>Tipo de cadastro</Label>
-            {(() => { console.log("registrationType atual:", registrationType); return null; })()}
+            
             <div className="grid grid-cols-2 gap-2 mt-1">
               <button
                 type="button"

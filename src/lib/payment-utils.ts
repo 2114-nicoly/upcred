@@ -3,6 +3,12 @@ import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, re
 import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction } from "@/lib/audit-utils";
+import {
+  INSTALLMENT_COLLECTIBLE_STATUSES,
+  INSTALLMENT_STATUS,
+  LOAN_STATUS,
+} from "@/lib/status-constants";
+
 
 /**
  * Centralized payment functions - SINGLE SOURCE OF TRUTH
@@ -247,13 +253,14 @@ export async function settleLoan(params: {
 
   const realBalance = Number(loanData.remaining_balance);
 
-  // Get all unpaid installments
+  // Get all collectible installments (pending/partial/overdue) — never touch cancelled/renegotiated
   const { data: allUnpaid } = await supabase
     .from("installments")
     .select("*")
     .eq("loan_id", loanId)
-    .neq("status", "paid")
+    .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[])
     .order("number");
+
 
   if (!allUnpaid || allUnpaid.length === 0) return { regularPaid: 0, penaltyPaid: 0 };
 
@@ -491,19 +498,19 @@ export async function editPayment(params: {
 
 /**
  * Safely cancel a loan WITHOUT deleting financial history.
- * - Reverses every non-reversed cash_movement of the loan (mark reversed + counter-entry)
- * - Marks linked daily_events as reversed
- * - Marks loan as cancelled (status='cancelled', remaining_balance=0)
- * - Marks non-paid installments as cancelled
- * - Removes operational not_paid_marks for the loan (non-financial)
- * - Creates a single "cancelamento" daily_event for traceability
- * - Recalculates cash balance
+ * Split into small internal helpers; every step checks Supabase errors and
+ * any failure throws (no fake success toast).
+ *
+ * For loan.is_imported_ongoing = true:
+ *  - the original disbursement never moved cash, so it is NOT counter-entered;
+ *  - only real payments received after creation are reversed.
  */
 export async function cancelLoan(params: {
   loanId: string;
   reason?: string;
 }) {
   const { loanId, reason } = params;
+  const cancelDate = new Date().toISOString().slice(0, 10);
 
   const throwIfError = (step: string, error: unknown) => {
     if (!error) return;
@@ -512,139 +519,159 @@ export async function cancelLoan(params: {
     throw new Error(`${step}: ${message}`);
   };
 
-  const cancelDate = new Date().toISOString().slice(0, 10);
+  // --- helpers -----------------------------------------------------------
+  const fetchLoan = async () => {
+    const { data, error } = await supabase
+      .from("loans")
+      .select("id, client_id, remaining_balance, status, is_imported_ongoing, amount_already_paid, initial_remaining_balance")
+      .eq("id", loanId)
+      .single();
+    throwIfError("Buscar empréstimo", error);
+    if (!data) throw new Error("Empréstimo não encontrado");
+    return data;
+  };
 
-  const { data: loan, error: loanError } = await supabase
-    .from("loans")
-    .select("id, client_id, remaining_balance, status, is_imported_ongoing, amount_already_paid, initial_remaining_balance")
-    .eq("id", loanId)
-    .single();
-  throwIfError("Buscar empréstimo", loanError);
-  if (!loan) throw new Error("Empréstimo não encontrado");
-
-  const isImportedOngoing = Boolean((loan as any).is_imported_ongoing);
-
-  // 1. Reverse each non-reversed cash_movement linked to the loan
-  const { data: movements, error: movementsError } = await supabase
-    .from("cash_movements")
-    .select("id, type, amount")
-    .eq("loan_id", loanId)
-    .is("reversed_at", null);
-  throwIfError("Buscar movimentações do empréstimo", movementsError);
-
-  // Mark existing non-reversed daily_events before creating new cancellation events.
-  const { data: events, error: eventsError } = await (supabase.from("daily_events" as any)
-    .select("id").eq("loan_id", loanId).is("reversed_at", null) as any);
-  throwIfError("Buscar eventos do empréstimo", eventsError);
-  for (const e of (events || []) as any[]) {
-    const { error } = await (supabase.from("daily_events" as any)
-      .update({ reversed_at: new Date().toISOString() } as any)
-      .eq("id", e.id) as any);
-    throwIfError("Marcar evento como estornado", error);
-  }
-
-  for (const mov of (movements || []) as any[]) {
-    try {
-      if (mov.type === "recebimento_normal" || mov.type === "recebimento_multa") {
-        // Payments received are always reversed (money actually moved)
-        await reversePayment({ movementId: mov.id });
-      } else if (isImportedOngoing && mov.type === "emprestimo") {
-        // Imported ongoing loans never moved cash on creation — do not create a counter-entry.
-        // Just mark any stray "emprestimo" movement as reversed for cleanliness.
-        const { error } = await supabase
-          .from("cash_movements")
-          .update({ reversed_at: new Date().toISOString() } as any)
-          .eq("id", mov.id);
-        throwIfError("Marcar liberação importada como estornada", error);
-      } else {
-        // emprestimo / other: mark reversed + counter-entry
-        const { error: reverseMovError } = await supabase
-          .from("cash_movements")
-          .update({ reversed_at: new Date().toISOString() } as any)
-          .eq("id", mov.id);
-        throwIfError("Marcar movimentação como estornada", reverseMovError);
-        const reversal = await createCashMovement({
-          type: "estorno_manual" as any,
-          amount: -Number(mov.amount),
-          loan_id: loanId,
-          observation: `Cancelamento de empréstimo`,
-          cash_date: cancelDate,
-        }) as any;
-        const evt = await createDailyEvent({
-          cash_date: cancelDate,
-          event_type: "cancelamento" as any,
-          loan_id: loanId,
-          client_id: loan.client_id,
-          amount_in: Number(mov.amount) < 0 ? -Number(mov.amount) : 0,
-          amount_out: Number(mov.amount) > 0 ? Number(mov.amount) : 0,
-          observation: `Estorno por cancelamento`,
-          origin: "cancelamento",
-          cash_movement_id: reversal?.id || null,
-        } as any) as any;
-        if (reversal?.id && evt?.id) {
-          const { error: linkError } = await supabase
-            .from("cash_movements")
-            .update({ daily_event_id: evt.id } as any)
-            .eq("id", reversal.id);
-          throwIfError("Vincular estorno ao evento diário", linkError);
-        }
-      }
-    } catch (err) {
-      console.error("[cancelLoan] reverse movement failed", err);
-      throw err;
+  const markOpenDailyEventsReversed = async () => {
+    const { data: events, error } = await (supabase.from("daily_events" as any)
+      .select("id").eq("loan_id", loanId).is("reversed_at", null) as any);
+    throwIfError("Buscar eventos do empréstimo", error);
+    for (const e of (events || []) as any[]) {
+      const { error: upErr } = await (supabase.from("daily_events" as any)
+        .update({ reversed_at: new Date().toISOString() } as any)
+        .eq("id", e.id) as any);
+      throwIfError("Marcar evento como estornado", upErr);
     }
-  }
+  };
 
-  // 2. Cancel installments that are not paid
-  const { error: installmentsError } = await supabase
-    .from("installments")
-    .update({ status: "cancelled" } as any)
-    .eq("loan_id", loanId)
-    .neq("status", "paid");
-  throwIfError("Cancelar parcelas pendentes", installmentsError);
+  const handleFinancialReversal = async (clientId: string, isImportedOngoing: boolean) => {
+    const { data: movements, error } = await supabase
+      .from("cash_movements")
+      .select("id, type, amount")
+      .eq("loan_id", loanId)
+      .is("reversed_at", null);
+    throwIfError("Buscar movimentações do empréstimo", error);
 
-  // 4. Remove operational not_paid_marks (non-financial, no audit value once cancelled)
-  const { error: marksError } = await supabase.from("not_paid_marks").delete().eq("loan_id", loanId);
-  throwIfError("Remover marcações de não pagou", marksError);
+    for (const mov of (movements || []) as any[]) {
+      if (mov.type === "recebimento_normal" || mov.type === "recebimento_multa") {
+        // Real money came in — always reverse with counter-entry.
+        await reversePayment({ movementId: mov.id });
+        continue;
+      }
 
-  // 5. Cancel the loan itself (preserves the row + history)
-  const { error: cancelError } = await supabase
-    .from("loans")
-    .update({ status: "cancelled", remaining_balance: 0 } as any)
-    .eq("id", loanId);
-  throwIfError("Cancelar empréstimo", cancelError);
+      if (isImportedOngoing && mov.type === "emprestimo") {
+        // Imported/ongoing: original disbursement never moved cash. Just flag it.
+        const { error: upErr } = await supabase
+          .from("cash_movements")
+          .update({ reversed_at: new Date().toISOString() } as any)
+          .eq("id", mov.id);
+        throwIfError("Marcar liberação importada como estornada", upErr);
+        continue;
+      }
 
-  const { data: cancelledLoan, error: validateError } = await supabase
-    .from("loans")
-    .select("status, remaining_balance")
-    .eq("id", loanId)
-    .single();
-  throwIfError("Validar cancelamento", validateError);
-  if (cancelledLoan?.status !== "cancelled" || Number(cancelledLoan?.remaining_balance) > 0.01) {
-    console.error("[cancelLoan] cancellation validation failed", cancelledLoan);
-    throw new Error("Cancelamento não foi aplicado no banco.");
-  }
+      // emprestimo (normal) / other: mark reversed + counter-entry
+      const { error: upErr } = await supabase
+        .from("cash_movements")
+        .update({ reversed_at: new Date().toISOString() } as any)
+        .eq("id", mov.id);
+      throwIfError("Marcar movimentação como estornada", upErr);
 
-  // 6. Single audit event for the cancellation itself
-  await createDailyEvent({
-    cash_date: cancelDate,
-    event_type: "cancelamento" as any,
-    loan_id: loanId,
-    client_id: loan.client_id,
-    amount_in: 0,
-    amount_out: 0,
-    observation: reason ? `Empréstimo cancelado: ${reason}` : "Empréstimo cancelado",
-    origin: "cancelamento",
-  } as any);
+      const reversal = await createCashMovement({
+        type: "estorno_manual" as any,
+        amount: -Number(mov.amount),
+        loan_id: loanId,
+        observation: `Cancelamento de empréstimo`,
+        cash_date: cancelDate,
+      }) as any;
+      const evt = await createDailyEvent({
+        cash_date: cancelDate,
+        event_type: "cancelamento" as any,
+        loan_id: loanId,
+        client_id: clientId,
+        amount_in: Number(mov.amount) < 0 ? -Number(mov.amount) : 0,
+        amount_out: Number(mov.amount) > 0 ? Number(mov.amount) : 0,
+        observation: `Estorno por cancelamento`,
+        origin: "cancelamento",
+        cash_movement_id: reversal?.id || null,
+      } as any) as any;
+      if (reversal?.id && evt?.id) {
+        const { error: linkError } = await supabase
+          .from("cash_movements")
+          .update({ daily_event_id: evt.id } as any)
+          .eq("id", reversal.id);
+        throwIfError("Vincular estorno ao evento diário", linkError);
+      }
+    }
+  };
 
+  const cancelCollectibleInstallments = async () => {
+    // Only collectible installments become cancelled — never overwrite paid/renegotiated.
+    const { error } = await supabase
+      .from("installments")
+      .update({ status: INSTALLMENT_STATUS.CANCELLED } as any)
+      .eq("loan_id", loanId)
+      .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[]);
+    throwIfError("Cancelar parcelas pendentes", error);
+  };
+
+  const removeNotPaidMarks = async () => {
+    const { error } = await supabase.from("not_paid_marks").delete().eq("loan_id", loanId);
+    throwIfError("Remover marcações de não pagou", error);
+  };
+
+  const markLoanCancelled = async (prevStatus: string, prevBalance: number) => {
+    const { error } = await supabase
+      .from("loans")
+      .update({ status: LOAN_STATUS.CANCELLED, remaining_balance: 0 } as any)
+      .eq("id", loanId);
+    throwIfError("Cancelar empréstimo", error);
+
+    const { data: check, error: validateError } = await supabase
+      .from("loans")
+      .select("status, remaining_balance")
+      .eq("id", loanId)
+      .single();
+    throwIfError("Validar cancelamento", validateError);
+    if (check?.status !== LOAN_STATUS.CANCELLED || Number(check?.remaining_balance) > 0.01) {
+      console.error("[cancelLoan] cancellation validation failed", check);
+      throw new Error("Cancelamento não foi aplicado no banco.");
+    }
+    return { prevStatus, prevBalance };
+  };
+
+  const writeAuditEvent = async (clientId: string) => {
+    await createDailyEvent({
+      cash_date: cancelDate,
+      event_type: "cancelamento" as any,
+      loan_id: loanId,
+      client_id: clientId,
+      amount_in: 0,
+      amount_out: 0,
+      observation: reason ? `Empréstimo cancelado: ${reason}` : "Empréstimo cancelado",
+      origin: "cancelamento",
+    } as any);
+  };
+
+  // --- pipeline ----------------------------------------------------------
+  const loan = await fetchLoan();
+  const isImportedOngoing = Boolean((loan as any).is_imported_ongoing);
+  const prevStatus = String(loan.status);
+  const prevBalance = Number(loan.remaining_balance);
+
+  await markOpenDailyEventsReversed();
+  await handleFinancialReversal(loan.client_id, isImportedOngoing);
+  await cancelCollectibleInstallments();
+  await removeNotPaidMarks();
+  await markLoanCancelled(prevStatus, prevBalance);
+  await writeAuditEvent(loan.client_id);
   await recalculateCashBalanceFromLedger();
 
   await logAction(
     "excluir_emprestimo",
     "loan",
     loanId,
-    { remaining_balance: Number(loan.remaining_balance), status: loan.status },
-    { status: "cancelled", remaining_balance: 0 },
+    { remaining_balance: prevBalance, status: prevStatus },
+    { status: LOAN_STATUS.CANCELLED, remaining_balance: 0 },
     reason ? `Empréstimo cancelado: ${reason}` : "Empréstimo cancelado",
   );
 }
+
