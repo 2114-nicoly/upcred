@@ -111,11 +111,12 @@ export async function registerPayment(params: {
 
   const { data: loanData } = await supabase
     .from("loans")
-    .select("amount, total_amount, remaining_balance")
+    .select("amount, total_amount, remaining_balance, status")
     .eq("id", loanId)
     .single();
 
   if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode receber pagamento.");
 
   const applied = Math.min(amount, Math.max(0, Number(loanData.remaining_balance)));
   if (applied <= 0.01) return { applied: 0, newBalance: Number(loanData.remaining_balance) };
@@ -195,6 +196,14 @@ export async function registerPenaltyPayment(params: {
   const { loanId, amount, clientId, clientName, cashDate, origin } = params;
   if (amount <= 0) return;
 
+  const { data: loanData } = await supabase
+    .from("loans")
+    .select("status, remaining_balance")
+    .eq("id", loanId)
+    .single();
+  if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode receber pagamento de multa.");
+
   const { data: penaltyInsts } = await supabase
     .from("installments")
     .select("*")
@@ -252,11 +261,12 @@ export async function settleLoan(params: {
   // Get real remaining balance
   const { data: loanData } = await supabase
     .from("loans")
-    .select("remaining_balance, amount, total_amount")
+    .select("remaining_balance, amount, total_amount, status")
     .eq("id", loanId)
     .single();
 
   if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode ser quitado.");
 
   const realBalance = Number(loanData.remaining_balance);
 
