@@ -135,7 +135,7 @@ export default function ActiveLoansPage() {
           .select("loan_id")
           .in("loan_id", loanIds)
           .eq("due_date", today)
-          .neq("status", "paid");
+          .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[]);
         setTodayLoanIds(new Set((todayInst || []).map((i) => i.loan_id)));
 
         const { data: allInst } = await supabase
@@ -189,7 +189,7 @@ export default function ActiveLoansPage() {
       .from("installments")
       .select("id")
       .eq("loan_id", loanId)
-      .neq("status", "paid")
+      .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[])
       .eq("is_penalty", false)
       .order("number")
       .limit(1);
@@ -257,7 +257,7 @@ export default function ActiveLoansPage() {
           // Get first unpaid installment for reference
           const { data: unpaid } = await supabase
             .from("installments").select("id, number")
-            .eq("loan_id", payLoanId).neq("status", "paid").eq("is_penalty", false)
+            .eq("loan_id", payLoanId).in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[]).eq("is_penalty", false)
             .order("number").limit(1);
           const firstUnpaid = unpaid?.[0];
 
