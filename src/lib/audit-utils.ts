@@ -9,7 +9,7 @@ export type AuditAction =
   | "anexar_arquivo" | "excluir_anexo"
   | "pagamento" | "editar_pagamento" | "desfazer_pagamento" | "nao_pagou"
   | "editar_parcela" | "alterar_data_parcela"
-  | "multa_aplicada" | "multa_paga"
+  | "multa_aplicada" | "multa_paga" | "multa_cancelada" | "editar_multa"
   | "reagendamento_solicitado" | "reagendamento_aprovado" | "reagendamento_recusado"
   | "aporte" | "retirada" | "ajuste_caixa" | "fechar_caixa" | "reabrir_caixa"
   | "criar_trabalhador" | "reset_senha_trabalhador" | "ativar_trabalhador" | "desativar_trabalhador"
