@@ -418,6 +418,15 @@ export async function settleLoan(params: {
   await recalculateInstallments(loanId);
   await recalculateCashBalanceFromLedger();
 
+  await logAction(
+    "quitar_emprestimo",
+    "loan",
+    loanId,
+    { remaining_balance: realBalance, status: loanData.status },
+    { status: "paid", remaining_balance: 0, regular_paid: realBalance, penalty_paid: totalPenaltyPaying, cash_date: cashDate },
+    `Quitação ${formatCurrency(realBalance + totalPenaltyPaying)} - ${clientName}`,
+  );
+
   return { regularPaid: realBalance, penaltyPaid: totalPenaltyPaying };
 }
 
@@ -539,6 +548,11 @@ export async function editPayment(params: {
   const { loanId, clientId, clientName, cashDate, newAmount, origin, movementId } = params;
   if (newAmount <= 0) throw new Error("Valor deve ser maior que zero");
 
+  // Capture old amount for audit
+  const { data: oldMov } = await supabase
+    .from("cash_movements").select("amount, cash_date").eq("id", movementId).single();
+  const oldAmount = oldMov ? Number(oldMov.amount) : null;
+
   // Reverse only the selected financial movement, then create a fresh linked movement/event.
   await reversePayment({ movementId });
 
@@ -547,6 +561,15 @@ export async function editPayment(params: {
     clientId, clientName,
     cashDate, origin,
   });
+
+  await logAction(
+    "editar_pagamento",
+    "payment",
+    movementId,
+    { amount: oldAmount, cash_date: (oldMov as any)?.cash_date ?? null },
+    { amount: newAmount, cash_date: cashDate, loan_id: loanId },
+    `Pagamento editado de ${oldAmount != null ? formatCurrency(oldAmount) : "?"} para ${formatCurrency(newAmount)} - ${clientName}`,
+  );
 
   return result;
 }

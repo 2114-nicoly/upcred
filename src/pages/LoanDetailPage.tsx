@@ -455,6 +455,14 @@ export default function LoanDetailPage() {
         origin: "detalhe_emprestimo",
       });
     } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }
+    await logAction(
+      "multa_aplicada",
+      "penalty",
+      installmentId,
+      null,
+      { loan_id: loanId, installment_id: installmentId, amount: penAmount, observation: penObs || null, client_id: loan?.client_id ?? null },
+      `Multa aplicada ${formatCurrency(penAmount)}${penObs ? ` — ${penObs}` : ""}`,
+    );
     toast.success("Multa adicionada!");
     setPenaltyAmount(""); setPenaltyObservation("");
     fetchData();
@@ -480,6 +488,14 @@ export default function LoanDetailPage() {
       }
     }
     await updateCashBalance({ penalty_receivable: diff });
+    await logAction(
+      "editar_multa",
+      "penalty",
+      penaltyId,
+      { amount: penalty.amount, observation: penalty.observation ?? null },
+      { amount: newAmount, observation: editPenaltyObs || penalty.observation, diff },
+      `Multa editada: ${formatCurrency(Number(penalty.amount))} → ${formatCurrency(newAmount)}`,
+    );
     toast.success("Multa atualizada!");
     setEditingPenalty(null); setEditPenaltyValue(""); setEditPenaltyObs("");
     fetchData();
@@ -506,7 +522,14 @@ export default function LoanDetailPage() {
       else await supabase.from("installments").update({ amount: newAmount }).eq("id", penaltyInst.id);
     }
     await updateCashBalance({ penalty_receivable: -Number(penalty.amount) });
-    logAction("multa_paga", "penalty", penaltyId, { amount: penalty.amount }, { cancelled: true }, "Multa cancelada (soft delete)");
+    await logAction(
+      "multa_cancelada",
+      "penalty",
+      penaltyId,
+      { amount: penalty.amount, observation: penalty.observation ?? null, installment_id: penalty.installment_id },
+      { cancelled: true, cancelled_by: uid, reason: "Cancelada pelo usuário" },
+      `Multa cancelada ${formatCurrency(Number(penalty.amount))}`,
+    );
     toast.success("Multa cancelada!");
     fetchData();
   };
