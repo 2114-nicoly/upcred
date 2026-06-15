@@ -175,7 +175,7 @@ export default function NewLoanPage() {
 
   const handleSave = async () => {
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
-    if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error("Informe a data do primeiro vencimento"); return; }
+    if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error(isOngoing ? "Informe a data da próxima cobrança" : "Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
 
     if (isOngoing && numAlreadyPaid > calc.totalAmount + 0.01) {
@@ -385,44 +385,56 @@ export default function NewLoanPage() {
 
     // Para importados: NÃO movimentar caixa, NÃO criar daily_event de empréstimo novo.
     if (!isOngoing) {
-      const interest = calc.totalAmount - numAmount;
-      const cashOut = renewFromLoanId ? valorLiberado : numAmount;
-      await updateCashBalance({
-        available_cash: -cashOut,
-        money_lent: numAmount,
-        interest_receivable: interest,
-      });
+      try {
+        const interest = calc.totalAmount - numAmount;
+        const cashOut = renewFromLoanId ? valorLiberado : numAmount;
 
-      let movementId: string | null = null;
-      if (cashOut > 0) {
-        const mv = await createCashMovement({
-          type: "emprestimo",
-          amount: -cashOut,
+        let movementId: string | null = null;
+        if (cashOut > 0) {
+          const mv = await createCashMovement({
+            type: "emprestimo",
+            amount: -cashOut,
+            client_id: clientId!,
+            loan_id: loan.id,
+            observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
+            cash_date: loanDate,
+          }) as any;
+          movementId = mv?.id || null;
+          if (!movementId) throw new Error("Movimentação de caixa não foi criada.");
+          createdMovementIds.push(movementId);
+        }
+
+        const renewObs = renewFromLoanId
+          ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
+          : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+
+        const evt = await createDailyEvent({
+          cash_date: loanDate,
+          event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
           client_id: clientId!,
           loan_id: loan.id,
-          observation: `${renewFromLoanId ? "Renovação - liberado" : "Empréstimo"} ${formatCurrency(cashOut)} para ${clientName}`,
-          cash_date: loanDate,
+          amount_in: 0,
+          amount_out: cashOut,
+          observation: renewObs,
+          origin: "novo_emprestimo",
+          cash_movement_id: movementId,
         }) as any;
-        movementId = mv?.id || null;
-      }
+        if (!evt?.id) throw new Error("Evento diário não foi criado.");
+        createdEventIds.push(evt.id);
 
-      const renewObs = renewFromLoanId
-        ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
-        : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
+        if (movementId) await linkCashMovementToDailyEvent(movementId, evt.id);
 
-      const evt = await createDailyEvent({
-        cash_date: loanDate,
-        event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
-        client_id: clientId!,
-        loan_id: loan.id,
-        amount_in: 0,
-        amount_out: cashOut,
-        observation: renewObs,
-        origin: "novo_emprestimo",
-        cash_movement_id: movementId,
-      }) as any;
-      if (movementId && evt?.id) {
-        await linkCashMovementToDailyEvent(movementId, evt.id);
+        await updateCashBalance({
+          available_cash: -cashOut,
+          money_lent: numAmount,
+          interest_receivable: interest,
+        });
+      } catch (err: any) {
+        console.error("Erro ao criar movimentação/evento do empréstimo:", err);
+        await rollbackLoan();
+        toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
+        setSaving(false);
+        return;
       }
     }
 
