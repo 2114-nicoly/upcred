@@ -333,20 +333,20 @@ export default function NewLoanPage() {
     //   Não marca parcelas como pagas — o valor já pago é apenas ajuste inicial.
     let installments: any[];
     if (isOngoing) {
-      const value = calc.installmentAmount;
-      const remaining = ongoingRemaining;
-      const needed = remaining <= 0.01 ? 0 : Math.ceil((remaining - 0.01) / value);
-      // Garantir que temos datas suficientes; se a quantidade informada for menor, estender.
+      const plan = ongoingPlan!;
+      const needed = plan.pendingCount;
+      // Garantir datas suficientes a partir de firstDueDate (para a primeira parcela pendente real)
       let dates = dueDates.slice(0, needed);
       if (dates.length < needed && (paymentType === "daily" || paymentType === "weekly" || paymentType === "biweekly" || paymentType === "monthly") && firstDueDate) {
         dates = generateDueDates(new Date(firstDueDate + "T12:00:00"), needed, paymentType);
       }
       installments = dates.map((date, i) => {
-        const isLast = i === needed - 1;
-        const amountThis = isLast ? Math.max(0, +(remaining - value * (needed - 1)).toFixed(2)) : value;
+        // Primeira parcela pendente: se houver parcial, vale só o restante (e number = fullPaid+1)
+        const isFirstPending = i === 0;
+        const amountThis = isFirstPending && plan.hasPartial ? plan.partialRemaining : plan.value;
         return {
           loan_id: loan.id,
-          number: i + 1,
+          number: plan.firstPendingNumber + i,
           amount: amountThis,
           due_date: format(date, "yyyy-MM-dd"),
           status: "pending",
@@ -365,6 +365,7 @@ export default function NewLoanPage() {
         paid_at: null,
       }));
     }
+
 
     if (installments.length === 0) {
       await rollbackLoan();
