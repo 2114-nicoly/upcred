@@ -57,7 +57,7 @@ export default function ClientsPage() {
   const [filterActive, setFilterActive] = useState(false);
 
   const fetchClients = async () => {
-    const { data } = await supabase.from("clients").select("*").order("client_code");
+    const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
     setClients(data || []);
     setLoading(false);
 
@@ -385,7 +385,7 @@ export default function ClientsPage() {
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => handleDelete(client.id)}>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                       <Link to={`/clients/${client.id}`}>
