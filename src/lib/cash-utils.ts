@@ -236,6 +236,8 @@ export async function recalculateCashBalanceFromLedger() {
   }
 
   for (const loan of (loans || []) as any[]) {
+    // Skip inactive loans (cancelled/renegotiated) — they no longer represent receivables.
+    if (loan.status === "cancelled" || loan.status === "renegotiated") continue;
     const principal = Number(loan.amount);
     const total = Number(loan.total_amount);
     const remaining = Math.max(0, Number(loan.remaining_balance));

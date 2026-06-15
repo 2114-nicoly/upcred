@@ -276,46 +276,88 @@ export default function NewLoanPage() {
       return;
     }
 
+    // Helper: rollback the just-created loan if any subsequent step fails.
+    const rollbackLoan = async () => {
+      try {
+        await supabase.from("installments").delete().eq("loan_id", loan.id);
+        await supabase.from("loans").delete().eq("id", loan.id);
+      } catch (e) {
+        console.error("[NewLoan] rollback falhou:", e);
+      }
+    };
+
     // Para empréstimos importados, ajustar remaining_balance para refletir o saldo já abatido
     if (isOngoing && numAlreadyPaid > 0) {
-      await supabase
+      const { error: balErr } = await supabase
         .from("loans")
         .update({ remaining_balance: ongoingRemaining } as any)
         .eq("id", loan.id);
+      if (balErr) {
+        console.error("Erro ao ajustar saldo do empréstimo importado:", balErr);
+        await rollbackLoan();
+        toast.error(`Erro ao ajustar saldo: ${balErr.message}`);
+        setSaving(false);
+        return;
+      }
     }
 
-    // Build installments. For "ongoing", consume amountAlreadyPaid against
-    // earliest installments first so the sum of pending installments matches
-    // the remaining_balance exactly.
-    let remainingToConsume = isOngoing ? numAlreadyPaid : 0;
-    const installments = dueDates.map((date, i) => {
+    // Build installments.
+    // - Empréstimo NOVO: cria todas as parcelas (pending, paid_amount=0).
+    // - Empréstimo EM ANDAMENTO (importado): cria apenas parcelas pendentes
+    //   cuja soma seja igual ao saldo restante (última parcela pode ser menor).
+    //   Não marca parcelas como pagas — o valor já pago é apenas ajuste inicial.
+    let installments: any[];
+    if (isOngoing) {
       const value = calc.installmentAmount;
-      let paid = 0;
-      let status: "pending" | "paid" | "partial" = "pending";
-      if (remainingToConsume > 0) {
-        if (remainingToConsume >= value - 0.01) {
-          paid = value;
-          status = "paid";
-          remainingToConsume -= value;
-        } else {
-          paid = remainingToConsume;
-          status = "partial";
-          remainingToConsume = 0;
-        }
+      const remaining = ongoingRemaining;
+      const needed = remaining <= 0.01 ? 0 : Math.ceil((remaining - 0.01) / value);
+      // Garantir que temos datas suficientes; se a quantidade informada for menor, estender.
+      let dates = dueDates.slice(0, needed);
+      if (dates.length < needed && (paymentType === "daily" || paymentType === "weekly" || paymentType === "biweekly" || paymentType === "monthly") && firstDueDate) {
+        dates = generateDueDates(new Date(firstDueDate + "T12:00:00"), needed, paymentType);
       }
-      return {
+      installments = dates.map((date, i) => {
+        const isLast = i === needed - 1;
+        const amountThis = isLast ? Math.max(0, +(remaining - value * (needed - 1)).toFixed(2)) : value;
+        return {
+          loan_id: loan.id,
+          number: i + 1,
+          amount: amountThis,
+          due_date: format(date, "yyyy-MM-dd"),
+          status: "pending",
+          paid_amount: 0,
+          paid_at: null,
+        };
+      });
+    } else {
+      installments = dueDates.map((date, i) => ({
         loan_id: loan.id,
         number: i + 1,
-        amount: value,
+        amount: calc.installmentAmount,
         due_date: format(date, "yyyy-MM-dd"),
-        status,
-        paid_amount: paid,
-        paid_date: status === "paid" ? loanDate : null,
-      };
-    });
+        status: "pending",
+        paid_amount: 0,
+        paid_at: null,
+      }));
+    }
 
-    const { error: instError } = await supabase.from("installments").insert(installments as any);
-    if (instError) { toast.error("Erro ao criar parcelas"); setSaving(false); return; }
+    if (installments.length === 0 && !isOngoing) {
+      await rollbackLoan();
+      toast.error("Erro ao criar parcelas. O empréstimo não foi salvo.");
+      setSaving(false);
+      return;
+    }
+
+    if (installments.length > 0) {
+      const { error: instError } = await supabase.from("installments").insert(installments as any);
+      if (instError) {
+        console.error("Erro ao criar parcelas:", instError);
+        await rollbackLoan();
+        toast.error(`Erro ao criar parcelas. O empréstimo não foi salvo.${instError.message ? ` (${instError.message})` : ""}`);
+        setSaving(false);
+        return;
+      }
+    }
 
     // Para importados: NÃO movimentar caixa, NÃO criar daily_event de empréstimo novo.
     if (!isOngoing) {
