@@ -238,53 +238,175 @@ export default function DailyReportPage() {
 
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);
 
-  const handleDownloadPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text("UpCred — Relatório Diário", 14, 16);
-    doc.setFontSize(11);
-    doc.text(`Trabalhador: ${workerName || "—"}`, 14, 24);
-    doc.text(`Data: ${dateLabel}`, 14, 30);
-    if (cashStatus) doc.text(`Status do caixa: ${cashStatus === "closed" ? "Fechado" : "Aberto"}`, 14, 36);
+  const handleDownloadPDF = async () => {
+    if (generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const issuedAt = format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
 
-    autoTable(doc, {
-      startY: cashStatus ? 42 : 36,
-      head: [["Hora", "Tipo", "Cliente", "Entrada", "Saída", "Obs.", "Status"]],
-      body: rows.map((r) => [
-        r.time,
-        r.typeLabel,
-        r.clientName,
-        r.amountIn ? formatCurrency(r.amountIn) : "—",
-        r.amountOut ? formatCurrency(r.amountOut) : "—",
-        r.observation,
-        r.reversed ? "Estornado" : "Normal",
-      ]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246] },
-    });
+      // Header
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.text("UpCred — Relatório Diário", 14, 16);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Emitido em ${issuedAt}`, pageWidth - 14, 16, { align: "right" });
 
-    const finalY = (doc as any).lastAutoTable.finalY || 60;
-    doc.setFontSize(12);
-    doc.text("Resumo do dia", 14, finalY + 10);
-    doc.setFontSize(10);
-    const summary: [string, string][] = [
-      ["Total de entradas", formatCurrency(totals.totalIn)],
-      ["Total de saídas", formatCurrency(totals.totalOut)],
-      ["Pagamentos recebidos", formatCurrency(totals.payments)],
-      ["Empréstimos liberados", formatCurrency(totals.loans)],
-      ["Renovações", formatCurrency(totals.renewals)],
-      ["Multas recebidas", formatCurrency(totals.penalties)],
-      ["Não pagou", String(totals.notPaidCount)],
-      ["Saldo do dia", formatCurrency(totals.balance)],
-    ];
-    autoTable(doc, {
-      startY: finalY + 14,
-      body: summary,
-      styles: { fontSize: 9 },
-      theme: "plain",
-    });
+      doc.setFontSize(10);
+      doc.text(`Trabalhador: ${workerName || "—"}`, 14, 24);
+      doc.text(`Data: ${dateLabel}`, 14, 30);
+      const cashLabel =
+        cashStatus === "closed" ? "Fechado" :
+        cashStatus === "open" ? "Aberto" :
+        cashStatus ? cashStatus : "—";
+      doc.text(`Caixa: ${cashLabel}`, 14, 36);
 
-    doc.save(`relatorio-${workerName || "trabalhador"}-${date}.pdf`);
+      // Cash summary block
+      const cashRows: [string, string][] = [
+        ["Saldo inicial", formatCurrency(cashSummary?.opening ?? 0)],
+        ["Total recebido (pagamentos)", formatCurrency(totals.payments)],
+        ["Multas recebidas", formatCurrency(totals.penalties)],
+        ["Total emprestado / liberado", formatCurrency(totals.loans + totals.renewals)],
+        ["Total entradas", formatCurrency(totals.totalIn)],
+        ["Total saídas", formatCurrency(totals.totalOut)],
+        ["Saldo esperado", formatCurrency(cashSummary?.expected ?? (cashSummary?.opening ?? 0) + totals.balance)],
+        ...(cashSummary?.counted != null ? [["Saldo contado/informado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
+        ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
+        ...(cashSummary?.closingObs ? [["Justificativa", cashSummary.closingObs] as [string,string]] : []),
+        ["Não pagou (qtd.)", String(totals.notPaidCount)],
+      ];
+      autoTable(doc, {
+        startY: 42,
+        head: [["Resumo do caixa", ""]],
+        body: cashRows,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: { 1: { halign: "right" } },
+      });
+
+      // Categorize events for sectioned lists
+      const paid = events.filter((e) => e.event_type === "pagamento" && !e.reversed_at);
+      const notPaid = events.filter((e) => e.event_type === "nao_pagou" && !e.reversed_at);
+      const partials = paid.filter((e) => (e.observation || "").toLowerCase().includes("parcial"));
+      const newLoans = events.filter((e) => e.event_type === "emprestimo_novo" && !e.reversed_at);
+      const renewals = events.filter((e) => (e.event_type === "renovacao" || e.event_type === "renegociacao") && !e.reversed_at);
+      const cancels = events.filter((e) => e.event_type === "cancelamento");
+      // Imported/ongoing audited via audit_logs new_value.imported_ongoing
+      const importedOngoing = auditRows.filter((a) =>
+        a.action_type === "criar_emprestimo" &&
+        (a as any).new_value && typeof (a as any).new_value === "object" && (a as any).new_value.imported_ongoing === true
+      );
+
+      const nameOf = (cid: string | null) => cid ? (clientNames[cid] || "—") : "—";
+
+      const addSection = (
+        title: string,
+        body: (string | number)[][],
+        head: string[],
+      ) => {
+        if (body.length === 0) return;
+        const startY = ((doc as any).lastAutoTable?.finalY || 42) + 6;
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(title, 14, startY);
+        doc.setFont("helvetica", "normal");
+        autoTable(doc, {
+          startY: startY + 2,
+          head: [head],
+          body,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [59, 130, 246] },
+        });
+      };
+
+      addSection("Clientes que pagaram", paid.map((e) => [
+        format(new Date(e.created_at), "HH:mm"),
+        nameOf(e.client_id),
+        formatCurrency(Number(e.amount_in || 0)),
+        e.observation || "",
+      ]), ["Hora", "Cliente", "Valor", "Obs."]);
+
+      addSection("Pagamentos parciais", partials.map((e) => [
+        format(new Date(e.created_at), "HH:mm"),
+        nameOf(e.client_id),
+        formatCurrency(Number(e.amount_in || 0)),
+        e.observation || "",
+      ]), ["Hora", "Cliente", "Valor", "Obs."]);
+
+      addSection("Clientes que não pagaram", notPaid.map((e) => [
+        format(new Date(e.created_at), "HH:mm"),
+        nameOf(e.client_id),
+        e.observation || "",
+      ]), ["Hora", "Cliente", "Obs."]);
+
+      addSection("Empréstimos novos", newLoans.map((e) => [
+        format(new Date(e.created_at), "HH:mm"),
+        nameOf(e.client_id),
+        formatCurrency(Number(e.amount_out || 0)),
+        e.observation || "",
+      ]), ["Hora", "Cliente", "Liberado", "Obs."]);
+
+      addSection("Empréstimos em andamento cadastrados", importedOngoing.map((a) => {
+        const nv: any = (a as any).new_value || {};
+        return [
+          format(new Date(a.created_at), "HH:mm"),
+          nameOf(a.entity_id),
+          formatCurrency(Number(nv.total_amount || 0)),
+          formatCurrency(Number(nv.amount_already_paid || 0)),
+          formatCurrency(Number(nv.initial_remaining_balance || 0)),
+        ];
+      }), ["Hora", "Cliente / Empréstimo", "Total", "Já pago", "Saldo restante"]);
+
+      addSection("Renovações", renewals.map((e) => [
+        format(new Date(e.created_at), "HH:mm"),
+        nameOf(e.client_id),
+        formatCurrency(Number(e.amount_out || 0)),
+        e.observation || "",
+      ]), ["Hora", "Cliente", "Liberado", "Obs."]);
+
+      addSection("Cancelamentos", cancels.map((e) => [
+        format(new Date(e.created_at), "HH:mm"),
+        nameOf(e.client_id),
+        e.observation || "",
+      ]), ["Hora", "Cliente", "Motivo / Obs."]);
+
+      // Observações livres
+      const obsList = events.filter((e) => (e.observation || "").trim().length > 0)
+        .map((e) => `• ${format(new Date(e.created_at), "HH:mm")} ${nameOf(e.client_id)} — ${e.observation}`);
+      if (obsList.length > 0) {
+        const startY = ((doc as any).lastAutoTable?.finalY || 60) + 6;
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Observações", 14, startY);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        const txt = doc.splitTextToSize(obsList.join("\n"), pageWidth - 28);
+        doc.text(txt, 14, startY + 5);
+      }
+
+      // Signatures — always at the bottom of the last page
+      const lastY = (doc as any).lastAutoTable?.finalY || 60;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let sigY = Math.max(lastY + 30, pageHeight - 40);
+      if (sigY > pageHeight - 30) { doc.addPage(); sigY = pageHeight - 50; }
+      doc.setDrawColor(120);
+      doc.line(20, sigY, 90, sigY);
+      doc.line(pageWidth - 90, sigY, pageWidth - 20, sigY);
+      doc.setFontSize(9);
+      doc.text("Assinatura do trabalhador", 55, sigY + 5, { align: "center" });
+      doc.text("Assinatura do administrador", pageWidth - 55, sigY + 5, { align: "center" });
+
+      const filename = `relatorio-${(workerName || "trabalhador").replace(/\s+/g, "_")}-${date}.pdf`;
+      doc.save(filename);
+      toast.success("PDF gerado");
+    } catch (err: any) {
+      console.error("[DailyReport PDF] erro:", err);
+      toast.error("Não foi possível gerar o PDF: " + (err?.message || "erro desconhecido"));
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   return (
