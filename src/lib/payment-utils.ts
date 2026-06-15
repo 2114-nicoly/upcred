@@ -294,11 +294,12 @@ export async function settleLoan(params: {
     .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[])
     .order("number");
 
-
-  if (!allUnpaid || allUnpaid.length === 0) return { regularPaid: 0, penaltyPaid: 0 };
-
-  const regularUnpaid = allUnpaid.filter((i: any) => !i.is_penalty);
-  const penaltyUnpaid = allUnpaid.filter((i: any) => i.is_penalty);
+  const regularUnpaid = (allUnpaid || []).filter((i: any) => !i.is_penalty);
+  const penaltyUnpaid = (allUnpaid || []).filter((i: any) => i.is_penalty);
+  if (realBalance > 0.01 && regularUnpaid.length === 0) {
+    throw new Error("Empréstimo ativo sem parcelas cobraveis. Corrija as parcelas antes de quitar.");
+  }
+  if (realBalance <= 0.01 && penaltyUnpaid.length === 0) return { regularPaid: 0, penaltyPaid: 0 };
 
   // Apply remaining balance via RPC
   if (realBalance > 0) {
@@ -379,26 +380,36 @@ export async function settleLoan(params: {
   }
 
   if (totalPenaltyPaying > 0) {
-    await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
-    const movement = await createCashMovement({
-      type: "recebimento_multa",
-      amount: totalPenaltyPaying,
-      client_id: clientId,
-      loan_id: loanId,
-      observation: `Quitação multa - ${clientName}`,
-      cash_date: cashDate,
-    }) as any;
-    const event = await createDailyEvent({
-      cash_date: cashDate,
-      event_type: "recebimento_multa",
-      client_id: clientId,
-      loan_id: loanId,
-      amount_in: totalPenaltyPaying,
-      observation: `Quitação multa - ${clientName}`,
-      origin,
-      cash_movement_id: movement?.id || null,
-    } as any) as any;
-    if (movement?.id && event?.id) await linkCashMovementToDailyEvent(movement.id, event.id);
+    let movement: any = null;
+    let event: any = null;
+    try {
+      movement = await createCashMovement({
+        type: "recebimento_multa",
+        amount: totalPenaltyPaying,
+        client_id: clientId,
+        loan_id: loanId,
+        observation: `Quitação multa - ${clientName}`,
+        cash_date: cashDate,
+      }) as any;
+      event = await createDailyEvent({
+        cash_date: cashDate,
+        event_type: "recebimento_multa",
+        client_id: clientId,
+        loan_id: loanId,
+        amount_in: totalPenaltyPaying,
+        observation: `Quitação multa - ${clientName}`,
+        origin,
+        cash_movement_id: movement?.id || null,
+      } as any) as any;
+      if (!movement?.id || !event?.id) throw new Error("Quitação de multa sem movimentação/evento financeiro vinculado.");
+      await linkCashMovementToDailyEvent(movement.id, event.id);
+      await updateCashBalance({ available_cash: totalPenaltyPaying, penalty_receivable: -totalPenaltyPaying });
+    } catch (err) {
+      if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
+      if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
+      await recalculateCashBalanceFromLedger();
+      throw err;
+    }
   }
 
   await recalculateInstallments(loanId);
