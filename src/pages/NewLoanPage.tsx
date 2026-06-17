@@ -13,7 +13,7 @@ import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
-import { logAction, logLoanAction } from "@/lib/audit-utils";
+import { logAction, logLoanAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -413,6 +413,8 @@ export default function NewLoanPage() {
       try {
         const interest = calc.totalAmount - numAmount;
         const cashOut = renewFromLoanId ? valorLiberado : numAmount;
+        const actor = await getCurrentActorIdentity();
+        const firstDueStr = paymentType !== "fixed_dates" ? firstDueDate : (fixedDates[0] || null);
 
         let movementId: string | null = null;
         if (cashOut > 0) {
@@ -433,6 +435,23 @@ export default function NewLoanPage() {
           ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
           : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
 
+        const novoMetadata = {
+          loan_type: renewFromLoanId ? "renovacao" : "novo",
+          loan_id: loan.id,
+          client_id: clientId,
+          client_name: clientName,
+          worker_id: actor.id,
+          worker_name: actor.name,
+          principal_amount: numAmount,
+          total_amount: calc.totalAmount,
+          installments: numInstallments,
+          installment_amount: calc.installmentAmount,
+          receivable_created: calc.totalAmount,
+          first_due_date: firstDueStr,
+          released_amount: cashOut,
+          created_at: new Date().toISOString(),
+        };
+
         const evt = await createDailyEvent({
           cash_date: loanDate,
           event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
@@ -443,6 +462,7 @@ export default function NewLoanPage() {
           observation: renewObs,
           origin: "novo_emprestimo",
           cash_movement_id: movementId,
+          metadata: novoMetadata,
         }) as any;
         if (!evt?.id) throw new Error("Evento diário não foi criado.");
         createdEventIds.push(evt.id);
@@ -520,9 +540,14 @@ export default function NewLoanPage() {
         ? (ongoingPlan?.partialRemaining ?? calc.installmentAmount)
         : calc.installmentAmount;
 
+      const actorImp = await getCurrentActorIdentity();
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+
       const importedMetadata = {
         client_id: clientId,
         client_name: clientName,
+        worker_id: actorImp.id,
+        worker_name: actorImp.name,
         loan_id: loan.id,
         loan_type: "emprestimo_importado",
         original_amount: numAmount,
@@ -531,10 +556,14 @@ export default function NewLoanPage() {
         remaining_balance: ongoingRemaining,
         principal_receivable: principalReceivable,
         interest_receivable: interestReceivable,
+        installment_amount: calc.installmentAmount,
+        installment_count: numInstallments,
         first_pending_installment: firstPending,
         first_pending_amount: firstPendingAmount,
         pending_installments_count: ongoingPlan?.pendingCount ?? null,
         next_due_date: nextDueStr,
+        original_loan_date: loanDate,
+        imported_at: new Date().toISOString(),
       };
 
       try {
@@ -553,10 +582,13 @@ export default function NewLoanPage() {
           `Juros a receber: ${formatCurrency(interestReceivable)}`,
           firstPending != null ? `Primeira parcela pendente: ${firstPending}` : null,
           nextDueStr ? `Próxima cobrança: ${nextDueStr}` : null,
+          `Data original do empréstimo: ${loanDate}`,
         ].filter(Boolean).join(" | ");
 
+        // Importante: cash_date = HOJE (dia em que o cadastro foi feito),
+        // não a data original do empréstimo. A data original fica em metadata.original_loan_date.
         const evt = await createDailyEvent({
-          cash_date: loanDate,
+          cash_date: todayStr,
           event_type: "emprestimo_importado",
           client_id: clientId!,
           loan_id: loan.id,
@@ -590,19 +622,22 @@ export default function NewLoanPage() {
         before: { status: "nao_existia" },
         after: {
           status: "open",
+          loan_type: "emprestimo_importado",
           original_amount: numAmount,
           total_amount: calc.totalAmount,
           amount_already_paid: numAlreadyPaid,
           initial_remaining_balance: ongoingRemaining,
           principal_receivable: principalReceivable,
           interest_receivable: interestReceivable,
+          installment_amount: calc.installmentAmount,
           first_pending_installment: firstPending,
           first_pending_amount: firstPendingAmount,
           pending_installments_count: ongoingPlan?.pendingCount ?? null,
           installment_count: numInstallments,
           payment_type: paymentType,
           next_due_date: nextDueStr,
-          loan_date: loanDate,
+          original_loan_date: loanDate,
+          imported_cash_date: format(new Date(), "yyyy-MM-dd"),
           imported_at: new Date().toISOString(),
         },
         observation: `Empréstimo importado - ${clientName} - saldo restante ${formatCurrency(ongoingRemaining)} adicionado ao A Receber`,
@@ -625,12 +660,18 @@ export default function NewLoanPage() {
         before: renewFromLoanId ? { from_loan_id: renewFromLoanId, falta_quitar: faltaQuitar } : null,
         after: {
           status: "open",
+          loan_type: renewFromLoanId ? "renovacao" : "novo",
+          principal_amount: numAmount,
           amount: numAmount,
           total_amount: calc.totalAmount,
+          installments: numInstallments,
           installment_count: numInstallments,
+          installment_amount: calc.installmentAmount,
           payment_type: paymentType,
           loan_date: loanDate,
+          first_due_date: paymentType !== "fixed_dates" ? firstDueDate : (fixedDates[0] || null),
           released: renewFromLoanId ? valorLiberado : numAmount,
+          receivable_created: calc.totalAmount,
           remaining_balance: calc.totalAmount,
         },
         observation: renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,

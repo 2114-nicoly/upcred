@@ -651,14 +651,32 @@ export default function CaixaPage() {
           ) : (
             novos.map(ev => {
               const isRenewal = ev.event_type === "renovacao";
+              const m = (ev as any).metadata as Record<string, any> | null;
+              const title = isRenewal ? "Renovação de Empréstimo" : "Empréstimo Liberado";
+              const dt = new Date(ev.created_at);
+              const dtLabel = `${dt.toLocaleDateString("pt-BR")} ${dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
               return (
                 <div key={ev.id} className={`rounded-lg border bg-card p-2.5 ${isRenewal ? "border-primary/30" : "border-success/30"}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">{ev.client_id ? clientNames[ev.client_id] || "Cliente" : "—"}</p>
-                      {ev.observation && <p className="text-[10px] text-muted-foreground">{ev.observation}</p>}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">{title}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {ev.client_id ? clientNames[ev.client_id] || m?.client_name || "Cliente" : (m?.client_name || "—")}
+                        {m?.worker_name ? <> · <span className="text-muted-foreground">por {m.worker_name}</span></> : null}
+                      </p>
+                      <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                        {m?.principal_amount != null && <p>Valor emprestado: <span className="font-medium">{formatCurrency(Number(m.principal_amount))}</span></p>}
+                        {m?.total_amount != null && <p>Total com juros: <span className="font-medium">{formatCurrency(Number(m.total_amount))}</span></p>}
+                        {m?.installments != null && m?.installment_amount != null && (
+                          <p>Parcelas: <span className="font-medium">{Number(m.installments)}x {formatCurrency(Number(m.installment_amount))}</span></p>
+                        )}
+                        {m?.first_due_date && <p>Primeira cobrança: <span className="font-medium">{m.first_due_date}</span></p>}
+                        {m?.receivable_created != null && <p>A Receber criado: <span className="font-medium">{formatCurrency(Number(m.receivable_created))}</span></p>}
+                        <p className="text-muted-foreground/70">{dtLabel}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
+                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Liberado</p>
                       <span className={`text-sm font-bold ${isRenewal ? "text-primary" : "text-success"}`}>
                         {formatCurrency(Number(ev.amount_out))}
                       </span>
@@ -700,15 +718,22 @@ export default function CaixaPage() {
                       <p className="text-sm font-semibold">Empréstimo Importado</p>
                       <p className="text-[11px] text-muted-foreground">
                         {ev.client_id ? clientNames[ev.client_id] || m?.client_name || "Cliente" : (m?.client_name || "—")}
+                        {m?.worker_name ? <> · <span className="text-muted-foreground">por {m.worker_name}</span></> : null}
                       </p>
                       {m && (
                         <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
                           {m.original_amount != null && <p>Valor original: <span className="font-medium">{formatCurrency(Number(m.original_amount))}</span></p>}
                           {m.total_amount != null && <p>Total com juros: <span className="font-medium">{formatCurrency(Number(m.total_amount))}</span></p>}
                           {Number(m.amount_already_paid) > 0 && <p>Já pago antes do cadastro: <span className="font-medium">{formatCurrency(Number(m.amount_already_paid))}</span></p>}
+                          {m.remaining_balance != null && <p>Saldo restante importado: <span className="font-medium">{formatCurrency(Number(m.remaining_balance))}</span></p>}
                           {m.principal_receivable != null && <p>Principal a receber: <span className="font-medium">{formatCurrency(Number(m.principal_receivable))}</span></p>}
                           {m.interest_receivable != null && <p>Juros a receber: <span className="font-medium">{formatCurrency(Number(m.interest_receivable))}</span></p>}
+                          {m.pending_installments_count != null && <p>Parcelas pendentes: <span className="font-medium">{Number(m.pending_installments_count)}</span></p>}
                           {m.next_due_date && <p>Próxima cobrança: <span className="font-medium">{m.next_due_date}</span></p>}
+                          {m.original_loan_date && <p>Data original: <span className="font-medium">{m.original_loan_date}</span></p>}
+                          <p className="text-muted-foreground/70">
+                            {(() => { const dt = new Date(ev.created_at); return `${dt.toLocaleDateString("pt-BR")} ${dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`; })()}
+                          </p>
                         </div>
                       )}
                     </div>
