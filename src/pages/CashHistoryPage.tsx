@@ -16,7 +16,7 @@ import {
   getMovementTypeColor,
   CashMovement,
 } from "@/lib/cash-utils";
-import { logAction } from "@/lib/audit-utils";
+import { logReversal } from "@/lib/audit-utils";
 import { ArrowLeft, Pencil, RotateCcw } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
