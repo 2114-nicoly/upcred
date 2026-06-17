@@ -67,6 +67,7 @@ export type DailyEvent = {
   worker_id?: string | null;
   admin_id?: string | null;
   reversed_at?: string | null;
+  metadata?: Record<string, any> | null;
 };
 
 export async function createDailyEvent(event: {
@@ -80,6 +81,7 @@ export async function createDailyEvent(event: {
   observation?: string | null;
   origin?: string;
   cash_movement_id?: string | null;
+  metadata?: Record<string, any> | null;
 }) {
   const userId = await getCurrentUserId();
   const { resolveScope } = await import("@/lib/cash-utils");
@@ -105,6 +107,7 @@ export async function createDailyEvent(event: {
     observation: event.observation || null,
     origin: event.origin || "rota",
     cash_movement_id: event.cash_movement_id || null,
+    metadata: event.metadata ?? null,
     user_id: userId,
     worker_id,
     admin_id,
@@ -115,6 +118,7 @@ export async function createDailyEvent(event: {
   }
   return data as unknown as DailyEvent | null;
 }
+
 
 /**
  * Returns daily events for a date, scoped to the current user's worker_id
