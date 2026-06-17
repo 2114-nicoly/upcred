@@ -663,6 +663,62 @@ export default function CaixaPage() {
         </div>
       )}
 
+      {activeSection === "importados" && (
+        <div className="space-y-2">
+          <h2 className="text-xs font-semibold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
+            Empréstimos Importados
+          </h2>
+          <p className="text-[10px] text-muted-foreground">
+            Empréstimos em andamento adicionados ao A Receber. Não afetam o caixa disponível.
+          </p>
+          {importados.length === 0 ? (
+            <EmptyState icon={DollarSign} message="Nenhum empréstimo importado neste dia" description="Empréstimos em andamento aparecerão aqui." compact />
+          ) : (
+            importados.map(ev => {
+              const m = (ev as any).metadata as Record<string, any> | null;
+              const remaining = Number(m?.remaining_balance ?? 0);
+              return (
+                <div key={ev.id} className="rounded-lg border border-muted-foreground/20 bg-muted/30 p-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">Empréstimo Importado</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {ev.client_id ? clientNames[ev.client_id] || m?.client_name || "Cliente" : (m?.client_name || "—")}
+                      </p>
+                      {m && (
+                        <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                          {m.original_amount != null && <p>Valor original: <span className="font-medium">{formatCurrency(Number(m.original_amount))}</span></p>}
+                          {m.total_amount != null && <p>Total com juros: <span className="font-medium">{formatCurrency(Number(m.total_amount))}</span></p>}
+                          {Number(m.amount_already_paid) > 0 && <p>Já pago antes do cadastro: <span className="font-medium">{formatCurrency(Number(m.amount_already_paid))}</span></p>}
+                          {m.principal_receivable != null && <p>Principal a receber: <span className="font-medium">{formatCurrency(Number(m.principal_receivable))}</span></p>}
+                          {m.interest_receivable != null && <p>Juros a receber: <span className="font-medium">{formatCurrency(Number(m.interest_receivable))}</span></p>}
+                          {m.next_due_date && <p>Próxima cobrança: <span className="font-medium">{m.next_due_date}</span></p>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground">A Receber +</p>
+                      <span className="text-sm font-bold tabular-nums">
+                        {formatCurrency(remaining)}
+                      </span>
+                      <Badge variant="outline" className="block mt-0.5 text-[9px] px-1.5 py-0 h-3.5">
+                        Importado
+                      </Badge>
+                    </div>
+                  </div>
+                  {ev.loan_id && (
+                    <Button variant="outline" size="sm" className="h-6 text-[10px] mt-1.5" onClick={() => navigate(`/loans/${ev.loan_id}`)}>
+                      Ver empréstimo
+                    </Button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+
       {activeSection === "movimentos" && (
         <div className="space-y-2">
           <h2 className="text-xs font-semibold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
