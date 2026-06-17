@@ -190,3 +190,103 @@ export async function logLoanAction(params: {
     ctx.worker_id,
   );
 }
+
+/**
+ * Resolves the current actor identity (logged-in user) as
+ * { id, name, role } for audit metadata. Never throws.
+ */
+export async function getCurrentActorIdentity(): Promise<{
+  id: string | null;
+  name: string | null;
+  role: "super_admin" | "admin" | "trabalhador" | null;
+}> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? null;
+    if (!uid) return { id: null, name: null, role: null };
+
+    const { data: w } = await supabase
+      .from("workers").select("id, nome").eq("auth_user_id", uid).maybeSingle();
+    if (w) return { id: uid, name: (w as any).nome ?? null, role: "trabalhador" };
+
+    const { data: a } = await supabase
+      .from("admins" as any).select("id, nome, is_super_admin").eq("auth_user_id", uid).maybeSingle();
+    if (a) return {
+      id: uid,
+      name: (a as any).nome ?? null,
+      role: (a as any).is_super_admin ? "super_admin" : "admin",
+    };
+  } catch (err) {
+    console.warn("[audit] getCurrentActorIdentity failed", err);
+  }
+  return { id: null, name: null, role: null };
+}
+
+/**
+ * Standardized reversal audit logger. Writes an audit_log entry with the
+ * full structured payload required for professional auditability:
+ *
+ *   original_event_id, original_movement_id,
+ *   reversal_movement_id, reversal_event_id,
+ *   reversal_reason, reversed_by, reversed_by_name, reversed_by_role,
+ *   reversed_at, original_amount, reversal_amount,
+ *   client_id, loan_id, original_type
+ *
+ * `action` should be "estorno_manual" or "desfazer_pagamento" depending on
+ * the flow. `entity` defaults to "cash".
+ */
+export async function logReversal(params: {
+  action: "estorno_manual" | "desfazer_pagamento" | "estorno_pagamento";
+  entity?: AuditEntity;
+  original_movement_id?: string | null;
+  original_event_id?: string | null;
+  reversal_movement_id?: string | null;
+  reversal_event_id?: string | null;
+  original_type?: string | null;
+  original_amount: number;
+  reversal_amount?: number;
+  reversal_reason?: string | null;
+  client_id?: string | null;
+  loan_id?: string | null;
+  cash_date?: string | null;
+  observation?: string | null;
+  beforeSnapshot?: Record<string, any> | null;
+}): Promise<void> {
+  const actor = await getCurrentActorIdentity();
+  const now = new Date().toISOString();
+  const reversalAmount = params.reversal_amount ?? -Number(params.original_amount);
+
+  const ctx = await (async () => {
+    try {
+      return await (await import("@/lib/audit-utils")).logLoanAction ? null : null;
+    } catch { return null; }
+  })();
+  void ctx;
+
+  const newPayload: Record<string, any> = {
+    original_event_id: params.original_event_id ?? null,
+    original_movement_id: params.original_movement_id ?? null,
+    reversal_movement_id: params.reversal_movement_id ?? null,
+    reversal_event_id: params.reversal_event_id ?? null,
+    original_type: params.original_type ?? null,
+    original_amount: Number(params.original_amount),
+    reversal_amount: Number(reversalAmount),
+    reversal_reason: params.reversal_reason ?? null,
+    reversed_by: actor.id,
+    reversed_by_name: actor.name,
+    reversed_by_role: actor.role,
+    reversed_at: now,
+    client_id: params.client_id ?? null,
+    loan_id: params.loan_id ?? null,
+    cash_date: params.cash_date ?? null,
+  };
+
+  await logAction(
+    params.action,
+    params.entity ?? "cash",
+    params.original_movement_id ?? null,
+    params.beforeSnapshot ?? null,
+    newPayload,
+    params.observation ?? (params.reversal_reason ?? undefined),
+  );
+}
