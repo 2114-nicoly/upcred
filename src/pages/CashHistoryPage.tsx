@@ -11,17 +11,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { formatCurrency } from "@/lib/loan-utils";
 import {
   updateCashBalance,
-  deleteCashMovement,
+  reverseCashMovement,
   getMovementTypeLabel,
   getMovementTypeColor,
   CashMovement,
 } from "@/lib/cash-utils";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { logAction } from "@/lib/audit-utils";
+import { ArrowLeft, Pencil, RotateCcw } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { useConfirm } from "@/hooks/useConfirm";
 
 function getDayLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -40,7 +40,6 @@ type GroupedDay = {
 
 export default function CashHistoryPage() {
   const navigate = useNavigate();
-  const confirm = useConfirm();
   const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
@@ -51,6 +50,11 @@ export default function CashHistoryPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editObs, setEditObs] = useState("");
+
+  // Reversal (estorno)
+  const [reverseTarget, setReverseTarget] = useState<MovementWithClient | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
+  const [reverseSaving, setReverseSaving] = useState(false);
 
   const fetchData = async () => {
     let query = supabase
@@ -90,30 +94,63 @@ export default function CashHistoryPage() {
       }));
   })();
 
-  const handleDelete = async (mov: MovementWithClient) => {
-    const ok = await confirm({
-      title: "Excluir movimentação?",
-      description: "O saldo do caixa será revertido conforme o tipo do lançamento.",
-      affected: [
-        { label: "Tipo", value: getMovementTypeLabel(mov.type) },
-        { label: "Valor", value: formatCurrency(Math.abs(Number(mov.amount))) },
-        { label: "Data", value: format(new Date(mov.cash_date + "T12:00:00"), "dd/MM/yyyy") },
-      ],
-      confirmText: "Excluir", destructive: true,
-    });
-    if (!ok) return;
-    const reverseMap: Record<string, any> = {
-      emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
-      recebimento_normal: { available_cash: -Number(mov.amount) },
-      recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
-      entrada_manual: { available_cash: -Number(mov.amount) },
-      saida_manual: { available_cash: -Number(mov.amount) },
-      ajuste_manual: { available_cash: -Number(mov.amount) },
-    };
-    await updateCashBalance(reverseMap[mov.type] || {});
-    await deleteCashMovement(mov.id);
-    toast.success("Movimentação excluída!");
-    fetchData();
+  const openReverseDialog = (mov: MovementWithClient) => {
+    setReverseTarget(mov);
+    setReverseReason("");
+  };
+
+  const confirmReverse = async () => {
+    if (!reverseTarget) return;
+    const reason = reverseReason.trim();
+    if (reason.length < 3) {
+      toast.error("Informe o motivo do estorno (mínimo 3 caracteres).");
+      return;
+    }
+    setReverseSaving(true);
+    const mov = reverseTarget;
+    try {
+      const reverseMap: Record<string, any> = {
+        emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
+        recebimento_normal: { available_cash: -Number(mov.amount) },
+        recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
+        entrada_manual: { available_cash: -Number(mov.amount) },
+        saida_manual: { available_cash: -Number(mov.amount) },
+        ajuste_manual: { available_cash: -Number(mov.amount) },
+      };
+      await updateCashBalance(reverseMap[mov.type] || {});
+      await reverseCashMovement(mov.id, { reason });
+      // Structured audit metadata (preserves history; no physical delete)
+      await logAction(
+        "estorno_manual" as any,
+        "cash",
+        mov.id,
+        {
+          type: mov.type,
+          amount: Number(mov.amount),
+          observation: mov.observation,
+          cash_date: mov.cash_date,
+        },
+        {
+          original_movement_id: mov.id,
+          original_event_id: (mov as any).daily_event_id ?? null,
+          client_id: mov.client_id,
+          loan_id: mov.loan_id,
+          amount: Number(mov.amount),
+          reversal_reason: reason,
+          reversed_at: new Date().toISOString(),
+        },
+        `Estorno de ${getMovementTypeLabel(mov.type)} (${formatCurrency(Math.abs(Number(mov.amount)))}) — ${reason}`,
+      );
+      toast.success("Movimentação estornada!");
+      setReverseTarget(null);
+      setReverseReason("");
+      fetchData();
+    } catch (err: any) {
+      console.error("[CashHistory] estorno falhou:", err);
+      toast.error("Não foi possível estornar: " + (err?.message || "erro desconhecido"));
+    } finally {
+      setReverseSaving(false);
+    }
   };
 
   const handleEdit = async () => {
@@ -188,6 +225,43 @@ export default function CashHistoryPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reverse (estorno) dialog */}
+      <Dialog open={reverseTarget !== null} onOpenChange={(o) => { if (!o && !reverseSaving) { setReverseTarget(null); setReverseReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Estornar movimentação?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Esta ação preservará o histórico e criará um registro de reversão vinculado à movimentação original.
+            </p>
+            {reverseTarget && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="font-medium">{getMovementTypeLabel(reverseTarget.type)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor</span><span className="font-mono">{formatCurrency(Math.abs(Number(reverseTarget.amount)))}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Data</span><span className="font-mono">{format(new Date(reverseTarget.cash_date + "T12:00:00"), "dd/MM/yyyy")}</span></div>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Motivo do estorno <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={reverseReason}
+                onChange={(e) => setReverseReason(e.target.value)}
+                placeholder="Ex.: lançamento incorreto, valor errado, duplicidade..."
+                rows={3}
+                disabled={reverseSaving}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setReverseTarget(null); setReverseReason(""); }} disabled={reverseSaving}>Cancelar</Button>
+              <Button className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={confirmReverse} disabled={reverseSaving || reverseReason.trim().length < 3}>
+                {reverseSaving ? "Estornando..." : "Estornar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {loading ? (
         <ListSkeleton count={4} />
       ) : groupedDays.length === 0 ? (
@@ -220,8 +294,8 @@ export default function CashHistoryPage() {
                         }}>
                           <Pencil className="h-3 w-3" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(mov)}>
-                          <Trash2 className="h-3 w-3" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Estornar movimentação" onClick={() => openReverseDialog(mov)}>
+                          <RotateCcw className="h-3 w-3" />
                         </Button>
                       </div>
                     </CardContent>
