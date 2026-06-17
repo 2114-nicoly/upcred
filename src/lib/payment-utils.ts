@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, markCashMovementReversed } from "@/lib/cash-utils";
 import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, logReversal } from "@/lib/audit-utils";
 import {
   INSTALLMENT_LOCKED_STATUSES,
   INSTALLMENT_COLLECTIBLE_STATUSES,
