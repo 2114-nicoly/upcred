@@ -316,10 +316,9 @@ export default function DailyCashPage() {
   const fetchSeqRef = useRef(0);
   const refreshTimerRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
-  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
-  const [reopenReason, setReopenReason] = useState("");
-  const [isReopening, setIsReopening] = useState(false);
-  const [closeCashDialogOpen, setCloseCashDialogOpen] = useState(false);
+  const [reopenRequestDialogOpen, setReopenRequestDialogOpen] = useState(false);
+  const [reopenRequestReason, setReopenRequestReason] = useState("");
+  const [isSubmittingReopenRequest, setIsSubmittingReopenRequest] = useState(false);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
@@ -1047,131 +1046,47 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleCloseCash = () => {
-    if (dailyCashStatus === "closed") {
-      toast.info("Caixa já está fechado.");
-      return;
-    }
-    setCloseCashDialogOpen(true);
-  };
-
-  const handleCloseCashConfirm = async () => {
-    if (isSubmitting) return;
-    if (dailyCashStatus === "closed") {
-      toast.info("Caixa já está fechado.");
-      setCloseCashDialogOpen(false);
-      return;
-    }
-    const totalReceived = paidGroups.reduce((s, g) => s + g.totalPaid, 0);
-    setIsSubmitting(true);
-
+  const submitReopenRequest = async () => {
+    if (reopenRequestReason.trim().length < 3) return;
+    setIsSubmittingReopenRequest(true);
     try {
-      const { data: penaltyMovements, error: pmErr } = await (supabase
-        .from("cash_movements")
-        .select("amount")
-        .eq("type", "recebimento_multa")
-        .eq("cash_date", selectedDate)
-        .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
-      if (pmErr) throw pmErr;
-      const totalPenaltyReceived = (penaltyMovements || []).reduce((s: number, m: PenaltyMovementRow) => s + Number(m.amount), 0);
-
-      const { data: { session: s3 } } = await supabase.auth.getSession();
-      const scope = await getCurrentDailyCashScope();
-      const { data: existing, error: selErr } = await applyDailyCashScope(
-        supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
-        scope
-      ).maybeSingle();
-      if (selErr) throw selErr;
-
-      const payload: DailyCashPayload = {
-        cash_date: selectedDate, status: "closed", total_received: totalReceived,
-        total_penalty_received: totalPenaltyReceived, total_not_paid_count: notPaidMarks.length,
-        total_items_treated: paidGroups.length + notPaidMarks.length, closed_at: new Date().toISOString(),
-      };
-
-      let dailyCashId: string | null = null;
-      if (existing) {
-        const { error: updErr } = await supabase.from("daily_cash").update(payload).eq("id", existing.id);
-        if (updErr) throw updErr;
-        dailyCashId = existing.id;
-      } else {
-        const { data: inserted, error: insErr } = await supabase.from("daily_cash").insert({
-          ...payload,
-          user_id: s3?.user?.id,
-          worker_id: scope.worker_id,
-          admin_id: scope.admin_id,
-        } as any).select("id").maybeSingle();
-        if (insErr) throw insErr;
-        dailyCashId = inserted?.id ?? null;
-      }
-
-      await logAction(
-        "fechar_caixa",
-        "cash",
-        dailyCashId,
-        null,
-        { cash_date: selectedDate, total_received: totalReceived, total_not_paid: notPaidMarks.length },
-        `Caixa fechado - ${selectedDate}`,
-      );
-
-      toast.success("Caixa do dia fechado!");
-      setDailyCashStatus("closed");
-      setPendingInstallments([]);
-      setCloseCashDialogOpen(false);
-    } catch (err) {
-      console.error("[handleCloseCash] failed", err);
-      toast.error("Não foi possível fechar o caixa. Tente novamente.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleReopenCash = async () => {
-    if (!isAdmin && !isSuperAdmin) {
-      toast.error("Apenas administradores podem reabrir o caixa.");
-      return;
-    }
-    setReopenReason("");
-    setReopenDialogOpen(true);
-  };
-
-  const confirmReopenCash = async () => {
-    if (reopenReason.trim().length < 5) return;
-    setIsReopening(true);
-    try {
-      const { data: existing, error: selErr } = await applyDailyCashScope(
-        supabase.from("daily_cash").select("id").eq("cash_date", selectedDate),
-        await getCurrentDailyCashScope()
-      ).maybeSingle();
-      if (selErr) throw selErr;
-      if (existing) {
-        const { error: updErr } = await supabase
-          .from("daily_cash")
-          .update({ status: "open", closed_at: null })
-          .eq("id", existing.id);
-        if (updErr) throw updErr;
-      }
       const { data: { session: s } } = await supabase.auth.getSession();
+      const uid = s?.user?.id ?? null;
+      let workerName: string | null = null;
+      let workerId: string | null = null;
+      if (uid) {
+        const { data: w } = await supabase
+          .from("workers").select("id, nome").eq("auth_user_id", uid).maybeSingle();
+        if (w) { workerId = (w as any).id ?? null; workerName = (w as any).nome ?? null; }
+      }
       await logAction(
-        "reabrir_caixa",
+        "solicitar_reabertura_caixa" as any,
         "cash",
-        existing?.id ?? null,
         null,
-        { cash_date: selectedDate },
-        `Reabertura de caixa (${selectedDate}): ${reopenReason.trim()}`,
+        null,
+        {
+          cash_date: selectedDate,
+          worker_id: workerId,
+          worker_name: workerName,
+          reason: reopenRequestReason.trim(),
+          status: "pending",
+          requested_at: new Date().toISOString(),
+        },
+        `Solicitação de reabertura (${selectedDate}): ${reopenRequestReason.trim()}`,
+        workerId,
       );
-      toast.success("Caixa reaberto!");
-      setDailyCashStatus("open");
-      setReopenDialogOpen(false);
-      setReopenReason("");
-      refreshDataInBackground();
+      toast.success("Solicitação enviada ao administrador.");
+      setReopenRequestDialogOpen(false);
+      setReopenRequestReason("");
     } catch (err) {
-      console.error("[confirmReopenCash] failed", err);
-      toast.error("Não foi possível reabrir o caixa. Tente novamente.");
+      console.error("[submitReopenRequest] failed", err);
+      toast.error("Não foi possível enviar a solicitação. Tente novamente.");
     } finally {
-      setIsReopening(false);
+      setIsSubmittingReopenRequest(false);
     }
   };
+
+
 
   const handleQuitarEmprestimo = async (instId: string) => {
     if (isSubmitting) return;
@@ -1868,17 +1783,22 @@ export default function DailyCashPage() {
 
           {isClosed ? (
             (isAdmin || isSuperAdmin) ? (
-              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm" disabled={isSubmitting || isReopening}>
-                <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
+              <Button onClick={() => navigate(`/caixa?date=${selectedDate}`)} className="w-full mt-4" variant="outline" size="sm">
+                <LockOpen className="mr-2 h-4 w-4" /> Ir para Caixa do Dia
               </Button>
             ) : (
-              <p className="text-center text-xs text-muted-foreground mt-4">
-                Caixa fechado. Solicite a reabertura ao seu administrador.
-              </p>
+              <div className="mt-4 space-y-2">
+                <p className="text-center text-xs text-muted-foreground">
+                  Caixa fechado. Solicite a reabertura ao seu administrador.
+                </p>
+                <Button onClick={() => setReopenRequestDialogOpen(true)} variant="outline" size="sm" className="w-full">
+                  <LockOpen className="mr-2 h-4 w-4" /> Solicitar reabertura
+                </Button>
+              </div>
             )
           ) : (
-            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm" disabled={isSubmitting}>
-              <Lock className="mr-2 h-4 w-4" /> {isSubmitting ? "Fechando..." : "Fechar Caixa do Dia"}
+            <Button onClick={() => navigate(`/caixa?date=${selectedDate}`)} className="w-full mt-4" variant="default" size="sm">
+              <Lock className="mr-2 h-4 w-4" /> Ir para Caixa do Dia
             </Button>
           )}
 
@@ -1891,34 +1811,47 @@ export default function DailyCashPage() {
             Ver Relatório do Dia
           </Button>
 
-          <Dialog open={reopenDialogOpen} onOpenChange={(o) => { setReopenDialogOpen(o); if (!o) setReopenReason(""); }}>
+          <Dialog
+            open={reopenRequestDialogOpen}
+            onOpenChange={(o) => { setReopenRequestDialogOpen(o); if (!o) setReopenRequestReason(""); }}
+          >
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Reabrir caixa do dia</DialogTitle>
+                <DialogTitle>Solicitar reabertura do caixa</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
-                  <Label>Motivo da reabertura <span className="text-destructive">*</span></Label>
+                  <Label>Motivo da solicitação <span className="text-destructive">*</span></Label>
                   <Textarea
-                    value={reopenReason}
-                    onChange={(e) => setReopenReason(e.target.value)}
-                    placeholder="Descreva o motivo (mínimo 5 caracteres)..."
+                    value={reopenRequestReason}
+                    onChange={(e) => setReopenRequestReason(e.target.value)}
+                    placeholder="Descreva o motivo (mínimo 3 caracteres)..."
                     rows={3}
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    Esta ação ficará registrada no histórico de auditoria.
+                    A solicitação será registrada no histórico de auditoria e enviada ao administrador.
                   </p>
                 </div>
-                <Button
-                  onClick={confirmReopenCash}
-                  disabled={reopenReason.trim().length < 5 || isReopening}
-                  className="w-full"
-                >
-                  {isReopening ? "Reabrindo..." : "Confirmar Reabertura"}
-                </Button>
+                <DialogFooter className="gap-2 sm:gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setReopenRequestDialogOpen(false); setReopenRequestReason(""); }}
+                    disabled={isSubmittingReopenRequest}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={submitReopenRequest}
+                    disabled={reopenRequestReason.trim().length < 3 || isSubmittingReopenRequest}
+                  >
+                    {isSubmittingReopenRequest ? "Enviando..." : "Enviar solicitação"}
+                  </Button>
+                </DialogFooter>
               </div>
             </DialogContent>
           </Dialog>
+
         </>
       )}
 

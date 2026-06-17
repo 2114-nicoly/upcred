@@ -47,7 +47,7 @@ const ACTION_LABELS: Record<string, string> = {
   multa_aplicada: "Multa aplicada", multa_paga: "Multa paga", multa_cancelada: "Multa cancelada", editar_multa: "Editar multa",
   anexar_arquivo: "Anexar arquivo", excluir_anexo: "Excluir anexo",
   aporte: "Aporte na rota", retirada: "Retirada da rota", ajuste_caixa: "Ajuste de caixa",
-  fechar_caixa: "Fechar caixa", reabrir_caixa: "Reabrir caixa",
+  fechar_caixa: "Fechar caixa", reabrir_caixa: "Reabrir caixa", solicitar_reabertura_caixa: "Solicitação de reabertura",
   criar_trabalhador: "Criar trabalhador", reset_senha_trabalhador: "Reset senha",
   ativar_trabalhador: "Ativar trabalhador", desativar_trabalhador: "Desativar trabalhador",
   arquivar_trabalhador: "Arquivar trabalhador", excluir_trabalhador: "Excluir trabalhador",
