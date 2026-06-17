@@ -593,11 +593,16 @@ export default function DailyReportPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} className="w-full">
-        {generatingPdf
-          ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando PDF…</>
-          : <><Download className="mr-2 h-4 w-4" /> Baixar PDF do dia</>}
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="default">
+          {generatingPdf
+            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando…</>
+            : <><Download className="mr-2 h-4 w-4" /> Baixar PDF</>}
+        </Button>
+        <Button onClick={handleSharePDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="outline">
+          <Share2 className="mr-2 h-4 w-4" /> Compartilhar
+        </Button>
+      </div>
 
       <Card>
         <CardContent className="p-0">
