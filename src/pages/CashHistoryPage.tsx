@@ -40,7 +40,6 @@ type GroupedDay = {
 
 export default function CashHistoryPage() {
   const navigate = useNavigate();
-  const confirm = useConfirm();
   const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
@@ -51,6 +50,11 @@ export default function CashHistoryPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editObs, setEditObs] = useState("");
+
+  // Reversal (estorno)
+  const [reverseTarget, setReverseTarget] = useState<MovementWithClient | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
+  const [reverseSaving, setReverseSaving] = useState(false);
 
   const fetchData = async () => {
     let query = supabase
