@@ -64,6 +64,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string
           id: string
+          metadata: Json | null
           new_value: Json | null
           observation: string | null
           old_value: Json | null
@@ -78,6 +79,7 @@ export type Database = {
           entity_id?: string | null
           entity_type: string
           id?: string
+          metadata?: Json | null
           new_value?: Json | null
           observation?: string | null
           old_value?: Json | null
@@ -92,6 +94,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string
           id?: string
+          metadata?: Json | null
           new_value?: Json | null
           observation?: string | null
           old_value?: Json | null
@@ -520,6 +523,7 @@ export type Database = {
           id: string
           installment_id: string | null
           loan_id: string | null
+          metadata: Json | null
           observation: string | null
           origin: string | null
           reversed_at: string | null
@@ -538,6 +542,7 @@ export type Database = {
           id?: string
           installment_id?: string | null
           loan_id?: string | null
+          metadata?: Json | null
           observation?: string | null
           origin?: string | null
           reversed_at?: string | null
@@ -556,6 +561,7 @@ export type Database = {
           id?: string
           installment_id?: string | null
           loan_id?: string | null
+          metadata?: Json | null
           observation?: string | null
           origin?: string | null
           reversed_at?: string | null
