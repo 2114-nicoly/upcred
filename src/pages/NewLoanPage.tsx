@@ -413,6 +413,8 @@ export default function NewLoanPage() {
       try {
         const interest = calc.totalAmount - numAmount;
         const cashOut = renewFromLoanId ? valorLiberado : numAmount;
+        const actor = await getCurrentActorIdentity();
+        const firstDueStr = paymentType !== "fixed_dates" ? firstDueDate : (fixedDates[0] || null);
 
         let movementId: string | null = null;
         if (cashOut > 0) {
@@ -433,6 +435,23 @@ export default function NewLoanPage() {
           ? `Renovação - ${clientName} - Pago: ${formatCurrency(renewPaid)} | Faltava: ${formatCurrency(faltaQuitar)} | Novo: ${formatCurrency(numAmount)} | Liberado: ${formatCurrency(valorLiberado)}`
           : `Novo empréstimo - ${clientName} - ${numInstallments}x ${formatCurrency(calc.installmentAmount)}`;
 
+        const novoMetadata = {
+          loan_type: renewFromLoanId ? "renovacao" : "novo",
+          loan_id: loan.id,
+          client_id: clientId,
+          client_name: clientName,
+          worker_id: actor.id,
+          worker_name: actor.name,
+          principal_amount: numAmount,
+          total_amount: calc.totalAmount,
+          installments: numInstallments,
+          installment_amount: calc.installmentAmount,
+          receivable_created: calc.totalAmount,
+          first_due_date: firstDueStr,
+          released_amount: cashOut,
+          created_at: new Date().toISOString(),
+        };
+
         const evt = await createDailyEvent({
           cash_date: loanDate,
           event_type: renewFromLoanId ? "renovacao" : "emprestimo_novo",
@@ -443,6 +462,7 @@ export default function NewLoanPage() {
           observation: renewObs,
           origin: "novo_emprestimo",
           cash_movement_id: movementId,
+          metadata: novoMetadata,
         }) as any;
         if (!evt?.id) throw new Error("Evento diário não foi criado.");
         createdEventIds.push(evt.id);
