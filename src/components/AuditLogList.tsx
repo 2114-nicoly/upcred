@@ -57,7 +57,11 @@ type Props = { workerId?: string | null; limit?: number };
 
 function extractAmount(v: any): number | null {
   if (!v || typeof v !== "object") return null;
-  const keys = ["amount", "total_amount", "value", "remaining_balance", "released", "initial_remaining_balance"];
+  const keys = [
+    "amount", "total_amount", "value",
+    "remaining_balance", "released",
+    "initial_remaining_balance", "principal_receivable",
+  ];
   for (const k of keys) {
     if (v[k] != null && !isNaN(Number(v[k]))) return Number(v[k]);
   }
