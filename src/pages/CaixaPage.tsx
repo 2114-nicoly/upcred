@@ -518,7 +518,7 @@ export default function CaixaPage() {
 
 
       {/* Section tabs */}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         <button
           onClick={() => setActiveSection("pagos")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeSection === "pagos" ? "border-success/50 bg-success/5" : "bg-card"}`}
@@ -541,6 +541,13 @@ export default function CaixaPage() {
           <p className="text-base font-bold text-primary">{novos.length}</p>
         </button>
         <button
+          onClick={() => setActiveSection("importados")}
+          className={`rounded-lg border p-1.5 text-center transition-colors ${activeSection === "importados" ? "border-muted-foreground/50 bg-muted/40" : "bg-card"}`}
+        >
+          <p className="text-[10px] text-muted-foreground">Importados</p>
+          <p className="text-base font-bold">{importados.length}</p>
+        </button>
+        <button
           onClick={() => setActiveSection("movimentos")}
           className={`rounded-lg border p-1.5 text-center transition-colors ${activeSection === "movimentos" ? "border-border bg-accent/50" : "bg-card"}`}
         >
@@ -548,6 +555,7 @@ export default function CaixaPage() {
           <p className="text-base font-bold">{movimentos.length}</p>
         </button>
       </div>
+
 
       {activeSection === "resumo" && events.length === 0 && (
         <p className="text-xs text-muted-foreground text-center py-4">Nenhum lançamento neste dia. Selecione uma aba acima para registrar.</p>
