@@ -36,7 +36,9 @@ type Log = {
 const ACTION_LABELS: Record<string, string> = {
   transferencia_cliente: "Transferência de cliente",
   criar_cliente: "Criar cliente", editar_cliente: "Editar cliente", excluir_cliente: "Arquivar cliente",
-  criar_emprestimo: "Criar empréstimo", editar_emprestimo: "Editar empréstimo", excluir_emprestimo: "Cancelar empréstimo",
+  criar_emprestimo: "Criar empréstimo",
+  criar_emprestimo_importado: "Empréstimo importado",
+  editar_emprestimo: "Editar empréstimo", excluir_emprestimo: "Cancelar empréstimo",
   editar_observacao_emprestimo: "Editar obs. empréstimo",
   renovar_emprestimo: "Renovar empréstimo", quitar_emprestimo: "Quitar empréstimo",
   pagamento: "Pagamento", editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
