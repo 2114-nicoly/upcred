@@ -260,6 +260,36 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
       await linkCashMovementToDailyEvent(reversalMovement.id, reversalEvent.id);
     }
 
+    // Structured audit metadata for the reversal
+    try {
+      const { logReversal } = await import("@/lib/audit-utils");
+      await logReversal({
+        action: "estorno_manual",
+        entity: "cash",
+        original_movement_id: movementId,
+        original_event_id: event.id,
+        reversal_movement_id: reversalMovement?.id ?? null,
+        reversal_event_id: reversalEvent?.id ?? null,
+        original_type: event.event_type,
+        original_amount: originalAmount,
+        reversal_amount: -originalAmount,
+        reversal_reason: reason ?? null,
+        client_id: event.client_id,
+        loan_id: event.loan_id,
+        cash_date: event.cash_date,
+        observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
+        beforeSnapshot: {
+          event_type: event.event_type,
+          amount_in: Number(event.amount_in) || 0,
+          amount_out: Number(event.amount_out) || 0,
+          observation: event.observation,
+          cash_date: event.cash_date,
+        },
+      });
+    } catch (err) {
+      console.warn("[daily-events] logReversal failed", err);
+    }
+
     await recalculateCashBalanceFromLedger();
     return;
   }
