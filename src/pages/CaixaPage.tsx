@@ -718,15 +718,22 @@ export default function CaixaPage() {
                       <p className="text-sm font-semibold">Empréstimo Importado</p>
                       <p className="text-[11px] text-muted-foreground">
                         {ev.client_id ? clientNames[ev.client_id] || m?.client_name || "Cliente" : (m?.client_name || "—")}
+                        {m?.worker_name ? <> · <span className="text-muted-foreground">por {m.worker_name}</span></> : null}
                       </p>
                       {m && (
                         <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
                           {m.original_amount != null && <p>Valor original: <span className="font-medium">{formatCurrency(Number(m.original_amount))}</span></p>}
                           {m.total_amount != null && <p>Total com juros: <span className="font-medium">{formatCurrency(Number(m.total_amount))}</span></p>}
                           {Number(m.amount_already_paid) > 0 && <p>Já pago antes do cadastro: <span className="font-medium">{formatCurrency(Number(m.amount_already_paid))}</span></p>}
+                          {m.remaining_balance != null && <p>Saldo restante importado: <span className="font-medium">{formatCurrency(Number(m.remaining_balance))}</span></p>}
                           {m.principal_receivable != null && <p>Principal a receber: <span className="font-medium">{formatCurrency(Number(m.principal_receivable))}</span></p>}
                           {m.interest_receivable != null && <p>Juros a receber: <span className="font-medium">{formatCurrency(Number(m.interest_receivable))}</span></p>}
+                          {m.pending_installments_count != null && <p>Parcelas pendentes: <span className="font-medium">{Number(m.pending_installments_count)}</span></p>}
                           {m.next_due_date && <p>Próxima cobrança: <span className="font-medium">{m.next_due_date}</span></p>}
+                          {m.original_loan_date && <p>Data original: <span className="font-medium">{m.original_loan_date}</span></p>}
+                          <p className="text-muted-foreground/70">
+                            {(() => { const dt = new Date(ev.created_at); return `${dt.toLocaleDateString("pt-BR")} ${dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`; })()}
+                          </p>
                         </div>
                       )}
                     </div>
