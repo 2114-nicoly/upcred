@@ -1783,17 +1783,22 @@ export default function DailyCashPage() {
 
           {isClosed ? (
             (isAdmin || isSuperAdmin) ? (
-              <Button onClick={handleReopenCash} className="w-full mt-4" variant="outline" size="sm" disabled={isSubmitting || isReopening}>
-                <LockOpen className="mr-2 h-4 w-4" /> Reabrir Caixa
+              <Button onClick={() => navigate(`/caixa?date=${selectedDate}`)} className="w-full mt-4" variant="outline" size="sm">
+                <LockOpen className="mr-2 h-4 w-4" /> Ir para Caixa do Dia
               </Button>
             ) : (
-              <p className="text-center text-xs text-muted-foreground mt-4">
-                Caixa fechado. Solicite a reabertura ao seu administrador.
-              </p>
+              <div className="mt-4 space-y-2">
+                <p className="text-center text-xs text-muted-foreground">
+                  Caixa fechado. Solicite a reabertura ao seu administrador.
+                </p>
+                <Button onClick={() => setReopenRequestDialogOpen(true)} variant="outline" size="sm" className="w-full">
+                  <LockOpen className="mr-2 h-4 w-4" /> Solicitar reabertura
+                </Button>
+              </div>
             )
           ) : (
-            <Button onClick={handleCloseCash} className="w-full mt-4" variant="default" size="sm" disabled={isSubmitting}>
-              <Lock className="mr-2 h-4 w-4" /> {isSubmitting ? "Fechando..." : "Fechar Caixa do Dia"}
+            <Button onClick={() => navigate(`/caixa?date=${selectedDate}`)} className="w-full mt-4" variant="default" size="sm">
+              <Lock className="mr-2 h-4 w-4" /> Ir para Caixa do Dia
             </Button>
           )}
 
@@ -1806,34 +1811,47 @@ export default function DailyCashPage() {
             Ver Relatório do Dia
           </Button>
 
-          <Dialog open={reopenDialogOpen} onOpenChange={(o) => { setReopenDialogOpen(o); if (!o) setReopenReason(""); }}>
+          <Dialog
+            open={reopenRequestDialogOpen}
+            onOpenChange={(o) => { setReopenRequestDialogOpen(o); if (!o) setReopenRequestReason(""); }}
+          >
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Reabrir caixa do dia</DialogTitle>
+                <DialogTitle>Solicitar reabertura do caixa</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
-                  <Label>Motivo da reabertura <span className="text-destructive">*</span></Label>
+                  <Label>Motivo da solicitação <span className="text-destructive">*</span></Label>
                   <Textarea
-                    value={reopenReason}
-                    onChange={(e) => setReopenReason(e.target.value)}
-                    placeholder="Descreva o motivo (mínimo 5 caracteres)..."
+                    value={reopenRequestReason}
+                    onChange={(e) => setReopenRequestReason(e.target.value)}
+                    placeholder="Descreva o motivo (mínimo 3 caracteres)..."
                     rows={3}
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    Esta ação ficará registrada no histórico de auditoria.
+                    A solicitação será registrada no histórico de auditoria e enviada ao administrador.
                   </p>
                 </div>
-                <Button
-                  onClick={confirmReopenCash}
-                  disabled={reopenReason.trim().length < 5 || isReopening}
-                  className="w-full"
-                >
-                  {isReopening ? "Reabrindo..." : "Confirmar Reabertura"}
-                </Button>
+                <DialogFooter className="gap-2 sm:gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setReopenRequestDialogOpen(false); setReopenRequestReason(""); }}
+                    disabled={isSubmittingReopenRequest}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={submitReopenRequest}
+                    disabled={reopenRequestReason.trim().length < 3 || isSubmittingReopenRequest}
+                  >
+                    {isSubmittingReopenRequest ? "Enviando..." : "Enviar solicitação"}
+                  </Button>
+                </DialogFooter>
               </div>
             </DialogContent>
           </Dialog>
+
         </>
       )}
 
