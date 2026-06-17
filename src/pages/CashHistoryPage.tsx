@@ -225,6 +225,43 @@ export default function CashHistoryPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reverse (estorno) dialog */}
+      <Dialog open={reverseTarget !== null} onOpenChange={(o) => { if (!o && !reverseSaving) { setReverseTarget(null); setReverseReason(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Estornar movimentação?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Esta ação preservará o histórico e criará um registro de reversão vinculado à movimentação original.
+            </p>
+            {reverseTarget && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs space-y-1">
+                <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="font-medium">{getMovementTypeLabel(reverseTarget.type)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor</span><span className="font-mono">{formatCurrency(Math.abs(Number(reverseTarget.amount)))}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Data</span><span className="font-mono">{format(new Date(reverseTarget.cash_date + "T12:00:00"), "dd/MM/yyyy")}</span></div>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Motivo do estorno <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={reverseReason}
+                onChange={(e) => setReverseReason(e.target.value)}
+                placeholder="Ex.: lançamento incorreto, valor errado, duplicidade..."
+                rows={3}
+                disabled={reverseSaving}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => { setReverseTarget(null); setReverseReason(""); }} disabled={reverseSaving}>Cancelar</Button>
+              <Button className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={confirmReverse} disabled={reverseSaving || reverseReason.trim().length < 3}>
+                {reverseSaving ? "Estornando..." : "Estornar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {loading ? (
         <ListSkeleton count={4} />
       ) : groupedDays.length === 0 ? (
