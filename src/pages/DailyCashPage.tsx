@@ -15,7 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
 import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger, getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
-import { createDailyEvent, deleteDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
+import { createDailyEvent, reverseDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { logAction } from "@/lib/audit-utils";
 import { isCashClosed } from "@/lib/cash-lock";
@@ -1001,7 +1001,7 @@ export default function DailyCashPage() {
           .eq("installment_id", mark.installment_id)
           .eq("cash_date", selectedDate) as unknown as QueryResult<{ id: string }>);
         for (const ev of (events || [])) {
-          await deleteDailyEvent(ev.id);
+          await reverseDailyEvent(ev.id);
         }
       }
       toast.success("Marcação desfeita!");
