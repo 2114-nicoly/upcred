@@ -540,9 +540,14 @@ export default function NewLoanPage() {
         ? (ongoingPlan?.partialRemaining ?? calc.installmentAmount)
         : calc.installmentAmount;
 
+      const actorImp = await getCurrentActorIdentity();
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+
       const importedMetadata = {
         client_id: clientId,
         client_name: clientName,
+        worker_id: actorImp.id,
+        worker_name: actorImp.name,
         loan_id: loan.id,
         loan_type: "emprestimo_importado",
         original_amount: numAmount,
@@ -551,10 +556,14 @@ export default function NewLoanPage() {
         remaining_balance: ongoingRemaining,
         principal_receivable: principalReceivable,
         interest_receivable: interestReceivable,
+        installment_amount: calc.installmentAmount,
+        installment_count: numInstallments,
         first_pending_installment: firstPending,
         first_pending_amount: firstPendingAmount,
         pending_installments_count: ongoingPlan?.pendingCount ?? null,
         next_due_date: nextDueStr,
+        original_loan_date: loanDate,
+        imported_at: new Date().toISOString(),
       };
 
       try {
@@ -573,10 +582,13 @@ export default function NewLoanPage() {
           `Juros a receber: ${formatCurrency(interestReceivable)}`,
           firstPending != null ? `Primeira parcela pendente: ${firstPending}` : null,
           nextDueStr ? `Próxima cobrança: ${nextDueStr}` : null,
+          `Data original do empréstimo: ${loanDate}`,
         ].filter(Boolean).join(" | ");
 
+        // Importante: cash_date = HOJE (dia em que o cadastro foi feito),
+        // não a data original do empréstimo. A data original fica em metadata.original_loan_date.
         const evt = await createDailyEvent({
-          cash_date: loanDate,
+          cash_date: todayStr,
           event_type: "emprestimo_importado",
           client_id: clientId!,
           loan_id: loan.id,
