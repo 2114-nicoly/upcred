@@ -121,7 +121,7 @@ export default function DailyReportPage() {
         const dayEnd = `${date}T23:59:59`;
         let aq: any = supabase.from("audit_logs").select("*")
           .gte("created_at", dayStart).lte("created_at", dayEnd)
-          .in("entity_type", ["client", "loan", "installment"]);
+          .in("entity_type", ["client", "loan", "installment", "penalty", "transfer", "payment", "cash"]);
         if (selectedWorkerId) aq = aq.eq("worker_id", selectedWorkerId);
         else if (isSuperAdmin && selectedAdminId) aq = aq.eq("admin_id", selectedAdminId);
         else if (isAdmin && !isSuperAdmin && myAdminId) aq = aq.eq("admin_id", myAdminId);
