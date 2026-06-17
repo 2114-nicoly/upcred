@@ -39,7 +39,7 @@ import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals } from "@/lib/daily-totals";
 
-type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "movimentos";
+type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
 export default function CaixaPage() {
   const navigate = useNavigate();
