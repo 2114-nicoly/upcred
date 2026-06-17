@@ -94,30 +94,63 @@ export default function CashHistoryPage() {
       }));
   })();
 
-  const handleDelete = async (mov: MovementWithClient) => {
-    const ok = await confirm({
-      title: "Excluir movimentação?",
-      description: "O saldo do caixa será revertido conforme o tipo do lançamento.",
-      affected: [
-        { label: "Tipo", value: getMovementTypeLabel(mov.type) },
-        { label: "Valor", value: formatCurrency(Math.abs(Number(mov.amount))) },
-        { label: "Data", value: format(new Date(mov.cash_date + "T12:00:00"), "dd/MM/yyyy") },
-      ],
-      confirmText: "Excluir", destructive: true,
-    });
-    if (!ok) return;
-    const reverseMap: Record<string, any> = {
-      emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
-      recebimento_normal: { available_cash: -Number(mov.amount) },
-      recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
-      entrada_manual: { available_cash: -Number(mov.amount) },
-      saida_manual: { available_cash: -Number(mov.amount) },
-      ajuste_manual: { available_cash: -Number(mov.amount) },
-    };
-    await updateCashBalance(reverseMap[mov.type] || {});
-    await deleteCashMovement(mov.id);
-    toast.success("Movimentação excluída!");
-    fetchData();
+  const openReverseDialog = (mov: MovementWithClient) => {
+    setReverseTarget(mov);
+    setReverseReason("");
+  };
+
+  const confirmReverse = async () => {
+    if (!reverseTarget) return;
+    const reason = reverseReason.trim();
+    if (reason.length < 3) {
+      toast.error("Informe o motivo do estorno (mínimo 3 caracteres).");
+      return;
+    }
+    setReverseSaving(true);
+    const mov = reverseTarget;
+    try {
+      const reverseMap: Record<string, any> = {
+        emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
+        recebimento_normal: { available_cash: -Number(mov.amount) },
+        recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
+        entrada_manual: { available_cash: -Number(mov.amount) },
+        saida_manual: { available_cash: -Number(mov.amount) },
+        ajuste_manual: { available_cash: -Number(mov.amount) },
+      };
+      await updateCashBalance(reverseMap[mov.type] || {});
+      await reverseCashMovement(mov.id, { reason });
+      // Structured audit metadata (preserves history; no physical delete)
+      await logAction(
+        "estorno_manual" as any,
+        "cash",
+        mov.id,
+        {
+          type: mov.type,
+          amount: Number(mov.amount),
+          observation: mov.observation,
+          cash_date: mov.cash_date,
+        },
+        {
+          original_movement_id: mov.id,
+          original_event_id: (mov as any).daily_event_id ?? null,
+          client_id: mov.client_id,
+          loan_id: mov.loan_id,
+          amount: Number(mov.amount),
+          reversal_reason: reason,
+          reversed_at: new Date().toISOString(),
+        },
+        `Estorno de ${getMovementTypeLabel(mov.type)} (${formatCurrency(Math.abs(Number(mov.amount)))}) — ${reason}`,
+      );
+      toast.success("Movimentação estornada!");
+      setReverseTarget(null);
+      setReverseReason("");
+      fetchData();
+    } catch (err: any) {
+      console.error("[CashHistory] estorno falhou:", err);
+      toast.error("Não foi possível estornar: " + (err?.message || "erro desconhecido"));
+    } finally {
+      setReverseSaving(false);
+    }
   };
 
   const handleEdit = async () => {
