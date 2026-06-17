@@ -36,7 +36,9 @@ type Log = {
 const ACTION_LABELS: Record<string, string> = {
   transferencia_cliente: "Transferência de cliente",
   criar_cliente: "Criar cliente", editar_cliente: "Editar cliente", excluir_cliente: "Arquivar cliente",
-  criar_emprestimo: "Criar empréstimo", editar_emprestimo: "Editar empréstimo", excluir_emprestimo: "Cancelar empréstimo",
+  criar_emprestimo: "Criar empréstimo",
+  criar_emprestimo_importado: "Empréstimo importado",
+  editar_emprestimo: "Editar empréstimo", excluir_emprestimo: "Cancelar empréstimo",
   editar_observacao_emprestimo: "Editar obs. empréstimo",
   renovar_emprestimo: "Renovar empréstimo", quitar_emprestimo: "Quitar empréstimo",
   pagamento: "Pagamento", editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
@@ -55,7 +57,11 @@ type Props = { workerId?: string | null; limit?: number };
 
 function extractAmount(v: any): number | null {
   if (!v || typeof v !== "object") return null;
-  const keys = ["amount", "total_amount", "value", "remaining_balance", "released", "initial_remaining_balance"];
+  const keys = [
+    "amount", "total_amount", "value",
+    "remaining_balance", "released",
+    "initial_remaining_balance", "principal_receivable",
+  ];
   for (const k of keys) {
     if (v[k] != null && !isNaN(Number(v[k]))) return Number(v[k]);
   }
@@ -167,8 +173,16 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
   const workerName = (id: string | null) => id ? (workers.find((w) => w.id === id)?.nome ?? "—") : "Admin";
   const adminName = (id: string | null) => id ? (admins.find((a) => a.id === id)?.nome ?? "—") : null;
   const clientName = (l: Log) => {
+    const fromPayload = (l.new_value && typeof l.new_value === "object" && (l.new_value as any).client_name)
+      || (l.old_value && typeof l.old_value === "object" && (l.old_value as any).client_name);
+    if (fromPayload) return String(fromPayload);
     const cid = getRelatedClientId(l);
     return cid ? (clientsMap[cid] ?? null) : null;
+  };
+  const workerNameFromPayload = (l: Log): string | null => {
+    const v = (l.new_value && typeof l.new_value === "object" && (l.new_value as any).worker_name)
+      || (l.old_value && typeof l.old_value === "object" && (l.old_value as any).worker_name);
+    return v ? String(v) : null;
   };
 
   const filtered = useMemo(() => {
@@ -286,7 +300,7 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {l.user_role === "super_admin" ? "Super Admin"
                             : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` · ${adminName(l.admin_id)}` : ""}`
-                            : workerName(l.worker_id)}
+                            : (workerNameFromPayload(l) || workerName(l.worker_id))}
                           {isSuperAdmin && l.user_role === "trabalhador" && adminName(l.admin_id) && (
                             <span className="ml-1">· {adminName(l.admin_id)}</span>
                           )}

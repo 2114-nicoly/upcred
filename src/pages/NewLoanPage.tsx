@@ -13,7 +13,7 @@ import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, logLoanAction } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -508,21 +508,41 @@ export default function NewLoanPage() {
       // Regras: NÃO movimenta caixa, NÃO cria cash_movement, NÃO marca valor já pago como recebido.
       // O que falta receber entra em A Receber (money_lent + interest_receivable) e
       // gera um daily_event INFORMATIVO no histórico (amount_in=0, amount_out=0).
-      try {
-        const interestPortion = Math.max(0, calc.totalAmount - numAmount);
-        const totalPaidBefore = Math.max(0, numAlreadyPaid);
-        const interestPaid = Math.min(interestPortion, totalPaidBefore);
-        const principalPaid = Math.max(0, totalPaidBefore - interestPaid);
-        const principalReceivable = Math.max(0, numAmount - principalPaid);
-        const interestReceivable = Math.max(0, interestPortion - interestPaid);
+      const interestPortion = Math.max(0, calc.totalAmount - numAmount);
+      const totalPaidBefore = Math.max(0, numAlreadyPaid);
+      const interestPaid = Math.min(interestPortion, totalPaidBefore);
+      const principalPaid = Math.max(0, totalPaidBefore - interestPaid);
+      const principalReceivable = Math.max(0, numAmount - principalPaid);
+      const interestReceivable = Math.max(0, interestPortion - interestPaid);
+      const firstPending = ongoingPlan?.firstPendingNumber ?? null;
+      const nextDueStr = paymentType !== "fixed_dates" ? firstDueDate : (fixedDates[0] || null);
+      const firstPendingAmount = ongoingPlan?.hasPartial
+        ? (ongoingPlan?.partialRemaining ?? calc.installmentAmount)
+        : calc.installmentAmount;
 
+      const importedMetadata = {
+        client_id: clientId,
+        client_name: clientName,
+        loan_id: loan.id,
+        loan_type: "emprestimo_importado",
+        original_amount: numAmount,
+        total_amount: calc.totalAmount,
+        amount_already_paid: numAlreadyPaid,
+        remaining_balance: ongoingRemaining,
+        principal_receivable: principalReceivable,
+        interest_receivable: interestReceivable,
+        first_pending_installment: firstPending,
+        first_pending_amount: firstPendingAmount,
+        pending_installments_count: ongoingPlan?.pendingCount ?? null,
+        next_due_date: nextDueStr,
+      };
+
+      try {
         await updateCashBalance({
           money_lent: principalReceivable,
           interest_receivable: interestReceivable,
         });
 
-        const firstPending = ongoingPlan?.firstPendingNumber ?? null;
-        const nextDueStr = paymentType !== "fixed_dates" ? firstDueDate : (fixedDates[0] || null);
         const importInfo = [
           `Empréstimo importado - ${clientName}`,
           `Valor original: ${formatCurrency(numAmount)}`,
@@ -544,6 +564,7 @@ export default function NewLoanPage() {
           amount_out: 0,
           observation: importInfo,
           origin: "emprestimo_em_andamento",
+          metadata: importedMetadata,
         }) as any;
         if (!evt?.id) throw new Error("Evento informativo do empréstimo importado não foi criado.");
         createdEventIds.push(evt.id);
@@ -557,34 +578,65 @@ export default function NewLoanPage() {
 
       // Safety net: garante consistência total de A Receber a partir do ledger.
       try { await recalculateCashBalanceFromLedger(); } catch (e) { console.warn("[NewLoan] recalc ledger falhou:", e); }
+
+      // Audit: ação específica de empréstimo importado, com Antes (não existia) e Depois (estado completo).
+      await logLoanAction({
+        action: "criar_emprestimo_importado",
+        entity: "loan",
+        entityId: loan.id,
+        loanId: loan.id,
+        clientId: clientId!,
+        clientName,
+        before: { status: "nao_existia" },
+        after: {
+          status: "open",
+          original_amount: numAmount,
+          total_amount: calc.totalAmount,
+          amount_already_paid: numAlreadyPaid,
+          initial_remaining_balance: ongoingRemaining,
+          principal_receivable: principalReceivable,
+          interest_receivable: interestReceivable,
+          first_pending_installment: firstPending,
+          first_pending_amount: firstPendingAmount,
+          pending_installments_count: ongoingPlan?.pendingCount ?? null,
+          installment_count: numInstallments,
+          payment_type: paymentType,
+          next_due_date: nextDueStr,
+          loan_date: loanDate,
+          imported_at: new Date().toISOString(),
+        },
+        observation: `Empréstimo importado - ${clientName} - saldo restante ${formatCurrency(ongoingRemaining)} adicionado ao A Receber`,
+      });
+
       toast.success("Empréstimo em andamento cadastrado!");
     } else {
       toast.success("Empréstimo criado com sucesso!");
     }
 
-    // Audit
-    await logAction(
-      renewFromLoanId ? "renovar_emprestimo" : "criar_emprestimo",
-      "loan",
-      loan.id,
-      renewFromLoanId ? { from_loan_id: renewFromLoanId, falta_quitar: faltaQuitar } : null,
-      {
-        amount: numAmount,
-        total_amount: calc.totalAmount,
-        installment_count: numInstallments,
-        payment_type: paymentType,
-        loan_date: loanDate,
-        released: renewFromLoanId ? valorLiberado : numAmount,
-        ...(isOngoing ? {
-          imported_ongoing: true,
-          amount_already_paid: numAlreadyPaid,
-          initial_remaining_balance: ongoingRemaining,
-          first_pending_installment: ongoingPlan?.firstPendingNumber ?? null,
-          partial_remaining: ongoingPlan?.partialRemaining ?? 0,
-        } : {}),
-      },
-      renewFromLoanId ? `Renovação - ${clientName}` : isOngoing ? `Empréstimo em andamento - ${clientName}` : `Novo empréstimo - ${clientName}`,
-    );
+    // Audit (apenas para novo / renovação — importado já foi auditado acima)
+    if (!isOngoing) {
+      await logLoanAction({
+        action: renewFromLoanId ? "renovar_emprestimo" : "criar_emprestimo",
+        entity: "loan",
+        entityId: loan.id,
+        loanId: loan.id,
+        clientId: clientId!,
+        clientName,
+        before: renewFromLoanId ? { from_loan_id: renewFromLoanId, falta_quitar: faltaQuitar } : null,
+        after: {
+          status: "open",
+          amount: numAmount,
+          total_amount: calc.totalAmount,
+          installment_count: numInstallments,
+          payment_type: paymentType,
+          loan_date: loanDate,
+          released: renewFromLoanId ? valorLiberado : numAmount,
+          remaining_balance: calc.totalAmount,
+        },
+        observation: renewFromLoanId ? `Renovação - ${clientName}` : `Novo empréstimo - ${clientName}`,
+      });
+    }
+
 
 
     draft.clear();
