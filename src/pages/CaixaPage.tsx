@@ -323,6 +323,22 @@ export default function CaixaPage() {
     try {
       const { error } = await supabase.rpc("reopen_daily_cash" as any, { p_cash_date: selectedDate, p_reason: reopenReason.trim() } as any);
       if (error) throw error;
+      const actor = await getCurrentActorIdentity();
+      await logAction(
+        "reabrir_caixa",
+        "cash",
+        null,
+        null,
+        {
+          cash_date: selectedDate,
+          reopened_by: actor.id,
+          reopened_by_name: actor.name,
+          reopened_by_role: actor.role,
+          reason: reopenReason.trim(),
+          reopened_at: new Date().toISOString(),
+        },
+        `Reabertura de caixa (${selectedDate}): ${reopenReason.trim()}`,
+      );
       toast.success("Caixa reaberto!");
       setReopenOpen(false);
       setReopenReason("");
