@@ -257,8 +257,8 @@ export default function CashHistoryPage() {
                         }}>
                           <Pencil className="h-3 w-3" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(mov)}>
-                          <Trash2 className="h-3 w-3" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Estornar movimentação" onClick={() => openReverseDialog(mov)}>
+                          <RotateCcw className="h-3 w-3" />
                         </Button>
                       </div>
                     </CardContent>
