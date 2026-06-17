@@ -12,7 +12,7 @@ import { formatCurrency } from "@/lib/loan-utils";
 import { getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { computeDailyTotals } from "@/lib/daily-totals";
 import { useAuth } from "@/hooks/useAuth";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Download, FileText, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
