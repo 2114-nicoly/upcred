@@ -42,7 +42,7 @@ function SuperMaintenanceTab() {
 import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
@@ -209,7 +209,20 @@ function AdminsTab() {
     });
     if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
     toast({ title: a.active ? "Desativado" : "Ativado" });
-    await logAction(a.active ? "desativar_admin" : "ativar_admin", "admin", a.id, { active: a.active }, { active: !a.active });
+    const actor = await getCurrentActorIdentity();
+    await logAction(
+      a.active ? "desativar_admin" : "ativar_admin",
+      "admin", a.id,
+      { name: a.nome, username: a.login_codigo, status: a.active ? "ativo" : "inativo" },
+      {
+        before: { name: a.nome, username: a.login_codigo, status: a.active ? "ativo" : "inativo" },
+        after:  { name: a.nome, username: a.login_codigo, status: a.active ? "inativo" : "ativo" },
+        performed_by: actor.id,
+        performed_by_name: actor.name,
+        performed_by_role: actor.role,
+        timestamp: new Date().toISOString(),
+      },
+    );
     load();
   }
 

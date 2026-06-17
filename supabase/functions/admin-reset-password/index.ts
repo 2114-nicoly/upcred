@@ -101,9 +101,25 @@ Deno.serve(async (req) => {
       status: "pending",
     });
 
+    let performedByName: string | null = null;
+    {
+      const { data: meAdmin } = await admin.from("admins").select("nome").eq("auth_user_id", callerId).maybeSingle();
+      const { data: meWorker } = await admin.from("workers").select("nome").eq("auth_user_id", callerId).maybeSingle();
+      performedByName = (meAdmin as any)?.nome ?? (meWorker as any)?.nome ?? null;
+    }
+
     await admin.rpc("log_audit", {
-      p_action: "redefinir_senha", p_entity: target_kind, p_entity_id: target_id,
-      p_old: null, p_new: { reset_by: callerId },
+      p_action: target_kind === "admin" ? "reset_senha_admin" : "reset_senha_trabalhador",
+      p_entity: target_kind, p_entity_id: target_id,
+      p_old: { name: nome, username: loginCodigo, status: "ativo" },
+      p_new: {
+        target_kind,
+        target_name: nome,
+        target_username: loginCodigo,
+        performed_by: callerId,
+        performed_by_name: performedByName,
+        timestamp: new Date().toISOString(),
+      },
       p_obs: "Senha redefinida", p_worker_id: target_kind === "worker" ? target_id : null,
     });
 

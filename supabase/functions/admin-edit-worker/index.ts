@@ -113,12 +113,35 @@ Deno.serve(async (req) => {
     const { error: updErr } = await admin.from("workers").update(updates).eq("id", workerId);
     if (updErr) return json(400, { error: updErr.message });
 
+    let performedByName: string | null = null;
+    {
+      const { data: meAdmin } = await admin.from("admins").select("nome").eq("auth_user_id", callerId).maybeSingle();
+      const { data: meWorker } = await admin.from("workers").select("nome").eq("auth_user_id", callerId).maybeSingle();
+      performedByName = (meAdmin as any)?.nome ?? (meWorker as any)?.nome ?? null;
+    }
+
+    const before: Record<string, any> = {
+      name: worker.nome,
+      username: worker.login_codigo,
+      status: worker.active ? "ativo" : "inativo",
+    };
+    const after: Record<string, any> = {
+      name: updates.nome ?? worker.nome,
+      username: updates.login_codigo ?? worker.login_codigo,
+      status: (updates.active ?? worker.active) ? "ativo" : "inativo",
+    };
+
     await admin.rpc("log_audit", {
       p_action: "editar_trabalhador",
       p_entity: "worker",
       p_entity_id: workerId,
-      p_old: null,
-      p_new: changed,
+      p_old: before,
+      p_new: {
+        before, after, changed,
+        performed_by: callerId,
+        performed_by_name: performedByName,
+        timestamp: new Date().toISOString(),
+      },
       p_obs: "Trabalhador editado",
       p_worker_id: workerId,
     }).catch(() => {});

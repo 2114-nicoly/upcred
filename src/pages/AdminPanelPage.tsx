@@ -46,7 +46,7 @@ import {
   PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
 } from "@/lib/consolidated-stats";
 
-import { logAction } from "@/lib/audit-utils";
+import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 
 type Worker = {
   id: string;
@@ -320,10 +320,24 @@ function WorkersTab() {
     if (!ok) return;
     const { error } = await supabase.from("workers").update({ active: !w.active } as any).eq("id", w.id);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    await logAction(w.active ? "desativar_trabalhador" : "ativar_trabalhador", "worker", w.id, { active: w.active }, { active: !w.active });
+    const actor = await getCurrentActorIdentity();
+    await logAction(
+      w.active ? "desativar_trabalhador" : "ativar_trabalhador",
+      "worker", w.id,
+      { name: w.nome, username: w.login_codigo, status: w.active ? "ativo" : "inativo" },
+      {
+        before: { name: w.nome, username: w.login_codigo, status: w.active ? "ativo" : "inativo" },
+        after:  { name: w.nome, username: w.login_codigo, status: w.active ? "inativo" : "ativo" },
+        performed_by: actor.id,
+        performed_by_name: actor.name,
+        performed_by_role: actor.role,
+        timestamp: new Date().toISOString(),
+      },
+    );
     toast({ title: w.active ? "Desativado" : "Ativado" });
     load();
   }
+
 
   async function handleResetPassword(w: Worker) {
     const ok = await confirm({

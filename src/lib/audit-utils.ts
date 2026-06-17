@@ -23,10 +23,57 @@ export type AuditEntity =
   | "penalty" | "installment_reschedules" | "loan_renegotiations";
 
 /**
+ * Auto-enriches an audit payload so financial logs always carry human context.
+ * - if it has `loan_id` without client/worker → fills from `loans` row
+ * - if it has `client_id` without `client_name` → fills from `clients`
+ * - if it has `worker_id` without `worker_name` → fills from `workers`
+ * Always stamps `timestamp` when missing. Never throws.
+ */
+async function enrichAuditPayload(payload: any): Promise<any> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const out: any = { ...payload };
+  try {
+    if (out.loan_id && (!out.client_id || !out.worker_id)) {
+      const { data: loan } = await supabase
+        .from("loans")
+        .select("client_id, worker_id, amount, total_amount, remaining_balance, installment_count, status")
+        .eq("id", out.loan_id).maybeSingle();
+      if (loan) {
+        out.client_id = out.client_id ?? (loan as any).client_id ?? null;
+        out.worker_id = out.worker_id ?? (loan as any).worker_id ?? null;
+        if (!out.loan_snapshot) {
+          out.loan_snapshot = {
+            amount: (loan as any).amount,
+            total_amount: (loan as any).total_amount,
+            remaining_balance: (loan as any).remaining_balance,
+            installment_count: (loan as any).installment_count,
+            status: (loan as any).status,
+          };
+        }
+      }
+    }
+    if (out.client_id && !out.client_name) {
+      const { data: c } = await supabase.from("clients").select("name, worker_id").eq("id", out.client_id).maybeSingle();
+      if (c) {
+        out.client_name = (c as any).name ?? null;
+        out.worker_id = out.worker_id ?? (c as any).worker_id ?? null;
+      }
+    }
+    if (out.worker_id && !out.worker_name) {
+      const { data: w } = await supabase.from("workers").select("nome").eq("id", out.worker_id).maybeSingle();
+      if (w) out.worker_name = (w as any).nome ?? null;
+    }
+  } catch (err) {
+    console.warn("[audit] enrichAuditPayload failed", err);
+  }
+  if (!out.timestamp) out.timestamp = new Date().toISOString();
+  return out;
+}
+
+/**
  * Logs an action. Never throws — auditing must not block the UI flow.
- * Both `oldValue` and `newValue` are jsonb in the DB; callers should put
- * enrichment fields (client_name, worker_name, loan_id, etc) directly in
- * `newValue` so the audit list can render them without extra joins.
+ * Auto-enriches `oldValue` / `newValue` with client_name / worker_name /
+ * loan snapshot when those ids are present but the names are missing.
  */
 export async function logAction(
   action: AuditAction,
@@ -38,14 +85,17 @@ export async function logAction(
   workerId?: string | null,
 ): Promise<void> {
   try {
+    const enrichedNew: any = newValue ? await enrichAuditPayload(newValue) : null;
+    const enrichedOld: any = oldValue ? await enrichAuditPayload(oldValue) : null;
     await supabase.rpc("log_audit" as any, {
       p_action: action,
       p_entity: entity,
       p_entity_id: entityId ?? null,
-      p_old: oldValue ? (oldValue as any) : null,
-      p_new: newValue ? (newValue as any) : null,
+      p_old: enrichedOld,
+      p_new: enrichedNew,
       p_obs: observation ?? null,
-      p_worker_id: workerId ?? null,
+      p_worker_id:
+        workerId ?? enrichedNew?.worker_id ?? enrichedOld?.worker_id ?? null,
     });
   } catch (err) {
     console.warn("[audit] log failed", err);

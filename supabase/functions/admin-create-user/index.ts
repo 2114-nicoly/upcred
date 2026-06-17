@@ -105,7 +105,13 @@ Deno.serve(async (req) => {
 
       await admin.rpc("log_audit", {
         p_action: "criar_admin", p_entity: "admin", p_entity_id: adminId,
-        p_old: null, p_new: { nome, email: emailReal, login_codigo: loginCodigo },
+        p_old: null,
+        p_new: {
+          before: null,
+          after: { name: nome, username: loginCodigo, status: "ativo", email: emailReal },
+          performed_by: callerId,
+          timestamp: new Date().toISOString(),
+        },
         p_obs: "Admin criado", p_worker_id: null,
       });
 
@@ -177,7 +183,14 @@ Deno.serve(async (req) => {
 
       await admin.rpc("log_audit", {
         p_action: "criar_trabalhador", p_entity: "worker", p_entity_id: workerRow.id,
-        p_old: null, p_new: { nome, login_codigo: loginCodigo },
+        p_old: null,
+        p_new: {
+          before: null,
+          after: { name: nome, username: loginCodigo, status: "ativo" },
+          performed_by: callerId,
+          parent_admin_id: parentAdminId,
+          timestamp: new Date().toISOString(),
+        },
         p_obs: "Trabalhador criado", p_worker_id: workerRow.id,
       });
 
