@@ -350,6 +350,37 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                 )}
 
                 {(() => {
+                  const nv = openLog.new_value && typeof openLog.new_value === "object" ? openLog.new_value : null;
+                  const isReversal = nv && (
+                    openLog.action_type === "estorno_manual" ||
+                    openLog.action_type === "desfazer_pagamento" ||
+                    openLog.action_type === "estorno_pagamento" ||
+                    nv.reversal_reason || nv.original_movement_id
+                  );
+                  if (!isReversal) return null;
+                  const fmt = (v: any) => v == null ? "—" : (typeof v === "number" ? formatCurrency(v) : String(v));
+                  const shortId = (v: any) => v ? String(v).slice(0, 8) + "…" : "—";
+                  return (
+                    <div className="rounded border border-destructive/30 bg-destructive/5 p-2 space-y-1">
+                      <p className="text-[11px] font-semibold text-destructive">Estorno — rastreabilidade</p>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+                        <span className="text-muted-foreground">Mov. original</span><span className="font-mono">{shortId(nv.original_movement_id)}</span>
+                        <span className="text-muted-foreground">Evento original</span><span className="font-mono">{shortId(nv.original_event_id)}</span>
+                        <span className="text-muted-foreground">Mov. de estorno</span><span className="font-mono">{shortId(nv.reversal_movement_id)}</span>
+                        <span className="text-muted-foreground">Evento de estorno</span><span className="font-mono">{shortId(nv.reversal_event_id)}</span>
+                        <span className="text-muted-foreground">Valor original</span><span className="font-mono">{fmt(nv.original_amount)}</span>
+                        <span className="text-muted-foreground">Valor estornado</span><span className="font-mono">{fmt(nv.reversal_amount)}</span>
+                        <span className="text-muted-foreground">Estornado por</span><span>{nv.reversed_by_name || "—"}{nv.reversed_by_role ? ` (${nv.reversed_by_role})` : ""}</span>
+                        <span className="text-muted-foreground">Estornado em</span><span className="font-mono">{nv.reversed_at ? format(parseISO(nv.reversed_at), "dd/MM/yy HH:mm:ss", { locale: ptBR }) : "—"}</span>
+                      </div>
+                      {nv.reversal_reason && (
+                        <div className="mt-1 rounded bg-background/60 p-1.5 text-[11px]"><span className="font-semibold">Motivo:</span> {nv.reversal_reason}</div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {(() => {
                   const diff = diffEntries(openLog.old_value, openLog.new_value);
                   if (diff.length === 0) {
                     return (
