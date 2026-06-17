@@ -520,14 +520,28 @@ export async function reversePayment(params: {
   await recalculateCashBalanceFromLedger();
   await recalculateInstallments(loanId);
 
-  await logAction(
-    "desfazer_pagamento",
-    "payment",
-    movementId,
-    { amount: totalReversed, loan_id: loanId },
-    { reversed: true, reason: reason || null },
-    reason ? `Pagamento estornado: ${reason}` : "Pagamento estornado",
-  );
+  await logReversal({
+    action: "desfazer_pagamento",
+    entity: "payment",
+    original_movement_id: movementId,
+    original_event_id: (movement as any).daily_event_id ?? null,
+    reversal_movement_id: reversalMovement?.id ?? null,
+    reversal_event_id: reversalEvent?.id ?? null,
+    original_type: (movement as any).type ?? null,
+    original_amount: totalReversed,
+    reversal_amount: -totalReversed,
+    reversal_reason: reason ?? null,
+    client_id: (movement as any).client_id ?? null,
+    loan_id: loanId,
+    cash_date: cashDate,
+    observation: reason ? `Pagamento estornado: ${reason}` : "Pagamento estornado",
+    beforeSnapshot: {
+      type: (movement as any).type,
+      amount: totalReversed,
+      cash_date: cashDate,
+      installment_id: (movement as any).installment_id ?? null,
+    },
+  });
 
   return totalReversed;
 }
