@@ -316,10 +316,9 @@ export default function DailyCashPage() {
   const fetchSeqRef = useRef(0);
   const refreshTimerRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
-  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
-  const [reopenReason, setReopenReason] = useState("");
-  const [isReopening, setIsReopening] = useState(false);
-  const [closeCashDialogOpen, setCloseCashDialogOpen] = useState(false);
+  const [reopenRequestDialogOpen, setReopenRequestDialogOpen] = useState(false);
+  const [reopenRequestReason, setReopenRequestReason] = useState("");
+  const [isSubmittingReopenRequest, setIsSubmittingReopenRequest] = useState(false);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
