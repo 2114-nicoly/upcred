@@ -142,9 +142,18 @@ export async function getDailyEvents(
 }
 
 /**
- * @deprecated Kept for legacy callers — does NOT delete; marks as reversed.
+ * @deprecated Use `reverseDailyEvent`. Kept for legacy callers — does NOT delete; marks as reversed.
  */
 export async function deleteDailyEvent(id: string) {
+  await markDailyEventReversed(id);
+}
+
+/**
+ * Reverse a daily_event by marking it as reversed (preserves history).
+ * NEVER deletes the row. Use `undoDailyEvent` for the full reversal flow
+ * (creates the counter-entry too); this just flips the flag.
+ */
+export async function reverseDailyEvent(id: string) {
   await markDailyEventReversed(id);
 }
 
