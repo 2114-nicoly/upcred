@@ -173,8 +173,16 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
   const workerName = (id: string | null) => id ? (workers.find((w) => w.id === id)?.nome ?? "—") : "Admin";
   const adminName = (id: string | null) => id ? (admins.find((a) => a.id === id)?.nome ?? "—") : null;
   const clientName = (l: Log) => {
+    const fromPayload = (l.new_value && typeof l.new_value === "object" && (l.new_value as any).client_name)
+      || (l.old_value && typeof l.old_value === "object" && (l.old_value as any).client_name);
+    if (fromPayload) return String(fromPayload);
     const cid = getRelatedClientId(l);
     return cid ? (clientsMap[cid] ?? null) : null;
+  };
+  const workerNameFromPayload = (l: Log): string | null => {
+    const v = (l.new_value && typeof l.new_value === "object" && (l.new_value as any).worker_name)
+      || (l.old_value && typeof l.old_value === "object" && (l.old_value as any).worker_name);
+    return v ? String(v) : null;
   };
 
   const filtered = useMemo(() => {
