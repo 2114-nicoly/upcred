@@ -120,27 +120,28 @@ export default function CashHistoryPage() {
       await updateCashBalance(reverseMap[mov.type] || {});
       await reverseCashMovement(mov.id, { reason });
       // Structured audit metadata (preserves history; no physical delete)
-      await logAction(
-        "estorno_manual" as any,
-        "cash",
-        mov.id,
-        {
+      await logReversal({
+        action: "estorno_manual",
+        entity: "cash",
+        original_movement_id: mov.id,
+        original_event_id: (mov as any).daily_event_id ?? null,
+        original_type: mov.type,
+        original_amount: Number(mov.amount),
+        reversal_amount: -Number(mov.amount),
+        reversal_reason: reason,
+        client_id: mov.client_id,
+        loan_id: mov.loan_id,
+        cash_date: (mov as any).cash_date ?? null,
+        observation: `Estorno de ${getMovementTypeLabel(mov.type)} (${formatCurrency(Math.abs(Number(mov.amount)))}) — ${reason}`,
+        beforeSnapshot: {
           type: mov.type,
           amount: Number(mov.amount),
           observation: mov.observation,
           cash_date: mov.cash_date,
-        },
-        {
-          original_movement_id: mov.id,
-          original_event_id: (mov as any).daily_event_id ?? null,
           client_id: mov.client_id,
           loan_id: mov.loan_id,
-          amount: Number(mov.amount),
-          reversal_reason: reason,
-          reversed_at: new Date().toISOString(),
         },
-        `Estorno de ${getMovementTypeLabel(mov.type)} (${formatCurrency(Math.abs(Number(mov.amount)))}) — ${reason}`,
-      );
+      });
       toast.success("Movimentação estornada!");
       setReverseTarget(null);
       setReverseReason("");
