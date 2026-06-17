@@ -300,7 +300,7 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {l.user_role === "super_admin" ? "Super Admin"
                             : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` · ${adminName(l.admin_id)}` : ""}`
-                            : workerName(l.worker_id)}
+                            : (workerNameFromPayload(l) || workerName(l.worker_id))}
                           {isSuperAdmin && l.user_role === "trabalhador" && adminName(l.admin_id) && (
                             <span className="ml-1">· {adminName(l.admin_id)}</span>
                           )}
