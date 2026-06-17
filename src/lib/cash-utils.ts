@@ -193,10 +193,29 @@ export async function markCashMovementReversed(movementId: string) {
 }
 
 /**
- * @deprecated kept for legacy callers — does NOT delete; marks as reversed.
+ * Reverse a cash_movement (preserves history). Optionally appends a reason
+ * to the observation field for human readability. NEVER deletes the row.
+ */
+export async function reverseCashMovement(
+  id: string,
+  opts: { reason?: string } = {},
+): Promise<void> {
+  await markCashMovementReversed(id);
+  if (opts.reason && opts.reason.trim().length > 0) {
+    const { data: cur } = await supabase
+      .from("cash_movements").select("observation").eq("id", id).maybeSingle();
+    const prev = (cur as any)?.observation || "";
+    const tag = `[ESTORNO] ${opts.reason.trim()}`;
+    const next = prev ? `${prev}\n${tag}` : tag;
+    await supabase.from("cash_movements").update({ observation: next } as any).eq("id", id);
+  }
+}
+
+/**
+ * @deprecated Use `reverseCashMovement`. Kept for legacy callers — NEVER deletes; marks as reversed.
  */
 export async function deleteCashMovement(id: string) {
-  await markCashMovementReversed(id);
+  await reverseCashMovement(id);
 }
 
 /**
