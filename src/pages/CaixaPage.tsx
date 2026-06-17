@@ -198,6 +198,7 @@ export default function CaixaPage() {
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
   const novos = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type));
+  const importados = scopedEvents.filter(e => e.event_type === "emprestimo_importado");
   const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
 
   const handleManualMovement = async () => {
