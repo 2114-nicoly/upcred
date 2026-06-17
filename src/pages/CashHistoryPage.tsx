@@ -11,17 +11,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { formatCurrency } from "@/lib/loan-utils";
 import {
   updateCashBalance,
-  deleteCashMovement,
+  reverseCashMovement,
   getMovementTypeLabel,
   getMovementTypeColor,
   CashMovement,
 } from "@/lib/cash-utils";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { logAction } from "@/lib/audit-utils";
+import { ArrowLeft, Pencil, RotateCcw } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { useConfirm } from "@/hooks/useConfirm";
 
 function getDayLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
