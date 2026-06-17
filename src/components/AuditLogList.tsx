@@ -42,6 +42,7 @@ const ACTION_LABELS: Record<string, string> = {
   editar_observacao_emprestimo: "Editar obs. empréstimo",
   renovar_emprestimo: "Renovar empréstimo", quitar_emprestimo: "Quitar empréstimo",
   pagamento: "Pagamento", editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
+  estorno_manual: "Estorno manual", estorno_pagamento: "Estorno de pagamento",
   editar_parcela: "Editar parcela", alterar_data_parcela: "Reorganizar parcelas",
   multa_aplicada: "Multa aplicada", multa_paga: "Multa paga", multa_cancelada: "Multa cancelada", editar_multa: "Editar multa",
   anexar_arquivo: "Anexar arquivo", excluir_anexo: "Excluir anexo",
