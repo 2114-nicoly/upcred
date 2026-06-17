@@ -46,7 +46,7 @@ import {
   PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
 } from "@/lib/consolidated-stats";
 
-import { logAction } from "@/lib/audit-utils";
+import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 
 type Worker = {
   id: string;
