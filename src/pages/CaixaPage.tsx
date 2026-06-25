@@ -563,9 +563,21 @@ export default function CaixaPage() {
             <div className="flex justify-between"><span className="text-muted-foreground">Saída manual</span><span className="text-destructive tabular-nums">{formatCurrency(summary.manualOut)}</span></div>
           </div>
           <div className="flex items-center justify-between border-t pt-1.5">
-            <span className="text-xs font-semibold">Saldo Final Esperado</span>
-            <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>
-              {summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}
+            <span className="text-xs font-semibold text-muted-foreground">Saldo Esperado <span className="text-[9px] font-normal">(rota do dia)</span></span>
+            <span className="text-sm font-bold tabular-nums text-warning">
+              {formatCurrency(expectedToReceiveToday)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold">Saldo Final Recebido</span>
+            <span className="text-sm font-bold tabular-nums text-success">
+              {formatCurrency((summary.received || 0) + (summary.penalty || 0))}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>Saldo esperado p/ conferência do caixa</span>
+            <span className={`tabular-nums ${summary.expected >= 0 ? "" : "text-destructive"}`}>
+              {formatCurrency(summary.expected)}
             </span>
           </div>
         </CardContent>
