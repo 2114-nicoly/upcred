@@ -152,6 +152,64 @@ export default function CaixaPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Compute "Saldo Esperado" = what would be received today if every route client paid.
+  // Mirrors the Rota do Dia source (get_route_installments) + pending penalties.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await (supabase as any).rpc("get_route_installments", { p_cash_date: selectedDate });
+        if (cancelled) return;
+        if (error) { setExpectedToReceiveToday(0); return; }
+        let rows = ((data || []) as any[]);
+        // Skip 'daily' loans on Sundays (same rule as Rota do Dia)
+        const d = new Date(selectedDate + "T12:00:00");
+        if (d.getDay() === 0) rows = rows.filter(r => r.loan_payment_type !== "daily");
+
+        // Apply worker/admin scope filter using loans table
+        const loanIds = [...new Set(rows.map(r => r.loan_id))];
+        let scopedLoanIds: Set<string> | null = null;
+        if ((selectedAdminId || selectedWorkerId) && loanIds.length > 0) {
+          const { data: loans } = await supabase.from("loans").select("id, worker_id, admin_id").in("id", loanIds);
+          scopedLoanIds = new Set(((loans as any[]) || []).filter((l: any) => {
+            if (selectedAdminId && l.admin_id !== selectedAdminId) return false;
+            if (selectedWorkerId && l.worker_id !== selectedWorkerId) return false;
+            return true;
+          }).map((l: any) => l.id));
+          rows = rows.filter(r => scopedLoanIds!.has(r.loan_id));
+        }
+
+        const collectible = new Set(["pending", "partial", "overdue"]);
+        let total = 0;
+        for (const r of rows) {
+          if (!collectible.has(r.status)) continue;
+          const remaining = Number(r.amount || 0) - Number(r.paid_amount || 0);
+          if (remaining > 0.001) total += remaining;
+        }
+
+        // Pending penalties for active loans (also added to expected route receivable)
+        const { data: pen } = await supabase
+          .from("penalties")
+          .select("amount, loan_id, loans:loan_id(worker_id, admin_id, remaining_balance, status)")
+          .eq("paid", false)
+          .lte("created_at", selectedDate + "T23:59:59");
+        for (const p of ((pen as any[]) || [])) {
+          const l = p.loans;
+          if (!l) continue;
+          if (Number(l.remaining_balance || 0) <= 0.001) continue;
+          if (selectedAdminId && l.admin_id !== selectedAdminId) continue;
+          if (selectedWorkerId && l.worker_id !== selectedWorkerId) continue;
+          total += Number(p.amount || 0);
+        }
+
+        if (!cancelled) setExpectedToReceiveToday(total);
+      } catch {
+        if (!cancelled) setExpectedToReceiveToday(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedDate, selectedAdminId, selectedWorkerId, events]);
+
   const cashState: "sem_caixa" | "open" | "closed" =
     dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
   const isClosed = cashState === "closed";
