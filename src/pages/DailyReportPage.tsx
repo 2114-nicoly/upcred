@@ -276,7 +276,7 @@ export default function DailyReportPage() {
       ["Total emprestado / liberado", formatCurrency(totals.loans + totals.renewals)],
       ["Total entradas", formatCurrency(totals.totalIn)],
       ["Total saídas", formatCurrency(totals.totalOut)],
-      ["Saldo esperado", formatCurrency(cashSummary?.expected ?? (cashSummary?.opening ?? 0) + totals.balance)],
+      ["Saldo esperado p/ conferência do caixa", formatCurrency(cashSummary?.expected ?? (cashSummary?.opening ?? 0) + totals.balance)],
       ...(cashSummary?.counted != null ? [["Saldo informado / contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
       ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
       ...(cashSummary?.closingObs ? [["Justificativa da diferença", cashSummary.closingObs] as [string,string]] : []),

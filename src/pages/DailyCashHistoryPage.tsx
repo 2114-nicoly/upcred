@@ -74,7 +74,7 @@ export default function DailyCashHistoryPage() {
           ["Entradas", formatCurrency(day.entradas)],
           ["Saídas", formatCurrency(day.saidas)],
           ["Saldo do dia", formatCurrency(day.saldo)],
-          ["Saldo esperado", formatCurrency(day.expected)],
+          ["Saldo esperado p/ conferência do caixa", formatCurrency(day.expected)],
           ["Lançamentos", String(day.eventsCount)],
           ["Não pagou", String(day.notPaidCount)],
           ...(day.countedClosing != null ? [["Contado no caixa", formatCurrency(day.countedClosing)]] : []),
