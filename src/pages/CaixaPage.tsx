@@ -37,7 +37,7 @@ import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { computeDailyTotals } from "@/lib/daily-totals";
+import { computeDailyTotals, getDailyCollectionSummary } from "@/lib/daily-totals";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
