@@ -37,7 +37,7 @@ import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { computeDailyTotals } from "@/lib/daily-totals";
+import { computeDailyTotals, getDailyCollectionSummary } from "@/lib/daily-totals";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
@@ -57,7 +57,10 @@ export default function CaixaPage() {
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [expectedToReceiveToday, setExpectedToReceiveToday] = useState<number>(0);
+  const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+  const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
+  const receivedToday = collectionSummary.receivedToday;
+  const pendingToReceiveToday = collectionSummary.pendingToReceiveToday;
   const [submitting, setSubmitting] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
@@ -152,59 +155,18 @@ export default function CaixaPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Compute "Saldo Esperado" = what would be received today if every route client paid.
-  // Mirrors the Rota do Dia source (get_route_installments) + pending penalties.
+  // Resumo unificado (mesma fonte usada na Rota do Dia).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await (supabase as any).rpc("get_route_installments", { p_cash_date: selectedDate });
-        if (cancelled) return;
-        if (error) { setExpectedToReceiveToday(0); return; }
-        let rows = ((data || []) as any[]);
-        // Skip 'daily' loans on Sundays (same rule as Rota do Dia)
-        const d = new Date(selectedDate + "T12:00:00");
-        if (d.getDay() === 0) rows = rows.filter(r => r.loan_payment_type !== "daily");
-
-        // Apply worker/admin scope filter using loans table
-        const loanIds = [...new Set(rows.map(r => r.loan_id))];
-        let scopedLoanIds: Set<string> | null = null;
-        if ((selectedAdminId || selectedWorkerId) && loanIds.length > 0) {
-          const { data: loans } = await supabase.from("loans").select("id, worker_id, admin_id").in("id", loanIds);
-          scopedLoanIds = new Set(((loans as any[]) || []).filter((l: any) => {
-            if (selectedAdminId && l.admin_id !== selectedAdminId) return false;
-            if (selectedWorkerId && l.worker_id !== selectedWorkerId) return false;
-            return true;
-          }).map((l: any) => l.id));
-          rows = rows.filter(r => scopedLoanIds!.has(r.loan_id));
-        }
-
-        const collectible = new Set(["pending", "partial", "overdue"]);
-        let total = 0;
-        for (const r of rows) {
-          if (!collectible.has(r.status)) continue;
-          const remaining = Number(r.amount || 0) - Number(r.paid_amount || 0);
-          if (remaining > 0.001) total += remaining;
-        }
-
-        // Pending penalties for active loans (also added to expected route receivable)
-        const { data: pen } = await supabase
-          .from("penalties")
-          .select("amount, loan_id, loans:loan_id(worker_id, admin_id, remaining_balance, status)")
-          .eq("paid", false)
-          .lte("created_at", selectedDate + "T23:59:59");
-        for (const p of ((pen as any[]) || [])) {
-          const l = p.loans;
-          if (!l) continue;
-          if (Number(l.remaining_balance || 0) <= 0.001) continue;
-          if (selectedAdminId && l.admin_id !== selectedAdminId) continue;
-          if (selectedWorkerId && l.worker_id !== selectedWorkerId) continue;
-          total += Number(p.amount || 0);
-        }
-
-        if (!cancelled) setExpectedToReceiveToday(total);
+        const summary = await getDailyCollectionSummary(selectedDate, {
+          workerId: selectedWorkerId || null,
+          adminId: selectedAdminId || null,
+        });
+        if (!cancelled) setCollectionSummary(summary);
       } catch {
-        if (!cancelled) setExpectedToReceiveToday(0);
+        if (!cancelled) setCollectionSummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
       }
     })();
     return () => { cancelled = true; };
@@ -533,19 +495,38 @@ export default function CaixaPage() {
         </div>
       )}
 
-      {/* Daily summary card */}
+      {/* Bloco: Cobranças do Dia (mesma fonte da Rota do Dia) */}
+      <Card>
+        <CardContent className="p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cobranças do Dia</p>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+            <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+            <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(receivedToday)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t pt-1.5">
+            <span className="text-xs font-semibold">Falta Receber</span>
+            <span className={`text-sm font-bold tabular-nums ${pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+              {formatCurrency(pendingToReceiveToday)}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bloco: Conferência do Caixa */}
       <Card>
         <CardContent className="p-3 space-y-1.5">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resumo do Dia</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conferência do Caixa</p>
             <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
           </div>
-          {summary.opening > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Saldo inicial</span>
-              <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
-            </div>
-          )}
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground">Saldo Inicial</span>
+            <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-success flex items-center gap-1"><ArrowDownCircle className="h-3 w-3" /> Entradas</span>
             <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span>
@@ -563,25 +544,28 @@ export default function CaixaPage() {
             <div className="flex justify-between"><span className="text-muted-foreground">Saída manual</span><span className="text-destructive tabular-nums">{formatCurrency(summary.manualOut)}</span></div>
           </div>
           <div className="flex items-center justify-between border-t pt-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Saldo Esperado <span className="text-[9px] font-normal">(rota do dia)</span></span>
-            <span className="text-sm font-bold tabular-nums text-warning">
-              {formatCurrency(expectedToReceiveToday)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold">Saldo Final Recebido</span>
-            <span className="text-sm font-bold tabular-nums text-success">
-              {formatCurrency((summary.received || 0) + (summary.penalty || 0))}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>Saldo esperado p/ conferência do caixa</span>
-            <span className={`tabular-nums ${summary.expected >= 0 ? "" : "text-destructive"}`}>
+            <span className="text-xs font-semibold">Valor Esperado no Caixa</span>
+            <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "" : "text-destructive"}`}>
               {formatCurrency(summary.expected)}
             </span>
           </div>
+          {isClosed && dailyCashRow?.counted_closing_balance != null && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Saldo Contado</span>
+                <span className="text-sm font-bold tabular-nums">{formatCurrency(Number(dailyCashRow.counted_closing_balance))}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Diferença</span>
+                <span className={`text-sm font-bold tabular-nums ${(Number(dailyCashRow.counted_closing_balance) - summary.expected) === 0 ? "text-muted-foreground" : (Number(dailyCashRow.counted_closing_balance) - summary.expected) < 0 ? "text-destructive" : "text-success"}`}>
+                  {formatCurrency(Number(dailyCashRow.counted_closing_balance) - summary.expected)}
+                </span>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
+
 
       {/* Close / Reopen cash actions */}
       {!isNotStarted && (
@@ -985,7 +969,7 @@ export default function CaixaPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">Saldo inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Saldo esperado p/ conferência</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Valor Esperado no Caixa</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
             </div>
             <div>
               <Label>Valor contado no caixa (R$) <span className="text-destructive">*</span></Label>
