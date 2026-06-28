@@ -969,7 +969,7 @@ export default function CaixaPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">Saldo inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Saldo esperado p/ conferência</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Valor Esperado no Caixa</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
             </div>
             <div>
               <Label>Valor contado no caixa (R$) <span className="text-destructive">*</span></Label>
