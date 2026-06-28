@@ -57,7 +57,10 @@ export default function CaixaPage() {
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [expectedToReceiveToday, setExpectedToReceiveToday] = useState<number>(0);
+  const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+  const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
+  const receivedToday = collectionSummary.receivedToday;
+  const pendingToReceiveToday = collectionSummary.pendingToReceiveToday;
   const [submitting, setSubmitting] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
