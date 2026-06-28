@@ -37,6 +37,7 @@ import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
+import { getDailyCollectionSummary } from "@/lib/daily-totals";
 
 type InstallmentWithLoan = {
   id: string;
