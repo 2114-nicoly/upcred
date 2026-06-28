@@ -324,6 +324,21 @@ export default function DailyCashPage() {
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
+  const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getDailyCollectionSummary(selectedDate);
+        if (!cancelled) setDailySummary(s);
+      } catch {
+        if (!cancelled) setDailySummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments]);
+
 
   useEffect(() => {
     isMountedRef.current = true;
