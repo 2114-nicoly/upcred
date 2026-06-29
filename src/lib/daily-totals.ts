@@ -155,10 +155,15 @@ export async function getDailyCollectionSummary(
     // ignora — mantém 0
   }
 
-  // 2) Recebido hoje + saldo de conferência: ler eventos do dia.
+  // 2) Recebido hoje + componentes para conferência do caixa.
+  //    NÃO usar soma genérica amount_in/amount_out: o "Valor Esperado no Caixa" segue a fórmula
+  //    opening + pagamentos + multas + entradasManuais - emprestimosLiberados(+renovação+renegociação) - saidasManuais.
   let receivedToday = 0;
-  let entradas = 0;
-  let saidas = 0;
+  let pagamentos = 0;
+  let multas = 0;
+  let manualIn = 0;
+  let manualOut = 0;
+  let lent = 0;
   try {
     let q: any = supabase.from("daily_events" as any)
       .select("event_type, amount_in, amount_out, reversed_at, worker_id, admin_id")
@@ -171,12 +176,18 @@ export async function getDailyCollectionSummary(
       if (e.event_type === "emprestimo_importado") continue;
       const ain = Number(e.amount_in) || 0;
       const aout = Number(e.amount_out) || 0;
-      entradas += ain;
-      saidas += aout;
-      if (e.event_type === "pagamento" || e.event_type === "recebimento_multa") {
-        receivedToday += ain;
+      switch (e.event_type) {
+        case "pagamento": pagamentos += ain; break;
+        case "recebimento_multa": multas += ain; break;
+        case "entrada_manual": manualIn += ain; break;
+        case "saida_manual": manualOut += aout; break;
+        case "emprestimo_novo":
+        case "renovacao":
+        case "renegociacao": lent += aout; break;
+        default: break;
       }
     }
+    receivedToday = pagamentos + multas;
   } catch {
     // ignora
   }
@@ -209,7 +220,8 @@ export async function getDailyCollectionSummary(
     // ignora
   }
 
-  const cashExpectedForClosing = opening + entradas - saidas;
+  // Esperado no caixa = dinheiro físico esperado (sem futuras cobranças, sem importados).
+  const cashExpectedForClosing = opening + pagamentos + multas + manualIn - lent - manualOut;
   const pendingToReceiveToday = Math.max(0, expectedToReceiveToday - receivedToday);
 
   return {

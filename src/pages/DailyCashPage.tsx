@@ -276,7 +276,7 @@ function composeNotPaidObservation(reason: string, obs: string): string {
 export default function DailyCashPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, workerId: authWorkerId, adminId: authAdminId } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
@@ -330,14 +330,17 @@ export default function DailyCashPage() {
     let cancelled = false;
     (async () => {
       try {
-        const s = await getDailyCollectionSummary(selectedDate);
+        const s = await getDailyCollectionSummary(selectedDate, {
+          workerId: authWorkerId || null,
+          adminId: authAdminId || null,
+        });
         if (!cancelled) setDailySummary(s);
       } catch {
         if (!cancelled) setDailySummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments]);
+  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments, authWorkerId, authAdminId]);
 
 
   useEffect(() => {

@@ -211,10 +211,14 @@ export default function CaixaPage() {
     lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
     manualIn: liveTotals.entradasManuais,
     manualOut: liveTotals.saidasManuais,
-    expected: inheritedOpening + liveTotals.saldoFinalEsperado,
+    // Valor Esperado no Caixa = opening + pagamentos + multas + entradas manuais - emprestimos - saidas manuais.
+    // (Sem emprestimo_importado, sem saldo a receber futuro.)
+    expected: collectionSummary.cashExpectedForClosing,
     notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
+  const expectedDisplay = Math.max(0, summary.expected);
+  const expectedNegative = summary.expected < -0.005;
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
@@ -305,7 +309,7 @@ export default function CaixaPage() {
 
   const openCloseDialog = () => {
     if (isClosed) return;
-    setCountedAmount(summary.expected.toFixed(2));
+    setCountedAmount(Math.max(0, summary.expected).toFixed(2));
     setCloseNote("");
     setCloseOpen(true);
   };
@@ -545,10 +549,15 @@ export default function CaixaPage() {
           </div>
           <div className="flex items-center justify-between border-t pt-1.5">
             <span className="text-xs font-semibold">Valor Esperado no Caixa</span>
-            <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "" : "text-destructive"}`}>
-              {formatCurrency(summary.expected)}
+            <span className="text-sm font-bold tabular-nums">
+              {formatCurrency(expectedDisplay)}
             </span>
           </div>
+          {expectedNegative && !isClosed && (
+            <p className="text-[10px] text-warning leading-tight">
+              Valor esperado no caixa ficou negativo ({formatCurrency(summary.expected)}). Verifique saldo inicial ou saídas lançadas.
+            </p>
+          )}
           {isClosed && dailyCashRow?.counted_closing_balance != null && (
             <>
               <div className="flex items-center justify-between">
