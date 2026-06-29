@@ -549,10 +549,15 @@ export default function CaixaPage() {
           </div>
           <div className="flex items-center justify-between border-t pt-1.5">
             <span className="text-xs font-semibold">Valor Esperado no Caixa</span>
-            <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "" : "text-destructive"}`}>
-              {formatCurrency(summary.expected)}
+            <span className="text-sm font-bold tabular-nums">
+              {formatCurrency(expectedDisplay)}
             </span>
           </div>
+          {expectedNegative && !isClosed && (
+            <p className="text-[10px] text-warning leading-tight">
+              Valor esperado no caixa ficou negativo ({formatCurrency(summary.expected)}). Verifique saldo inicial ou saídas lançadas.
+            </p>
+          )}
           {isClosed && dailyCashRow?.counted_closing_balance != null && (
             <>
               <div className="flex items-center justify-between">
