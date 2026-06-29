@@ -326,18 +326,22 @@ export default function DailyCashPage() {
   const [quickSearch, setQuickSearch] = useState("");
   const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
 
+  const { workerId: authWorkerId, adminId: authAdminId } = useAuth();
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const s = await getDailyCollectionSummary(selectedDate);
+        const s = await getDailyCollectionSummary(selectedDate, {
+          workerId: authWorkerId || null,
+          adminId: authAdminId || null,
+        });
         if (!cancelled) setDailySummary(s);
       } catch {
         if (!cancelled) setDailySummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments]);
+  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments, authWorkerId, authAdminId]);
 
 
   useEffect(() => {
