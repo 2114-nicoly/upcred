@@ -309,7 +309,7 @@ export default function CaixaPage() {
 
   const openCloseDialog = () => {
     if (isClosed) return;
-    setCountedAmount(summary.expected.toFixed(2));
+    setCountedAmount(Math.max(0, summary.expected).toFixed(2));
     setCloseNote("");
     setCloseOpen(true);
   };
