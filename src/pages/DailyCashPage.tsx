@@ -276,7 +276,7 @@ function composeNotPaidObservation(reason: string, obs: string): string {
 export default function DailyCashPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, workerId: authWorkerId, adminId: authAdminId } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
