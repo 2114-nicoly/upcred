@@ -211,10 +211,14 @@ export default function CaixaPage() {
     lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
     manualIn: liveTotals.entradasManuais,
     manualOut: liveTotals.saidasManuais,
-    expected: inheritedOpening + liveTotals.saldoFinalEsperado,
+    // Valor Esperado no Caixa = opening + pagamentos + multas + entradas manuais - emprestimos - saidas manuais.
+    // (Sem emprestimo_importado, sem saldo a receber futuro.)
+    expected: collectionSummary.cashExpectedForClosing,
     notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
+  const expectedDisplay = Math.max(0, summary.expected);
+  const expectedNegative = summary.expected < -0.005;
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
