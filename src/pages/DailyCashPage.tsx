@@ -1555,21 +1555,7 @@ export default function DailyCashPage() {
               {formatCurrency(dailySummary.pendingToReceiveToday)}
             </span>
           </div>
-          {totalOverdueValue > 0 && (
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>dos quais atrasados</span>
-              <span className="tabular-nums text-destructive">{formatCurrency(totalOverdueValue)}</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Progresso</span>
-            <div className="flex items-center gap-2">
-              <div className="w-20 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${totalAll > 0 ? (totalTreated / totalAll) * 100 : 0}%` }} />
-              </div>
-              <span className="text-xs font-bold tabular-nums">{totalTreated}/{totalAll}</span>
-            </div>
-          </div>
+
         </div>
       )}
 
