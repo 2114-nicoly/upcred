@@ -325,9 +325,11 @@ export default function DailyCashPage() {
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
   const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setSummaryLoading(true);
     (async () => {
       try {
         const s = await getDailyCollectionSummary(selectedDate, {
@@ -337,10 +339,14 @@ export default function DailyCashPage() {
         if (!cancelled) setDailySummary(s);
       } catch {
         if (!cancelled) setDailySummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments, authWorkerId, authAdminId]);
+    // Não depender de paidGroups/notPaidMarks/pendingInstallments — getDailyCollectionSummary
+    // lê direto do banco e re-rodar em cada subestado causava flicker nos cards.
+  }, [selectedDate, authWorkerId, authAdminId, paidGroups.length, notPaidMarks.length]);
 
 
   useEffect(() => {
@@ -1545,37 +1551,46 @@ export default function DailyCashPage() {
 
 
       {/* Top summary — Cobranças do dia (fonte única) */}
-      <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Saldo Esperado</span>
-          <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>
+      {(loading || summaryLoading) ? (
+        <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          <div className="h-4 w-full rounded bg-muted animate-pulse" />
+          <div className="h-4 w-full rounded bg-muted animate-pulse" />
+          <div className="h-5 w-2/3 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Recebido Hoje</span>
-          <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(dailySummary.receivedToday)}</span>
-        </div>
-        <div className="flex items-center justify-between border-t border-border pt-2">
-          <span className="text-xs font-bold">Falta Receber</span>
-          <span className={`text-base font-extrabold tabular-nums ${dailySummary.pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-            {formatCurrency(dailySummary.pendingToReceiveToday)}
-          </span>
-        </div>
-        {totalOverdueValue > 0 && (
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>dos quais atrasados</span>
-            <span className="tabular-nums text-destructive">{formatCurrency(totalOverdueValue)}</span>
+      ) : (
+        <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+            <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>
           </div>
-        )}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Progresso</span>
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-1.5 rounded-full bg-secondary overflow-hidden">
-              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${totalAll > 0 ? (totalTreated / totalAll) * 100 : 0}%` }} />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+            <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(dailySummary.receivedToday)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-border pt-2">
+            <span className="text-xs font-bold">Falta Receber</span>
+            <span className={`text-base font-extrabold tabular-nums ${dailySummary.pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+              {formatCurrency(dailySummary.pendingToReceiveToday)}
+            </span>
+          </div>
+          {totalOverdueValue > 0 && (
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>dos quais atrasados</span>
+              <span className="tabular-nums text-destructive">{formatCurrency(totalOverdueValue)}</span>
             </div>
-            <span className="text-xs font-bold tabular-nums">{totalTreated}/{totalAll}</span>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Progresso</span>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${totalAll > 0 ? (totalTreated / totalAll) * 100 : 0}%` }} />
+              </div>
+              <span className="text-xs font-bold tabular-nums">{totalTreated}/{totalAll}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
 
       {loading ? (
