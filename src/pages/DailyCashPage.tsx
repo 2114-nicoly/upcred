@@ -31,7 +31,7 @@ import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
-import WorkerDashboard from "@/components/WorkerDashboard";
+
 
 import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
