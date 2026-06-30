@@ -326,27 +326,9 @@ export default function DailyCashPage() {
   const [quickSearch, setQuickSearch] = useState("");
   const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
   const [summaryLoading, setSummaryLoading] = useState(true);
+  // O resumo é carregado dentro de fetchData (atualização atômica após qualquer ação).
 
-  useEffect(() => {
-    let cancelled = false;
-    setSummaryLoading(true);
-    (async () => {
-      try {
-        const s = await getDailyCollectionSummary(selectedDate, {
-          workerId: authWorkerId || null,
-          adminId: authAdminId || null,
-        });
-        if (!cancelled) setDailySummary(s);
-      } catch {
-        if (!cancelled) setDailySummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
-      } finally {
-        if (!cancelled) setSummaryLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-    // Não depender de paidGroups/notPaidMarks/pendingInstallments — getDailyCollectionSummary
-    // lê direto do banco e re-rodar em cada subestado causava flicker nos cards.
-  }, [selectedDate, authWorkerId, authAdminId, paidGroups.length, notPaidMarks.length]);
+
 
 
   useEffect(() => {
@@ -740,11 +722,24 @@ export default function DailyCashPage() {
       }
     } finally {
       if (!isStale()) {
+        // Atualiza o resumo unificado dentro do mesmo ciclo para evitar piscadas.
+        try {
+          setSummaryLoading(true);
+          const s = await getDailyCollectionSummary(selectedDate, {
+            workerId: authWorkerId || null,
+            adminId: authAdminId || null,
+          });
+          if (!isStale()) setDailySummary(s);
+        } catch {
+          // mantém valores anteriores
+        } finally {
+          if (!isStale()) setSummaryLoading(false);
+        }
         if (!silent) setLoading(false);
         if (silent) setIsRefreshing(false);
       }
     }
-  }, [selectedDate]);
+  }, [selectedDate, authWorkerId, authAdminId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
