@@ -1520,22 +1520,8 @@ export default function DailyCashPage() {
         />
       </div>
 
-      {/* Painel de produção do trabalhador */}
-      <div className="mb-3">
-        <WorkerDashboard
-          data={{
-            cashStatus: isClosed ? "closed" : "open",
-            treatedCount: totalTreated,
-            paidCount: paidGroups.length,
-            notPaidCount: notPaidMarks.length,
-            remainingPending: pendingInstallments.length,
-            totalReceived: totalPaidValue,
-            totalLent: newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
-            totalPenaltyReceived: totalPenaltyPaidToday,
-            expectedBalance: openingBalance + manualInToday - manualOutToday + totalPaidValue + totalPenaltyPaidToday - newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
-          }}
-        />
-      </div>
+      {/* Painel de produção removido: indicadores unificados pelo bloco "Cobranças do dia" abaixo. */}
+
 
       {/* Últimos dias trabalhados (link discreto) */}
       <div className="mb-3 flex justify-end">
