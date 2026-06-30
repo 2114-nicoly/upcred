@@ -175,7 +175,7 @@ export default function CaixaPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDate, selectedAdminId, selectedWorkerId]);
+  }, [selectedDate, selectedAdminId, selectedWorkerId, events]);
 
   const cashState: "sem_caixa" | "open" | "closed" =
     dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
