@@ -325,9 +325,11 @@ export default function DailyCashPage() {
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
   const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setSummaryLoading(true);
     (async () => {
       try {
         const s = await getDailyCollectionSummary(selectedDate, {
@@ -337,10 +339,14 @@ export default function DailyCashPage() {
         if (!cancelled) setDailySummary(s);
       } catch {
         if (!cancelled) setDailySummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDate, paidGroups, notPaidMarks, pendingInstallments, authWorkerId, authAdminId]);
+    // Não depender de paidGroups/notPaidMarks/pendingInstallments — getDailyCollectionSummary
+    // lê direto do banco e re-rodar em cada subestado causava flicker nos cards.
+  }, [selectedDate, authWorkerId, authAdminId, paidGroups.length, notPaidMarks.length]);
 
 
   useEffect(() => {
