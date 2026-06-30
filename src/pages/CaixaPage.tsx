@@ -157,8 +157,10 @@ export default function CaixaPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Resumo unificado (mesma fonte usada na Rota do Dia).
+  // Não depender de `events` para evitar re-render/flicker dos cards após o carregamento.
   useEffect(() => {
     let cancelled = false;
+    setSummaryLoading(true);
     (async () => {
       try {
         const summary = await getDailyCollectionSummary(selectedDate, {
@@ -168,10 +170,12 @@ export default function CaixaPage() {
         if (!cancelled) setCollectionSummary(summary);
       } catch {
         if (!cancelled) setCollectionSummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedDate, selectedAdminId, selectedWorkerId, events]);
+  }, [selectedDate, selectedAdminId, selectedWorkerId]);
 
   const cashState: "sem_caixa" | "open" | "closed" =
     dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
