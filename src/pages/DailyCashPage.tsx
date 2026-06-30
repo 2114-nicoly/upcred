@@ -740,11 +740,24 @@ export default function DailyCashPage() {
       }
     } finally {
       if (!isStale()) {
+        // Atualiza o resumo unificado dentro do mesmo ciclo para evitar piscadas.
+        try {
+          setSummaryLoading(true);
+          const s = await getDailyCollectionSummary(selectedDate, {
+            workerId: authWorkerId || null,
+            adminId: authAdminId || null,
+          });
+          if (!isStale()) setDailySummary(s);
+        } catch {
+          // mantém valores anteriores
+        } finally {
+          if (!isStale()) setSummaryLoading(false);
+        }
         if (!silent) setLoading(false);
         if (silent) setIsRefreshing(false);
       }
     }
-  }, [selectedDate]);
+  }, [selectedDate, authWorkerId, authAdminId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
