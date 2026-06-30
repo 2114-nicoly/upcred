@@ -150,32 +150,25 @@ export default function CaixaPage() {
       console.error("Error in CaixaPage fetchData:", err);
       toast.error("Erro ao carregar dados do caixa");
     } finally {
-      setLoading(false);
-    }
-  }, [selectedDate]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Resumo unificado (mesma fonte usada na Rota do Dia).
-  // Não depender de `events` para evitar re-render/flicker dos cards após o carregamento.
-  useEffect(() => {
-    let cancelled = false;
-    setSummaryLoading(true);
-    (async () => {
+      // Resumo unificado dentro do mesmo ciclo — atualização atômica para não piscar.
       try {
+        setSummaryLoading(true);
         const summary = await getDailyCollectionSummary(selectedDate, {
           workerId: selectedWorkerId || null,
           adminId: selectedAdminId || null,
         });
-        if (!cancelled) setCollectionSummary(summary);
+        setCollectionSummary(summary);
       } catch {
-        if (!cancelled) setCollectionSummary({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+        // mantém valores anteriores
       } finally {
-        if (!cancelled) setSummaryLoading(false);
+        setSummaryLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedDate, selectedAdminId, selectedWorkerId, events]);
+      setLoading(false);
+    }
+  }, [selectedDate, selectedAdminId, selectedWorkerId]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
 
   const cashState: "sem_caixa" | "open" | "closed" =
     dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
