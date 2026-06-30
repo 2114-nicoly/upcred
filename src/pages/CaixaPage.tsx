@@ -505,25 +505,36 @@ export default function CaixaPage() {
       )}
 
       {/* Bloco: Cobranças do Dia (mesma fonte da Rota do Dia) */}
-      <Card>
-        <CardContent className="p-3 space-y-1.5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cobranças do Dia</p>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Saldo Esperado</span>
-            <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Recebido Hoje</span>
-            <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(receivedToday)}</span>
-          </div>
-          <div className="flex items-center justify-between border-t pt-1.5">
-            <span className="text-xs font-semibold">Falta Receber</span>
-            <span className={`text-sm font-bold tabular-nums ${pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-              {formatCurrency(pendingToReceiveToday)}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+      {(loading || summaryLoading) ? (
+        <Card>
+          <CardContent className="p-3 space-y-2">
+            <div className="h-3 w-32 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-full rounded bg-muted animate-pulse" />
+            <div className="h-4 w-full rounded bg-muted animate-pulse" />
+            <div className="h-4 w-2/3 rounded bg-muted animate-pulse" />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-3 space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cobranças do Dia</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+              <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+              <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(receivedToday)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t pt-1.5">
+              <span className="text-xs font-semibold">Falta Receber</span>
+              <span className={`text-sm font-bold tabular-nums ${pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                {formatCurrency(pendingToReceiveToday)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Bloco: Conferência do Caixa */}
       <Card>
