@@ -216,6 +216,11 @@ export async function getDailyCollectionSummary(
       const prev = (prior?.[0] as any) || null;
       if (prev) opening = Number(prev.counted_closing_balance ?? prev.expected_closing_balance ?? 0) || 0;
     }
+    if (opening < 0) {
+      console.warn("[daily-totals] Saldo inicial negativo, exibindo 0:", opening);
+      opening = 0;
+    }
+
   } catch {
     // ignora
   }

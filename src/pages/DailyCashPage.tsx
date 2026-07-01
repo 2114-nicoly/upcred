@@ -31,7 +31,7 @@ import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
-import WorkerDashboard from "@/components/WorkerDashboard";
+
 
 import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
@@ -1520,22 +1520,8 @@ export default function DailyCashPage() {
         />
       </div>
 
-      {/* Painel de produção do trabalhador */}
-      <div className="mb-3">
-        <WorkerDashboard
-          data={{
-            cashStatus: isClosed ? "closed" : "open",
-            treatedCount: totalTreated,
-            paidCount: paidGroups.length,
-            notPaidCount: notPaidMarks.length,
-            remainingPending: pendingInstallments.length,
-            totalReceived: totalPaidValue,
-            totalLent: newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
-            totalPenaltyReceived: totalPenaltyPaidToday,
-            expectedBalance: openingBalance + manualInToday - manualOutToday + totalPaidValue + totalPenaltyPaidToday - newLoans.reduce((s, l) => s + Number(l.amount || 0), 0),
-          }}
-        />
-      </div>
+      {/* Painel de produção removido: indicadores unificados pelo bloco "Cobranças do dia" abaixo. */}
+
 
       {/* Últimos dias trabalhados (link discreto) */}
       <div className="mb-3 flex justify-end">
@@ -1569,21 +1555,7 @@ export default function DailyCashPage() {
               {formatCurrency(dailySummary.pendingToReceiveToday)}
             </span>
           </div>
-          {totalOverdueValue > 0 && (
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>dos quais atrasados</span>
-              <span className="tabular-nums text-destructive">{formatCurrency(totalOverdueValue)}</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Progresso</span>
-            <div className="flex items-center gap-2">
-              <div className="w-20 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${totalAll > 0 ? (totalTreated / totalAll) * 100 : 0}%` }} />
-              </div>
-              <span className="text-xs font-bold tabular-nums">{totalTreated}/{totalAll}</span>
-            </div>
-          </div>
+
         </div>
       )}
 

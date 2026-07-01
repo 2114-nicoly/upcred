@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Lock, LockOpen, Users, CheckCircle2, XCircle, Clock, ArrowDownCircle, ArrowUpCircle, AlertTriangle, Wallet } from "lucide-react";
+import { Lock, LockOpen, Users, CheckCircle2, XCircle, Clock, ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
 
 export type WorkerDashboardData = {
@@ -12,8 +12,8 @@ export type WorkerDashboardData = {
   totalReceived: number;
   totalLent: number;
   totalPenaltyReceived: number;
-  expectedBalance: number;
 };
+
 
 type StatProps = {
   icon: React.ReactNode;
@@ -64,7 +64,7 @@ export default function WorkerDashboard({ data }: { data: WorkerDashboardData })
         <Stat icon={<ArrowDownCircle className="h-3 w-3" />} label="Recebido" value={formatCurrency(data.totalReceived)} tone="positive" />
         <Stat icon={<ArrowUpCircle className="h-3 w-3" />} label="Liberado" value={formatCurrency(data.totalLent)} tone="negative" />
         <Stat icon={<AlertTriangle className="h-3 w-3" />} label="Multas" value={formatCurrency(data.totalPenaltyReceived)} tone="positive" />
-        <Stat icon={<Wallet className="h-3 w-3" />} label="Saldo esperado" value={formatCurrency(data.expectedBalance)} />
+        
       </div>
     </div>
   );
