@@ -314,7 +314,8 @@ export default function CaixaPage() {
 
   const openCloseDialog = () => {
     if (isClosed) return;
-    setCountedAmount(Math.max(0, summary.expected).toFixed(2));
+    const cur = Number(balance?.available_cash || 0);
+    setCountedAmount(Math.max(0, cur).toFixed(2));
     setCloseNote("");
     setCloseOpen(true);
   };
@@ -323,7 +324,8 @@ export default function CaixaPage() {
     if (submitting || isClosed) return;
     const counted = parseFloat(countedAmount);
     if (!isFinite(counted)) { toast.error("Informe o valor contado no caixa"); return; }
-    const diff = counted - summary.expected;
+    const currentAvailable = Number(balance?.available_cash || 0);
+    const diff = counted - currentAvailable;
     if (Math.abs(diff) > 0.01 && closeNote.trim().length < 3) {
       toast.error("Informe a observação para justificar a diferença"); return;
     }
@@ -334,6 +336,27 @@ export default function CaixaPage() {
         { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
       );
       if (error) throw error;
+      // Auditoria detalhada baseada no Caixa Disponível Atual.
+      try {
+        await logAction(
+          "fechar_caixa",
+          "cash",
+          null,
+          null,
+          {
+            cash_date: selectedDate,
+            caixa_inicio_dia: Number(summary.opening.toFixed(2)),
+            recebido_hoje: Number((summary.received + summary.penalty).toFixed(2)),
+            emprestado_hoje: Number(summary.lent.toFixed(2)),
+            entradas_manuais: Number(summary.manualIn.toFixed(2)),
+            saidas_manuais: Number(summary.manualOut.toFixed(2)),
+            caixa_disponivel_final: Number(currentAvailable.toFixed(2)),
+            dinheiro_contado: Number(counted.toFixed(2)),
+            diferenca: Number(diff.toFixed(2)),
+          },
+          closeNote.trim() || null,
+        );
+      } catch (e) { console.warn("[caixa] audit log failed", e); }
       toast.success(`Caixa fechado! Diferença: ${formatCurrency(diff)}`);
       setCloseOpen(false);
       await fetchData();
