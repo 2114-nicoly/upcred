@@ -1023,19 +1023,21 @@ export default function CaixaPage() {
           <DialogHeader><DialogTitle>Fechar caixa do dia</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Saldo inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Valor Esperado no Caixa</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Disponível no Início do Dia</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Recebido Hoje</span><span className="text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Emprestado Hoje</span><span className="text-primary tabular-nums">-{formatCurrency(summary.lent)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Entradas Manuais</span><span className="text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Saídas Manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível Atual</span><span className="tabular-nums">{formatCurrency(Number(balance?.available_cash || 0))}</span></div>
             </div>
             <div>
-              <Label>Valor contado no caixa (R$) <span className="text-destructive">*</span></Label>
+              <Label>Dinheiro contado no caixa (R$) <span className="text-destructive">*</span></Label>
               <Input type="number" step="0.01" value={countedAmount} onChange={(e) => setCountedAmount(e.target.value)} placeholder="0.00" />
             </div>
             {(() => {
               const counted = parseFloat(countedAmount);
               if (!isFinite(counted)) return null;
-              const diff = counted - summary.expected;
+              const diff = counted - Number(balance?.available_cash || 0);
               const hasDiff = Math.abs(diff) > 0.01;
               return (
                 <div className={`rounded-md border p-2 text-xs ${hasDiff ? "border-destructive/40 bg-destructive/5" : "border-success/40 bg-success/5"}`}>
@@ -1052,7 +1054,7 @@ export default function CaixaPage() {
             <div>
               <Label>Observação {(() => {
                 const counted = parseFloat(countedAmount);
-                const diff = isFinite(counted) ? counted - summary.expected : 0;
+                const diff = isFinite(counted) ? counted - Number(balance?.available_cash || 0) : 0;
                 return Math.abs(diff) > 0.01 ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>;
               })()}</Label>
               <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Motivo da diferença, observações..." />
