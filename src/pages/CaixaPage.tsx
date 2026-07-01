@@ -536,7 +536,7 @@ export default function CaixaPage() {
         </Card>
       )}
 
-      {/* Bloco: Conferência do Caixa */}
+      {/* Bloco: Conferência do Caixa (referência = Caixa Disponível Atual) */}
       {(loading || summaryLoading) ? (
         <Card>
           <CardContent className="p-3 space-y-2">
@@ -555,46 +555,43 @@ export default function CaixaPage() {
               <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Saldo Inicial</span>
+              <span className="text-[11px] text-muted-foreground">Caixa Disponível no Início do Dia</span>
               <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-success flex items-center gap-1"><ArrowDownCircle className="h-3 w-3" /> Entradas</span>
-              <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-destructive flex items-center gap-1"><ArrowUpCircle className="h-3 w-3" /> Saídas</span>
-              <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1.5 border-t text-[11px]">
-              <div className="flex justify-between"><span className="text-muted-foreground">Pagamentos</span><span className="text-success tabular-nums">{formatCurrency(summary.received)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Multas</span><span className="text-warning tabular-nums">{formatCurrency(summary.penalty)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Emprestado</span><span className="text-primary tabular-nums">{formatCurrency(summary.lent)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Não pagou</span><span className="text-destructive tabular-nums">{summary.notPaidCount}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Entr. manual</span><span className="text-success tabular-nums">{formatCurrency(summary.manualIn)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Saída manual</span><span className="text-destructive tabular-nums">{formatCurrency(summary.manualOut)}</span></div>
+            <div className="pt-1.5 border-t space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-success">Recebido Hoje</span>
+                <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-primary">Emprestado Hoje</span>
+                <span className="text-sm font-bold text-primary tabular-nums">-{formatCurrency(summary.lent)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Entradas Manuais</span>
+                <span className="text-xs font-semibold text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Saídas Manuais</span>
+                <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
+              </div>
             </div>
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Valor Esperado no Caixa</span>
-              <span className="text-sm font-bold tabular-nums">
-                {formatCurrency(expectedDisplay)}
+              <span className="text-xs font-semibold">Caixa Disponível Atual</span>
+              <span className={`text-sm font-bold tabular-nums ${Number(balance?.available_cash || 0) < 0 ? "text-destructive" : "text-primary"}`}>
+                {formatCurrency(Number(balance?.available_cash || 0))}
               </span>
             </div>
-            {expectedNegative && !isClosed && (
-              <p className="text-[10px] text-warning leading-tight">
-                Valor esperado no caixa ficou negativo ({formatCurrency(summary.expected)}). Verifique saldo inicial ou saídas lançadas.
-              </p>
-            )}
             {isClosed && dailyCashRow?.counted_closing_balance != null && (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Saldo Contado</span>
+                  <span className="text-xs text-muted-foreground">Dinheiro Contado</span>
                   <span className="text-sm font-bold tabular-nums">{formatCurrency(Number(dailyCashRow.counted_closing_balance))}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Diferença</span>
-                  <span className={`text-sm font-bold tabular-nums ${(Number(dailyCashRow.counted_closing_balance) - summary.expected) === 0 ? "text-muted-foreground" : (Number(dailyCashRow.counted_closing_balance) - summary.expected) < 0 ? "text-destructive" : "text-success"}`}>
-                    {formatCurrency(Number(dailyCashRow.counted_closing_balance) - summary.expected)}
+                  <span className={`text-sm font-bold tabular-nums ${(Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0)) === 0 ? "text-muted-foreground" : (Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0)) < 0 ? "text-destructive" : "text-success"}`}>
+                    {formatCurrency(Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0))}
                   </span>
                 </div>
               </>
