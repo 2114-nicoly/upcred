@@ -126,11 +126,18 @@ export default function CaixaPage() {
           const { data: prev } = await prevQ;
           const prevRow = (prev?.[0] as any) || null;
           if (prevRow) {
-            const inh = Number(prevRow.counted_closing_balance ?? prevRow.expected_closing_balance ?? 0);
-            setInheritedOpening(isFinite(inh) ? inh : 0);
+            const rawInh = Number(prevRow.counted_closing_balance ?? prevRow.expected_closing_balance ?? 0);
+            const inh = isFinite(rawInh) ? rawInh : 0;
+            if (inh < 0) {
+              console.warn("[CaixaPage] Saldo inicial herdado negativo, exibindo 0:", inh);
+              setInheritedOpening(0);
+            } else {
+              setInheritedOpening(inh);
+            }
           } else {
             setInheritedOpening(0);
           }
+
         } catch {
           setInheritedOpening(0);
         }
