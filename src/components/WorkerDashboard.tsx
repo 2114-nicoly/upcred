@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Lock, LockOpen, Users, CheckCircle2, XCircle, Clock, ArrowDownCircle, ArrowUpCircle, AlertTriangle, Wallet } from "lucide-react";
+import { Lock, LockOpen, Users, CheckCircle2, XCircle, Clock, ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
 
 export type WorkerDashboardData = {
@@ -12,8 +12,8 @@ export type WorkerDashboardData = {
   totalReceived: number;
   totalLent: number;
   totalPenaltyReceived: number;
-  expectedBalance: number;
 };
+
 
 type StatProps = {
   icon: React.ReactNode;
