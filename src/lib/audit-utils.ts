@@ -243,7 +243,7 @@ export async function logLoanAction(params: {
   before?: Record<string, any> | null;
   after?: Record<string, any> | null;
   observation?: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const ctx = await enrichLoanContext({
     loanId: params.loanId ?? (params.entity === "loan" ? params.entityId ?? null : null),
     clientId: params.clientId,
