@@ -1541,6 +1541,11 @@ export default function DailyCashPage() {
         </div>
       ) : (
         <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          {dailySummary.hasError && (
+            <div className="text-xs text-destructive font-medium">
+              Não foi possível carregar os totais.
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Saldo Esperado</span>
             <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>
