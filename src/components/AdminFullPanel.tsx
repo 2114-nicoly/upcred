@@ -434,6 +434,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             workers.map((w) => {
               const s = stats.find((x) => x.worker_id === w.id);
               const isArchived = !!w.archived_at;
+              const wt = workerToday[w.id];
+              const cashLabel = wt?.cashStatus === "open" ? "Aberto" : wt?.cashStatus === "closed" ? "Fechado" : "Não aberto";
+              const cashVariant: "default" | "secondary" | "outline" = wt?.cashStatus === "open" ? "default" : wt?.cashStatus === "closed" ? "secondary" : "outline";
               return (
                 <Card key={w.id} className={isArchived ? "opacity-70" : ""}>
                   <CardContent className="p-3 space-y-2">
@@ -447,13 +450,22 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                             : w.active
                               ? <Badge className="text-[9px]">Ativo</Badge>
                               : <Badge variant="secondary" className="text-[9px]">Inativo</Badge>}
+                          {!isArchived && <Badge variant={cashVariant} className="text-[9px]">Caixa: {cashLabel}</Badge>}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
-                          Login {w.login_codigo} · Recebido {formatCurrency(s?.recebido ?? 0)} · Falta {formatCurrency(s?.faltaReceber ?? 0)}
+                          Login {w.login_codigo} · Recebido hoje {formatCurrency(wt?.receivedToday ?? 0)} · Emprestado hoje {formatCurrency(wt?.lentToday ?? 0)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Caixa Disponível: <span className="font-semibold">{formatCurrency(wt?.availableCash ?? 0)}</span>
+                          {wt?.lastClosingDifference != null && (
+                            <> · Últ. dif.: <span className={wt.lastClosingDifference === 0 ? "text-success" : "text-destructive"}>{formatCurrency(wt.lastClosingDifference)}</span></>
+                          )}
+                          {wt?.lastActivity && <> · Últ. ativ.: {format(new Date(wt.lastActivity), "dd/MM HH:mm")}</>}
                         </p>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
+
                     <div className="flex flex-wrap gap-1">
                       {!isArchived && (
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleToggleActive(w, e)}>
