@@ -179,14 +179,73 @@ export async function registerPayment(params: {
   await recalculateInstallments(loanId);
   await recalculateCashBalanceFromLedger();
 
+  const balanceBefore = Number(loanData.remaining_balance);
+  const balanceAfter = Number(newBalance);
+
+  // Standard payment audit — always includes ids + snapshot for traceability.
   await logAction(
     "pagamento",
     "payment",
     movement?.id ?? null,
-    null,
-    { loan_id: loanId, amount: applied, cash_date: cashDate, client_id: clientId },
+    { remaining_balance: balanceBefore },
+    {
+      loan_id: loanId,
+      client_id: clientId,
+      client_name: clientName,
+      installment_id: installmentId || null,
+      payment_id: movement?.id ?? null,
+      cash_movement_id: movement?.id ?? null,
+      daily_event_id: event?.id ?? null,
+      amount: applied,
+      cash_date: cashDate,
+      remaining_balance: balanceAfter,
+      timestamp: new Date().toISOString(),
+    },
     `Pagamento ${formatCurrency(applied)} - ${clientName}`,
   );
+
+  // Detect partial payment against the referenced installment (if any) and
+  // emit a dedicated audit line so partial receipts are first-class events.
+  if (installmentId) {
+    try {
+      const { data: inst } = await supabase
+        .from("installments")
+        .select("number, amount, paid_amount, status")
+        .eq("id", installmentId)
+        .maybeSingle();
+      if (inst && inst.status !== "paid") {
+        const instAmount = Number(inst.amount);
+        const instPaid = Number(inst.paid_amount);
+        const instRemaining = Math.max(0, instAmount - instPaid);
+        await logAction(
+          "pagamento_parcial",
+          "installment",
+          installmentId,
+          { remaining_balance: balanceBefore, installment_paid_before: instPaid - applied },
+          {
+            loan_id: loanId,
+            client_id: clientId,
+            client_name: clientName,
+            installment_id: installmentId,
+            installment_number: (inst as any).number,
+            installment_amount: instAmount,
+            amount_paid: applied,
+            installment_remaining: instRemaining,
+            payment_id: movement?.id ?? null,
+            cash_movement_id: movement?.id ?? null,
+            daily_event_id: event?.id ?? null,
+            remaining_balance_before: balanceBefore,
+            remaining_balance_after: balanceAfter,
+            cash_date: cashDate,
+            timestamp: new Date().toISOString(),
+          },
+          `Pagamento parcial parcela #${(inst as any).number} - ${clientName} (${formatCurrency(applied)}/${formatCurrency(instAmount)})`,
+        );
+      }
+    } catch (err) {
+      console.warn("[registerPayment] pagamento_parcial audit failed", err);
+    }
+  }
 
   return { applied, newBalance: Number(newBalance) };
 }
