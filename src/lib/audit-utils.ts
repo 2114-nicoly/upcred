@@ -9,7 +9,7 @@ export type AuditAction =
   | "renovar_emprestimo" | "quitar_emprestimo"
   | "renegociacao_emprestimo" | "renovacao_emprestimo"
   | "anexar_arquivo" | "excluir_anexo"
-  | "pagamento" | "editar_pagamento" | "desfazer_pagamento" | "nao_pagou"
+  | "pagamento" | "pagamento_parcial" | "editar_pagamento" | "desfazer_pagamento" | "nao_pagou"
   | "editar_parcela" | "alterar_data_parcela"
   | "multa_aplicada" | "multa_paga" | "multa_cancelada" | "editar_multa"
   | "reagendamento_solicitado" | "reagendamento_aprovado" | "reagendamento_recusado"
