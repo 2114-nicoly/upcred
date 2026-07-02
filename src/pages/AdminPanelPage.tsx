@@ -409,6 +409,26 @@ function WorkersTab() {
     });
     if (!ok) return;
     try {
+      // Auditoria OBRIGATÓRIA — bloqueia o reset se o log falhar.
+      const actor = await getCurrentActorIdentity();
+      const now = new Date().toISOString();
+      try {
+        await requireAudit(
+          "reset_senha_trabalhador", "worker", w.id,
+          { name: w.nome, login: w.login_codigo, status: w.active ? "ativo" : "inativo" },
+          {
+            name: w.nome, login: w.login_codigo,
+            status: w.active ? "ativo" : "inativo",
+            target_kind: "worker", target_id: w.id,
+            performed_by: actor.id, performed_by_name: actor.name, performed_by_role: actor.role,
+            timestamp: now,
+          },
+          `Reset de senha do trabalhador ${w.nome}`,
+        );
+      } catch (err) {
+        if (err instanceof AuditRequiredError) return;
+        throw err;
+      }
       const { data, error } = await supabase.functions.invoke("admin-reset-password", {
         body: { target_kind: "worker", target_id: w.id },
       });
@@ -419,6 +439,7 @@ function WorkersTab() {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
   }
+
 
   // resolveResetRequest removed: handled by PasswordRecoveryBell
 
