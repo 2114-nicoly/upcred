@@ -367,7 +367,7 @@ export async function logReversal(params: {
     cash_date: params.cash_date ?? null,
   };
 
-  await logAction(
+  const ok = await logAction(
     params.action,
     params.entity ?? "cash",
     params.original_movement_id ?? null,
@@ -375,4 +375,6 @@ export async function logReversal(params: {
     newPayload,
     params.observation ?? (params.reversal_reason ?? undefined),
   );
+  if (!ok) notifyAuditFailure(String(params.action));
+  return ok;
 }
