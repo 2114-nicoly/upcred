@@ -124,6 +124,8 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
   const [maxValue, setMaxValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [openLog, setOpenLog] = useState<Log | null>(null);
+  const [onlyCritical, setOnlyCritical] = useState(false);
+
 
   useEffect(() => {
     if (isSuperAdmin) {
