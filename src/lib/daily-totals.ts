@@ -106,6 +106,7 @@ export async function getDailyCollectionSummary(
 ): Promise<DailyCollectionSummary> {
   const { workerId = null, adminId = null } = options;
   const collectible = new Set(["pending", "partial", "overdue"]);
+  let hasError = false;
 
   // 1) Esperado: rota do dia + multas pendentes (não inclui saldo inicial nem caixa).
   let expectedToReceiveToday = 0;
