@@ -97,6 +97,7 @@ export type DailyCollectionSummary = {
   receivedToday: number;
   pendingToReceiveToday: number;
   cashExpectedForClosing: number;
+  hasError: boolean;
 };
 
 export async function getDailyCollectionSummary(
@@ -105,6 +106,7 @@ export async function getDailyCollectionSummary(
 ): Promise<DailyCollectionSummary> {
   const { workerId = null, adminId = null } = options;
   const collectible = new Set(["pending", "partial", "overdue"]);
+  let hasError = false;
 
   // 1) Esperado: rota do dia + multas pendentes (não inclui saldo inicial nem caixa).
   let expectedToReceiveToday = 0;
@@ -151,8 +153,9 @@ export async function getDailyCollectionSummary(
       if (workerId && l.worker_id !== workerId) continue;
       expectedToReceiveToday += Number(p.amount || 0);
     }
-  } catch {
-    // ignora — mantém 0
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] esperado/multas falhou", err);
+    hasError = true;
   }
 
   // 2) Recebido hoje + componentes para conferência do caixa.
@@ -188,8 +191,9 @@ export async function getDailyCollectionSummary(
       }
     }
     receivedToday = pagamentos + multas;
-  } catch {
-    // ignora
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] recebido/lançamentos falhou", err);
+    hasError = true;
   }
 
   // 3) Saldo inicial do dia (para conferência do caixa)
@@ -221,8 +225,9 @@ export async function getDailyCollectionSummary(
       opening = 0;
     }
 
-  } catch {
-    // ignora
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] saldo inicial falhou", err);
+    hasError = true;
   }
 
   // Esperado no caixa = dinheiro físico esperado (sem futuras cobranças, sem importados).
@@ -234,6 +239,7 @@ export async function getDailyCollectionSummary(
     receivedToday,
     pendingToReceiveToday,
     cashExpectedForClosing,
+    hasError,
   };
 }
 

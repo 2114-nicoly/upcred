@@ -324,7 +324,7 @@ export default function DailyCashPage() {
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
-  const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+  const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   // O resumo é carregado dentro de fetchData (atualização atômica após qualquer ação).
 
@@ -755,7 +755,7 @@ export default function DailyCashPage() {
       refreshTimerRef.current = window.setTimeout(() => {
         refreshTimerRef.current = null;
         if (isMountedRef.current) void fetchData({ silent: true });
-      }, 250);
+      }, 1000);
     };
 
     // Use an opaque, per-session random channel topic so other authenticated
@@ -1541,6 +1541,11 @@ export default function DailyCashPage() {
         </div>
       ) : (
         <div className="mb-3 rounded-lg border bg-card p-3 space-y-2">
+          {dailySummary.hasError && (
+            <div className="text-xs text-destructive font-medium">
+              Não foi possível carregar os totais.
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Saldo Esperado</span>
             <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>

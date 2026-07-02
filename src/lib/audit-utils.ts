@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type AuditAction =
   | "transferencia_cliente"
@@ -75,6 +76,21 @@ async function enrichAuditPayload(payload: any): Promise<any> {
  * Auto-enriches `oldValue` / `newValue` with client_name / worker_name /
  * loan snapshot when those ids are present but the names are missing.
  */
+const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
+  "fechar_caixa",
+  "reabrir_caixa",
+  "solicitar_reabertura_caixa",
+  "estorno_manual",
+  "estorno_pagamento",
+  "desfazer_pagamento",
+  "excluir_emprestimo",
+  "renovar_emprestimo",
+  "renovacao_emprestimo",
+  "renegociacao_emprestimo",
+  "quitar_emprestimo",
+  "pagamento",
+]);
+
 export async function logAction(
   action: AuditAction,
   entity: AuditEntity,
@@ -83,11 +99,11 @@ export async function logAction(
   newValue?: unknown,
   observation?: string,
   workerId?: string | null,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const enrichedNew: any = newValue ? await enrichAuditPayload(newValue) : null;
     const enrichedOld: any = oldValue ? await enrichAuditPayload(oldValue) : null;
-    await supabase.rpc("log_audit" as any, {
+    const { error } = await supabase.rpc("log_audit" as any, {
       p_action: action,
       p_entity: entity,
       p_entity_id: entityId ?? null,
@@ -97,9 +113,43 @@ export async function logAction(
       p_worker_id:
         workerId ?? enrichedNew?.worker_id ?? enrichedOld?.worker_id ?? null,
     });
+    if (error) {
+      console.error("[audit] log_audit RPC returned error", { action, entity, error });
+      if (CRITICAL_AUDIT_ACTIONS.has(action)) notifyAuditFailure(String(action));
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn("[audit] log failed", err);
+    console.error("[audit] log_audit threw", { action, entity, err });
+    if (CRITICAL_AUDIT_ACTIONS.has(action)) notifyAuditFailure(String(action));
+    return false;
   }
+}
+
+/**
+ * Shows a persistent toast informing the user that a critical action was
+ * completed but its audit trail could NOT be recorded. This surfaces silent
+ * auditing failures so the admin is aware and can investigate.
+ */
+export function notifyAuditFailure(context?: string): void {
+  const suffix = context ? ` (${context})` : "";
+  toast.error(
+    `Ação realizada, mas houve falha ao registrar auditoria${suffix}. Avise o administrador.`,
+    { duration: 8000 },
+  );
+}
+
+/**
+ * Wrapper around logAction for critical actions (fechar/reabrir caixa,
+ * estornar, cancelar/renovar/quitar empréstimo, pagamento). If the audit
+ * write fails, shows a user-visible warning instead of failing silently.
+ */
+export async function logCriticalAction(
+  ...args: Parameters<typeof logAction>
+): Promise<boolean> {
+  const ok = await logAction(...args);
+  // Toast on failure handled inside logAction for critical actions.
+  return ok;
 }
 
 /**
@@ -210,7 +260,7 @@ export async function logLoanAction(params: {
   before?: Record<string, any> | null;
   after?: Record<string, any> | null;
   observation?: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const ctx = await enrichLoanContext({
     loanId: params.loanId ?? (params.entity === "loan" ? params.entityId ?? null : null),
     clientId: params.clientId,
@@ -231,7 +281,7 @@ export async function logLoanAction(params: {
 
   const oldPayload = params.before ?? null;
 
-  await logAction(
+  const ok = await logAction(
     params.action,
     params.entity ?? "loan",
     params.entityId ?? ctx.loan_id ?? null,
@@ -240,6 +290,8 @@ export async function logLoanAction(params: {
     params.observation ?? undefined,
     ctx.worker_id,
   );
+  // Toast on failure is already handled inside logAction for critical actions.
+  return ok;
 }
 
 /**
@@ -302,7 +354,7 @@ export async function logReversal(params: {
   cash_date?: string | null;
   observation?: string | null;
   beforeSnapshot?: Record<string, any> | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const actor = await getCurrentActorIdentity();
   const now = new Date().toISOString();
   const reversalAmount = params.reversal_amount ?? -Number(params.original_amount);
@@ -332,7 +384,7 @@ export async function logReversal(params: {
     cash_date: params.cash_date ?? null,
   };
 
-  await logAction(
+  const ok = await logAction(
     params.action,
     params.entity ?? "cash",
     params.original_movement_id ?? null,
@@ -340,4 +392,6 @@ export async function logReversal(params: {
     newPayload,
     params.observation ?? (params.reversal_reason ?? undefined),
   );
+  // Toast on failure is already handled inside logAction for critical actions.
+  return ok;
 }

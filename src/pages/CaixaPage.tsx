@@ -56,7 +56,7 @@ export default function CaixaPage() {
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0 });
+  const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
   const receivedToday = collectionSummary.receivedToday;
@@ -579,6 +579,9 @@ export default function CaixaPage() {
         <Card>
           <CardContent className="p-3 space-y-1.5">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cobranças do Dia</p>
+            {collectionSummary.hasError && (
+              <p className="text-[11px] text-destructive font-medium">Não foi possível carregar os totais.</p>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Saldo Esperado</span>
               <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
@@ -616,7 +619,7 @@ export default function CaixaPage() {
               <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Caixa Disponível no Início do Dia</span>
+              <span className="text-[11px] text-muted-foreground">Caixa no Início do Dia</span>
               <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
             </div>
             <div className="pt-1.5 border-t space-y-1">
