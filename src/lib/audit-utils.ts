@@ -76,7 +76,7 @@ async function enrichAuditPayload(payload: any): Promise<any> {
  * Auto-enriches `oldValue` / `newValue` with client_name / worker_name /
  * loan snapshot when those ids are present but the names are missing.
  */
-const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
+export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
   "fechar_caixa",
   "reabrir_caixa",
   "solicitar_reabertura_caixa",
@@ -89,7 +89,22 @@ const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
   "renegociacao_emprestimo",
   "quitar_emprestimo",
   "pagamento",
+  "reset_senha_trabalhador",
+  "arquivar_trabalhador",
+  "desarquivar_trabalhador",
+  "ativar_trabalhador",
+  "desativar_trabalhador",
+  "excluir_trabalhador",
+  "excluir_cliente",
+  "transferencia_cliente",
+  "ativar_admin",
+  "desativar_admin",
 ]);
+
+export function isCriticalAuditAction(a: string): boolean {
+  return CRITICAL_AUDIT_ACTIONS.has(a as AuditAction);
+}
+
 
 export async function logAction(
   action: AuditAction,
