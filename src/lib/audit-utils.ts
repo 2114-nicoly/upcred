@@ -337,7 +337,7 @@ export async function logReversal(params: {
   cash_date?: string | null;
   observation?: string | null;
   beforeSnapshot?: Record<string, any> | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const actor = await getCurrentActorIdentity();
   const now = new Date().toISOString();
   const reversalAmount = params.reversal_amount ?? -Number(params.original_amount);
