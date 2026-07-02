@@ -72,8 +72,66 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const [mode, setMode] = useState<PeriodMode>("day");
   const [tab, setTab] = useState("resumo");
   const [loading, setLoading] = useState(true);
+  const [daySummary, setDaySummary] = useState<{ previsto: number; recebido: number; falta: number; hasError: boolean } | null>(null);
+  const [workerToday, setWorkerToday] = useState<Record<string, WorkerToday>>({});
+  const [reopenReqs, setReopenReqs] = useState<ReopenReq[]>([]);
+  const [reopenBusy, setReopenBusy] = useState<string | null>(null);
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
+  const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+
+  async function loadReopenRequests() {
+    const { data } = await supabase
+      .from("cash_reopen_requests" as any)
+      .select("id, cash_date, reason, requested_at, worker_id, worker_name, status, admin_id")
+      .eq("status", "pending")
+      .eq("admin_id", adminId)
+      .order("requested_at", { ascending: false });
+    setReopenReqs(((data as any[]) || []) as ReopenReq[]);
+  }
+
+  async function loadWorkerToday(wList: Worker[]) {
+    if (wList.length === 0) { setWorkerToday({}); return; }
+    const wIds = wList.map((w) => w.id);
+    const [dcRes, cbRes, evTodayRes, lastCloseRes, lastEvRes] = await Promise.all([
+      supabase.from("daily_cash").select("worker_id, status, opening_balance, expected_closing_balance, counted_closing_balance, closing_difference").eq("cash_date", today).in("worker_id", wIds),
+      supabase.from("cash_balance").select("worker_id, available_cash").in("worker_id", wIds),
+      supabase.from("daily_events" as any).select("worker_id, event_type, amount_in, amount_out, reversed_at").eq("cash_date", today).in("worker_id", wIds),
+      supabase.from("daily_cash").select("worker_id, closing_difference, cash_date").eq("status", "closed").in("worker_id", wIds).order("cash_date", { ascending: false }).limit(200),
+      supabase.from("daily_events" as any).select("worker_id, created_at").in("worker_id", wIds).order("created_at", { ascending: false }).limit(200),
+    ]);
+    const map: Record<string, WorkerToday> = {};
+    for (const w of wList) {
+      map[w.id] = { cashStatus: "not_opened", availableCash: 0, receivedToday: 0, lentToday: 0, lastClosingDifference: null, lastActivity: null };
+    }
+    for (const dc of (dcRes.data as any[]) || []) {
+      const wid = dc.worker_id; if (!wid || !map[wid]) continue;
+      map[wid].cashStatus = dc.status === "closed" ? "closed" : dc.status === "open" ? "open" : "not_opened";
+    }
+    for (const cb of (cbRes.data as any[]) || []) {
+      const wid = cb.worker_id; if (!wid || !map[wid]) continue;
+      map[wid].availableCash = Number(cb.available_cash || 0);
+    }
+    for (const e of (evTodayRes.data as any[]) || []) {
+      const wid = e.worker_id; if (!wid || !map[wid] || e.reversed_at) continue;
+      const ain = Number(e.amount_in || 0); const aout = Number(e.amount_out || 0);
+      if (e.event_type === "pagamento" || e.event_type === "recebimento_multa") map[wid].receivedToday += ain;
+      if (e.event_type === "emprestimo_novo" || e.event_type === "renovacao" || e.event_type === "renegociacao") map[wid].lentToday += aout;
+    }
+    const seenClose = new Set<string>();
+    for (const c of (lastCloseRes.data as any[]) || []) {
+      const wid = c.worker_id; if (!wid || !map[wid] || seenClose.has(wid)) continue;
+      seenClose.add(wid);
+      map[wid].lastClosingDifference = c.closing_difference != null ? Number(c.closing_difference) : null;
+    }
+    const seenAct = new Set<string>();
+    for (const a of (lastEvRes.data as any[]) || []) {
+      const wid = a.worker_id; if (!wid || !map[wid] || seenAct.has(wid)) continue;
+      seenAct.add(wid);
+      map[wid].lastActivity = a.created_at;
+    }
+    setWorkerToday(map);
+  }
 
   async function load(signal?: { cancel: boolean }) {
     setLoading(true);
@@ -88,11 +146,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     setWorkers(wList);
 
     const wIds = wList.map((w) => w.id);
-    const [allStats, cs, ls, evs] = await Promise.all([
+    const [allStats, cs, ls, evs, summary] = await Promise.all([
       loadWorkersStats(range),
       supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).order("name"),
       supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
       supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
+      mode === "day" ? getDailyCollectionSummary(range.startDate, { adminId }) : Promise.resolve(null),
     ]);
     if (signal?.cancel) return;
 
@@ -101,6 +160,17 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     setClients((cs.data as ClientRow[]) || []);
     setLoans((ls.data as any) || []);
     setEvents((evs.data as any) || []);
+    if (summary) {
+      setDaySummary({
+        previsto: summary.expectedToReceiveToday,
+        recebido: summary.receivedToday,
+        falta: summary.pendingToReceiveToday,
+        hasError: summary.hasError,
+      });
+    } else {
+      setDaySummary(null);
+    }
+    await Promise.all([loadWorkerToday(wList), loadReopenRequests()]);
     setLoading(false);
   }
 
@@ -110,6 +180,30 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     return () => { signal.cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId, range]);
+
+  async function handleReopenReview(r: ReopenReq, action: "approve" | "reject") {
+    setReopenBusy(r.id);
+    try {
+      const rpc = action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
+      const { error } = await supabase.rpc(rpc as any, { p_request_id: r.id, p_note: null } as any);
+      if (error) throw error;
+      await logAction(
+        (action === "approve" ? "reabrir_caixa" : "ajuste_caixa") as any,
+        "cash", null,
+        { request_id: r.id, status: "pending", cash_date: r.cash_date, worker_id: r.worker_id, worker_name: r.worker_name },
+        { request_id: r.id, status: action === "approve" ? "approved" : "rejected", reviewed_at: new Date().toISOString(), cash_date: r.cash_date, worker_id: r.worker_id, worker_name: r.worker_name, reason: r.reason },
+        `${action === "approve" ? "Aprovada" : "Recusada"} solicitação de reabertura (${r.cash_date}) de ${r.worker_name ?? "trabalhador"}`,
+        r.worker_id ?? undefined,
+      );
+      toast({ title: action === "approve" ? "Solicitação aprovada" : "Solicitação recusada" });
+      await loadReopenRequests();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e?.message || "Falha", variant: "destructive" });
+    } finally {
+      setReopenBusy(null);
+    }
+  }
+
 
   async function handleToggleActive(w: Worker, e: React.MouseEvent) {
     e.stopPropagation();
