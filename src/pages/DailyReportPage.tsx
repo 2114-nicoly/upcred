@@ -231,6 +231,8 @@ export default function DailyReportPage() {
       loans: t.emprestimosLiberados,
       renewals: t.renovacoes + t.renegociacoes,
       penalties: t.multas,
+      manualIn: t.entradasManuais,
+      manualOut: t.saidasManuais,
       notPaidCount: t.naoPagos,
       balance: t.entradas - t.saidas,
     };
