@@ -18,11 +18,27 @@ import { isLoanActive } from "@/lib/status-constants";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
 } from "@/lib/consolidated-stats";
+import { getDailyCollectionSummary } from "@/lib/daily-totals";
+import { logAction } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
-import { KeyRound } from "lucide-react";
+import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+
+type WorkerToday = {
+  cashStatus: "open" | "closed" | "not_opened";
+  availableCash: number;
+  receivedToday: number;
+  lentToday: number;
+  lastClosingDifference: number | null;
+  lastActivity: string | null;
+};
+
+type ReopenReq = {
+  id: string; cash_date: string; reason: string;
+  requested_at: string; worker_id: string | null; worker_name: string | null;
+};
 
 type Admin = {
   id: string; nome: string; email_real: string; login_codigo: string | null;
