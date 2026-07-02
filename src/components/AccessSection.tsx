@@ -7,6 +7,8 @@ import { KeyRound, Loader2, Lock } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
+
 
 type Props = {
   targetKind: "admin" | "worker";
