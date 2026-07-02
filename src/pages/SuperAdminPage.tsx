@@ -42,7 +42,7 @@ function SuperMaintenanceTab() {
 import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
-import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
+import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
 import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
@@ -234,6 +234,26 @@ function AdminsTab() {
       confirmText: "Gerar nova senha", destructive: true,
     });
     if (!ok) return;
+    // Auditoria OBRIGATÓRIA — sem log, sem reset.
+    const actor = await getCurrentActorIdentity();
+    const now = new Date().toISOString();
+    try {
+      await requireAudit(
+        "reset_senha_trabalhador", "admin", a.id,
+        { name: a.nome, login: a.login_codigo, email: a.email_real, status: a.active ? "ativo" : "inativo" },
+        {
+          name: a.nome, login: a.login_codigo, email: a.email_real,
+          status: a.active ? "ativo" : "inativo",
+          target_kind: "admin", target_id: a.id,
+          performed_by: actor.id, performed_by_name: actor.name, performed_by_role: actor.role,
+          timestamp: now,
+        },
+        `Reset de senha do administrador ${a.nome}`,
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { data, error } = await supabase.functions.invoke("admin-reset-password", {
       body: { target_kind: "admin", target_id: a.id },
     });
@@ -243,6 +263,7 @@ function AdminsTab() {
     }
     setCreds({ nome: data.nome, role: data.role, login: data.login, password: data.password, created_at: data.created_at });
   }
+
 
   return (
     <div className="space-y-2">

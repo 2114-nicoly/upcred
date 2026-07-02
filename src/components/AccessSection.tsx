@@ -7,6 +7,8 @@ import { KeyRound, Loader2, Lock } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
+
 
 type Props = {
   targetKind: "admin" | "worker";
@@ -53,6 +55,32 @@ export default function AccessSection({ targetKind, targetId, loginCodigo, nome,
     if (!confirm(`Gerar nova senha para ${nome}? A senha atual deixará de funcionar.`)) return;
     setResetting(true);
     try {
+      // Auditoria OBRIGATÓRIA antes de redefinir. Nunca registrar a senha.
+      const actor = await getCurrentActorIdentity();
+      const now = new Date().toISOString();
+      try {
+        await requireAudit(
+          "reset_senha_trabalhador",
+          targetKind === "admin" ? "admin" : "worker",
+          targetId,
+          { name: nome, login: loginCodigo ?? null, status: active ? "ativo" : "inativo" },
+          {
+            name: nome,
+            login: loginCodigo ?? null,
+            status: active ? "ativo" : "inativo",
+            target_kind: targetKind,
+            target_id: targetId,
+            performed_by: actor.id,
+            performed_by_name: actor.name,
+            performed_by_role: actor.role,
+            timestamp: now,
+          },
+          `Reset de senha para ${targetKind === "admin" ? "administrador" : "trabalhador"} ${nome}`,
+        );
+      } catch (err) {
+        if (err instanceof AuditRequiredError) { setResetting(false); return; }
+        throw err;
+      }
       const { data, error } = await supabase.functions.invoke("admin-reset-password", {
         body: { target_kind: targetKind, target_id: targetId },
       });
@@ -74,6 +102,7 @@ export default function AccessSection({ targetKind, targetId, loginCodigo, nome,
       setResetting(false);
     }
   }
+
 
   return (
     <>
