@@ -13,7 +13,6 @@ import {
   getCashBalance,
   updateCashBalance,
   createCashMovement,
-  recalculateCashBalanceFromLedger,
   CashBalance,
   getCurrentDailyCashScope,
   applyDailyCashScope,
@@ -67,6 +66,9 @@ export default function CaixaPage() {
   const [reopenReason, setReopenReason] = useState("");
   const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
   const [undoReason, setUndoReason] = useState("");
+  const [reopenRequests, setReopenRequests] = useState<any[]>([]);
+  const [reviewTarget, setReviewTarget] = useState<{ req: any; action: "approve" | "reject" } | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
 
   // Manual movement dialog
   const [manualType, setManualType] = useState<"entrada_manual" | "saida_manual" | "ajuste_manual" | null>(null);
@@ -377,10 +379,74 @@ export default function CaixaPage() {
   };
 
 
-  const handleRecalculate = async () => {
-    await recalculateCashBalanceFromLedger();
-    toast.success("Caixa recalculado com sucesso!");
-    fetchData();
+
+  // Fetch pending reopen requests (admin only).
+  const fetchReopenRequests = useCallback(async () => {
+    if (!isAdmin && !isSuperAdmin) { setReopenRequests([]); return; }
+    let q: any = supabase.from("cash_reopen_requests" as any).select("*").eq("status", "pending").order("requested_at", { ascending: false });
+    const { data } = await q;
+    setReopenRequests((data as any[]) || []);
+  }, [isAdmin, isSuperAdmin]);
+  useEffect(() => { void fetchReopenRequests(); }, [fetchReopenRequests, dailyCashStatus, selectedDate]);
+
+  // Worker: submit reopen request (creates a row in cash_reopen_requests).
+  const submitReopenRequest = async () => {
+    if (submitting) return;
+    if (reopenReason.trim().length < 3) { toast.error("Informe o motivo (mínimo 3 caracteres)."); return; }
+    setSubmitting(true);
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      const uid = s?.user?.id ?? null;
+      let workerName: string | null = null;
+      let workerId: string | null = null;
+      let adminId: string | null = null;
+      if (uid) {
+        const { data: w } = await supabase.from("workers").select("id, nome, parent_admin_id").eq("auth_user_id", uid).maybeSingle();
+        if (w) { workerId = (w as any).id ?? null; workerName = (w as any).nome ?? null; adminId = (w as any).parent_admin_id ?? null; }
+      }
+      const { error } = await supabase.from("cash_reopen_requests" as any).insert({
+        cash_date: selectedDate,
+        worker_id: workerId,
+        worker_name: workerName,
+        admin_id: adminId,
+        reason: reopenReason.trim(),
+        status: "pending",
+        requested_by: uid,
+      } as any);
+      if (error) throw error;
+      await logAction(
+        "solicitar_reabertura_caixa" as any, "cash", null, null,
+        { cash_date: selectedDate, worker_id: workerId, worker_name: workerName, reason: reopenReason.trim(), status: "pending", requested_at: new Date().toISOString() },
+        `Solicitação de reabertura (${selectedDate}): ${reopenReason.trim()}`, workerId ?? undefined,
+      );
+      toast.success("Solicitação enviada ao administrador");
+      setReopenOpen(false);
+      setReopenReason("");
+    } catch (err: any) {
+      console.error("[caixa] submit reopen request failed", err);
+      toast.error(err?.message || "Erro ao enviar solicitação");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReviewRequest = async () => {
+    if (!reviewTarget || submitting) return;
+    setSubmitting(true);
+    try {
+      const rpc = reviewTarget.action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
+      const { error } = await supabase.rpc(rpc as any, { p_request_id: reviewTarget.req.id, p_note: reviewNote.trim() || null } as any);
+      if (error) throw error;
+      toast.success(reviewTarget.action === "approve" ? "Solicitação aprovada e caixa reaberto" : "Solicitação recusada");
+      setReviewTarget(null); setReviewNote("");
+      await fetchReopenRequests();
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] review request failed", err);
+      toast.error(err?.message || "Erro ao processar solicitação");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleUndoEvent = (event: DailyEvent) => {
@@ -606,14 +672,59 @@ export default function CaixaPage() {
           ) : (
             <Button
               onClick={() => setReopenOpen(true)}
-              disabled={submitting || (!isAdmin && !isSuperAdmin)}
+              disabled={submitting}
               variant="outline"
               className="text-xs h-9 col-span-2 border-warning/40 text-warning"
             >
-              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
+              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
             </Button>
           )}
         </div>
+      )}
+
+      {/* Admin: solicitações pendentes de reabertura */}
+      {(isAdmin || isSuperAdmin) && reopenRequests.length > 0 && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-warning">
+              Solicitações de reabertura pendentes ({reopenRequests.length})
+            </p>
+            <div className="space-y-2">
+              {reopenRequests.map((r) => (
+                <div key={r.id} className="rounded-md border bg-background p-2 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{r.worker_name || "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Caixa de {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                        {" · "}Solicitado {format(new Date(r.requested_at), "dd/MM HH:mm", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
+                    <span className="font-medium text-foreground">Motivo:</span> {r.reason}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-[11px] border-destructive/40 text-destructive"
+                      onClick={() => { setReviewNote(""); setReviewTarget({ req: r, action: "reject" }); }}
+                    >
+                      <XCircle className="mr-1 h-3 w-3" /> Recusar
+                    </Button>
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-[11px] border-success/40 text-success"
+                      onClick={() => { setReviewNote(""); setReviewTarget({ req: r, action: "approve" }); }}
+                    >
+                      <CheckCircle className="mr-1 h-3 w-3" /> Aprovar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
 
@@ -937,15 +1048,10 @@ export default function CaixaPage() {
         )}
       </div>
 
-      <div className={`grid gap-2 ${showAjuste ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className="grid gap-2 grid-cols-1">
         <Button variant="outline" className="w-full text-xs h-9" onClick={() => navigate("/daily-cash-history")}>
           <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
         </Button>
-        {showAjuste && (
-          <Button variant="outline" className="w-full text-xs h-9" onClick={handleRecalculate}>
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalcular
-          </Button>
-        )}
       </div>
 
       {/* Manual movement dialog */}
@@ -975,17 +1081,57 @@ export default function CaixaPage() {
       {/* Reopen cash dialog */}
       <Dialog open={reopenOpen} onOpenChange={(o) => { if (!o) { setReopenOpen(false); setReopenReason(""); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Reabrir caixa</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{(isAdmin || isSuperAdmin) ? "Reabrir caixa" : "Solicitar reabertura do caixa"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Informe o motivo da reabertura. A ação será registrada no histórico de auditoria.</p>
+            <p className="text-xs text-muted-foreground">
+              {(isAdmin || isSuperAdmin)
+                ? "Informe o motivo da reabertura. A ação será registrada no histórico de auditoria."
+                : "Informe o motivo. A solicitação será enviada ao administrador."}
+            </p>
             <div>
               <Label>Motivo <span className="text-destructive">*</span></Label>
               <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="Ex.: ajuste de pagamento recebido após fechamento" />
             </div>
-            <Button onClick={handleReopenCash} disabled={submitting || reopenReason.trim().length < 3} className="w-full">
-              Confirmar reabertura
+            <Button
+              onClick={(isAdmin || isSuperAdmin) ? handleReopenCash : submitReopenRequest}
+              disabled={submitting || reopenReason.trim().length < 3}
+              className="w-full"
+            >
+              {(isAdmin || isSuperAdmin) ? "Confirmar reabertura" : "Enviar solicitação"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin: review reopen request dialog */}
+      <Dialog open={!!reviewTarget} onOpenChange={(o) => { if (!o) { setReviewTarget(null); setReviewNote(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reviewTarget?.action === "approve" ? "Aprovar reabertura" : "Recusar solicitação"}
+            </DialogTitle>
+          </DialogHeader>
+          {reviewTarget && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded border bg-muted/30 p-2 space-y-0.5">
+                <p><span className="text-muted-foreground">Trabalhador:</span> <span className="font-medium">{reviewTarget.req.worker_name || "—"}</span></p>
+                <p><span className="text-muted-foreground">Caixa de:</span> <span className="font-medium">{format(new Date(reviewTarget.req.cash_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}</span></p>
+                <p><span className="text-muted-foreground">Motivo:</span> <span className="whitespace-pre-wrap">{reviewTarget.req.reason}</span></p>
+              </div>
+              <div>
+                <Label className="text-xs">Observação {reviewTarget.action === "reject" ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>}</Label>
+                <Textarea value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} rows={3} placeholder="Justificativa da decisão..." />
+              </div>
+              <Button
+                onClick={handleReviewRequest}
+                disabled={submitting || (reviewTarget.action === "reject" && reviewNote.trim().length < 3)}
+                className="w-full"
+                variant={reviewTarget.action === "approve" ? "default" : "destructive"}
+              >
+                {submitting ? "Processando..." : reviewTarget.action === "approve" ? "Aprovar e reabrir" : "Confirmar recusa"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
