@@ -84,11 +84,11 @@ export async function logAction(
   newValue?: unknown,
   observation?: string,
   workerId?: string | null,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const enrichedNew: any = newValue ? await enrichAuditPayload(newValue) : null;
     const enrichedOld: any = oldValue ? await enrichAuditPayload(oldValue) : null;
-    await supabase.rpc("log_audit" as any, {
+    const { error } = await supabase.rpc("log_audit" as any, {
       p_action: action,
       p_entity: entity,
       p_entity_id: entityId ?? null,
@@ -98,9 +98,41 @@ export async function logAction(
       p_worker_id:
         workerId ?? enrichedNew?.worker_id ?? enrichedOld?.worker_id ?? null,
     });
+    if (error) {
+      console.error("[audit] log_audit RPC returned error", { action, entity, error });
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn("[audit] log failed", err);
+    console.error("[audit] log_audit threw", { action, entity, err });
+    return false;
   }
+}
+
+/**
+ * Shows a persistent toast informing the user that a critical action was
+ * completed but its audit trail could NOT be recorded. This surfaces silent
+ * auditing failures so the admin is aware and can investigate.
+ */
+export function notifyAuditFailure(context?: string): void {
+  const suffix = context ? ` (${context})` : "";
+  toast.error(
+    `Ação realizada, mas houve falha ao registrar auditoria${suffix}. Avise o administrador.`,
+    { duration: 8000 },
+  );
+}
+
+/**
+ * Wrapper around logAction for critical actions (fechar/reabrir caixa,
+ * estornar, cancelar/renovar/quitar empréstimo, pagamento). If the audit
+ * write fails, shows a user-visible warning instead of failing silently.
+ */
+export async function logCriticalAction(
+  ...args: Parameters<typeof logAction>
+): Promise<boolean> {
+  const ok = await logAction(...args);
+  if (!ok) notifyAuditFailure(String(args[0]));
+  return ok;
 }
 
 /**
