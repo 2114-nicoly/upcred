@@ -148,7 +148,7 @@ export async function logCriticalAction(
   ...args: Parameters<typeof logAction>
 ): Promise<boolean> {
   const ok = await logAction(...args);
-  if (!ok) notifyAuditFailure(String(args[0]));
+  // Toast on failure handled inside logAction for critical actions.
   return ok;
 }
 
