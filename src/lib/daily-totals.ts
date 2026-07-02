@@ -191,8 +191,9 @@ export async function getDailyCollectionSummary(
       }
     }
     receivedToday = pagamentos + multas;
-  } catch {
-    // ignora
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] recebido/lançamentos falhou", err);
+    hasError = true;
   }
 
   // 3) Saldo inicial do dia (para conferência do caixa)
