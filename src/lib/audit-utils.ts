@@ -290,7 +290,7 @@ export async function logLoanAction(params: {
     params.observation ?? undefined,
     ctx.worker_id,
   );
-  if (!ok) notifyAuditFailure(String(params.action));
+  // Toast on failure is already handled inside logAction for critical actions.
   return ok;
 }
 
