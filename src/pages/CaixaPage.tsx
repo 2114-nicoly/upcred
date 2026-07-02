@@ -579,6 +579,9 @@ export default function CaixaPage() {
         <Card>
           <CardContent className="p-3 space-y-1.5">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cobranças do Dia</p>
+            {collectionSummary.hasError && (
+              <p className="text-[11px] text-destructive font-medium">Não foi possível carregar os totais.</p>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Saldo Esperado</span>
               <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
