@@ -277,7 +277,31 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={onlyCritical ? "default" : "outline"}
+          className="h-8 text-xs"
+          onClick={() => setOnlyCritical((v) => !v)}
+          title="Filtrar apenas ações críticas"
+        >
+          <ShieldAlert className="h-3.5 w-3.5 mr-1" />
+          Ações Críticas
+          {onlyCritical && <Badge variant="secondary" className="ml-1.5 text-[9px] h-4">on</Badge>}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          onClick={exportFilteredPdf}
+          disabled={filtered.length === 0}
+          title="Exportar registros filtrados em PDF"
+        >
+          <FileDown className="h-3.5 w-3.5 mr-1" /> Exportar PDF
+        </Button>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+
         <div>
           <Label className="text-[10px]">Ação</Label>
           <Select value={filterAction} onValueChange={setFilterAction}>
