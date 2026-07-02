@@ -76,6 +76,21 @@ async function enrichAuditPayload(payload: any): Promise<any> {
  * Auto-enriches `oldValue` / `newValue` with client_name / worker_name /
  * loan snapshot when those ids are present but the names are missing.
  */
+const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
+  "fechar_caixa",
+  "reabrir_caixa",
+  "solicitar_reabertura_caixa",
+  "estorno_manual",
+  "estorno_pagamento",
+  "desfazer_pagamento",
+  "excluir_emprestimo",
+  "renovar_emprestimo",
+  "renovacao_emprestimo",
+  "renegociacao_emprestimo",
+  "quitar_emprestimo",
+  "pagamento",
+]);
+
 export async function logAction(
   action: AuditAction,
   entity: AuditEntity,
@@ -100,11 +115,13 @@ export async function logAction(
     });
     if (error) {
       console.error("[audit] log_audit RPC returned error", { action, entity, error });
+      if (CRITICAL_AUDIT_ACTIONS.has(action)) notifyAuditFailure(String(action));
       return false;
     }
     return true;
   } catch (err) {
     console.error("[audit] log_audit threw", { action, entity, err });
+    if (CRITICAL_AUDIT_ACTIONS.has(action)) notifyAuditFailure(String(action));
     return false;
   }
 }
