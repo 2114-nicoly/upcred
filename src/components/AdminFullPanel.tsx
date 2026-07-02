@@ -432,8 +432,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Nenhum trabalhador desta equipe.</CardContent></Card>
           ) : (
             workers.map((w) => {
-              const s = stats.find((x) => x.worker_id === w.id);
+              void stats;
               const isArchived = !!w.archived_at;
+
               const wt = workerToday[w.id];
               const cashLabel = wt?.cashStatus === "open" ? "Aberto" : wt?.cashStatus === "closed" ? "Fechado" : "Não aberto";
               const cashVariant: "default" | "secondary" | "outline" = wt?.cashStatus === "open" ? "default" : wt?.cashStatus === "closed" ? "secondary" : "outline";
