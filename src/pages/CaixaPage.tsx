@@ -619,7 +619,7 @@ export default function CaixaPage() {
               <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Caixa Disponível no Início do Dia</span>
+              <span className="text-[11px] text-muted-foreground">Caixa no Início do Dia</span>
               <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
             </div>
             <div className="pt-1.5 border-t space-y-1">
