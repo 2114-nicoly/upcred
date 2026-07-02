@@ -1081,17 +1081,57 @@ export default function CaixaPage() {
       {/* Reopen cash dialog */}
       <Dialog open={reopenOpen} onOpenChange={(o) => { if (!o) { setReopenOpen(false); setReopenReason(""); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Reabrir caixa</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{(isAdmin || isSuperAdmin) ? "Reabrir caixa" : "Solicitar reabertura do caixa"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Informe o motivo da reabertura. A ação será registrada no histórico de auditoria.</p>
+            <p className="text-xs text-muted-foreground">
+              {(isAdmin || isSuperAdmin)
+                ? "Informe o motivo da reabertura. A ação será registrada no histórico de auditoria."
+                : "Informe o motivo. A solicitação será enviada ao administrador."}
+            </p>
             <div>
               <Label>Motivo <span className="text-destructive">*</span></Label>
               <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="Ex.: ajuste de pagamento recebido após fechamento" />
             </div>
-            <Button onClick={handleReopenCash} disabled={submitting || reopenReason.trim().length < 3} className="w-full">
-              Confirmar reabertura
+            <Button
+              onClick={(isAdmin || isSuperAdmin) ? handleReopenCash : submitReopenRequest}
+              disabled={submitting || reopenReason.trim().length < 3}
+              className="w-full"
+            >
+              {(isAdmin || isSuperAdmin) ? "Confirmar reabertura" : "Enviar solicitação"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin: review reopen request dialog */}
+      <Dialog open={!!reviewTarget} onOpenChange={(o) => { if (!o) { setReviewTarget(null); setReviewNote(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reviewTarget?.action === "approve" ? "Aprovar reabertura" : "Recusar solicitação"}
+            </DialogTitle>
+          </DialogHeader>
+          {reviewTarget && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded border bg-muted/30 p-2 space-y-0.5">
+                <p><span className="text-muted-foreground">Trabalhador:</span> <span className="font-medium">{reviewTarget.req.worker_name || "—"}</span></p>
+                <p><span className="text-muted-foreground">Caixa de:</span> <span className="font-medium">{format(new Date(reviewTarget.req.cash_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}</span></p>
+                <p><span className="text-muted-foreground">Motivo:</span> <span className="whitespace-pre-wrap">{reviewTarget.req.reason}</span></p>
+              </div>
+              <div>
+                <Label className="text-xs">Observação {reviewTarget.action === "reject" ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>}</Label>
+                <Textarea value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} rows={3} placeholder="Justificativa da decisão..." />
+              </div>
+              <Button
+                onClick={handleReviewRequest}
+                disabled={submitting || (reviewTarget.action === "reject" && reviewNote.trim().length < 3)}
+                className="w-full"
+                variant={reviewTarget.action === "approve" ? "default" : "destructive"}
+              >
+                {submitting ? "Processando..." : reviewTarget.action === "approve" ? "Aprovar e reabrir" : "Confirmar recusa"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
