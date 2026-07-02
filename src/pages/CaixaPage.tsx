@@ -13,7 +13,6 @@ import {
   getCashBalance,
   updateCashBalance,
   createCashMovement,
-  recalculateCashBalanceFromLedger,
   CashBalance,
   getCurrentDailyCashScope,
   applyDailyCashScope,
