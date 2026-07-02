@@ -15,8 +15,13 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { FileSearch, Eye } from "lucide-react";
+import { FileSearch, Eye, ShieldAlert, FileDown } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
+import { CRITICAL_AUDIT_ACTIONS } from "@/lib/audit-utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { toast } from "sonner";
+
 
 type Log = {
   id: string;
