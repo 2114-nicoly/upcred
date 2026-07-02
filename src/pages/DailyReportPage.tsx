@@ -586,16 +586,33 @@ export default function DailyReportPage() {
 
       <Card>
         <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <Stat label="Entradas" value={formatCurrency(totals.totalIn)} positive />
-          <Stat label="Saídas" value={formatCurrency(totals.totalOut)} negative />
-          <Stat label="Pagamentos" value={formatCurrency(totals.payments)} />
-          <Stat label="Empréstimos" value={formatCurrency(totals.loans)} />
-          <Stat label="Renovações" value={formatCurrency(totals.renewals)} />
-          <Stat label="Multas recebidas" value={formatCurrency(totals.penalties)} />
+          <Stat label="Caixa Disponível no Início do Dia" value={formatCurrency(cashSummary?.opening ?? 0)} />
+          <Stat label="Recebido Hoje" value={formatCurrency(totals.payments)} positive />
+          <Stat label="Multas Recebidas" value={formatCurrency(totals.penalties)} positive />
+          <Stat label="Emprestado Hoje" value={formatCurrency(totals.loans + totals.renewals)} negative />
+          <Stat label="Entradas Manuais" value={formatCurrency(totals.manualIn)} positive />
+          <Stat label="Saídas Manuais" value={formatCurrency(totals.manualOut)} negative />
+          <Stat
+            label="Caixa Disponível Final"
+            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut))}
+          />
+          {cashSummary?.counted != null && <Stat label="Dinheiro Contado" value={formatCurrency(cashSummary.counted)} />}
+          {cashSummary?.diff != null && (
+            <Stat label="Diferença" value={formatCurrency(cashSummary.diff)} positive={cashSummary.diff >= 0} negative={cashSummary.diff < 0} />
+          )}
           <Stat label="Não pagou" value={String(totals.notPaidCount)} />
-          <Stat label="Saldo do dia" value={formatCurrency(totals.balance)} positive={totals.balance >= 0} negative={totals.balance < 0} />
         </CardContent>
       </Card>
+
+      {cashSummary?.closingObs && (
+        <Card>
+          <CardContent className="p-3 text-xs">
+            <p className="text-muted-foreground mb-1">Observação do fechamento</p>
+            <p className="whitespace-pre-wrap">{cashSummary.closingObs}</p>
+          </CardContent>
+        </Card>
+      )}
+
 
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="default">
