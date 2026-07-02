@@ -97,6 +97,7 @@ export type DailyCollectionSummary = {
   receivedToday: number;
   pendingToReceiveToday: number;
   cashExpectedForClosing: number;
+  hasError: boolean;
 };
 
 export async function getDailyCollectionSummary(
