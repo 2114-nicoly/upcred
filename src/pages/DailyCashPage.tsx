@@ -1785,10 +1785,10 @@ export default function DailyCashPage() {
             ) : (
               <div className="mt-4 space-y-2">
                 <p className="text-center text-xs text-muted-foreground">
-                  Caixa fechado. Solicite a reabertura ao seu administrador.
+                  Caixa fechado. Vá para o Caixa do Dia para solicitar a reabertura ao administrador.
                 </p>
-                <Button onClick={() => setReopenRequestDialogOpen(true)} variant="outline" size="sm" className="w-full">
-                  <LockOpen className="mr-2 h-4 w-4" /> Solicitar reabertura
+                <Button onClick={() => navigate(`/caixa?date=${selectedDate}`)} variant="outline" size="sm" className="w-full">
+                  <LockOpen className="mr-2 h-4 w-4" /> Ir para Caixa do Dia
                 </Button>
               </div>
             )
@@ -1807,46 +1807,6 @@ export default function DailyCashPage() {
             Ver Relatório do Dia
           </Button>
 
-          <Dialog
-            open={reopenRequestDialogOpen}
-            onOpenChange={(o) => { setReopenRequestDialogOpen(o); if (!o) setReopenRequestReason(""); }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Solicitar reabertura do caixa</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div>
-                  <Label>Motivo da solicitação <span className="text-destructive">*</span></Label>
-                  <Textarea
-                    value={reopenRequestReason}
-                    onChange={(e) => setReopenRequestReason(e.target.value)}
-                    placeholder="Descreva o motivo (mínimo 3 caracteres)..."
-                    rows={3}
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    A solicitação será registrada no histórico de auditoria e enviada ao administrador.
-                  </p>
-                </div>
-                <DialogFooter className="gap-2 sm:gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => { setReopenRequestDialogOpen(false); setReopenRequestReason(""); }}
-                    disabled={isSubmittingReopenRequest}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={submitReopenRequest}
-                    disabled={reopenRequestReason.trim().length < 3 || isSubmittingReopenRequest}
-                  >
-                    {isSubmittingReopenRequest ? "Enviando..." : "Enviar solicitação"}
-                  </Button>
-                </DialogFooter>
-              </div>
-            </DialogContent>
-          </Dialog>
 
         </>
       )}
