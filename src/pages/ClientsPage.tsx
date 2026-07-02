@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 
 type Client = {
   id: string;
