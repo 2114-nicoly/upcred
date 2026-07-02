@@ -274,6 +274,49 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
     }
   }
 
+  function exportFilteredCsv() {
+    try {
+      const header = ["Data", "Ação", "Responsável", "Papel", "Cliente", "Entidade", "ID", "Valor", "Observação"];
+      const escape = (v: any) => {
+        const s = v == null ? "" : String(v);
+        return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const lines = [header.map(escape).join(";")];
+      filtered.forEach((l) => {
+        const amt = getLogAmount(l);
+        const actor = l.user_role === "super_admin" ? "Super Admin"
+          : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` — ${adminName(l.admin_id)}` : ""}`
+          : (workerNameFromPayload(l) || workerName(l.worker_id));
+        lines.push([
+          format(parseISO(l.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR }),
+          ACTION_LABELS[l.action_type] ?? l.action_type,
+          actor ?? "",
+          l.user_role ?? "",
+          clientName(l) ?? "",
+          l.entity_type,
+          l.entity_id ?? "",
+          amt != null ? String(amt).replace(".", ",") : "",
+          l.observation ?? "",
+        ].map(escape).join(";"));
+      });
+      const csv = "\uFEFF" + lines.join("\n"); // BOM for Excel
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = format(new Date(), "yyyyMMdd_HHmm");
+      a.href = url;
+      a.download = `${onlyCritical ? "acoes-criticas" : "auditoria"}_${stamp}.csv`;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("CSV gerado");
+    } catch (err: any) {
+      console.error("[audit] csv export failed", err);
+      toast.error(err?.message || "Falha ao gerar CSV");
+    }
+  }
+
+
 
   return (
     <div className="space-y-3">
