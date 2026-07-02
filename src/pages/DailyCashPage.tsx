@@ -755,7 +755,7 @@ export default function DailyCashPage() {
       refreshTimerRef.current = window.setTimeout(() => {
         refreshTimerRef.current = null;
         if (isMountedRef.current) void fetchData({ silent: true });
-      }, 250);
+      }, 1000);
     };
 
     // Use an opaque, per-session random channel topic so other authenticated
