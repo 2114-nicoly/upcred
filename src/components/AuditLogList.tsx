@@ -342,6 +342,17 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
         >
           <FileDown className="h-3.5 w-3.5 mr-1" /> Exportar PDF
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          onClick={exportFilteredCsv}
+          disabled={filtered.length === 0}
+          title="Exportar registros filtrados em CSV"
+        >
+          <FileDown className="h-3.5 w-3.5 mr-1" /> Exportar CSV
+        </Button>
+
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
 
