@@ -264,7 +264,7 @@ export async function logLoanAction(params: {
 
   const oldPayload = params.before ?? null;
 
-  await logAction(
+  const ok = await logAction(
     params.action,
     params.entity ?? "loan",
     params.entityId ?? ctx.loan_id ?? null,
@@ -273,6 +273,8 @@ export async function logLoanAction(params: {
     params.observation ?? undefined,
     ctx.worker_id,
   );
+  if (!ok) notifyAuditFailure(String(params.action));
+  return ok;
 }
 
 /**
