@@ -235,6 +235,65 @@ export type Database = {
           },
         ]
       }
+      cash_reopen_requests: {
+        Row: {
+          admin_id: string | null
+          cash_date: string
+          created_at: string
+          id: string
+          reason: string
+          requested_at: string
+          requested_by: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          worker_id: string | null
+          worker_name: string | null
+        }
+        Insert: {
+          admin_id?: string | null
+          cash_date: string
+          created_at?: string
+          id?: string
+          reason: string
+          requested_at?: string
+          requested_by?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+          worker_name?: string | null
+        }
+        Update: {
+          admin_id?: string | null
+          cash_date?: string
+          created_at?: string
+          id?: string
+          reason?: string
+          requested_at?: string
+          requested_by?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+          worker_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_reopen_requests_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_attachments: {
         Row: {
           admin_id: string | null
@@ -1543,6 +1602,10 @@ export type Database = {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
       }
+      approve_cash_reopen_request: {
+        Args: { p_note?: string; p_request_id: string }
+        Returns: string
+      }
       archive_worker: { Args: { p_worker_id: string }; Returns: undefined }
       close_daily_cash: { Args: { p_cash_date: string }; Returns: string }
       close_daily_cash_v2: {
@@ -1656,6 +1719,10 @@ export type Database = {
       redact_old_credentials_log: { Args: never; Returns: number }
       register_recovery_request: {
         Args: { p_email: string; p_login: string; p_nome: string }
+        Returns: string
+      }
+      reject_cash_reopen_request: {
+        Args: { p_note?: string; p_request_id: string }
         Returns: string
       }
       reopen_daily_cash: {
