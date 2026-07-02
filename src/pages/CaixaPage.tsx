@@ -672,14 +672,59 @@ export default function CaixaPage() {
           ) : (
             <Button
               onClick={() => setReopenOpen(true)}
-              disabled={submitting || (!isAdmin && !isSuperAdmin)}
+              disabled={submitting}
               variant="outline"
               className="text-xs h-9 col-span-2 border-warning/40 text-warning"
             >
-              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Caixa fechado — solicite reabertura" : "Reabrir caixa"}
+              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
             </Button>
           )}
         </div>
+      )}
+
+      {/* Admin: solicitações pendentes de reabertura */}
+      {(isAdmin || isSuperAdmin) && reopenRequests.length > 0 && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-warning">
+              Solicitações de reabertura pendentes ({reopenRequests.length})
+            </p>
+            <div className="space-y-2">
+              {reopenRequests.map((r) => (
+                <div key={r.id} className="rounded-md border bg-background p-2 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{r.worker_name || "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Caixa de {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                        {" · "}Solicitado {format(new Date(r.requested_at), "dd/MM HH:mm", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
+                    <span className="font-medium text-foreground">Motivo:</span> {r.reason}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-[11px] border-destructive/40 text-destructive"
+                      onClick={() => { setReviewNote(""); setReviewTarget({ req: r, action: "reject" }); }}
+                    >
+                      <XCircle className="mr-1 h-3 w-3" /> Recusar
+                    </Button>
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-[11px] border-success/40 text-success"
+                      onClick={() => { setReviewNote(""); setReviewTarget({ req: r, action: "approve" }); }}
+                    >
+                      <CheckCircle className="mr-1 h-3 w-3" /> Aprovar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
 
