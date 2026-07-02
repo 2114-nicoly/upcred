@@ -271,17 +271,19 @@ export default function DailyReportPage() {
     const notVisitedCount = notPaidEvents.length;
 
     // Cash summary block
+    const opening = cashSummary?.opening ?? 0;
+    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut);
     const cashRows: [string, string][] = [
-      ["Saldo inicial", formatCurrency(cashSummary?.opening ?? 0)],
-      ["Total recebido (pagamentos)", formatCurrency(totals.payments)],
-      ["Multas recebidas", formatCurrency(totals.penalties)],
-      ["Total emprestado / liberado", formatCurrency(totals.loans + totals.renewals)],
-      ["Total entradas", formatCurrency(totals.totalIn)],
-      ["Total saídas", formatCurrency(totals.totalOut)],
-      ["Saldo esperado p/ conferência do caixa", formatCurrency(cashSummary?.expected ?? (cashSummary?.opening ?? 0) + totals.balance)],
-      ...(cashSummary?.counted != null ? [["Saldo informado / contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
+      ["Caixa Disponível no Início do Dia", formatCurrency(opening)],
+      ["Recebido Hoje", formatCurrency(totals.payments)],
+      ["Multas Recebidas", formatCurrency(totals.penalties)],
+      ["Emprestado Hoje", formatCurrency(totals.loans + totals.renewals)],
+      ["Entradas Manuais", formatCurrency(totals.manualIn)],
+      ["Saídas Manuais", formatCurrency(totals.manualOut)],
+      ["Caixa Disponível Final", formatCurrency(finalCash)],
+      ...(cashSummary?.counted != null ? [["Dinheiro Contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
       ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
-      ...(cashSummary?.closingObs ? [["Justificativa da diferença", cashSummary.closingObs] as [string,string]] : []),
+      ...(cashSummary?.closingObs ? [["Observação do fechamento", cashSummary.closingObs] as [string,string]] : []),
       ["Clientes visitados", String(visitedClients.size)],
       ["Clientes não visitados (não pagou)", String(notVisitedCount)],
     ];
