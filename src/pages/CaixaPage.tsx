@@ -188,9 +188,9 @@ export default function CaixaPage() {
     lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
     manualIn: liveTotals.entradasManuais,
     manualOut: liveTotals.saidasManuais,
-    // Valor Esperado no Caixa = opening + pagamentos + multas + entradas manuais - emprestimos - saidas manuais.
-    // (Sem emprestimo_importado, sem saldo a receber futuro.)
-    expected: collectionSummary.cashExpectedForClosing,
+    // Valor Esperado no Caixa = cash_balance.available_cash atual (fonte única da verdade).
+    // Já reflete abertura + todas as movimentações do dia.
+    expected: Number(balance?.available_cash ?? 0),
     notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
