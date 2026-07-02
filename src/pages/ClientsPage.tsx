@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Search, ChevronRight, Pencil, Trash2, ArrowDownAZ, Filter, Layers } from "lucide-react";
+import { Users, Plus, Search, ChevronRight, Pencil, Archive, ArrowDownAZ, Filter, Layers } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 
 type Client = {
   id: string;
@@ -177,6 +177,17 @@ export default function ClientsPage() {
 
   const handleArchive = async (id: string) => {
     if (!confirm("Arquivar este cliente? Ele deixará de aparecer nas listas, mas todo o histórico (empréstimos, pagamentos, caixa) será preservado.")) return;
+    try {
+      await requireAudit(
+        "excluir_cliente", "client", id,
+        { archived: false },
+        { archived: true },
+        "Arquivamento de cliente",
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id || null;
     const { error } = await supabase
@@ -184,10 +195,10 @@ export default function ClientsPage() {
       .update({ archived_at: new Date().toISOString(), archived_by: uid } as any)
       .eq("id", id);
     if (error) { toast.error("Erro ao arquivar cliente"); return; }
-    logAction("excluir_cliente", "client", id, null, { archived: true }, "Arquivamento (soft delete)");
     toast.success("Cliente arquivado!");
     fetchClients();
   };
+
 
   const openEdit = (client: Client) => {
     setEditingClient(client);
@@ -385,9 +396,10 @@ export default function ClientsPage() {
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
+                        <Archive className="h-3.5 w-3.5" />
                       </Button>
+
                       <Link to={`/clients/${client.id}`}>
                         <ChevronRight className="h-5 w-5 text-muted-foreground" />
                       </Link>

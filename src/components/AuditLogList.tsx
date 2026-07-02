@@ -15,8 +15,13 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { FileSearch, Eye } from "lucide-react";
+import { FileSearch, Eye, ShieldAlert, FileDown } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
+import { CRITICAL_AUDIT_ACTIONS } from "@/lib/audit-utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { toast } from "sonner";
+
 
 type Log = {
   id: string;
@@ -119,6 +124,8 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
   const [maxValue, setMaxValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [openLog, setOpenLog] = useState<Log | null>(null);
+  const [onlyCritical, setOnlyCritical] = useState(false);
+
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -192,6 +199,7 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
     const min = minValue ? Number(minValue) : null;
     const max = maxValue ? Number(maxValue) : null;
     return logs.filter((l) => {
+      if (onlyCritical && !CRITICAL_AUDIT_ACTIONS.has(l.action_type as any)) return false;
       if (q) {
         const label = (ACTION_LABELS[l.action_type] || l.action_type).toLowerCase();
         const hay = `${label} ${l.entity_type} ${l.entity_id ?? ""} ${l.observation ?? ""} ${JSON.stringify(l.new_value ?? "")} ${JSON.stringify(l.old_value ?? "")}`.toLowerCase();
@@ -209,11 +217,91 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
       }
       return true;
     });
-  }, [logs, search, clientSearch, minValue, maxValue, clientsMap]);
+  }, [logs, search, clientSearch, minValue, maxValue, clientsMap, onlyCritical]);
+
+  function exportFilteredPdf() {
+    try {
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const now = new Date();
+      doc.setFontSize(14);
+      doc.text(
+        onlyCritical ? "Auditoria — Ações Críticas" : "Auditoria — Registros filtrados",
+        40, 40,
+      );
+      doc.setFontSize(9);
+      doc.text(
+        `Gerado em ${format(now, "dd/MM/yyyy HH:mm", { locale: ptBR })} · ${filtered.length} registros`,
+        40, 58,
+      );
+      const rows = filtered.map((l) => {
+        const amt = getLogAmount(l);
+        const actor = l.user_role === "super_admin" ? "Super Admin"
+          : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` — ${adminName(l.admin_id)}` : ""}`
+          : (workerNameFromPayload(l) || workerName(l.worker_id));
+        return [
+          format(parseISO(l.created_at), "dd/MM/yy HH:mm", { locale: ptBR }),
+          ACTION_LABELS[l.action_type] ?? l.action_type,
+          actor,
+          clientName(l) ?? "—",
+          amt != null ? formatCurrency(amt) : "—",
+          l.observation ?? "",
+        ];
+      });
+      autoTable(doc, {
+        startY: 74,
+        head: [["Data", "Ação", "Responsável", "Cliente", "Valor", "Observação"]],
+        body: rows,
+        styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" },
+        headStyles: { fillColor: [30, 41, 59] },
+        columnStyles: {
+          0: { cellWidth: 62 }, 1: { cellWidth: 90 }, 2: { cellWidth: 90 },
+          3: { cellWidth: 90 }, 4: { cellWidth: 58 }, 5: { cellWidth: "auto" as any },
+        },
+        margin: { left: 40, right: 40 },
+        didDrawPage: () => {
+          const p = (doc as any).internal.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.text(`Página ${p}`, doc.internal.pageSize.getWidth() - 60, doc.internal.pageSize.getHeight() - 20);
+        },
+      });
+      const stamp = format(now, "yyyyMMdd_HHmm");
+      const suffix = onlyCritical ? "acoes-criticas" : "auditoria";
+      doc.save(`${suffix}_${stamp}.pdf`);
+      toast.success("PDF gerado");
+    } catch (err: any) {
+      console.error("[audit] pdf export failed", err);
+      toast.error(err?.message || "Falha ao gerar PDF");
+    }
+  }
+
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={onlyCritical ? "default" : "outline"}
+          className="h-8 text-xs"
+          onClick={() => setOnlyCritical((v) => !v)}
+          title="Filtrar apenas ações críticas"
+        >
+          <ShieldAlert className="h-3.5 w-3.5 mr-1" />
+          Ações Críticas
+          {onlyCritical && <Badge variant="secondary" className="ml-1.5 text-[9px] h-4">on</Badge>}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          onClick={exportFilteredPdf}
+          disabled={filtered.length === 0}
+          title="Exportar registros filtrados em PDF"
+        >
+          <FileDown className="h-3.5 w-3.5 mr-1" /> Exportar PDF
+        </Button>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+
         <div>
           <Label className="text-[10px]">Ação</Label>
           <Select value={filterAction} onValueChange={setFilterAction}>

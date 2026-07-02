@@ -76,7 +76,7 @@ async function enrichAuditPayload(payload: any): Promise<any> {
  * Auto-enriches `oldValue` / `newValue` with client_name / worker_name /
  * loan snapshot when those ids are present but the names are missing.
  */
-const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
+export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
   "fechar_caixa",
   "reabrir_caixa",
   "solicitar_reabertura_caixa",
@@ -89,7 +89,22 @@ const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction>([
   "renegociacao_emprestimo",
   "quitar_emprestimo",
   "pagamento",
+  "reset_senha_trabalhador",
+  "arquivar_trabalhador",
+  "desarquivar_trabalhador",
+  "ativar_trabalhador",
+  "desativar_trabalhador",
+  "excluir_trabalhador",
+  "excluir_cliente",
+  "transferencia_cliente",
+  "ativar_admin",
+  "desativar_admin",
 ]);
+
+export function isCriticalAuditAction(a: string): boolean {
+  return CRITICAL_AUDIT_ACTIONS.has(a as AuditAction);
+}
+
 
 export async function logAction(
   action: AuditAction,
@@ -151,6 +166,34 @@ export async function logCriticalAction(
   // Toast on failure handled inside logAction for critical actions.
   return ok;
 }
+
+/**
+ * Enforces that a critical audit MUST be recorded. Throws AuditRequiredError
+ * on failure so the caller can abort the action and surface the message to
+ * the user. Use this BEFORE (or as a gate around) any irreversible critical
+ * operation whose audit trail is mandatory.
+ */
+export class AuditRequiredError extends Error {
+  constructor(action: string) {
+    super(`Auditoria obrigatória falhou (${action}). Ação não realizada.`);
+    this.name = "AuditRequiredError";
+  }
+}
+
+export async function requireAudit(
+  ...args: Parameters<typeof logAction>
+): Promise<void> {
+  const ok = await logAction(...args);
+  if (!ok) {
+    const action = String(args[0] ?? "ação crítica");
+    toast.error(
+      `Não foi possível registrar auditoria de "${action}". A ação foi bloqueada.`,
+      { duration: 8000 },
+    );
+    throw new AuditRequiredError(action);
+  }
+}
+
 
 /**
  * Resolves the client / worker / admin names attached to a loan so audit

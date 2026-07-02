@@ -19,7 +19,7 @@ import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
 } from "@/lib/consolidated-stats";
 import { getDailyCollectionSummary } from "@/lib/daily-totals";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
@@ -187,7 +187,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       const rpc = action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
       const { error } = await supabase.rpc(rpc as any, { p_request_id: r.id, p_note: null } as any);
       if (error) throw error;
-      await logAction(
+      await requireAudit(
         (action === "approve" ? "reabrir_caixa" : "ajuste_caixa") as any,
         "cash", null,
         { request_id: r.id, status: "pending", cash_date: r.cash_date, worker_id: r.worker_id, worker_name: r.worker_name },
@@ -198,7 +198,11 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       toast({ title: action === "approve" ? "Solicitação aprovada" : "Solicitação recusada" });
       await loadReopenRequests();
     } catch (e: any) {
-      toast({ title: "Erro", description: e?.message || "Falha", variant: "destructive" });
+      if (e instanceof AuditRequiredError) {
+        toast({ title: "Auditoria obrigatória", description: e.message, variant: "destructive" });
+      } else {
+        toast({ title: "Erro", description: e?.message || "Falha", variant: "destructive" });
+      }
     } finally {
       setReopenBusy(null);
     }
@@ -215,6 +219,19 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
     });
     if (!ok) return;
+    try {
+      await requireAudit(
+        desativando ? "desativar_trabalhador" : "ativar_trabalhador",
+        "worker", w.id,
+        { active: w.active, nome: w.nome },
+        { active: !w.active, nome: w.nome },
+        desativando ? "Desativação de trabalhador" : "Ativação de trabalhador",
+        w.id,
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { error } = await supabase.rpc("set_worker_active" as any, { p_worker_id: w.id, p_active: !w.active });
     if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
     toast({ title: w.active ? "Desativado" : "Ativado" });
@@ -231,6 +248,18 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       confirmText: "Arquivar", destructive: true,
     });
     if (!ok) return;
+    try {
+      await requireAudit(
+        "arquivar_trabalhador", "worker", w.id,
+        { archived_at: null, nome: w.nome },
+        { archived_at: new Date().toISOString(), nome: w.nome },
+        "Arquivamento de trabalhador",
+        w.id,
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { error } = await supabase.rpc("archive_worker" as any, { p_worker_id: w.id });
     if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
     toast({ title: "Trabalhador arquivado" }); load();
@@ -238,6 +267,18 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
   async function handleUnarchive(w: Worker, e: React.MouseEvent) {
     e.stopPropagation();
+    try {
+      await requireAudit(
+        "desarquivar_trabalhador", "worker", w.id,
+        { archived_at: w.archived_at ?? null, nome: w.nome },
+        { archived_at: null, nome: w.nome },
+        "Desarquivamento de trabalhador",
+        w.id,
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { error } = await supabase.rpc("unarchive_worker" as any, { p_worker_id: w.id });
     if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
     toast({ title: "Trabalhador desarquivado" }); load();
@@ -245,6 +286,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
   async function handleDeleteForever(w: Worker, e: React.MouseEvent) {
     e.stopPropagation();
+    if (!isSuperAdmin) {
+      return toast({ title: "Restrito", description: "Exclusão definitiva é exclusiva do Super Admin (manutenção avançada).", variant: "destructive" });
+    }
     const ok = await confirm({
       title: "Excluir definitivamente?",
       description: "Ação irreversível. Só funciona se o trabalhador não tiver clientes, empréstimos ou movimentações.",
@@ -252,10 +296,23 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       confirmText: "Excluir definitivamente", destructive: true,
     });
     if (!ok) return;
+    try {
+      await requireAudit(
+        "excluir_trabalhador", "worker", w.id,
+        { nome: w.nome, archived_at: w.archived_at },
+        null,
+        "Exclusão definitiva (manutenção avançada)",
+        w.id,
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { error } = await supabase.rpc("delete_worker_if_empty" as any, { p_worker_id: w.id });
     if (error) return toast({ title: "Não foi possível excluir", description: error.message, variant: "destructive" });
     toast({ title: "Trabalhador excluído" }); load();
   }
+
 
   function viewAsAdmin(target = "/admin") {
     if (!admin) return;
@@ -483,11 +540,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                           <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
                         </Button>
                       )}
-                      {isArchived && (
-                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={(e) => handleDeleteForever(w, e)}>
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
+                      {isArchived && isSuperAdmin && (
+                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={(e) => handleDeleteForever(w, e)} title="Manutenção avançada — Super Admin">
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir definitivo
                         </Button>
                       )}
+
                     </div>
                   </CardContent>
                 </Card>
