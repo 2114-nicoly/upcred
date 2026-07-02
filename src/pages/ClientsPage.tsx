@@ -177,6 +177,17 @@ export default function ClientsPage() {
 
   const handleArchive = async (id: string) => {
     if (!confirm("Arquivar este cliente? Ele deixará de aparecer nas listas, mas todo o histórico (empréstimos, pagamentos, caixa) será preservado.")) return;
+    try {
+      await requireAudit(
+        "excluir_cliente", "client", id,
+        { archived: false },
+        { archived: true },
+        "Arquivamento de cliente",
+      );
+    } catch (err) {
+      if (err instanceof AuditRequiredError) return;
+      throw err;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id || null;
     const { error } = await supabase
@@ -184,10 +195,10 @@ export default function ClientsPage() {
       .update({ archived_at: new Date().toISOString(), archived_by: uid } as any)
       .eq("id", id);
     if (error) { toast.error("Erro ao arquivar cliente"); return; }
-    logAction("excluir_cliente", "client", id, null, { archived: true }, "Arquivamento (soft delete)");
     toast.success("Cliente arquivado!");
     fetchClients();
   };
+
 
   const openEdit = (client: Client) => {
     setEditingClient(client);
