@@ -540,11 +540,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                           <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
                         </Button>
                       )}
-                      {isArchived && (
-                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={(e) => handleDeleteForever(w, e)}>
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir
+                      {isArchived && isSuperAdmin && (
+                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={(e) => handleDeleteForever(w, e)} title="Manutenção avançada — Super Admin">
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir definitivo
                         </Button>
                       )}
+
                     </div>
                   </CardContent>
                 </Card>
