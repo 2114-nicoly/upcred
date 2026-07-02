@@ -225,8 +225,9 @@ export async function getDailyCollectionSummary(
       opening = 0;
     }
 
-  } catch {
-    // ignora
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] saldo inicial falhou", err);
+    hasError = true;
   }
 
   // Esperado no caixa = dinheiro físico esperado (sem futuras cobranças, sem importados).
@@ -238,6 +239,7 @@ export async function getDailyCollectionSummary(
     receivedToday,
     pendingToReceiveToday,
     cashExpectedForClosing,
+    hasError,
   };
 }
 
