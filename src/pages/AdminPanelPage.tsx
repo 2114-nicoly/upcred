@@ -78,18 +78,28 @@ export default function AdminPanelPage() {
   return (
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
-      <Tabs defaultValue="workers">
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="workers" className="text-xs">Equipe</TabsTrigger>
-          <TabsTrigger value="overview" className="text-xs">Resumo</TabsTrigger>
-          <TabsTrigger value="maintenance" className="text-xs">Manutenção</TabsTrigger>
+      <Tabs defaultValue="operacao">
+        <TabsList className="grid grid-cols-5 w-full">
+          <TabsTrigger value="operacao" className="text-[10px]">Operação</TabsTrigger>
+          <TabsTrigger value="workers" className="text-[10px]">Equipe</TabsTrigger>
+          <TabsTrigger value="reports" className="text-[10px]">Relatórios</TabsTrigger>
+          <TabsTrigger value="audit" className="text-[10px]">Auditoria</TabsTrigger>
+          <TabsTrigger value="maintenance" className="text-[10px]">Manutenção</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="operacao" className="mt-3">
+          <OperacaoTab />
+        </TabsContent>
         <TabsContent value="workers" className="mt-3">
+          <OverviewTab />
+          <div className="h-3" />
           <WorkersTab />
         </TabsContent>
-        <TabsContent value="overview" className="mt-3">
-          <OverviewTab />
+        <TabsContent value="reports" className="mt-3">
+          <ReportsTab />
+        </TabsContent>
+        <TabsContent value="audit" className="mt-3">
+          <AuditLogList />
         </TabsContent>
         <TabsContent value="maintenance" className="mt-3">
           <MaintenanceTab />
@@ -98,6 +108,54 @@ export default function AdminPanelPage() {
     </div>
   );
 }
+
+/* ============= OPERAÇÃO TAB ============= */
+function OperacaoTab() {
+  const navigate = useNavigate();
+  const items: { label: string; path: string }[] = [
+    { label: "Rota do dia", path: "/" },
+    { label: "Caixa do dia", path: "/caixa" },
+    { label: "Clientes", path: "/clients" },
+    { label: "Empréstimos ativos", path: "/active-loans" },
+    { label: "Parcelas em atraso", path: "/overdue-loans" },
+  ];
+  return (
+    <div className="space-y-2">
+      {items.map((it) => (
+        <Button key={it.path} variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate(it.path)}>
+          {it.label} <ExternalLink className="h-3.5 w-3.5" />
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+/* ============= RELATÓRIOS TAB ============= */
+function ReportsTab() {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Atalhos</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-2 space-y-2">
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-report")}>
+            Relatório Diário (PDF) <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/reports")}>
+            Relatórios financeiros <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-cash-history")}>
+            Histórico de caixa <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        </CardContent>
+      </Card>
+      <div className="border rounded-lg overflow-hidden">
+        <DailyReportPage />
+      </div>
+    </div>
+  );
+}
+
 
 /* ============= OVERVIEW TAB ============= */
 function OverviewTab() {
