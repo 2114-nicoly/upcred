@@ -108,42 +108,14 @@ export default function CaixaPage() {
           : "sem_caixa"
       );
 
-      // Inherit opening balance from last closed daily_cash if current row is open/missing.
-      const currentOpening = Number(dc?.opening_balance || 0);
-      const currentClosed = dc?.status === "closed";
-      if (!currentClosed && currentOpening <= 0.001) {
-        try {
-          const scope = await getCurrentDailyCashScope();
-          const prevQ = applyDailyCashScope(
-            supabase.from("daily_cash")
-              .select("expected_closing_balance, counted_closing_balance, cash_date, status")
-              .lt("cash_date", selectedDate)
-              .eq("status", "closed")
-              .order("cash_date", { ascending: false })
-              .limit(1),
-            scope
-          );
-          const { data: prev } = await prevQ;
-          const prevRow = (prev?.[0] as any) || null;
-          if (prevRow) {
-            const rawInh = Number(prevRow.counted_closing_balance ?? prevRow.expected_closing_balance ?? 0);
-            const inh = isFinite(rawInh) ? rawInh : 0;
-            if (inh < 0) {
-              console.warn("[CaixaPage] Saldo inicial herdado negativo, exibindo 0:", inh);
-              setInheritedOpening(0);
-            } else {
-              setInheritedOpening(inh);
-            }
-          } else {
-            setInheritedOpening(0);
-          }
-
-        } catch {
-          setInheritedOpening(0);
-        }
-      } else {
-        setInheritedOpening(0);
+      // Saldo inicial = opening_balance salvo na abertura (nunca herda de dias anteriores,
+      // nunca fica negativo). Se ainda não existe daily_cash, exibe 0.
+      const rawOpening = Number(dc?.opening_balance ?? 0);
+      const safeOpening = isFinite(rawOpening) && rawOpening > 0 ? rawOpening : 0;
+      if (rawOpening < 0) {
+        console.warn("[CaixaPage] opening_balance negativo, exibindo 0:", rawOpening);
       }
+      setInheritedOpening(safeOpening);
 
       // Fetch client names for all events
       const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
@@ -216,9 +188,9 @@ export default function CaixaPage() {
     lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
     manualIn: liveTotals.entradasManuais,
     manualOut: liveTotals.saidasManuais,
-    // Valor Esperado no Caixa = opening + pagamentos + multas + entradas manuais - emprestimos - saidas manuais.
-    // (Sem emprestimo_importado, sem saldo a receber futuro.)
-    expected: collectionSummary.cashExpectedForClosing,
+    // Valor Esperado no Caixa = cash_balance.available_cash atual (fonte única da verdade).
+    // Já reflete abertura + todas as movimentações do dia.
+    expected: Number(balance?.available_cash ?? 0),
     notPaidCount: liveTotals.naoPagos,
     eventsCount: scopedEvents.length,
   };
