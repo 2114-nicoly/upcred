@@ -392,6 +392,6 @@ export async function logReversal(params: {
     newPayload,
     params.observation ?? (params.reversal_reason ?? undefined),
   );
-  if (!ok) notifyAuditFailure(String(params.action));
+  // Toast on failure is already handled inside logAction for critical actions.
   return ok;
 }
