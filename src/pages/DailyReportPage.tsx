@@ -243,24 +243,81 @@ export default function DailyReportPage() {
   const buildPdf = (): { doc: jsPDF; filename: string } => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const issuedAt = format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
-
-    // Header
-    doc.setFontSize(15);
-    doc.setFont("helvetica", "bold");
-    doc.text("UpCred — Relatório Diário", 14, 16);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text(`Emitido em ${issuedAt}`, pageWidth - 14, 16, { align: "right" });
-
-    doc.setFontSize(10);
-    doc.text(`Trabalhador: ${workerName || "—"}`, 14, 24);
-    doc.text(`Data: ${dateLabel}`, 14, 30);
     const cashLabel =
       cashStatus === "closed" ? "Fechado" :
       cashStatus === "open" ? "Aberto" :
       cashStatus ? cashStatus : "—";
-    doc.text(`Caixa: ${cashLabel}`, 14, 36);
+
+    // Layout constants — never use fixed absolute Y positions after this point;
+    // always route through cursorY() / ensureSpace() / addSection().
+    const HEADER_BOTTOM = 42;
+    const PAGE_BOTTOM = pageHeight - 22;
+
+    const drawHeader = () => {
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+      doc.text("UpCred — Relatório Diário", 14, 16);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Emitido em ${issuedAt}`, pageWidth - 14, 16, { align: "right" });
+      doc.setFontSize(10);
+      doc.text(`Trabalhador: ${workerName || "—"}`, 14, 24);
+      doc.text(`Data: ${dateLabel}`, 14, 30);
+      doc.text(`Caixa: ${cashLabel}`, 14, 36);
+      doc.setDrawColor(200);
+      doc.line(14, 38, pageWidth - 14, 38);
+    };
+
+    drawHeader();
+    // Seed lastAutoTable so the first cursorY() call sits below the header.
+    (doc as any).lastAutoTable = { finalY: HEADER_BOTTOM };
+
+    const cursorY = () => (doc as any).lastAutoTable?.finalY ?? HEADER_BOTTOM;
+
+    const ensureSpace = (needed: number) => {
+      if (cursorY() + needed > PAGE_BOTTOM) {
+        doc.addPage();
+        drawHeader();
+        (doc as any).lastAutoTable = { finalY: HEADER_BOTTOM };
+      }
+    };
+
+    const writeBlockTitle = (title: string) => {
+      ensureSpace(14);
+      const y = cursorY() + 8;
+      doc.setFillColor(59, 130, 246);
+      doc.rect(14, y - 5, pageWidth - 28, 8, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, 16, y);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      (doc as any).lastAutoTable = { finalY: y + 3 };
+    };
+
+    const addSection = (title: string, body: (string | number)[][], head: string[]) => {
+      if (body.length === 0) return;
+      ensureSpace(20);
+      const startY = cursorY() + 6;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, 14, startY);
+      doc.setFont("helvetica", "normal");
+      autoTable(doc, {
+        startY: startY + 2,
+        head: [head],
+        body,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] },
+        margin: { top: HEADER_BOTTOM, left: 14, right: 14, bottom: 22 },
+        // Repeat main report header on every new page the table spans.
+        didDrawPage: () => drawHeader(),
+      });
+    };
 
     // Counts: visitados / não visitados
     const paidEvents = events.filter((e) => e.event_type === "pagamento" && !e.reversed_at);
@@ -270,7 +327,9 @@ export default function DailyReportPage() {
     notPaidEvents.forEach((e) => e.client_id && visitedClients.add(e.client_id));
     const notVisitedCount = notPaidEvents.length;
 
-    // Cash summary block
+    // ============ BLOCO 1: RESUMO DO DIA ============
+    writeBlockTitle("1. Resumo do Dia");
+
     const opening = cashSummary?.opening ?? 0;
     const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut);
     const cashRows: [string, string][] = [
@@ -287,16 +346,19 @@ export default function DailyReportPage() {
       ["Clientes visitados", String(visitedClients.size)],
       ["Clientes não visitados (não pagou)", String(notVisitedCount)],
     ];
+    ensureSpace(20);
     autoTable(doc, {
-      startY: 42,
-      head: [["Resumo do caixa", ""]],
+      startY: cursorY() + 4,
+      head: [["Indicador", "Valor"]],
       body: cashRows,
       styles: { fontSize: 9 },
       headStyles: { fillColor: [59, 130, 246] },
       columnStyles: { 1: { halign: "right" } },
+      margin: { top: HEADER_BOTTOM, left: 14, right: 14, bottom: 22 },
+      didDrawPage: () => drawHeader(),
     });
 
-    // Categorize
+    // Categorize (financial events)
     const paid = paidEvents;
     const notPaid = notPaidEvents;
     const partials = paid.filter((e) => (e.observation || "").toLowerCase().includes("parcial"));
@@ -310,9 +372,11 @@ export default function DailyReportPage() {
       (a.action_type === "criar_emprestimo" &&
         (a as any).new_value && typeof (a as any).new_value === "object" && (a as any).new_value.imported_ongoing === true)
     );
-
-    const penaltiesCancelled = auditRows.filter((a) => a.action_type === "multa_cancelada");
     const quitacoes = auditRows.filter((a) => a.action_type === "quitar_emprestimo");
+
+    // Audit-only rows (belong to "Auditoria")
+    const penaltiesCancelled = auditRows.filter((a) => a.action_type === "multa_cancelada");
+    const partialPayments = auditRows.filter((a) => a.action_type === "pagamento_parcial");
     const auditResumo = auditRows.filter((a) =>
       a.action_type === "editar_cliente" ||
       a.action_type === "editar_parcela" ||
@@ -320,30 +384,15 @@ export default function DailyReportPage() {
       a.action_type === "desfazer_pagamento" ||
       a.action_type === "estorno_pagamento" ||
       a.action_type === "estorno_manual" ||
-      a.action_type === "transferencia_cliente"
+      a.action_type === "transferencia_cliente" ||
+      a.action_type === "fechar_caixa" ||
+      a.action_type === "reabrir_caixa"
     );
 
     const nameOf = (cid: string | null) => cid ? (clientNames[cid] || "—") : "—";
 
-    const addSection = (
-      title: string,
-      body: (string | number)[][],
-      head: string[],
-    ) => {
-      if (body.length === 0) return;
-      const startY = ((doc as any).lastAutoTable?.finalY || 42) + 6;
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text(title, 14, startY);
-      doc.setFont("helvetica", "normal");
-      autoTable(doc, {
-        startY: startY + 2,
-        head: [head],
-        body,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] },
-      });
-    };
+    // ============ BLOCO 2: MOVIMENTAÇÕES FINANCEIRAS ============
+    writeBlockTitle("2. Movimentações Financeiras");
 
     addSection("Clientes que pagaram", paid.map((e) => [
       format(new Date(e.created_at), "HH:mm"),
@@ -378,12 +427,6 @@ export default function DailyReportPage() {
       formatCurrency(Number(e.amount_in || 0)),
       e.observation || "",
     ]), ["Hora", "Cliente", "Valor", "Obs."]);
-
-    addSection("Multas canceladas", penaltiesCancelled.map((a) => [
-      format(new Date(a.created_at), "HH:mm"),
-      nameOf((a as any).new_value?.client_id || null),
-      a.observation || "",
-    ]), ["Hora", "Cliente", "Motivo / Obs."]);
 
     addSection("Empréstimos novos", newLoans.map((e) => [
       format(new Date(e.created_at), "HH:mm"),
@@ -426,7 +469,28 @@ export default function DailyReportPage() {
       ];
     }), ["Hora", "Cliente", "Valor", "Obs."]);
 
-    addSection("Auditoria resumida", auditResumo.map((a) => {
+    // ============ BLOCO 3: AUDITORIA ============
+    writeBlockTitle("3. Auditoria");
+
+    addSection("Pagamentos parciais (registrados)", partialPayments.map((a) => {
+      const nv: any = (a as any).new_value || {};
+      return [
+        format(new Date(a.created_at), "HH:mm"),
+        nv.client_name || nameOf(nv.client_id || null),
+        `#${nv.installment_number ?? "—"}`,
+        formatCurrency(Number(nv.amount_paid || 0)),
+        formatCurrency(Number(nv.installment_amount || 0)),
+        formatCurrency(Number(nv.installment_remaining || 0)),
+      ];
+    }), ["Hora", "Cliente", "Parcela", "Pago", "Valor parcela", "Restante"]);
+
+    addSection("Multas canceladas", penaltiesCancelled.map((a) => [
+      format(new Date(a.created_at), "HH:mm"),
+      nameOf((a as any).new_value?.client_id || null),
+      a.observation || "",
+    ]), ["Hora", "Cliente", "Motivo / Obs."]);
+
+    addSection("Ações administrativas / correções", auditResumo.map((a) => {
       const nv: any = (a as any).new_value || {};
       const label =
         a.action_type === "editar_cliente" ? "Cliente editado" :
@@ -436,6 +500,8 @@ export default function DailyReportPage() {
         a.action_type === "estorno_pagamento" ? "Pagamento estornado" :
         a.action_type === "estorno_manual" ? "Movimentação estornada" :
         a.action_type === "transferencia_cliente" ? "Cliente transferido" :
+        a.action_type === "fechar_caixa" ? "Caixa fechado" :
+        a.action_type === "reabrir_caixa" ? "Caixa reaberto" :
         a.action_type;
       return [
         format(new Date(a.created_at), "HH:mm"),
@@ -445,25 +511,36 @@ export default function DailyReportPage() {
       ];
     }), ["Hora", "Ação", "Cliente", "Obs."]);
 
-    // Observações livres
+    // Observações livres (page-break safe)
     const obsList = events.filter((e) => (e.observation || "").trim().length > 0)
       .map((e) => `• ${format(new Date(e.created_at), "HH:mm")} ${nameOf(e.client_id)} — ${e.observation}`);
     if (obsList.length > 0) {
-      const startY = ((doc as any).lastAutoTable?.finalY || 60) + 6;
-      doc.setFontSize(11);
+      ensureSpace(14);
+      const startY = cursorY() + 6;
+      doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
       doc.text("Observações", 14, startY);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      const txt = doc.splitTextToSize(obsList.join("\n"), pageWidth - 28);
-      doc.text(txt, 14, startY + 5);
+      const wrapped: string[] = doc.splitTextToSize(obsList.join("\n"), pageWidth - 28);
+      let y = startY + 5;
+      const lineHeight = 4;
+      for (const line of wrapped) {
+        if (y + lineHeight > PAGE_BOTTOM) {
+          doc.addPage();
+          drawHeader();
+          y = HEADER_BOTTOM + 6;
+          doc.setFontSize(8);
+        }
+        doc.text(line, 14, y);
+        y += lineHeight;
+      }
+      (doc as any).lastAutoTable = { finalY: y };
     }
 
-    // Signatures
-    const lastY = (doc as any).lastAutoTable?.finalY || 60;
-    const pageHeight = doc.internal.pageSize.getHeight();
-    let sigY = Math.max(lastY + 30, pageHeight - 40);
-    if (sigY > pageHeight - 30) { doc.addPage(); sigY = pageHeight - 50; }
+    // Signatures — always reserve room; add a page if it would overlap content.
+    ensureSpace(35);
+    const sigY = cursorY() + 25;
     doc.setDrawColor(120);
     doc.line(20, sigY, 90, sigY);
     doc.line(pageWidth - 90, sigY, pageWidth - 20, sigY);
