@@ -1003,15 +1003,10 @@ export default function CaixaPage() {
         )}
       </div>
 
-      <div className={`grid gap-2 ${showAjuste ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className="grid gap-2 grid-cols-1">
         <Button variant="outline" className="w-full text-xs h-9" onClick={() => navigate("/daily-cash-history")}>
           <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
         </Button>
-        {showAjuste && (
-          <Button variant="outline" className="w-full text-xs h-9" onClick={handleRecalculate}>
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalcular
-          </Button>
-        )}
       </div>
 
       {/* Manual movement dialog */}
