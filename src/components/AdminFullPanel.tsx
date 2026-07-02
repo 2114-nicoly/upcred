@@ -19,7 +19,7 @@ import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
 } from "@/lib/consolidated-stats";
 import { getDailyCollectionSummary } from "@/lib/daily-totals";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
