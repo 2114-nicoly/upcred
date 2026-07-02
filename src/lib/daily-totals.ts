@@ -153,8 +153,9 @@ export async function getDailyCollectionSummary(
       if (workerId && l.worker_id !== workerId) continue;
       expectedToReceiveToday += Number(p.amount || 0);
     }
-  } catch {
-    // ignora — mantém 0
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] esperado/multas falhou", err);
+    hasError = true;
   }
 
   // 2) Recebido hoje + componentes para conferência do caixa.
