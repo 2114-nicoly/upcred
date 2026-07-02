@@ -379,10 +379,74 @@ export default function CaixaPage() {
   };
 
 
-  const handleRecalculate = async () => {
-    await recalculateCashBalanceFromLedger();
-    toast.success("Caixa recalculado com sucesso!");
-    fetchData();
+
+  // Fetch pending reopen requests (admin only).
+  const fetchReopenRequests = useCallback(async () => {
+    if (!isAdmin && !isSuperAdmin) { setReopenRequests([]); return; }
+    let q: any = supabase.from("cash_reopen_requests" as any).select("*").eq("status", "pending").order("requested_at", { ascending: false });
+    const { data } = await q;
+    setReopenRequests((data as any[]) || []);
+  }, [isAdmin, isSuperAdmin]);
+  useEffect(() => { void fetchReopenRequests(); }, [fetchReopenRequests, dailyCashStatus, selectedDate]);
+
+  // Worker: submit reopen request (creates a row in cash_reopen_requests).
+  const submitReopenRequest = async () => {
+    if (submitting) return;
+    if (reopenReason.trim().length < 3) { toast.error("Informe o motivo (mínimo 3 caracteres)."); return; }
+    setSubmitting(true);
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      const uid = s?.user?.id ?? null;
+      let workerName: string | null = null;
+      let workerId: string | null = null;
+      let adminId: string | null = null;
+      if (uid) {
+        const { data: w } = await supabase.from("workers").select("id, nome, parent_admin_id").eq("auth_user_id", uid).maybeSingle();
+        if (w) { workerId = (w as any).id ?? null; workerName = (w as any).nome ?? null; adminId = (w as any).parent_admin_id ?? null; }
+      }
+      const { error } = await supabase.from("cash_reopen_requests" as any).insert({
+        cash_date: selectedDate,
+        worker_id: workerId,
+        worker_name: workerName,
+        admin_id: adminId,
+        reason: reopenReason.trim(),
+        status: "pending",
+        requested_by: uid,
+      } as any);
+      if (error) throw error;
+      await logAction(
+        "solicitar_reabertura_caixa" as any, "cash", null, null,
+        { cash_date: selectedDate, worker_id: workerId, worker_name: workerName, reason: reopenReason.trim(), status: "pending", requested_at: new Date().toISOString() },
+        `Solicitação de reabertura (${selectedDate}): ${reopenReason.trim()}`, workerId ?? undefined,
+      );
+      toast.success("Solicitação enviada ao administrador");
+      setReopenOpen(false);
+      setReopenReason("");
+    } catch (err: any) {
+      console.error("[caixa] submit reopen request failed", err);
+      toast.error(err?.message || "Erro ao enviar solicitação");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReviewRequest = async () => {
+    if (!reviewTarget || submitting) return;
+    setSubmitting(true);
+    try {
+      const rpc = reviewTarget.action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
+      const { error } = await supabase.rpc(rpc as any, { p_request_id: reviewTarget.req.id, p_note: reviewNote.trim() || null } as any);
+      if (error) throw error;
+      toast.success(reviewTarget.action === "approve" ? "Solicitação aprovada e caixa reaberto" : "Solicitação recusada");
+      setReviewTarget(null); setReviewNote("");
+      await fetchReopenRequests();
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] review request failed", err);
+      toast.error(err?.message || "Erro ao processar solicitação");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleUndoEvent = (event: DailyEvent) => {
