@@ -333,16 +333,26 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-3 mt-3">
+          {daySummary?.hasError && (
+            <div className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-[11px] text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5" /> Falha ao carregar totais do dia. Os valores podem estar incompletos.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
-            <Stat label="Previsto" value={formatCurrency(total.previsto)} />
-            <Stat label="Recebido" value={formatCurrency(total.recebido)} cls="text-success" />
-            <Stat label="Falta" value={formatCurrency(total.faltaReceber)} cls="text-destructive" />
+            <Stat label="Previsto" value={formatCurrency(daySummary ? daySummary.previsto : total.previsto)} />
+            <Stat label="Recebido" value={formatCurrency(daySummary ? daySummary.recebido : total.recebido)} cls="text-success" />
+            <Stat label="Falta Receber" value={formatCurrency(daySummary ? daySummary.falta : total.faltaReceber)} cls="text-destructive" />
             <Stat label="%" value={`${total.percentual.toFixed(0)}%`} />
             <Stat label="Emprestado" value={formatCurrency(total.emprestado)} />
             <Stat label="Retirado" value={formatCurrency(total.retirada)} cls="text-destructive" />
             <Stat label="Aporte" value={formatCurrency(total.aporte)} cls="text-success" />
             <Stat label="Saldo" value={formatCurrency(total.saldoLiquido)} cls={total.saldoLiquido >= 0 ? "text-success" : "text-destructive"} />
           </div>
+          {mode === "day" && (
+            <p className="text-[10px] text-muted-foreground -mt-1">
+              Previsto/Recebido/Falta seguem a mesma fórmula da Rota e do Caixa (getDailyCollectionSummary).
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Clientes" value={String(total.clientesAtivos)} />
             <Stat label="Empr.Ativos" value={String(total.emprestimosAtivos)} />
@@ -353,6 +363,37 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <Stat label="Renovações" value={String(total.renovacoes)} />
             <Stat label="Novos" value={String(total.emprestimosNovos)} />
           </div>
+
+          {reopenReqs.length > 0 && (
+            <Card className="border-warning">
+              <CardHeader className="p-3 pb-1">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <DoorOpen className="h-4 w-4" /> Solicitações Pendentes de Reabertura ({reopenReqs.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-1 space-y-2">
+                {reopenReqs.map((r) => (
+                  <div key={r.id} className="rounded border p-2 space-y-1">
+                    <p className="text-sm font-medium">{r.worker_name ?? "Trabalhador"}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Caixa {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy")} · Solicitado {format(new Date(r.requested_at), "dd/MM/yyyy HH:mm")}
+                    </p>
+                    <p className="text-[11px]"><span className="text-muted-foreground">Motivo:</span> {r.reason}</p>
+                    <div className="flex gap-1">
+                      <Button size="sm" className="flex-1 h-7 text-xs" disabled={reopenBusy === r.id} onClick={() => handleReopenReview(r, "approve")}>
+                        {reopenBusy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Check className="h-3 w-3 mr-1" /> Aprovar</>}
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={reopenBusy === r.id} onClick={() => handleReopenReview(r, "reject")}>
+                        <X className="h-3 w-3 mr-1" /> Recusar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+
 
           {isSuperAdmin && (
             <>
