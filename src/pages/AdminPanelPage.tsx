@@ -150,6 +150,7 @@ function ReportsTab() {
           </Button>
         </CardContent>
       </Card>
+      <TeamDailyReport />
       <div className="border rounded-lg overflow-hidden">
         <DailyReportPage />
       </div>
