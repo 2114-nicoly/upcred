@@ -50,6 +50,7 @@ import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } 
 import AuditLogList from "@/components/AuditLogList";
 import DailyReportPage from "@/pages/DailyReportPage";
 import TeamDailyReport from "@/components/TeamDailyReport";
+import RemindersAdminList from "@/components/RemindersAdminList";
 
 
 type Worker = {
