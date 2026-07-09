@@ -699,7 +699,36 @@ export type Database = {
           reminded_by_name?: string | null
           worker_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "installment_reminders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reminders_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: true
+            referencedRelation: "installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reminders_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installment_reminders_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       installment_reschedules: {
         Row: {
