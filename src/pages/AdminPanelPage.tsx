@@ -49,6 +49,7 @@ import {
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import DailyReportPage from "@/pages/DailyReportPage";
+import TeamDailyReport from "@/components/TeamDailyReport";
 
 
 type Worker = {
