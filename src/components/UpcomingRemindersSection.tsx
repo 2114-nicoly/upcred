@@ -162,15 +162,18 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
 
     const { data: inserted, error } = await supabase
       .from("installment_reminders" as any)
-      .insert({
-        installment_id: r.id,
-        loan_id: r.loan_id,
-        client_id: r.loans?.client_id ?? null,
-        worker_id: workerId,
-        reminded_at: now,
-        reminded_by: actor.id,
-        reminded_by_name: actor.name,
-      })
+      .upsert(
+        {
+          installment_id: r.id,
+          loan_id: r.loan_id,
+          client_id: r.loans?.client_id ?? null,
+          worker_id: workerId,
+          reminded_at: now,
+          reminded_by: actor.id,
+          reminded_by_name: actor.name,
+        },
+        { onConflict: "installment_id" },
+      )
       .select("reminded_at")
       .maybeSingle();
 
