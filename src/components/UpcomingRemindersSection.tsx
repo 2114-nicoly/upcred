@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -8,11 +8,9 @@ import { Bell, BellRing, MessageCircle, Eye, CalendarClock } from "lucide-react"
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
-import { logAction } from "@/lib/audit-utils";
+import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import {
   getReminderDays,
-  getReminderMark,
-  saveReminderMark,
   type ReminderMark,
 } from "@/lib/reminders";
 
@@ -47,14 +45,28 @@ function paymentLabel(t: string) {
   return t;
 }
 
+/**
+ * Color class for the "faltam X dias" chip based on proximity.
+ *  ≤1  → destructive (urgent)
+ *   2  → warning-ish (amber)
+ *   3  → default primary
+ *  ≥4  → muted
+ */
+function urgencyClasses(days: number) {
+  if (days <= 1) return "bg-destructive text-destructive-foreground border-destructive";
+  if (days === 2) return "bg-amber-500 text-white border-amber-500";
+  if (days === 3) return "bg-primary text-primary-foreground border-primary";
+  return "bg-muted text-muted-foreground border-border";
+}
+
 export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
   const [marks, setMarks] = useState<Record<string, ReminderMark | null>>({});
   const [days, setDays] = useState<number>(getReminderDays(workerId));
   const [loading, setLoading] = useState(true);
+  const [onlyPending, setOnlyPending] = useState<boolean>(true);
 
-  // Refresh preferred days when worker changes
   useEffect(() => { setDays(getReminderDays(workerId)); }, [workerId]);
 
   const load = useCallback(async () => {
@@ -86,13 +98,34 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
       if (error) {
         console.warn("[upcoming] fetch failed", error);
         setRows([]);
-      } else {
-        const list = ((data as unknown) as Row[] || []).filter(r => r.loans && r.loans.clients);
-        setRows(list);
-        const m: Record<string, ReminderMark | null> = {};
-        for (const r of list) m[r.id] = getReminderMark(r.id);
-        setMarks(m);
+        setMarks({});
+        return;
       }
+      const list = ((data as unknown) as Row[] || []).filter(r => r.loans && r.loans.clients);
+      setRows(list);
+
+      // Load latest reminder per installment from DB
+      const ids = list.map(r => r.id);
+      const marksMap: Record<string, ReminderMark | null> = {};
+      if (ids.length) {
+        const { data: rem } = await supabase
+          .from("installment_reminders" as any)
+          .select("installment_id, loan_id, client_id, worker_id, reminded_at")
+          .in("installment_id", ids)
+          .order("reminded_at", { ascending: false });
+        for (const r of (rem as any[]) || []) {
+          if (!marksMap[r.installment_id]) {
+            marksMap[r.installment_id] = {
+              installment_id: r.installment_id,
+              loan_id: r.loan_id,
+              client_id: r.client_id,
+              worker_id: r.worker_id,
+              at: r.reminded_at,
+            };
+          }
+        }
+      }
+      setMarks(marksMap);
     } finally {
       setLoading(false);
     }
@@ -123,17 +156,43 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
   }
 
   async function markReminded(r: Row) {
+    const client = r.loans?.clients;
+    const actor = await getCurrentActorIdentity();
     const now = new Date().toISOString();
-    const mark: ReminderMark = {
-      installment_id: r.id,
-      loan_id: r.loan_id,
-      client_id: r.loans?.client_id ?? null,
-      worker_id: workerId,
-      at: now,
-    };
-    saveReminderMark(mark);
-    setMarks(prev => ({ ...prev, [r.id]: mark }));
-    // Best-effort audit; never blocks UI.
+
+    const { data: inserted, error } = await supabase
+      .from("installment_reminders" as any)
+      .insert({
+        installment_id: r.id,
+        loan_id: r.loan_id,
+        client_id: r.loans?.client_id ?? null,
+        worker_id: workerId,
+        reminded_at: now,
+        reminded_by: actor.id,
+        reminded_by_name: actor.name,
+      })
+      .select("reminded_at")
+      .maybeSingle();
+
+    if (error) {
+      console.error("[reminder] insert failed", error);
+      toast.error("Não foi possível registrar o lembrete.");
+      return;
+    }
+
+    const at = (inserted as any)?.reminded_at || now;
+    setMarks(prev => ({
+      ...prev,
+      [r.id]: {
+        installment_id: r.id,
+        loan_id: r.loan_id,
+        client_id: r.loans?.client_id ?? null,
+        worker_id: workerId,
+        at,
+      },
+    }));
+
+    // Mandatory audit trail (best-effort, doesn't roll back the mark).
     try {
       await logAction(
         "editar_observacao_emprestimo",
@@ -143,30 +202,47 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
         {
           event: "reminder_sent",
           installment_id: r.id,
+          installment_number: r.number,
           loan_id: r.loan_id,
           client_id: r.loans?.client_id ?? null,
+          client_name: client?.name ?? null,
           worker_id: workerId,
+          worker_name: actor.name,
           due_date: r.due_date,
           amount: Number(r.amount),
-          at: now,
+          reminded_at: at,
+          reminded_by: actor.id,
         },
-        "Lembrete de cobrança enviado",
+        `Lembrete enviado para ${client?.name ?? "cliente"} (parcela ${r.number})`,
         workerId,
       );
     } catch { /* noop */ }
+
     toast.success("Lembrete registrado");
   }
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = useMemo(() => { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }, []);
+  const visibleRows = useMemo(
+    () => onlyPending ? rows.filter(r => !marks[r.id]) : rows,
+    [rows, marks, onlyPending],
+  );
 
   return (
     <div className="space-y-2 mb-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xs font-semibold text-foreground flex items-center gap-1 uppercase tracking-wider">
-          <CalendarClock className="h-3 w-3" /> Próximas Cobranças ({rows.length})
+          <CalendarClock className="h-3 w-3" /> Próximas Cobranças ({visibleRows.length})
         </h2>
         <div className="flex items-center gap-1.5">
-          <label className="text-[10px] text-muted-foreground">Lembrar</label>
+          <select
+            value={onlyPending ? "pending" : "all"}
+            onChange={(e) => setOnlyPending(e.target.value === "pending")}
+            className="text-[11px] border border-border bg-card rounded-md px-1.5 py-0.5"
+            aria-label="Filtro de lembretes"
+          >
+            <option value="pending">Apenas não lembrados</option>
+            <option value="all">Mostrar todos</option>
+          </select>
           <select
             value={String(days)}
             onChange={(e) => onChangeDays(e.target.value)}
@@ -183,13 +259,15 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
 
       {loading ? (
         <p className="text-[11px] text-muted-foreground">Carregando…</p>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <p className="text-[11px] text-muted-foreground italic">
-          Nenhuma cobrança mensal ou data fixa nos próximos {days} dias.
+          {onlyPending && rows.length > 0
+            ? "Todos os clientes desta janela já foram lembrados."
+            : `Nenhuma cobrança mensal ou data fixa nos próximos ${days} dias.`}
         </p>
       ) : (
         <div className="space-y-1.5">
-          {rows.map((r) => {
+          {visibleRows.map((r) => {
             const client = r.loans?.clients;
             const due = new Date(r.due_date + "T12:00:00");
             const daysLeft = Math.max(0, differenceInCalendarDays(due, today));
@@ -211,19 +289,18 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       Vence em {format(due, "dd/MM/yyyy", { locale: ptBR })}
-                      {" "}({daysLeft === 1 ? "1 dia" : `${daysLeft} dias`})
                     </p>
                     {mark && (
                       <p className="text-[10px] text-primary flex items-center gap-1 mt-0.5">
                         <BellRing className="h-3 w-3" />
-                        Lembrete marcado em {format(new Date(mark.at), "dd/MM HH:mm")}
+                        Lembrete enviado em {format(new Date(mark.at), "dd/MM/yyyy HH:mm")}
                       </p>
                     )}
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 space-y-1">
                     <p className="font-bold text-sm tabular-nums">{formatCurrency(Number(r.amount))}</p>
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
-                      {daysLeft === 0 ? "hoje" : `+${daysLeft}d`}
+                    <Badge className={`text-[10px] px-1.5 py-0 h-5 border ${urgencyClasses(daysLeft)}`}>
+                      {daysLeft === 0 ? "Vence hoje" : daysLeft === 1 ? "Faltam 1 dia" : `Faltam ${daysLeft} dias`}
                     </Badge>
                   </div>
                 </div>
@@ -242,6 +319,7 @@ export default function UpcomingRemindersSection({ workerId, adminId }: Props) {
                     variant={mark ? "secondary" : "default"}
                     className="h-7 text-[11px] px-2 flex-1"
                     onClick={() => markReminded(r)}
+                    disabled={!!mark}
                   >
                     <Bell className="h-3.5 w-3.5 mr-1" />
                     {mark ? "Lembrado" : "Marcar lembrado"}
