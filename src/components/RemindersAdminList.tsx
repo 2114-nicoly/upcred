@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BellRing, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { BellRing, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -19,21 +23,36 @@ type Row = {
   due_date?: string | null;
 };
 
+type WorkerOpt = { id: string; nome: string };
+
 export default function RemindersAdminList() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [workers, setWorkers] = useState<WorkerOpt[]>([]);
+
+  // filters
+  const [workerId, setWorkerId] = useState<string>("all");
+  const [clientQuery, setClientQuery] = useState<string>("");
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
 
   useEffect(() => {
     let cancel = false;
     async function load() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        let q = supabase
           .from("installment_reminders" as any)
           .select("id, installment_id, loan_id, client_id, worker_id, reminded_at, reminded_by_name")
           .order("reminded_at", { ascending: false })
-          .limit(200);
-        if (error) { console.warn(error); setRows([]); return; }
+          .limit(500);
+
+        if (workerId !== "all") q = q.eq("worker_id", workerId);
+        if (fromDate) q = q.gte("reminded_at", `${fromDate}T00:00:00`);
+        if (toDate) q = q.lte("reminded_at", `${toDate}T23:59:59`);
+
+        const { data, error } = await q;
+        if (error) { console.warn(error); if (!cancel) setRows([]); return; }
         const base = (data as any[]) || [];
         const workerIds = Array.from(new Set(base.map(r => r.worker_id).filter(Boolean)));
         const clientIds = Array.from(new Set(base.map(r => r.client_id).filter(Boolean)));
@@ -58,39 +77,105 @@ export default function RemindersAdminList() {
         const im = new Map<string, { number: number; due_date: string }>();
         for (const i of (instRes.data as any[]) || []) im.set(i.id, { number: i.number, due_date: i.due_date });
 
-        const rows: Row[] = base.map(r => ({
+        const mapped: Row[] = base.map(r => ({
           ...r,
           worker_name: r.worker_id ? wm.get(r.worker_id) ?? null : null,
           client_name: r.client_id ? cm.get(r.client_id) ?? null : null,
           installment_number: im.get(r.installment_id)?.number ?? null,
           due_date: im.get(r.installment_id)?.due_date ?? null,
         }));
-        if (!cancel) setRows(rows);
+        if (!cancel) setRows(mapped);
       } finally {
         if (!cancel) setLoading(false);
       }
     }
     load();
     return () => { cancel = true; };
+  }, [workerId, fromDate, toDate]);
+
+  // Load available workers for the filter (scoped by RLS — admin only sees own team).
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase.rpc("admin_list_workers", { p_include_archived: true } as any);
+      if (!cancel && Array.isArray(data)) {
+        setWorkers((data as any[]).map(w => ({ id: w.id, nome: w.nome })));
+      }
+    })();
+    return () => { cancel = true; };
   }, []);
+
+  const filtered = useMemo(() => {
+    const q = clientQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => (r.client_name || "").toLowerCase().includes(q));
+  }, [rows, clientQuery]);
+
+  const clearFilters = () => {
+    setWorkerId("all");
+    setClientQuery("");
+    setFromDate("");
+    setToDate("");
+  };
+
+  const hasFilters = workerId !== "all" || clientQuery || fromDate || toDate;
 
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <BellRing className="h-4 w-4" /> Lembretes enviados
+          <BellRing className="h-4 w-4" /> Lembretes enviados ({filtered.length})
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-4 pt-2">
+      <CardContent className="p-4 pt-2 space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div>
+            <Label className="text-[10px] text-muted-foreground">Trabalhador</Label>
+            <Select value={workerId} onValueChange={setWorkerId}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {workers.map(w => (
+                  <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-[10px] text-muted-foreground">Cliente</Label>
+            <Input
+              value={clientQuery}
+              onChange={(e) => setClientQuery(e.target.value)}
+              placeholder="Buscar por nome"
+              className="h-8 text-xs"
+            />
+          </div>
+          <div>
+            <Label className="text-[10px] text-muted-foreground">De</Label>
+            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-8 text-xs" />
+          </div>
+          <div>
+            <Label className="text-[10px] text-muted-foreground">Até</Label>
+            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-8 text-xs" />
+          </div>
+        </div>
+        {hasFilters && (
+          <div>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={clearFilters}>
+              <X className="h-3 w-3 mr-1" /> Limpar filtros
+            </Button>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
           </div>
-        ) : rows.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">Nenhum lembrete registrado ainda.</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">Nenhum lembrete encontrado.</p>
         ) : (
           <div className="divide-y">
-            {rows.map((r) => (
+            {filtered.map((r) => (
               <div key={r.id} className="py-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{r.client_name || "Cliente"}</p>
