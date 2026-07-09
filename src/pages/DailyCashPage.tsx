@@ -1662,6 +1662,9 @@ export default function DailyCashPage() {
             </div>
           )}
 
+          {/* PRÓXIMAS COBRANÇAS (Mensais / Data Fixa) */}
+          <UpcomingRemindersSection workerId={authWorkerId || null} adminId={authAdminId || null} />
+
           {/* MULTAS PENDENTES */}
           {pendingPenalties.length > 0 && (
             <div className="space-y-1.5 mb-4">
