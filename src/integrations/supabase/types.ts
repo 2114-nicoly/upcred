@@ -665,6 +665,42 @@ export type Database = {
           },
         ]
       }
+      installment_reminders: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          installment_id: string
+          loan_id: string
+          reminded_at: string
+          reminded_by: string | null
+          reminded_by_name: string | null
+          worker_id: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          installment_id: string
+          loan_id: string
+          reminded_at?: string
+          reminded_by?: string | null
+          reminded_by_name?: string | null
+          worker_id?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          installment_id?: string
+          loan_id?: string
+          reminded_at?: string
+          reminded_by?: string | null
+          reminded_by_name?: string | null
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
       installment_reschedules: {
         Row: {
           admin_id: string | null

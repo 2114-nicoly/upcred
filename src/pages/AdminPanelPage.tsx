@@ -50,6 +50,7 @@ import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } 
 import AuditLogList from "@/components/AuditLogList";
 import DailyReportPage from "@/pages/DailyReportPage";
 import TeamDailyReport from "@/components/TeamDailyReport";
+import RemindersAdminList from "@/components/RemindersAdminList";
 
 
 type Worker = {
@@ -99,7 +100,8 @@ export default function AdminPanelPage() {
         <TabsContent value="reports" className="mt-3">
           <ReportsTab />
         </TabsContent>
-        <TabsContent value="audit" className="mt-3">
+        <TabsContent value="audit" className="mt-3 space-y-3">
+          <RemindersAdminList />
           <AuditLogList />
         </TabsContent>
         <TabsContent value="maintenance" className="mt-3">
