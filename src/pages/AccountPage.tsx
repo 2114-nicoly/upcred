@@ -3,15 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react";
+import { Loader2, LogOut, User as UserIcon, Shield, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { getReminderDays, setReminderDays, type ReminderDays } from "@/lib/reminders";
 
 export default function AccountPage() {
   const navigate = useNavigate();
   const { user, isAdmin, isSuperAdmin, workerId, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [info, setInfo] = useState<{ nome?: string; login?: string; admin?: string }>({});
+  const [reminderDays, setReminderDaysState] = useState<ReminderDays>(getReminderDays(workerId));
+
+  useEffect(() => { setReminderDaysState(getReminderDays(workerId)); }, [workerId]);
 
   useEffect(() => {
     let cancel = false;
@@ -115,6 +119,38 @@ export default function AccountPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Bell className="h-4 w-4" /> Lembretes de cobrança
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-2 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Antecedência com que os lembretes de parcelas mensais/data fixa aparecem na Rota do Dia.
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs">Lembrar cobranças com antecedência</span>
+            <select
+              value={String(reminderDays)}
+              onChange={(e) => {
+                const n = Number(e.target.value) as ReminderDays;
+                setReminderDaysState(n);
+                setReminderDays(n, workerId);
+                toast.success("Preferência salva");
+              }}
+              className="text-xs border border-border bg-card rounded-md px-2 py-1"
+            >
+              <option value="2">2 dias antes</option>
+              <option value="3">3 dias antes</option>
+              <option value="4">4 dias antes</option>
+              <option value="5">5 dias antes</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
 
       <Button variant="outline" className="w-full" onClick={handleSignOut}>
         <LogOut className="h-4 w-4 mr-2" /> Sair da conta

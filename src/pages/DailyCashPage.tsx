@@ -38,6 +38,7 @@ import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { getDailyCollectionSummary } from "@/lib/daily-totals";
+import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
 
 type InstallmentWithLoan = {
   id: string;
@@ -1660,6 +1661,9 @@ export default function DailyCashPage() {
               {notPaidMarks.map(renderNotPaidRow)}
             </div>
           )}
+
+          {/* PRÓXIMAS COBRANÇAS (Mensais / Data Fixa) */}
+          <UpcomingRemindersSection workerId={authWorkerId || null} adminId={authAdminId || null} />
 
           {/* MULTAS PENDENTES */}
           {pendingPenalties.length > 0 && (
