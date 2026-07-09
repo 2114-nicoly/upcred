@@ -69,13 +69,27 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
     if (!files || files.length === 0) return;
     setUploading(true);
     let okCount = 0;
+    // Always derive the tenant folder from the authoritative client record
+    // (RLS-protected) instead of trusting the adminId prop. This ensures the
+    // storage path's first segment matches the storage RLS policies which
+    // require (storage.foldername(name))[1] = get_admin_id(auth.uid())::text.
+    const { data: clientRow, error: clientErr } = await supabase
+      .from("clients")
+      .select("admin_id")
+      .eq("id", clientId)
+      .maybeSingle();
+    if (clientErr || !clientRow?.admin_id) {
+      setUploading(false);
+      toast.error("Não foi possível identificar o administrador do cliente");
+      return;
+    }
+    const tenantFolder = String((clientRow as any).admin_id);
     for (const file of Array.from(files)) {
       if (file.size > MAX_SIZE) {
         toast.error(`${file.name}: arquivo maior que 10MB`);
         continue;
       }
-      const folder = adminId || "shared";
-      const path = `${folder}/${clientId}/${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+      const path = `${tenantFolder}/${clientId}/${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
         contentType: file.type || undefined,
         upsert: false,
