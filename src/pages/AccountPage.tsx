@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, User as UserIcon, Shield } from "lucide-react";
+import { Loader2, LogOut, User as UserIcon, Shield, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { getReminderDays, setReminderDays, type ReminderDays } from "@/lib/reminders";
 
 export default function AccountPage() {
   const navigate = useNavigate();
