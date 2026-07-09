@@ -13,6 +13,9 @@ export default function AccountPage() {
   const { user, isAdmin, isSuperAdmin, workerId, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [info, setInfo] = useState<{ nome?: string; login?: string; admin?: string }>({});
+  const [reminderDays, setReminderDaysState] = useState<ReminderDays>(getReminderDays(workerId));
+
+  useEffect(() => { setReminderDaysState(getReminderDays(workerId)); }, [workerId]);
 
   useEffect(() => {
     let cancel = false;
