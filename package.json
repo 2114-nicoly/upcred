@@ -88,5 +88,13 @@
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "dompurify": "^3.5.0",
+    "ws": "^8.19.1"
+  },
+  "resolutions": {
+    "dompurify": "^3.5.0",
+    "ws": "^8.19.1"
   }
 }
