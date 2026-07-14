@@ -49,6 +49,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
+    "dompurify": "^3.2.6",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.462.0",
@@ -90,11 +91,9 @@
     "vitest": "^3.2.4"
   },
   "overrides": {
-    "dompurify": "^3.5.0",
     "ws": "^8.19.1"
   },
   "resolutions": {
-    "dompurify": "^3.5.0",
     "ws": "^8.19.1"
   }
 }
