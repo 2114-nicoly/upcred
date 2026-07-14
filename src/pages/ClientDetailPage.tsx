@@ -418,9 +418,16 @@ export default function ClientDetailPage() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>
-          <ClientForm value={form} onChange={setForm} submitLabel="Salvar" onSubmit={handleEditClient} />
+          <ClientForm
+            value={form}
+            onChange={setForm}
+            submitLabel="Salvar"
+            onSubmit={handleEditClient}
+            extra={<div className="pt-2 border-t"><ClientAttachments clientId={client.id} /></div>}
+          />
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
