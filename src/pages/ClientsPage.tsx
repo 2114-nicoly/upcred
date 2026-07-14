@@ -330,22 +330,35 @@ export default function ClientsPage() {
               onChange={setForm}
               submitLabel="Cadastrar"
               onSubmit={() => handleCreate()}
-              extra={isAdmin && (
-                <div>
-                  <Label>Trabalhador responsável *</Label>
-                  <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
-                    <SelectContent>
-                      {workers.filter((w) => w.active).map((w) => (
-                        <SelectItem key={w.id} value={w.id}>{w.nome} · {w.login_codigo}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {workers.filter((w) => w.active).length === 0 && (
-                    <p className="text-xs text-destructive mt-1">Nenhum trabalhador ativo. Cadastre um trabalhador antes.</p>
+              extra={
+                <div className="space-y-3">
+                  {isAdmin && (
+                    <div>
+                      <Label>Trabalhador responsável *</Label>
+                      <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                        <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
+                        <SelectContent>
+                          {workers.filter((w) => w.active).map((w) => (
+                            <SelectItem key={w.id} value={w.id}>{w.nome} · {w.login_codigo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {workers.filter((w) => w.active).length === 0 && (
+                        <p className="text-xs text-destructive mt-1">Nenhum trabalhador ativo. Cadastre um trabalhador antes.</p>
+                      )}
+                    </div>
+                  )}
+                  <PendingClientAttachments
+                    items={pendingAttachments}
+                    onChange={setPendingAttachments}
+                  />
+                  {retryQueue && (
+                    <Button type="button" variant="outline" className="w-full" onClick={handleRetryUploads}>
+                      Tentar novamente ({retryQueue.items.length})
+                    </Button>
                   )}
                 </div>
-              )}
+              }
             />
           </DialogContent>
         </Dialog>
