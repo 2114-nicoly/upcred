@@ -402,10 +402,30 @@ export default function ClientAttachments({ clientId }: { clientId: string; admi
         <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle className="text-sm truncate">{preview?.name}</DialogTitle></DialogHeader>
           {preview && (
-            preview.isImage ? (
+            preview.kind === "image" ? (
               <img src={preview.url} alt={preview.name} className="max-h-[80vh] mx-auto rounded" />
-            ) : (
+            ) : preview.kind === "pdf" ? (
               <iframe src={preview.url} className="w-full h-[80vh] rounded" title={preview.name} />
+            ) : (
+              <div className="p-6 flex flex-col items-center gap-3 text-center">
+                <FileText className="h-12 w-12 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">{preview.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {preview.att.file_size ? `${(preview.att.file_size / 1024).toFixed(1)} KB` : ""}
+                    {preview.att.file_type ? ` · ${preview.att.file_type}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">Este tipo de arquivo não pode ser pré-visualizado.</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => handleDownload(preview.att)}>
+                    <Download className="mr-1 h-3.5 w-3.5" /> Baixar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleShare(preview.att)}>
+                    <Share2 className="mr-1 h-3.5 w-3.5" /> Compartilhar
+                  </Button>
+                </div>
+              </div>
             )
           )}
         </DialogContent>
