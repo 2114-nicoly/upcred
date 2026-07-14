@@ -315,7 +315,13 @@ export default function ClientAttachments({ clientId }: { clientId: string; admi
 
       {loading ? (
         <p className="text-xs text-muted-foreground">Carregando...</p>
-      ) : items.length === 0 ? (
+      ) : loadError ? (
+        <div className="text-center space-y-2 py-4">
+          <p className="text-xs text-destructive">Não foi possível carregar os documentos</p>
+          <Button size="sm" variant="outline" onClick={fetchItems}>Tentar novamente</Button>
+        </div>
+      ) : null}
+      {!loading && !loadError && (items.length === 0 ? (
         <EmptyState
           compact
           icon={<Paperclip className="h-5 w-5" />}
