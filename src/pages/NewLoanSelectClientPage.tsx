@@ -14,6 +14,8 @@ import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
+import PendingClientAttachments, { type PendingAttachment } from "@/components/PendingClientAttachments";
+import { uploadPendingAttachments } from "@/lib/attachment-upload";
 import { logAction } from "@/lib/audit-utils";
 
 type Client = {
