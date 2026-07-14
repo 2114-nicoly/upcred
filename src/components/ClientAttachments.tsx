@@ -171,27 +171,44 @@ export default function ClientAttachments({ clientId }: { clientId: string; admi
   const handlePreview = async (att: Attachment) => {
     const url = await getSignedUrl(att.storage_path);
     if (!url) return;
-    setPreview({ url, isImage: (att.file_type || "").startsWith("image/"), name: att.file_name });
+    const ft = (att.file_type || "").toLowerCase();
+    const kind: "image" | "pdf" | "other" =
+      ft.startsWith("image/") ? "image" : ft === "application/pdf" ? "pdf" : "other";
+    setPreview({ url, kind, name: att.file_name, att });
   };
 
   const handleDownload = async (att: Attachment) => {
-    const url = await getSignedUrl(att.storage_path);
-    if (!url) return;
+    const { data, error } = await supabase.storage.from(BUCKET).download(att.storage_path);
+    if (error || !data) { toast.error("Falha ao baixar"); return; }
+    const blobUrl = URL.createObjectURL(data);
     const a = document.createElement("a");
-    a.href = url; a.download = att.file_name; a.target = "_blank";
+    a.href = blobUrl; a.download = att.file_name;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     logAction("baixar_anexo" as any, "client", clientId, null, { attachment_id: att.id, file_name: att.file_name });
   };
 
   const handleShare = async (att: Attachment) => {
+    // Prefer file share when supported
+    try {
+      const { data: blob } = await supabase.storage.from(BUCKET).download(att.storage_path);
+      if (blob && (navigator as any).canShare) {
+        const file = new File([blob], att.file_name, { type: att.file_type || blob.type || "application/octet-stream" });
+        if ((navigator as any).canShare({ files: [file] })) {
+          await (navigator as any).share({ files: [file], title: att.file_name });
+          return;
+        }
+      }
+    } catch { /* fall through */ }
     const url = await getSignedUrl(att.storage_path);
     if (!url) return;
     try {
       if ((navigator as any).share) {
         await (navigator as any).share({ title: att.file_name, url });
+        toast.info("Link compartilhado (expira em alguns minutos)");
       } else {
         await navigator.clipboard.writeText(url);
-        toast.success("Link copiado para a área de transferência");
+        toast.success("Link copiado (expira em alguns minutos)");
       }
     } catch { /* user cancelled */ }
   };
