@@ -19,6 +19,8 @@ import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
 import ClientAttachments from "@/components/ClientAttachments";
+import PendingClientAttachments, { type PendingAttachment } from "@/components/PendingClientAttachments";
+import { uploadPendingAttachments } from "@/lib/attachment-upload";
 
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 
