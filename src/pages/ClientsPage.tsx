@@ -147,7 +147,38 @@ export default function ClientsPage() {
     }
     if (createdId) logAction("criar_cliente", "client", createdId, null, { name: form.name, full_name: form.full_name });
     toast.success("Cliente cadastrado!");
+
+    if (createdId && pendingAttachments.length > 0) {
+      const res = await uploadPendingAttachments(createdId, pendingAttachments);
+      if (res.failed.length > 0) {
+        toast.error(
+          `Falha ao enviar ${res.failed.length} arquivo(s): ${res.failed.map((f) => f.item.name).join(", ")}`,
+          { duration: 8000 }
+        );
+        setRetryQueue({ clientId: createdId, items: res.failed.map((f) => f.item) });
+        setPendingAttachments(res.failed.map((f) => f.item));
+        fetchClients();
+        return; // keep dialog open for retry
+      }
+      if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    }
     setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
+    setPendingAttachments([]); setRetryQueue(null);
+    fetchClients();
+  };
+
+  const handleRetryUploads = async () => {
+    if (!retryQueue) return;
+    const res = await uploadPendingAttachments(retryQueue.clientId, retryQueue.items);
+    if (res.failed.length > 0) {
+      toast.error(`Ainda falharam: ${res.failed.map((f) => f.item.name).join(", ")}`);
+      setRetryQueue({ clientId: retryQueue.clientId, items: res.failed.map((f) => f.item) });
+      setPendingAttachments(res.failed.map((f) => f.item));
+      return;
+    }
+    toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
+    setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
   };
 
