@@ -18,6 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
+import ClientAttachments from "@/components/ClientAttachments";
+
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 
 type Client = {
@@ -447,9 +449,20 @@ export default function ClientsPage() {
       <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingClient(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>
-          <ClientForm value={form} onChange={setForm} submitLabel="Salvar" onSubmit={handleEdit} />
+          <ClientForm
+            value={form}
+            onChange={setForm}
+            submitLabel="Salvar"
+            onSubmit={handleEdit}
+            extra={editingClient && (
+              <div className="pt-2 border-t">
+                <ClientAttachments clientId={editingClient.id} />
+              </div>
+            )}
+          />
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
