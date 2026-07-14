@@ -28,6 +28,7 @@ export const ATTACHMENT_CATEGORIES = [
   { value: "comprovante_residencia", label: "Comprovante de residência" },
   { value: "comprovante_renda", label: "Comprovante de renda" },
   { value: "contrato", label: "Contrato" },
+  { value: "foto_cliente", label: "Foto do cliente" },
   { value: "garantia", label: "Garantia" },
   { value: "outro", label: "Outro" },
 ] as const;
