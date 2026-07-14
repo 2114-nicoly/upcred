@@ -401,7 +401,7 @@ export default function ClientAttachments({ clientId }: { clientId: string; admi
             );
           })}
         </div>
-      )}
+      ))}
 
       {/* Preview */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null); }}>
