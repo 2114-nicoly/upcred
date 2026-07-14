@@ -43,6 +43,8 @@ export default function NewLoanSelectClientPage() {
   const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
   const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
 
   // Active-loan blocking dialog
   const [activeBlockDialog, setActiveBlockDialog] = useState<{
