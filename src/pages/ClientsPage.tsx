@@ -19,6 +19,8 @@ import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
 import ClientAttachments from "@/components/ClientAttachments";
+import PendingClientAttachments, { type PendingAttachment } from "@/components/PendingClientAttachments";
+import { uploadPendingAttachments } from "@/lib/attachment-upload";
 
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 
@@ -57,6 +59,8 @@ export default function ClientsPage() {
   const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [sortAlpha, setSortAlpha] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
 
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
@@ -143,7 +147,38 @@ export default function ClientsPage() {
     }
     if (createdId) logAction("criar_cliente", "client", createdId, null, { name: form.name, full_name: form.full_name });
     toast.success("Cliente cadastrado!");
+
+    if (createdId && pendingAttachments.length > 0) {
+      const res = await uploadPendingAttachments(createdId, pendingAttachments);
+      if (res.failed.length > 0) {
+        toast.error(
+          `Falha ao enviar ${res.failed.length} arquivo(s): ${res.failed.map((f) => f.item.name).join(", ")}`,
+          { duration: 8000 }
+        );
+        setRetryQueue({ clientId: createdId, items: res.failed.map((f) => f.item) });
+        setPendingAttachments(res.failed.map((f) => f.item));
+        fetchClients();
+        return; // keep dialog open for retry
+      }
+      if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    }
     setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
+    setPendingAttachments([]); setRetryQueue(null);
+    fetchClients();
+  };
+
+  const handleRetryUploads = async () => {
+    if (!retryQueue) return;
+    const res = await uploadPendingAttachments(retryQueue.clientId, retryQueue.items);
+    if (res.failed.length > 0) {
+      toast.error(`Ainda falharam: ${res.failed.map((f) => f.item.name).join(", ")}`);
+      setRetryQueue({ clientId: retryQueue.clientId, items: res.failed.map((f) => f.item) });
+      setPendingAttachments(res.failed.map((f) => f.item));
+      return;
+    }
+    toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
+    setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
   };
 
@@ -295,22 +330,35 @@ export default function ClientsPage() {
               onChange={setForm}
               submitLabel="Cadastrar"
               onSubmit={() => handleCreate()}
-              extra={isAdmin && (
-                <div>
-                  <Label>Trabalhador responsável *</Label>
-                  <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
-                    <SelectContent>
-                      {workers.filter((w) => w.active).map((w) => (
-                        <SelectItem key={w.id} value={w.id}>{w.nome} · {w.login_codigo}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {workers.filter((w) => w.active).length === 0 && (
-                    <p className="text-xs text-destructive mt-1">Nenhum trabalhador ativo. Cadastre um trabalhador antes.</p>
+              extra={
+                <div className="space-y-3">
+                  {isAdmin && (
+                    <div>
+                      <Label>Trabalhador responsável *</Label>
+                      <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                        <SelectTrigger><SelectValue placeholder="Selecione um trabalhador" /></SelectTrigger>
+                        <SelectContent>
+                          {workers.filter((w) => w.active).map((w) => (
+                            <SelectItem key={w.id} value={w.id}>{w.nome} · {w.login_codigo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {workers.filter((w) => w.active).length === 0 && (
+                        <p className="text-xs text-destructive mt-1">Nenhum trabalhador ativo. Cadastre um trabalhador antes.</p>
+                      )}
+                    </div>
+                  )}
+                  <PendingClientAttachments
+                    items={pendingAttachments}
+                    onChange={setPendingAttachments}
+                  />
+                  {retryQueue && (
+                    <Button type="button" variant="outline" className="w-full" onClick={handleRetryUploads}>
+                      Tentar novamente ({retryQueue.items.length})
+                    </Button>
                   )}
                 </div>
-              )}
+              }
             />
           </DialogContent>
         </Dialog>

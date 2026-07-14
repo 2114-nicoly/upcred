@@ -14,6 +14,8 @@ import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } from "@/components/ClientForm";
+import PendingClientAttachments, { type PendingAttachment } from "@/components/PendingClientAttachments";
+import { uploadPendingAttachments } from "@/lib/attachment-upload";
 import { logAction } from "@/lib/audit-utils";
 
 type Client = {
@@ -41,6 +43,8 @@ export default function NewLoanSelectClientPage() {
   const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
   const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
 
   // Active-loan blocking dialog
   const [activeBlockDialog, setActiveBlockDialog] = useState<{
@@ -152,8 +156,39 @@ export default function NewLoanSelectClientPage() {
     if (createdId) {
       logAction("criar_cliente", "client", createdId, null, { name: form.name, full_name: form.full_name, origin: "novo_emprestimo" });
       toast.success("Cliente cadastrado!");
+
+      if (pendingAttachments.length > 0) {
+        const res = await uploadPendingAttachments(createdId, pendingAttachments);
+        if (res.failed.length > 0) {
+          toast.error(
+            `Falha ao enviar ${res.failed.length} arquivo(s): ${res.failed.map((f) => f.item.name).join(", ")}`,
+            { duration: 8000 }
+          );
+          setRetryQueue({ clientId: createdId!, items: res.failed.map((f) => f.item) });
+          setPendingAttachments(res.failed.map((f) => f.item));
+          return; // stay so user can retry
+        }
+        if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+      }
       navigate(`/clients/${createdId}/new-loan`);
     }
+  };
+
+  const handleRetryUploads = async () => {
+    if (!retryQueue) return;
+    setSaving(true);
+    const res = await uploadPendingAttachments(retryQueue.clientId, retryQueue.items);
+    setSaving(false);
+    if (res.failed.length > 0) {
+      toast.error(`Ainda falharam: ${res.failed.map((f) => f.item.name).join(", ")}`);
+      setRetryQueue({ clientId: retryQueue.clientId, items: res.failed.map((f) => f.item) });
+      setPendingAttachments(res.failed.map((f) => f.item));
+      return;
+    }
+    toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    setPendingAttachments([]);
+    setRetryQueue(null);
+    navigate(`/clients/${retryQueue.clientId}/new-loan`);
   };
 
   if (newClientMode) {
@@ -169,19 +204,31 @@ export default function NewLoanSelectClientPage() {
           submitLabel={saving ? "Salvando..." : "Cadastrar e Criar Empréstimo"}
           onSubmit={() => handleCreateClient()}
           extra={
-            isAdmin ? (
-              <div>
-                <Label>Trabalhador responsável *</Label>
-                <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o trabalhador" /></SelectTrigger>
-                  <SelectContent>
-                    {workers.filter((w) => w.active).map((w) => (
-                      <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null
+            <div className="space-y-3">
+              {isAdmin && (
+                <div>
+                  <Label>Trabalhador responsável *</Label>
+                  <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o trabalhador" /></SelectTrigger>
+                    <SelectContent>
+                      {workers.filter((w) => w.active).map((w) => (
+                        <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <PendingClientAttachments
+                items={pendingAttachments}
+                onChange={setPendingAttachments}
+                disabled={saving}
+              />
+              {retryQueue && (
+                <Button type="button" variant="outline" className="w-full" onClick={handleRetryUploads} disabled={saving}>
+                  Tentar novamente ({retryQueue.items.length})
+                </Button>
+              )}
+            </div>
           }
         />
       </div>
