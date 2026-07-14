@@ -59,10 +59,11 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 export default function ClientAttachments({ clientId }: { clientId: string; adminId?: string | null }) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  const [preview, setPreview] = useState<{ url: string; isImage: boolean; name: string } | null>(null);
+  const [preview, setPreview] = useState<{ url: string; kind: "image" | "pdf" | "other"; name: string; att: Attachment } | null>(null);
   const [renaming, setRenaming] = useState<Attachment | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [changingCat, setChangingCat] = useState<Attachment | null>(null);
@@ -75,6 +76,7 @@ export default function ClientAttachments({ clientId }: { clientId: string; admi
 
   const fetchItems = async () => {
     setLoading(true);
+    setLoadError(false);
     const q = supabase
       .from("client_attachments" as any)
       .select("*")
@@ -82,7 +84,8 @@ export default function ClientAttachments({ clientId }: { clientId: string; admi
       .order("uploaded_at", { ascending: false });
     if (!showArchived) q.is("deleted_at", null);
     const { data, error } = await q;
-    if (!error) setItems(((data as any) || []) as Attachment[]);
+    if (error) { setLoadError(true); setLoading(false); return; }
+    setItems(((data as any) || []) as Attachment[]);
     setLoading(false);
   };
 
