@@ -204,19 +204,31 @@ export default function NewLoanSelectClientPage() {
           submitLabel={saving ? "Salvando..." : "Cadastrar e Criar Empréstimo"}
           onSubmit={() => handleCreateClient()}
           extra={
-            isAdmin ? (
-              <div>
-                <Label>Trabalhador responsável *</Label>
-                <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o trabalhador" /></SelectTrigger>
-                  <SelectContent>
-                    {workers.filter((w) => w.active).map((w) => (
-                      <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null
+            <div className="space-y-3">
+              {isAdmin && (
+                <div>
+                  <Label>Trabalhador responsável *</Label>
+                  <Select value={newClientWorkerId} onValueChange={setNewClientWorkerId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o trabalhador" /></SelectTrigger>
+                    <SelectContent>
+                      {workers.filter((w) => w.active).map((w) => (
+                        <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <PendingClientAttachments
+                items={pendingAttachments}
+                onChange={setPendingAttachments}
+                disabled={saving}
+              />
+              {retryQueue && (
+                <Button type="button" variant="outline" className="w-full" onClick={handleRetryUploads} disabled={saving}>
+                  Tentar novamente ({retryQueue.items.length})
+                </Button>
+              )}
+            </div>
           }
         />
       </div>
