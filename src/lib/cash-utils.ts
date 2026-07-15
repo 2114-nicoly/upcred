@@ -314,6 +314,7 @@ export function getMovementTypeColor(type: string): string {
     case "entrada_manual": return "text-success";
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
+    case "despesa": return "text-destructive";
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
     default: return "text-muted-foreground";
