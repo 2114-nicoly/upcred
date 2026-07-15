@@ -687,9 +687,10 @@ export default function DailyReportPage() {
           <Stat label="Emprestado Hoje" value={formatCurrency(totals.loans + totals.renewals)} negative />
           <Stat label="Entradas Manuais" value={formatCurrency(totals.manualIn)} positive />
           <Stat label="Saídas Manuais" value={formatCurrency(totals.manualOut)} negative />
+          <Stat label="Despesas Operacionais" value={formatCurrency(totals.expenses)} negative />
           <Stat
             label="Caixa Disponível Final"
-            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut))}
+            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))}
           />
           {cashSummary?.counted != null && <Stat label="Dinheiro Contado" value={formatCurrency(cashSummary.counted)} />}
           {cashSummary?.diff != null && (
