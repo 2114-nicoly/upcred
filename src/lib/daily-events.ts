@@ -12,6 +12,7 @@ export type DailyEventType =
   | "entrada_manual"
   | "saida_manual"
   | "ajuste_manual"
+  | "despesa"
   | "recebimento_multa"
   | "multa_adicionada"
   | "estorno_pagamento"
@@ -24,6 +25,18 @@ export type DailyEventType =
   | "anexo_adicionado"
   | "anexo_removido";
 
+/** Categorias de despesa operacional. */
+export const EXPENSE_CATEGORIES = [
+  "Gasolina/Transporte",
+  "Alimentação",
+  "Taxas",
+  "Manutenção",
+  "Material",
+  "Serviços",
+  "Outros",
+] as const;
+export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
+
 /** Event types that move money (have cash_movement + change available_cash). */
 export const FINANCIAL_EVENT_TYPES: DailyEventType[] = [
   "pagamento",
@@ -34,6 +47,7 @@ export const FINANCIAL_EVENT_TYPES: DailyEventType[] = [
   "entrada_manual",
   "saida_manual",
   "ajuste_manual",
+  "despesa",
 ];
 
 /** Reversal / correction events. */
