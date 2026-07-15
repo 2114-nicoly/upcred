@@ -23,7 +23,7 @@ import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw, Lock, Unlock,
-  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2, FileText
+  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2, FileText, Receipt
 } from "lucide-react";
 import { EmptyState, CardSkeleton } from "@/components/LoadingSkeleton";
 import { format, addDays } from "date-fns";
