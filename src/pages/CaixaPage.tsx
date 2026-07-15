@@ -17,13 +17,13 @@ import {
   getCurrentDailyCashScope,
   applyDailyCashScope,
 } from "@/lib/cash-utils";
-import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, isFinancialEvent, isReversalEvent, DailyEvent } from "@/lib/daily-events";
+import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, isFinancialEvent, isReversalEvent, DailyEvent, EXPENSE_CATEGORIES, type ExpenseCategory } from "@/lib/daily-events";
 import { assertCashOpen } from "@/lib/cash-lock";
 import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
   History, ChevronLeft, ChevronRight, CheckCircle, XCircle, RefreshCw, Lock, Unlock,
-  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2, FileText
+  DollarSign, ArrowDownCircle, ArrowUpCircle, Undo2, FileText, Receipt
 } from "lucide-react";
 import { EmptyState, CardSkeleton } from "@/components/LoadingSkeleton";
 import { format, addDays } from "date-fns";
@@ -74,6 +74,13 @@ export default function CaixaPage() {
   const [manualType, setManualType] = useState<"entrada_manual" | "saida_manual" | "ajuste_manual" | null>(null);
   const [manualAmount, setManualAmount] = useState("");
   const [manualObs, setManualObs] = useState("");
+
+  // Expense dialog
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>("Gasolina/Transporte");
+  const [expenseDescription, setExpenseDescription] = useState("");
+  const [expenseDate, setExpenseDate] = useState<string>(today);
 
   // Close cash dialog
   const [closeOpen, setCloseOpen] = useState(false);
@@ -203,7 +210,14 @@ export default function CaixaPage() {
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
   const novos = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type));
   const importados = scopedEvents.filter(e => e.event_type === "emprestimo_importado");
-  const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
+  const despesas = scopedEvents.filter(e => e.event_type === "despesa");
+  const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida", "despesa"].includes(e.event_type));
+  const despesasTotal = despesas.reduce((s, e) => s + Number(e.amount_out || 0), 0);
+  const despesasPorCategoria = despesas.reduce<Record<string, number>>((acc, e) => {
+    const cat = (e.metadata?.category as string) || "Outros";
+    acc[cat] = (acc[cat] || 0) + Number(e.amount_out || 0);
+    return acc;
+  }, {});
 
   const handleManualMovement = async () => {
     if (!manualType || submitting) return;
@@ -281,6 +295,80 @@ export default function CaixaPage() {
     } catch (err: any) {
       console.error("[caixa] manual movement failed", err);
       toast.error(err?.message || "Erro ao registrar movimentação");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleExpense = async () => {
+    if (submitting) return;
+    const amount = parseFloat(expenseAmount);
+    if (!isFinite(amount) || amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
+    if (!expenseCategory) { toast.error("Selecione uma categoria"); return; }
+    const desc = expenseDescription.trim();
+    if (desc.length < 3) { toast.error("Descrição obrigatória (mín. 3 caracteres)"); return; }
+    const cashDate = expenseDate || selectedDate;
+
+    const ok = await confirm({
+      title: "Registrar despesa?",
+      description: "O valor será descontado do Caixa Disponível.",
+      affected: [
+        { label: "Valor", value: formatCurrency(amount) },
+        { label: "Categoria", value: expenseCategory },
+        { label: "Descrição", value: desc },
+        { label: "Data", value: cashDate },
+      ],
+      confirmText: "Confirmar", destructive: true,
+    });
+    if (!ok) return;
+
+    setSubmitting(true);
+    try {
+      await assertCashOpen(cashDate);
+      const before = Number((await getCashBalance())?.available_cash ?? 0);
+
+      await updateCashBalance({ available_cash: -amount });
+
+      const movement: any = await createCashMovement({
+        type: "despesa" as any,
+        amount: -amount,
+        observation: `[${expenseCategory}] ${desc}`,
+        cash_date: cashDate,
+      });
+
+      const event: any = await createDailyEvent({
+        cash_date: cashDate,
+        event_type: "despesa",
+        amount_in: 0,
+        amount_out: amount,
+        observation: `[${expenseCategory}] ${desc}`,
+        origin: "geral",
+        cash_movement_id: movement?.id || null,
+        metadata: { category: expenseCategory, description: desc },
+      } as any);
+
+      const after = before - amount;
+      await logAction("despesa", "cash", null, null, {
+        amount,
+        category: expenseCategory,
+        description: desc,
+        cash_date: cashDate,
+        movement_id: movement?.id ?? null,
+        daily_event_id: event?.id ?? null,
+        cash_before: before,
+        cash_after: after,
+      }, desc);
+
+      toast.success("Despesa registrada!");
+      setExpenseOpen(false);
+      setExpenseAmount("");
+      setExpenseDescription("");
+      setExpenseCategory("Gasolina/Transporte");
+      setExpenseDate(today);
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] expense failed", err);
+      toast.error(err?.message || "Erro ao registrar despesa");
     } finally {
       setSubmitting(false);
     }
@@ -1036,13 +1124,65 @@ export default function CaixaPage() {
         </div>
       )}
 
+      {/* Despesas do dia */}
+      {despesas.length > 0 && (
+        <Card className="border-destructive/30">
+          <CardHeader className="pb-1.5 pt-3 px-3">
+            <CardTitle className="text-xs flex items-center justify-between">
+              <span className="flex items-center gap-1"><Receipt className="h-3.5 w-3.5 text-destructive" /> Despesas Hoje</span>
+              <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(despesasTotal)}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-2">
+            {Object.keys(despesasPorCategoria).length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(despesasPorCategoria).map(([cat, val]) => (
+                  <span key={cat} className="text-[10px] rounded-md border bg-muted/40 px-1.5 py-0.5">
+                    {cat}: <span className="font-semibold tabular-nums">{formatCurrency(val)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="space-y-1">
+              {despesas.slice(0, 5).map(ev => {
+                const m = (ev.metadata || {}) as any;
+                return (
+                  <div key={ev.id} className="flex items-center justify-between rounded-md bg-accent/40 px-2 py-1">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium truncate">{m.category || "Sem categoria"}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{m.description || ev.observation || "—"}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-destructive tabular-nums">-{formatCurrency(Number(ev.amount_out))}</span>
+                      {!workerIsClosed && (
+                        <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Estornar despesa">
+                          <Undo2 className="h-3 w-3 text-destructive" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {despesas.length > 5 && (
+                <button type="button" onClick={() => setActiveSection("movimentos")} className="w-full text-[11px] text-primary hover:underline pt-0.5">
+                  Ver todas ({despesas.length}) →
+                </button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Action buttons */}
-      <div className={`grid gap-2 ${showAjuste ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div className={`grid gap-2 ${showAjuste ? "grid-cols-4" : "grid-cols-3"}`}>
         <Button disabled={cashLocked || submitting} variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Entrada
         </Button>
         <Button disabled={cashLocked || submitting} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
           <Minus className="mr-1 h-3.5 w-3.5" /> Saída
+        </Button>
+        <Button disabled={cashLocked || submitting} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => { setExpenseDate(selectedDate); setExpenseOpen(true); }}>
+          <Receipt className="mr-1 h-3.5 w-3.5" /> Despesa
         </Button>
         {showAjuste && (
           <Button disabled={cashLocked || submitting} variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
@@ -1056,6 +1196,46 @@ export default function CaixaPage() {
           <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
         </Button>
       </div>
+
+      {/* Expense dialog */}
+      <Dialog open={expenseOpen} onOpenChange={(o) => { if (!o) setExpenseOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Receipt className="h-4 w-4 text-destructive" /> Nova Despesa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Valor (R$) <span className="text-destructive">*</span></Label>
+              <Input type="number" step="0.01" min="0" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" />
+            </div>
+            <div>
+              <Label>Categoria <span className="text-destructive">*</span></Label>
+              <select
+                value={expenseCategory}
+                onChange={(e) => setExpenseCategory(e.target.value as ExpenseCategory)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Descrição <span className="text-destructive">*</span></Label>
+              <Textarea value={expenseDescription} onChange={(e) => setExpenseDescription(e.target.value)} placeholder="Ex.: Combustível moto — posto Shell" />
+            </div>
+            <div>
+              <Label>Data</Label>
+              <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              O valor será descontado do Caixa Disponível uma única vez e ficará separado das saídas manuais.
+            </p>
+            <Button onClick={handleExpense} disabled={submitting} className="w-full">Confirmar despesa</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
 
       {/* Manual movement dialog */}
       <Dialog open={manualType !== null} onOpenChange={(o) => { if (!o) setManualType(null); }}>

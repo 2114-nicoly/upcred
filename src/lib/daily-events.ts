@@ -12,6 +12,7 @@ export type DailyEventType =
   | "entrada_manual"
   | "saida_manual"
   | "ajuste_manual"
+  | "despesa"
   | "recebimento_multa"
   | "multa_adicionada"
   | "estorno_pagamento"
@@ -24,6 +25,18 @@ export type DailyEventType =
   | "anexo_adicionado"
   | "anexo_removido";
 
+/** Categorias de despesa operacional. */
+export const EXPENSE_CATEGORIES = [
+  "Gasolina/Transporte",
+  "Alimentação",
+  "Taxas",
+  "Manutenção",
+  "Material",
+  "Serviços",
+  "Outros",
+] as const;
+export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
+
 /** Event types that move money (have cash_movement + change available_cash). */
 export const FINANCIAL_EVENT_TYPES: DailyEventType[] = [
   "pagamento",
@@ -34,6 +47,7 @@ export const FINANCIAL_EVENT_TYPES: DailyEventType[] = [
   "entrada_manual",
   "saida_manual",
   "ajuste_manual",
+  "despesa",
 ];
 
 /** Reversal / correction events. */
@@ -211,7 +225,8 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   if (
     event.event_type === "entrada_manual" ||
     event.event_type === "saida_manual" ||
-    event.event_type === "ajuste_manual"
+    event.event_type === "ajuste_manual" ||
+    event.event_type === "despesa"
   ) {
     // Locate the original cash_movement (prefer linked id; else match by type+date)
     let movementId = event.cash_movement_id || null;
@@ -322,6 +337,7 @@ export function getEventTypeLabel(type: string): string {
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
+    case "despesa": return "Despesa";
     case "recebimento_multa": return "Multa Recebida";
     case "multa_adicionada": return "Multa Adicionada";
     case "estorno_pagamento": return "Estorno de Pagamento";
@@ -351,6 +367,7 @@ export function getEventTypeColor(type: string): string {
     case "entrada_manual": return "text-success";
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
+    case "despesa": return "text-destructive";
     case "recebimento_multa": return "text-warning";
     case "multa_adicionada": return "text-warning";
     case "estorno_pagamento": return "text-muted-foreground";

@@ -10,6 +10,7 @@ export type DailyEventLike = {
   amount_in?: number | string | null;
   amount_out?: number | string | null;
   reversed_at?: string | null;
+  metadata?: Record<string, any> | null;
 };
 
 export type DailyTotals = {
@@ -22,6 +23,9 @@ export type DailyTotals = {
   renegociacoes: number;     // event_type = 'renegociacao'
   entradasManuais: number;   // event_type = 'entrada_manual'
   saidasManuais: number;     // event_type = 'saida_manual'
+  despesas: number;          // event_type = 'despesa'
+  despesasCount: number;
+  despesasPorCategoria: Record<string, number>;
   naoPagos: number;          // contagem event_type = 'nao_pagou'
   emprestimosImportados: number;   // contagem event_type = 'emprestimo_importado'
   valorImportadoAReceber: number;  // soma do saldo restante adicionado ao A Receber via importações
@@ -47,6 +51,9 @@ export function computeDailyTotals(
     renegociacoes: 0,
     entradasManuais: 0,
     saidasManuais: 0,
+    despesas: 0,
+    despesasCount: 0,
+    despesasPorCategoria: {},
     naoPagos: 0,
     emprestimosImportados: 0,
     valorImportadoAReceber: 0,
@@ -59,7 +66,6 @@ export function computeDailyTotals(
     // Empréstimo importado é informativo: não entra em entradas/saídas/pagamentos/liberados.
     if (e.event_type === "emprestimo_importado") {
       t.emprestimosImportados += 1;
-      // Caso futuramente venha valor metadado em amount_in, agregamos aqui sem afetar caixa.
       t.valorImportadoAReceber += ain;
       continue;
     }
@@ -73,6 +79,13 @@ export function computeDailyTotals(
       case "renegociacao": t.renegociacoes += aout; break;
       case "entrada_manual": t.entradasManuais += ain; break;
       case "saida_manual": t.saidasManuais += aout; break;
+      case "despesa": {
+        t.despesas += aout;
+        t.despesasCount += 1;
+        const cat = (e.metadata?.category as string) || "Outros";
+        t.despesasPorCategoria[cat] = (t.despesasPorCategoria[cat] || 0) + aout;
+        break;
+      }
       case "nao_pagou": t.naoPagos += 1; break;
     }
   }
@@ -166,6 +179,7 @@ export async function getDailyCollectionSummary(
   let multas = 0;
   let manualIn = 0;
   let manualOut = 0;
+  let expenses = 0;
   let lent = 0;
   try {
     let q: any = supabase.from("daily_events" as any)
@@ -184,6 +198,7 @@ export async function getDailyCollectionSummary(
         case "recebimento_multa": multas += ain; break;
         case "entrada_manual": manualIn += ain; break;
         case "saida_manual": manualOut += aout; break;
+        case "despesa": expenses += aout; break;
         case "emprestimo_novo":
         case "renovacao":
         case "renegociacao": lent += aout; break;
@@ -231,7 +246,7 @@ export async function getDailyCollectionSummary(
   }
 
   // Esperado no caixa = dinheiro físico esperado (sem futuras cobranças, sem importados).
-  const cashExpectedForClosing = opening + pagamentos + multas + manualIn - lent - manualOut;
+  const cashExpectedForClosing = opening + pagamentos + multas + manualIn - lent - manualOut - expenses;
   const pendingToReceiveToday = Math.max(0, expectedToReceiveToday - receivedToday);
 
   return {

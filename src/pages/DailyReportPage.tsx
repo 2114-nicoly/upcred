@@ -33,7 +33,7 @@ type WorkerOpt = { id: string; nome: string; parent_admin_id: string | null };
 type AdminOpt = { id: string; nome: string };
 
 const INCOME_TYPES = new Set(["pagamento", "recebimento_multa", "entrada_manual"]);
-const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "renegociacao", "saida", "saida_manual"]);
+const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "renegociacao", "saida", "saida_manual", "despesa"]);
 
 export default function DailyReportPage() {
   const { workerId: myWorkerId, adminId: myAdminId, isAdmin, isSuperAdmin } = useAuth();
@@ -233,6 +233,8 @@ export default function DailyReportPage() {
       penalties: t.multas,
       manualIn: t.entradasManuais,
       manualOut: t.saidasManuais,
+      expenses: t.despesas,
+      expensesByCategory: t.despesasPorCategoria,
       notPaidCount: t.naoPagos,
       balance: t.entradas - t.saidas,
     };
@@ -331,7 +333,7 @@ export default function DailyReportPage() {
     writeBlockTitle("1. Resumo do Dia");
 
     const opening = cashSummary?.opening ?? 0;
-    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut);
+    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses);
     const cashRows: [string, string][] = [
       ["Caixa Disponível no Início do Dia", formatCurrency(opening)],
       ["Recebido Hoje", formatCurrency(totals.payments)],
@@ -339,6 +341,7 @@ export default function DailyReportPage() {
       ["Emprestado Hoje", formatCurrency(totals.loans + totals.renewals)],
       ["Entradas Manuais", formatCurrency(totals.manualIn)],
       ["Saídas Manuais", formatCurrency(totals.manualOut)],
+      ["Despesas Operacionais", formatCurrency(totals.expenses)],
       ["Caixa Disponível Final", formatCurrency(finalCash)],
       ...(cashSummary?.counted != null ? [["Dinheiro Contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
       ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
@@ -367,6 +370,7 @@ export default function DailyReportPage() {
     const cancels = events.filter((e) => e.event_type === "cancelamento");
     const penaltiesAdded = events.filter((e) => e.event_type === "multa_adicionada" && !e.reversed_at);
     const penaltiesPaid = events.filter((e) => e.event_type === "recebimento_multa" && !e.reversed_at);
+    const expenses = events.filter((e) => e.event_type === "despesa" && !e.reversed_at);
     const importedOngoing = auditRows.filter((a) =>
       a.action_type === "criar_emprestimo_importado" ||
       (a.action_type === "criar_emprestimo" &&
@@ -458,6 +462,20 @@ export default function DailyReportPage() {
       nameOf(e.client_id),
       e.observation || "",
     ]), ["Hora", "Cliente", "Motivo / Obs."]);
+
+    addSection("Despesas Operacionais", expenses.map((e) => {
+      const m: any = (e as any).metadata || {};
+      return [
+        format(new Date(e.created_at), "HH:mm"),
+        m.category || "Sem categoria",
+        m.description || e.observation || "",
+        formatCurrency(Number(e.amount_out || 0)),
+      ];
+    }), ["Hora", "Categoria", "Descrição", "Valor"]);
+
+    addSection("Despesas por Categoria", Object.entries(totals.expensesByCategory).map(([cat, val]) => [
+      cat, formatCurrency(Number(val)),
+    ]), ["Categoria", "Total"]);
 
     addSection("Quitações", quitacoes.map((a) => {
       const nv: any = (a as any).new_value || {};
@@ -669,9 +687,10 @@ export default function DailyReportPage() {
           <Stat label="Emprestado Hoje" value={formatCurrency(totals.loans + totals.renewals)} negative />
           <Stat label="Entradas Manuais" value={formatCurrency(totals.manualIn)} positive />
           <Stat label="Saídas Manuais" value={formatCurrency(totals.manualOut)} negative />
+          <Stat label="Despesas Operacionais" value={formatCurrency(totals.expenses)} negative />
           <Stat
             label="Caixa Disponível Final"
-            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut))}
+            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))}
           />
           {cashSummary?.counted != null && <Stat label="Dinheiro Contado" value={formatCurrency(cashSummary.counted)} />}
           {cashSummary?.diff != null && (

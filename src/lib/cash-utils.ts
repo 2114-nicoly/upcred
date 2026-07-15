@@ -87,6 +87,7 @@ export type CashMovementType =
   | "entrada_manual"
   | "saida_manual"
   | "ajuste_manual"
+  | "despesa"
   | "estorno_pagamento"
   | "estorno_manual";
 
@@ -298,6 +299,7 @@ export function getMovementTypeLabel(type: string): string {
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
+    case "despesa": return "Despesa";
     case "estorno_pagamento": return "Estorno Pagamento";
     case "estorno_manual": return "Estorno Manual";
     default: return type;
@@ -312,6 +314,7 @@ export function getMovementTypeColor(type: string): string {
     case "entrada_manual": return "text-success";
     case "saida_manual": return "text-destructive";
     case "ajuste_manual": return "text-primary";
+    case "despesa": return "text-destructive";
     case "estorno_pagamento": return "text-muted-foreground";
     case "estorno_manual": return "text-muted-foreground";
     default: return "text-muted-foreground";
