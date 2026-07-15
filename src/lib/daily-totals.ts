@@ -179,6 +179,7 @@ export async function getDailyCollectionSummary(
   let multas = 0;
   let manualIn = 0;
   let manualOut = 0;
+  let expenses = 0;
   let lent = 0;
   try {
     let q: any = supabase.from("daily_events" as any)
@@ -197,6 +198,7 @@ export async function getDailyCollectionSummary(
         case "recebimento_multa": multas += ain; break;
         case "entrada_manual": manualIn += ain; break;
         case "saida_manual": manualOut += aout; break;
+        case "despesa": expenses += aout; break;
         case "emprestimo_novo":
         case "renovacao":
         case "renegociacao": lent += aout; break;
