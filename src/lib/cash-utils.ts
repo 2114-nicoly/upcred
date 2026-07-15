@@ -87,6 +87,7 @@ export type CashMovementType =
   | "entrada_manual"
   | "saida_manual"
   | "ajuste_manual"
+  | "despesa"
   | "estorno_pagamento"
   | "estorno_manual";
 
