@@ -370,6 +370,7 @@ export default function DailyReportPage() {
     const cancels = events.filter((e) => e.event_type === "cancelamento");
     const penaltiesAdded = events.filter((e) => e.event_type === "multa_adicionada" && !e.reversed_at);
     const penaltiesPaid = events.filter((e) => e.event_type === "recebimento_multa" && !e.reversed_at);
+    const expenses = events.filter((e) => e.event_type === "despesa" && !e.reversed_at);
     const importedOngoing = auditRows.filter((a) =>
       a.action_type === "criar_emprestimo_importado" ||
       (a.action_type === "criar_emprestimo" &&
