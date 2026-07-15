@@ -13,7 +13,7 @@ export type AuditAction =
   | "editar_parcela" | "alterar_data_parcela"
   | "multa_aplicada" | "multa_paga" | "multa_cancelada" | "editar_multa"
   | "reagendamento_solicitado" | "reagendamento_aprovado" | "reagendamento_recusado"
-  | "aporte" | "retirada" | "ajuste_caixa" | "fechar_caixa" | "reabrir_caixa" | "solicitar_reabertura_caixa"
+  | "aporte" | "retirada" | "ajuste_caixa" | "despesa" | "estorno_despesa" | "fechar_caixa" | "reabrir_caixa" | "solicitar_reabertura_caixa"
   | "estorno_manual" | "estorno_pagamento"
   | "criar_trabalhador" | "reset_senha_trabalhador" | "ativar_trabalhador" | "desativar_trabalhador"
   | "arquivar_trabalhador" | "desarquivar_trabalhador" | "excluir_trabalhador"
