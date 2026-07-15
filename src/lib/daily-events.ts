@@ -225,7 +225,8 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   if (
     event.event_type === "entrada_manual" ||
     event.event_type === "saida_manual" ||
-    event.event_type === "ajuste_manual"
+    event.event_type === "ajuste_manual" ||
+    event.event_type === "despesa"
   ) {
     // Locate the original cash_movement (prefer linked id; else match by type+date)
     let movementId = event.cash_movement_id || null;
