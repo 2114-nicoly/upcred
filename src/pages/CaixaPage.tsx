@@ -1124,13 +1124,65 @@ export default function CaixaPage() {
         </div>
       )}
 
+      {/* Despesas do dia */}
+      {despesas.length > 0 && (
+        <Card className="border-destructive/30">
+          <CardHeader className="pb-1.5 pt-3 px-3">
+            <CardTitle className="text-xs flex items-center justify-between">
+              <span className="flex items-center gap-1"><Receipt className="h-3.5 w-3.5 text-destructive" /> Despesas Hoje</span>
+              <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(despesasTotal)}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-2">
+            {Object.keys(despesasPorCategoria).length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(despesasPorCategoria).map(([cat, val]) => (
+                  <span key={cat} className="text-[10px] rounded-md border bg-muted/40 px-1.5 py-0.5">
+                    {cat}: <span className="font-semibold tabular-nums">{formatCurrency(val)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="space-y-1">
+              {despesas.slice(0, 5).map(ev => {
+                const m = (ev.metadata || {}) as any;
+                return (
+                  <div key={ev.id} className="flex items-center justify-between rounded-md bg-accent/40 px-2 py-1">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium truncate">{m.category || "Sem categoria"}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{m.description || ev.observation || "—"}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-destructive tabular-nums">-{formatCurrency(Number(ev.amount_out))}</span>
+                      {!workerIsClosed && (
+                        <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Estornar despesa">
+                          <Undo2 className="h-3 w-3 text-destructive" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {despesas.length > 5 && (
+                <button type="button" onClick={() => setActiveSection("movimentos")} className="w-full text-[11px] text-primary hover:underline pt-0.5">
+                  Ver todas ({despesas.length}) →
+                </button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Action buttons */}
-      <div className={`grid gap-2 ${showAjuste ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div className={`grid gap-2 ${showAjuste ? "grid-cols-4" : "grid-cols-3"}`}>
         <Button disabled={cashLocked || submitting} variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Entrada
         </Button>
         <Button disabled={cashLocked || submitting} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => setManualType("saida_manual")}>
           <Minus className="mr-1 h-3.5 w-3.5" /> Saída
+        </Button>
+        <Button disabled={cashLocked || submitting} variant="outline" className="text-destructive border-destructive/50 text-xs h-9" onClick={() => { setExpenseDate(selectedDate); setExpenseOpen(true); }}>
+          <Receipt className="mr-1 h-3.5 w-3.5" /> Despesa
         </Button>
         {showAjuste && (
           <Button disabled={cashLocked || submitting} variant="outline" className="text-xs h-9" onClick={() => setManualType("ajuste_manual")}>
@@ -1144,6 +1196,46 @@ export default function CaixaPage() {
           <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
         </Button>
       </div>
+
+      {/* Expense dialog */}
+      <Dialog open={expenseOpen} onOpenChange={(o) => { if (!o) setExpenseOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Receipt className="h-4 w-4 text-destructive" /> Nova Despesa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Valor (R$) <span className="text-destructive">*</span></Label>
+              <Input type="number" step="0.01" min="0" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" />
+            </div>
+            <div>
+              <Label>Categoria <span className="text-destructive">*</span></Label>
+              <select
+                value={expenseCategory}
+                onChange={(e) => setExpenseCategory(e.target.value as ExpenseCategory)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Descrição <span className="text-destructive">*</span></Label>
+              <Textarea value={expenseDescription} onChange={(e) => setExpenseDescription(e.target.value)} placeholder="Ex.: Combustível moto — posto Shell" />
+            </div>
+            <div>
+              <Label>Data</Label>
+              <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              O valor será descontado do Caixa Disponível uma única vez e ficará separado das saídas manuais.
+            </p>
+            <Button onClick={handleExpense} disabled={submitting} className="w-full">Confirmar despesa</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
 
       {/* Manual movement dialog */}
       <Dialog open={manualType !== null} onOpenChange={(o) => { if (!o) setManualType(null); }}>
