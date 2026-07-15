@@ -463,6 +463,20 @@ export default function DailyReportPage() {
       e.observation || "",
     ]), ["Hora", "Cliente", "Motivo / Obs."]);
 
+    addSection("Despesas Operacionais", expenses.map((e) => {
+      const m: any = (e as any).metadata || {};
+      return [
+        format(new Date(e.created_at), "HH:mm"),
+        m.category || "Sem categoria",
+        m.description || e.observation || "",
+        formatCurrency(Number(e.amount_out || 0)),
+      ];
+    }), ["Hora", "Categoria", "Descrição", "Valor"]);
+
+    addSection("Despesas por Categoria", Object.entries(totals.expensesByCategory).map(([cat, val]) => [
+      cat, formatCurrency(Number(val)),
+    ]), ["Categoria", "Total"]);
+
     addSection("Quitações", quitacoes.map((a) => {
       const nv: any = (a as any).new_value || {};
       return [
