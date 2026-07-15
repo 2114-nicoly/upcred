@@ -210,7 +210,14 @@ export default function CaixaPage() {
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
   const novos = scopedEvents.filter(e => ["emprestimo_novo","renovacao","renegociacao"].includes(e.event_type));
   const importados = scopedEvents.filter(e => e.event_type === "emprestimo_importado");
-  const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida"].includes(e.event_type));
+  const despesas = scopedEvents.filter(e => e.event_type === "despesa");
+  const movimentos = scopedEvents.filter(e => ["entrada_manual", "saida_manual", "ajuste_manual", "saida", "despesa"].includes(e.event_type));
+  const despesasTotal = despesas.reduce((s, e) => s + Number(e.amount_out || 0), 0);
+  const despesasPorCategoria = despesas.reduce<Record<string, number>>((acc, e) => {
+    const cat = (e.metadata?.category as string) || "Outros";
+    acc[cat] = (acc[cat] || 0) + Number(e.amount_out || 0);
+    return acc;
+  }, {});
 
   const handleManualMovement = async () => {
     if (!manualType || submitting) return;
