@@ -233,6 +233,8 @@ export default function DailyReportPage() {
       penalties: t.multas,
       manualIn: t.entradasManuais,
       manualOut: t.saidasManuais,
+      expenses: t.despesas,
+      expensesByCategory: t.despesasPorCategoria,
       notPaidCount: t.naoPagos,
       balance: t.entradas - t.saidas,
     };
