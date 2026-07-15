@@ -246,7 +246,7 @@ export async function getDailyCollectionSummary(
   }
 
   // Esperado no caixa = dinheiro físico esperado (sem futuras cobranças, sem importados).
-  const cashExpectedForClosing = opening + pagamentos + multas + manualIn - lent - manualOut;
+  const cashExpectedForClosing = opening + pagamentos + multas + manualIn - lent - manualOut - expenses;
   const pendingToReceiveToday = Math.max(0, expectedToReceiveToday - receivedToday);
 
   return {
