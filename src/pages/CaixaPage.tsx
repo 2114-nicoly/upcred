@@ -17,7 +17,7 @@ import {
   getCurrentDailyCashScope,
   applyDailyCashScope,
 } from "@/lib/cash-utils";
-import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, isFinancialEvent, isReversalEvent, DailyEvent } from "@/lib/daily-events";
+import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, isFinancialEvent, isReversalEvent, DailyEvent, EXPENSE_CATEGORIES, type ExpenseCategory } from "@/lib/daily-events";
 import { assertCashOpen } from "@/lib/cash-lock";
 import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import {
