@@ -10,6 +10,7 @@ export type DailyEventLike = {
   amount_in?: number | string | null;
   amount_out?: number | string | null;
   reversed_at?: string | null;
+  metadata?: Record<string, any> | null;
 };
 
 export type DailyTotals = {
@@ -22,6 +23,9 @@ export type DailyTotals = {
   renegociacoes: number;     // event_type = 'renegociacao'
   entradasManuais: number;   // event_type = 'entrada_manual'
   saidasManuais: number;     // event_type = 'saida_manual'
+  despesas: number;          // event_type = 'despesa'
+  despesasCount: number;
+  despesasPorCategoria: Record<string, number>;
   naoPagos: number;          // contagem event_type = 'nao_pagou'
   emprestimosImportados: number;   // contagem event_type = 'emprestimo_importado'
   valorImportadoAReceber: number;  // soma do saldo restante adicionado ao A Receber via importações
