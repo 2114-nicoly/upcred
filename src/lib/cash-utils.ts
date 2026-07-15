@@ -299,6 +299,7 @@ export function getMovementTypeLabel(type: string): string {
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
+    case "despesa": return "Despesa";
     case "estorno_pagamento": return "Estorno Pagamento";
     case "estorno_manual": return "Estorno Manual";
     default: return type;
