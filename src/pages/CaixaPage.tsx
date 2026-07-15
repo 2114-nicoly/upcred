@@ -300,6 +300,80 @@ export default function CaixaPage() {
     }
   };
 
+  const handleExpense = async () => {
+    if (submitting) return;
+    const amount = parseFloat(expenseAmount);
+    if (!isFinite(amount) || amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
+    if (!expenseCategory) { toast.error("Selecione uma categoria"); return; }
+    const desc = expenseDescription.trim();
+    if (desc.length < 3) { toast.error("Descrição obrigatória (mín. 3 caracteres)"); return; }
+    const cashDate = expenseDate || selectedDate;
+
+    const ok = await confirm({
+      title: "Registrar despesa?",
+      description: "O valor será descontado do Caixa Disponível.",
+      affected: [
+        { label: "Valor", value: formatCurrency(amount) },
+        { label: "Categoria", value: expenseCategory },
+        { label: "Descrição", value: desc },
+        { label: "Data", value: cashDate },
+      ],
+      confirmText: "Confirmar", destructive: true,
+    });
+    if (!ok) return;
+
+    setSubmitting(true);
+    try {
+      await assertCashOpen(cashDate);
+      const before = Number((await getCashBalance())?.available_cash ?? 0);
+
+      await updateCashBalance({ available_cash: -amount });
+
+      const movement: any = await createCashMovement({
+        type: "despesa" as any,
+        amount: -amount,
+        observation: `[${expenseCategory}] ${desc}`,
+        cash_date: cashDate,
+      });
+
+      const event: any = await createDailyEvent({
+        cash_date: cashDate,
+        event_type: "despesa",
+        amount_in: 0,
+        amount_out: amount,
+        observation: `[${expenseCategory}] ${desc}`,
+        origin: "geral",
+        cash_movement_id: movement?.id || null,
+        metadata: { category: expenseCategory, description: desc },
+      } as any);
+
+      const after = before - amount;
+      await logAction("despesa", "cash", null, null, {
+        amount,
+        category: expenseCategory,
+        description: desc,
+        cash_date: cashDate,
+        movement_id: movement?.id ?? null,
+        daily_event_id: event?.id ?? null,
+        cash_before: before,
+        cash_after: after,
+      }, desc);
+
+      toast.success("Despesa registrada!");
+      setExpenseOpen(false);
+      setExpenseAmount("");
+      setExpenseDescription("");
+      setExpenseCategory("Gasolina/Transporte");
+      setExpenseDate(today);
+      await fetchData();
+    } catch (err: any) {
+      console.error("[caixa] expense failed", err);
+      toast.error(err?.message || "Erro ao registrar despesa");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const openCloseDialog = () => {
     if (isClosed) return;
     const cur = Number(balance?.available_cash || 0);
