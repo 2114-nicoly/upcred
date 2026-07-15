@@ -51,6 +51,9 @@ export function computeDailyTotals(
     renegociacoes: 0,
     entradasManuais: 0,
     saidasManuais: 0,
+    despesas: 0,
+    despesasCount: 0,
+    despesasPorCategoria: {},
     naoPagos: 0,
     emprestimosImportados: 0,
     valorImportadoAReceber: 0,
@@ -63,7 +66,6 @@ export function computeDailyTotals(
     // Empréstimo importado é informativo: não entra em entradas/saídas/pagamentos/liberados.
     if (e.event_type === "emprestimo_importado") {
       t.emprestimosImportados += 1;
-      // Caso futuramente venha valor metadado em amount_in, agregamos aqui sem afetar caixa.
       t.valorImportadoAReceber += ain;
       continue;
     }
@@ -77,6 +79,13 @@ export function computeDailyTotals(
       case "renegociacao": t.renegociacoes += aout; break;
       case "entrada_manual": t.entradasManuais += ain; break;
       case "saida_manual": t.saidasManuais += aout; break;
+      case "despesa": {
+        t.despesas += aout;
+        t.despesasCount += 1;
+        const cat = (e.metadata?.category as string) || "Outros";
+        t.despesasPorCategoria[cat] = (t.despesasPorCategoria[cat] || 0) + aout;
+        break;
+      }
       case "nao_pagou": t.naoPagos += 1; break;
     }
   }
