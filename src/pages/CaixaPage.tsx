@@ -75,6 +75,13 @@ export default function CaixaPage() {
   const [manualAmount, setManualAmount] = useState("");
   const [manualObs, setManualObs] = useState("");
 
+  // Expense dialog
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>("Gasolina/Transporte");
+  const [expenseDescription, setExpenseDescription] = useState("");
+  const [expenseDate, setExpenseDate] = useState<string>(today);
+
   // Close cash dialog
   const [closeOpen, setCloseOpen] = useState(false);
   const [countedAmount, setCountedAmount] = useState("");
