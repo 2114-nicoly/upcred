@@ -333,7 +333,7 @@ export default function DailyReportPage() {
     writeBlockTitle("1. Resumo do Dia");
 
     const opening = cashSummary?.opening ?? 0;
-    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut);
+    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses);
     const cashRows: [string, string][] = [
       ["Caixa Disponível no Início do Dia", formatCurrency(opening)],
       ["Recebido Hoje", formatCurrency(totals.payments)],
@@ -341,6 +341,7 @@ export default function DailyReportPage() {
       ["Emprestado Hoje", formatCurrency(totals.loans + totals.renewals)],
       ["Entradas Manuais", formatCurrency(totals.manualIn)],
       ["Saídas Manuais", formatCurrency(totals.manualOut)],
+      ["Despesas Operacionais", formatCurrency(totals.expenses)],
       ["Caixa Disponível Final", formatCurrency(finalCash)],
       ...(cashSummary?.counted != null ? [["Dinheiro Contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
       ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
