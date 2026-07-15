@@ -337,6 +337,7 @@ export function getEventTypeLabel(type: string): string {
     case "entrada_manual": return "Entrada Manual";
     case "saida_manual": return "Saída Manual";
     case "ajuste_manual": return "Ajuste Manual";
+    case "despesa": return "Despesa";
     case "recebimento_multa": return "Multa Recebida";
     case "multa_adicionada": return "Multa Adicionada";
     case "estorno_pagamento": return "Estorno de Pagamento";
