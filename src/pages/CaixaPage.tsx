@@ -81,6 +81,7 @@ export default function CaixaPage() {
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>("Gasolina/Transporte");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseDate, setExpenseDate] = useState<string>(today);
+  const [expenseReceipt, setExpenseReceipt] = useState<File | null>(null);
 
   // Close cash dialog
   const [closeOpen, setCloseOpen] = useState(false);
