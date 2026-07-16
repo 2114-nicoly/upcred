@@ -529,6 +529,44 @@ export default function ClientsPage() {
           })()
         )}
       </div>
+      </>) : (
+        <div className="space-y-2">
+          {archivedLoading ? (
+            <ListSkeleton count={4} />
+          ) : archivedClients.length === 0 ? (
+            <EmptyState icon={Archive} message="Nenhum cliente arquivado" />
+          ) : (
+            archivedClients.map((c) => (
+              <Card key={c.id} className="overflow-hidden opacity-80">
+                <CardContent className="flex items-center justify-between p-4">
+                  <Link to={`/clients/${c.id}`} className="flex-1">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{c.name}</p>
+                        <Badge variant="outline" className="text-[10px]">Arquivado</Badge>
+                      </div>
+                      {c.phone && <p className="text-sm text-muted-foreground">{c.phone}</p>}
+                      <p className="text-[10px] text-muted-foreground">
+                        Trab.: {workerName(c.worker_id)}
+                        {c.archived_at && ` · em ${new Date(c.archived_at).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleRestore(c.id, c.name)}>
+                      <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Restaurar
+                    </Button>
+                    <Link to={`/clients/${c.id}`}>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
 
       <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingClient(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
