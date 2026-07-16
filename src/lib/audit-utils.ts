@@ -3,7 +3,8 @@ import { toast } from "sonner";
 
 export type AuditAction =
   | "transferencia_cliente"
-  | "criar_cliente" | "editar_cliente" | "excluir_cliente"
+  | "criar_cliente" | "editar_cliente" | "excluir_cliente" | "desarquivar_cliente"
+  | "arquivar_clientes_lote" | "desarquivar_clientes_lote"
   | "criar_emprestimo" | "criar_emprestimo_importado"
   | "editar_emprestimo" | "excluir_emprestimo" | "editar_observacao_emprestimo"
   | "renovar_emprestimo" | "quitar_emprestimo"
