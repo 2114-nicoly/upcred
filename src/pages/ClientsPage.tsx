@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Search, ChevronRight, Pencil, Archive, ArrowDownAZ, Filter, Layers } from "lucide-react";
+import { Users, Plus, Search, ChevronRight, Pencil, Archive, ArrowDownAZ, Filter, Layers, ArchiveRestore } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/loan-utils";
@@ -61,6 +62,9 @@ export default function ClientsPage() {
   const [filterActive, setFilterActive] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
+  const [tab, setTab] = useState<"active" | "archived">("active");
+  const [archivedClients, setArchivedClients] = useState<(Client & { archived_at: string | null })[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
 
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
@@ -213,6 +217,7 @@ export default function ClientsPage() {
   };
 
   const handleArchive = async (id: string) => {
+    if (!isSuperAdmin) { toast.error("Apenas o Super Administrador pode arquivar clientes"); return; }
     if (!confirm("Arquivar este cliente? Ele deixará de aparecer nas listas, mas todo o histórico (empréstimos, pagamentos, caixa) será preservado.")) return;
     try {
       await requireAudit(
@@ -225,16 +230,37 @@ export default function ClientsPage() {
       if (err instanceof AuditRequiredError) return;
       throw err;
     }
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id || null;
-    const { error } = await supabase
-      .from("clients")
-      .update({ archived_at: new Date().toISOString(), archived_by: uid } as any)
-      .eq("id", id);
-    if (error) { toast.error("Erro ao arquivar cliente"); return; }
+    const { data, error } = await supabase.rpc("bulk_archive_clients" as any, { p_client_ids: [id] });
+    if (error) { toast.error(error.message || "Erro ao arquivar cliente"); return; }
     toast.success("Cliente arquivado!");
     fetchClients();
+    if (tab === "archived") loadArchived();
   };
+
+  const loadArchived = async () => {
+    setArchivedLoading(true);
+    const { data } = await supabase
+      .from("clients")
+      .select("*")
+      .not("archived_at", "is", null)
+      .order("archived_at", { ascending: false });
+    setArchivedClients((data as any) || []);
+    setArchivedLoading(false);
+  };
+
+  const handleRestore = async (id: string, name: string) => {
+    if (!isSuperAdmin) { toast.error("Apenas o Super Administrador pode restaurar clientes"); return; }
+    if (!confirm(`Restaurar cliente "${name}"? Ele voltará a aparecer nas listas ativas.`)) return;
+    const { error } = await supabase.rpc("bulk_unarchive_clients" as any, { p_client_ids: [id] });
+    if (error) { toast.error(error.message || "Erro ao restaurar"); return; }
+    logAction("desarquivar_cliente", "client", id, { archived: true }, { archived: false });
+    toast.success("Cliente restaurado!");
+    loadArchived();
+    fetchClients();
+  };
+
+  useEffect(() => { if (tab === "archived") loadArchived(); }, [tab]);
+
 
 
   const openEdit = (client: Client) => {
@@ -396,6 +422,14 @@ export default function ClientsPage() {
         </Card>
       )}
 
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "archived")} className="mb-3">
+        <TabsList className={isSuperAdmin ? "grid grid-cols-2 w-full" : "grid grid-cols-1 w-full"}>
+          <TabsTrigger value="active">Ativos</TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="archived">Arquivados</TabsTrigger>}
+        </TabsList>
+      </Tabs>
+
+      {tab === "active" ? (<>
       <div className="mb-4 flex gap-3">
         <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2">
           <ArrowDownAZ className="h-4 w-4 text-muted-foreground" />
@@ -446,9 +480,11 @@ export default function ClientsPage() {
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
-                        <Archive className="h-3.5 w-3.5" />
-                      </Button>
+                      {isSuperAdmin && (
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
+                          <Archive className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
 
                       <Link to={`/clients/${client.id}`}>
                         <ChevronRight className="h-5 w-5 text-muted-foreground" />
@@ -493,6 +529,44 @@ export default function ClientsPage() {
           })()
         )}
       </div>
+      </>) : (
+        <div className="space-y-2">
+          {archivedLoading ? (
+            <ListSkeleton count={4} />
+          ) : archivedClients.length === 0 ? (
+            <EmptyState icon={Archive} message="Nenhum cliente arquivado" />
+          ) : (
+            archivedClients.map((c) => (
+              <Card key={c.id} className="overflow-hidden opacity-80">
+                <CardContent className="flex items-center justify-between p-4">
+                  <Link to={`/clients/${c.id}`} className="flex-1">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{c.name}</p>
+                        <Badge variant="outline" className="text-[10px]">Arquivado</Badge>
+                      </div>
+                      {c.phone && <p className="text-sm text-muted-foreground">{c.phone}</p>}
+                      <p className="text-[10px] text-muted-foreground">
+                        Trab.: {workerName(c.worker_id)}
+                        {c.archived_at && ` · em ${new Date(c.archived_at).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleRestore(c.id, c.name)}>
+                      <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Restaurar
+                    </Button>
+                    <Link to={`/clients/${c.id}`}>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
 
       <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingClient(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">

@@ -84,7 +84,8 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
       .select("id, worker_id, status, remaining_balance, client_id"),
     supabase
       .from("clients")
-      .select("id, worker_id"),
+      .select("id, worker_id")
+      .is("archived_at", null),
     supabase.rpc("admin_list_workers" as any),
   ]);
 

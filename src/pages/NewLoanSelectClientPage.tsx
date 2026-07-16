@@ -59,6 +59,7 @@ export default function NewLoanSelectClientPage() {
       const { data: clientRows } = await supabase
         .from("clients")
         .select("id, name, phone, client_code, doc_primary_number, doc_secondary_number")
+        .is("archived_at", null)
         .order("client_code");
       // 2) buscar empréstimos ativos para excluir esses clientes
       const { data: activeLoans } = await supabase

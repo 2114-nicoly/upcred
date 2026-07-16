@@ -257,6 +257,7 @@ type WorkerRow = Worker & { archived_at?: string | null };
 function WorkersTab() {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const { isSuperAdmin } = useAuth();
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   // resetRequests removed: handled by PasswordRecoveryBell in header
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
@@ -267,6 +268,9 @@ function WorkersTab() {
   const [nome, setNome] = useState("");
   const [notas, setNotas] = useState("");
   const [creds, setCreds] = useState<CredsToShow | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<WorkerRow | null>(null);
+  const [archiveCascade, setArchiveCascade] = useState(false);
+  const [archiveWorking, setArchiveWorking] = useState(false);
 
   // Edição de trabalhador
   const [editing, setEditing] = useState<WorkerRow | null>(null);
@@ -325,23 +329,57 @@ function WorkersTab() {
 
   useEffect(() => { load(); }, [showArchived]);
 
-  async function handleArchive(w: Worker & { archived_at?: string | null }) {
-    const isArchived = !!w.archived_at;
-    const ok = await confirm({
-      title: isArchived ? "Desarquivar trabalhador?" : "Arquivar trabalhador?",
-      description: isArchived
-        ? "O trabalhador voltará a aparecer na lista padrão."
-        : "O trabalhador some da lista padrão. Histórico financeiro é preservado.",
+  async function handleUnarchive(w: WorkerRow) {
+    if (!isSuperAdmin) { toast({ title: "Apenas o Super Administrador pode desarquivar", variant: "destructive" }); return; }
+    const cascade = window.confirm(
+      `Desarquivar "${w.nome}"?\n\nOK = Desarquivar trabalhador e restaurar todos os seus clientes.\nCancelar = apenas o trabalhador.`,
+    );
+    // If user cancels the browser confirm we still ask a final confirmation via useConfirm
+    const proceed = await confirm({
+      title: "Desarquivar trabalhador?",
+      description: cascade
+        ? "Trabalhador e todos os seus clientes voltarão a aparecer nas listas ativas."
+        : "Somente o trabalhador voltará a aparecer nas listas ativas.",
       affected: [{ label: "Trabalhador", value: w.nome }],
-      confirmText: isArchived ? "Desarquivar" : "Arquivar",
-      destructive: !isArchived,
+      confirmText: "Desarquivar",
     });
-    if (!ok) return;
-    const { error } = await supabase.rpc((isArchived ? "unarchive_worker" : "archive_worker") as any, { p_worker_id: w.id });
+    if (!proceed) return;
+    const { error } = await supabase.rpc("unarchive_worker" as any, { p_worker_id: w.id, p_cascade: cascade });
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    toast({ title: isArchived ? "Desarquivado" : "Arquivado" });
+    toast({ title: "Desarquivado" });
     load();
   }
+
+  function openArchiveDialog(w: WorkerRow) {
+    if (!isSuperAdmin) { toast({ title: "Apenas o Super Administrador pode arquivar trabalhadores", variant: "destructive" }); return; }
+    setArchiveTarget(w);
+    setArchiveCascade(false);
+  }
+
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    setArchiveWorking(true);
+    try {
+      const { data, error } = await supabase.rpc("archive_worker" as any, {
+        p_worker_id: archiveTarget.id, p_cascade: archiveCascade,
+      });
+      if (error) throw error;
+      const clientsArchived = (data as any)?.clients_archived ?? 0;
+      toast({
+        title: "Trabalhador arquivado",
+        description: archiveCascade
+          ? `${clientsArchived} cliente(s) também foram arquivados.`
+          : "Clientes vinculados permanecem ativos.",
+      });
+      setArchiveTarget(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro ao arquivar", description: err.message, variant: "destructive" });
+    } finally {
+      setArchiveWorking(false);
+    }
+  }
+
 
   async function pickUniqueLogin(): Promise<string> {
     for (let i = 0; i < 20; i++) {
@@ -460,10 +498,12 @@ function WorkersTab() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-muted-foreground">{workers.length} trabalhador(es)</p>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
-            <Switch checked={showArchived} onCheckedChange={setShowArchived} />
-            Mostrar arquivados
-          </label>
+          {isSuperAdmin && (
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+              <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+              Mostrar arquivados
+            </label>
+          )}
           <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
         </div>
       </div>
@@ -514,9 +554,14 @@ function WorkersTab() {
                         <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
                       </Button>
                     )}
-                    {(!w.active || w.archived_at) && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleArchive(w)}>
-                        {w.archived_at ? "Desarquivar Trabalhador" : "Arquivar Trabalhador"}
+                    {isSuperAdmin && !w.archived_at && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openArchiveDialog(w)}>
+                        Arquivar Trabalhador
+                      </Button>
+                    )}
+                    {isSuperAdmin && w.archived_at && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleUnarchive(w)}>
+                        Desarquivar Trabalhador
                       </Button>
                     )}
                   </div>
@@ -604,6 +649,40 @@ function WorkersTab() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!archiveTarget} onOpenChange={(o) => !o && setArchiveTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Arquivar trabalhador</DialogTitle>
+            <DialogDescription>
+              O trabalhador {archiveTarget?.nome ? <b>{archiveTarget.nome}</b> : null} sairá das listas ativas.
+              Todo o histórico (empréstimos, pagamentos, caixa, auditoria) é preservado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <label className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer ${!archiveCascade ? "border-primary bg-primary/5" : ""}`}>
+              <input type="radio" checked={!archiveCascade} onChange={() => setArchiveCascade(false)} />
+              <div>
+                <div className="font-medium">Arquivar somente o trabalhador</div>
+                <div className="text-[11px] text-muted-foreground">Clientes vinculados continuam ativos e podem ser reatribuídos.</div>
+              </div>
+            </label>
+            <label className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer ${archiveCascade ? "border-primary bg-primary/5" : ""}`}>
+              <input type="radio" checked={archiveCascade} onChange={() => setArchiveCascade(true)} />
+              <div>
+                <div className="font-medium">Arquivar trabalhador e todos os clientes vinculados</div>
+                <div className="text-[11px] text-muted-foreground">Executado em uma única transação. Nada é excluído.</div>
+              </div>
+            </label>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setArchiveTarget(null)} disabled={archiveWorking}>Cancelar</Button>
+            <Button onClick={confirmArchive} disabled={archiveWorking}>
+              {archiveWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar arquivamento"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
