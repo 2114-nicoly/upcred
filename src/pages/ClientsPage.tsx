@@ -62,6 +62,9 @@ export default function ClientsPage() {
   const [filterActive, setFilterActive] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
+  const [tab, setTab] = useState<"active" | "archived">("active");
+  const [archivedClients, setArchivedClients] = useState<(Client & { archived_at: string | null })[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
 
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
