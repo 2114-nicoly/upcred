@@ -217,6 +217,7 @@ export default function ClientsPage() {
   };
 
   const handleArchive = async (id: string) => {
+    if (!isSuperAdmin) { toast.error("Apenas o Super Administrador pode arquivar clientes"); return; }
     if (!confirm("Arquivar este cliente? Ele deixará de aparecer nas listas, mas todo o histórico (empréstimos, pagamentos, caixa) será preservado.")) return;
     try {
       await requireAudit(
@@ -229,16 +230,37 @@ export default function ClientsPage() {
       if (err instanceof AuditRequiredError) return;
       throw err;
     }
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id || null;
-    const { error } = await supabase
-      .from("clients")
-      .update({ archived_at: new Date().toISOString(), archived_by: uid } as any)
-      .eq("id", id);
-    if (error) { toast.error("Erro ao arquivar cliente"); return; }
+    const { data, error } = await supabase.rpc("bulk_archive_clients" as any, { p_client_ids: [id] });
+    if (error) { toast.error(error.message || "Erro ao arquivar cliente"); return; }
     toast.success("Cliente arquivado!");
     fetchClients();
+    if (tab === "archived") loadArchived();
   };
+
+  const loadArchived = async () => {
+    setArchivedLoading(true);
+    const { data } = await supabase
+      .from("clients")
+      .select("*")
+      .not("archived_at", "is", null)
+      .order("archived_at", { ascending: false });
+    setArchivedClients((data as any) || []);
+    setArchivedLoading(false);
+  };
+
+  const handleRestore = async (id: string, name: string) => {
+    if (!isSuperAdmin) { toast.error("Apenas o Super Administrador pode restaurar clientes"); return; }
+    if (!confirm(`Restaurar cliente "${name}"? Ele voltará a aparecer nas listas ativas.`)) return;
+    const { error } = await supabase.rpc("bulk_unarchive_clients" as any, { p_client_ids: [id] });
+    if (error) { toast.error(error.message || "Erro ao restaurar"); return; }
+    logAction("desarquivar_cliente", "client", id, { archived: true }, { archived: false });
+    toast.success("Cliente restaurado!");
+    loadArchived();
+    fetchClients();
+  };
+
+  useEffect(() => { if (tab === "archived") loadArchived(); }, [tab]);
+
 
 
   const openEdit = (client: Client) => {
