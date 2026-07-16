@@ -271,6 +271,8 @@ function WorkersTab() {
   const [archiveTarget, setArchiveTarget] = useState<WorkerRow | null>(null);
   const [archiveCascade, setArchiveCascade] = useState(false);
   const [archiveWorking, setArchiveWorking] = useState(false);
+  const [archiveAckTarget, setArchiveAckTarget] = useState<WorkerRow | null>(null);
+
 
   // Edição de trabalhador
   const [editing, setEditing] = useState<WorkerRow | null>(null);
@@ -351,10 +353,23 @@ function WorkersTab() {
   }
 
   function openArchiveDialog(w: WorkerRow) {
-    if (!isSuperAdmin) { toast({ title: "Apenas o Super Administrador pode arquivar trabalhadores", variant: "destructive" }); return; }
+    if (isSuperAdmin) {
+      setArchiveTarget(w);
+      setArchiveCascade(false);
+    } else {
+      // Administrador comum: exigir aviso de responsabilidade antes
+      setArchiveAckTarget(w);
+    }
+  }
+
+  function acknowledgeArchiveWarning() {
+    if (!archiveAckTarget) return;
+    const w = archiveAckTarget;
+    setArchiveAckTarget(null);
     setArchiveTarget(w);
     setArchiveCascade(false);
   }
+
 
   async function confirmArchive() {
     if (!archiveTarget) return;
@@ -554,11 +569,12 @@ function WorkersTab() {
                         <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
                       </Button>
                     )}
-                    {isSuperAdmin && !w.archived_at && (
+                    {!w.archived_at && (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openArchiveDialog(w)}>
                         Arquivar Trabalhador
                       </Button>
                     )}
+
                     {isSuperAdmin && w.archived_at && (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleUnarchive(w)}>
                         Desarquivar Trabalhador
@@ -685,6 +701,24 @@ function WorkersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!archiveAckTarget} onOpenChange={(o) => !o && setArchiveAckTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-4 w-4" /> Aviso de responsabilidade
+            </DialogTitle>
+            <DialogDescription>
+              Você está arquivando um trabalhador e poderá retirar clientes e dados da operação atual. Essa ação é de sua responsabilidade.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setArchiveAckTarget(null)}>Cancelar</Button>
+            <Button onClick={acknowledgeArchiveWarning}>Confirmo e desejo continuar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
