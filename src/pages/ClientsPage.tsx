@@ -422,6 +422,14 @@ export default function ClientsPage() {
         </Card>
       )}
 
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "archived")} className="mb-3">
+        <TabsList className={isSuperAdmin ? "grid grid-cols-2 w-full" : "grid grid-cols-1 w-full"}>
+          <TabsTrigger value="active">Ativos</TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="archived">Arquivados</TabsTrigger>}
+        </TabsList>
+      </Tabs>
+
+      {tab === "active" ? (<>
       <div className="mb-4 flex gap-3">
         <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2">
           <ArrowDownAZ className="h-4 w-4 text-muted-foreground" />
