@@ -472,9 +472,11 @@ export default function ClientsPage() {
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(client)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
-                        <Archive className="h-3.5 w-3.5" />
-                      </Button>
+                      {isSuperAdmin && (
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Arquivar cliente" onClick={() => handleArchive(client.id)}>
+                          <Archive className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
 
                       <Link to={`/clients/${client.id}`}>
                         <ChevronRight className="h-5 w-5 text-muted-foreground" />
