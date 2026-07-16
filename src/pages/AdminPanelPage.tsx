@@ -701,6 +701,24 @@ function WorkersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!archiveAckTarget} onOpenChange={(o) => !o && setArchiveAckTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-4 w-4" /> Aviso de responsabilidade
+            </DialogTitle>
+            <DialogDescription>
+              Você está arquivando um trabalhador e poderá retirar clientes e dados da operação atual. Essa ação é de sua responsabilidade.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setArchiveAckTarget(null)}>Cancelar</Button>
+            <Button onClick={acknowledgeArchiveWarning}>Confirmo e desejo continuar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
