@@ -651,6 +651,40 @@ function WorkersTab() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!archiveTarget} onOpenChange={(o) => !o && setArchiveTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Arquivar trabalhador</DialogTitle>
+            <DialogDescription>
+              O trabalhador {archiveTarget?.nome ? <b>{archiveTarget.nome}</b> : null} sairá das listas ativas.
+              Todo o histórico (empréstimos, pagamentos, caixa, auditoria) é preservado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <label className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer ${!archiveCascade ? "border-primary bg-primary/5" : ""}`}>
+              <input type="radio" checked={!archiveCascade} onChange={() => setArchiveCascade(false)} />
+              <div>
+                <div className="font-medium">Arquivar somente o trabalhador</div>
+                <div className="text-[11px] text-muted-foreground">Clientes vinculados continuam ativos e podem ser reatribuídos.</div>
+              </div>
+            </label>
+            <label className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer ${archiveCascade ? "border-primary bg-primary/5" : ""}`}>
+              <input type="radio" checked={archiveCascade} onChange={() => setArchiveCascade(true)} />
+              <div>
+                <div className="font-medium">Arquivar trabalhador e todos os clientes vinculados</div>
+                <div className="text-[11px] text-muted-foreground">Executado em uma única transação. Nada é excluído.</div>
+              </div>
+            </label>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setArchiveTarget(null)} disabled={archiveWorking}>Cancelar</Button>
+            <Button onClick={confirmArchive} disabled={archiveWorking}>
+              {archiveWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar arquivamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
