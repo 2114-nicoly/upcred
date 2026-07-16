@@ -569,11 +569,12 @@ function WorkersTab() {
                         <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
                       </Button>
                     )}
-                    {isSuperAdmin && !w.archived_at && (
+                    {!w.archived_at && (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openArchiveDialog(w)}>
                         Arquivar Trabalhador
                       </Button>
                     )}
+
                     {isSuperAdmin && w.archived_at && (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleUnarchive(w)}>
                         Desarquivar Trabalhador
