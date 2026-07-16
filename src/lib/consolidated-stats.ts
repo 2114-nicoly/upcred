@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { isLoanActive } from "@/lib/status-constants";
+
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
 } from "date-fns";
