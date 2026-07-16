@@ -353,10 +353,23 @@ function WorkersTab() {
   }
 
   function openArchiveDialog(w: WorkerRow) {
-    if (!isSuperAdmin) { toast({ title: "Apenas o Super Administrador pode arquivar trabalhadores", variant: "destructive" }); return; }
+    if (isSuperAdmin) {
+      setArchiveTarget(w);
+      setArchiveCascade(false);
+    } else {
+      // Administrador comum: exigir aviso de responsabilidade antes
+      setArchiveAckTarget(w);
+    }
+  }
+
+  function acknowledgeArchiveWarning() {
+    if (!archiveAckTarget) return;
+    const w = archiveAckTarget;
+    setArchiveAckTarget(null);
     setArchiveTarget(w);
     setArchiveCascade(false);
   }
+
 
   async function confirmArchive() {
     if (!archiveTarget) return;
