@@ -65,7 +65,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
       const [{ data: w }, statsList, { data: cs }, { data: ls }, { data: evs }] = await Promise.all([
         supabase.from("workers").select("*").eq("id", workerId).maybeSingle(),
         loadWorkersStats(range),
-        supabase.from("clients").select("id, name, phone, client_code").eq("worker_id", workerId).order("name"),
+        supabase.from("clients").select("id, name, phone, client_code").eq("worker_id", workerId).is("archived_at", null).order("name"),
         supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, clients(name)").eq("worker_id", workerId).order("loan_date", { ascending: false }).limit(200),
         supabase.from("daily_events" as any).select("id, cash_date, event_type, amount_in, amount_out, observation, origin, reversed_at, clients(name)").eq("worker_id", workerId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
       ]);
