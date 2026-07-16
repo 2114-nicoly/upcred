@@ -65,52 +65,57 @@ const empty = (id: string | null, name: string): WorkerStats => ({
  * - Reads loans/clients counts for snapshot indicators
  */
 export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[]> {
-  const today = format(new Date(), "yyyy-MM-dd");
+  // 1) Operational workers only (active + not archived)
+  const workersRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: true });
+  const allWorkers = (workersRes.data as { id: string; nome: string; active: boolean; archived_at: string | null }[]) || [];
+  const operational = allWorkers.filter((w) => w.active && !w.archived_at);
+  const operationalIds = new Set(operational.map((w) => w.id));
 
-  const [insRes, evRes, loansRes, clientsRes, workersRes] = await Promise.all([
+  const [insRes, evRes, loansRes, clientsRes] = await Promise.all([
     supabase
       .from("installments")
-      .select("amount, paid_amount, due_date, status, is_penalty, loans!inner(worker_id)")
+      .select("amount, paid_amount, due_date, status, is_penalty, loans!inner(worker_id, client_id, clients!inner(archived_at))")
       .gte("due_date", range.startDate)
       .lte("due_date", range.endDate)
-      .eq("is_penalty", false),
+      .eq("is_penalty", false)
+      .in("status", ["pending", "partial", "overdue"])
+      .is("loans.clients.archived_at", null),
     supabase
       .from("daily_events" as any)
-      .select("event_type, amount_in, amount_out, worker_id")
+      .select("event_type, amount_in, amount_out, worker_id, reversed_at")
       .gte("cash_date", range.startDate)
-      .lte("cash_date", range.endDate),
+      .lte("cash_date", range.endDate)
+      .is("reversed_at", null),
     supabase
       .from("loans")
-      .select("id, worker_id, status, remaining_balance, client_id"),
+      .select("id, worker_id, status, remaining_balance, client_id, clients!inner(archived_at)")
+      .is("clients.archived_at", null),
     supabase
       .from("clients")
       .select("id, worker_id")
       .is("archived_at", null),
-    supabase.rpc("admin_list_workers" as any),
   ]);
 
-  const workers = (workersRes.data as { id: string; nome: string }[]) || [];
-  const map = new Map<string | null, WorkerStats>();
-  // Always include each worker, plus a "sem trabalhador" bucket for legacy null
-  workers.forEach((w) => map.set(w.id, empty(w.id, w.nome)));
+  const map = new Map<string, WorkerStats>();
+  operational.forEach((w) => map.set(w.id, empty(w.id, w.nome)));
 
-  const get = (id: string | null) => {
-    if (!map.has(id)) {
-      map.set(id, empty(id, id ? "Trabalhador" : "Sem trabalhador"));
-    }
-    return map.get(id)!;
+  const get = (id: string | null): WorkerStats | null => {
+    if (!id || !operationalIds.has(id)) return null;
+    return map.get(id) || null;
   };
 
-  // Previsto from installments (due in range, regular only)
+  // Previsto from installments (regular, pending/partial/overdue, active worker+client)
   ((insRes.data as any[]) || []).forEach((i) => {
-    const wid = i.loans?.worker_id ?? null;
-    get(wid).previsto += Number(i.amount || 0);
+    const s = get(i.loans?.worker_id ?? null);
+    if (!s) return;
+    const remaining = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
+    s.previsto += remaining;
   });
 
-  // Cash flow from daily_events
+  // Cash flow from daily_events (non-reversed, active workers only)
   ((evRes.data as any[]) || []).forEach((e) => {
-    const wid = e.worker_id ?? null;
-    const s = get(wid);
+    const s = get(e.worker_id ?? null);
+    if (!s) return;
     const inV = Number(e.amount_in || 0);
     const outV = Number(e.amount_out || 0);
     switch (e.event_type) {
@@ -125,19 +130,23 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     }
   });
 
-  // Snapshot counters from loans (today, not period-bound)
+  // Active loans snapshot: active worker+client, open/overdue, remaining_balance > 0.01
   ((loansRes.data as any[]) || []).forEach((l) => {
-    const wid = l.worker_id ?? null;
-    const s = get(wid);
-    if (isLoanActive(l)) {
+    const s = get(l.worker_id ?? null);
+    if (!s) return;
+    const isActive =
+      (l.status === "open" || l.status === "overdue") &&
+      Number(l.remaining_balance || 0) > 0.01;
+    if (isActive) {
       s.emprestimosAtivos += 1;
       if (l.status === "overdue") s.atrasados += 1;
     }
   });
 
   ((clientsRes.data as any[]) || []).forEach((c) => {
-    const wid = c.worker_id ?? null;
-    get(wid).clientesAtivos += 1;
+    const s = get(c.worker_id ?? null);
+    if (!s) return;
+    s.clientesAtivos += 1;
   });
 
   // Derived
@@ -148,7 +157,7 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     s.saldoLiquido = s.recebido + s.aporte - s.emprestado - s.retirada;
   }
 
-  return Array.from(map.values()).filter((s) => s.worker_id !== null || s.previsto > 0 || s.recebido > 0 || s.emprestado > 0 || s.retirada > 0 || s.aporte > 0 || s.clientesAtivos > 0);
+  return Array.from(map.values());
 }
 
 export function consolidate(stats: WorkerStats[]): WorkerStats {
