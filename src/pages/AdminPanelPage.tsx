@@ -271,6 +271,8 @@ function WorkersTab() {
   const [archiveTarget, setArchiveTarget] = useState<WorkerRow | null>(null);
   const [archiveCascade, setArchiveCascade] = useState(false);
   const [archiveWorking, setArchiveWorking] = useState(false);
+  const [archiveAckTarget, setArchiveAckTarget] = useState<WorkerRow | null>(null);
+
 
   // Edição de trabalhador
   const [editing, setEditing] = useState<WorkerRow | null>(null);
