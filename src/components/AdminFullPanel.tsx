@@ -148,7 +148,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     const wIds = wList.map((w) => w.id);
     const [allStats, cs, ls, evs, summary] = await Promise.all([
       loadWorkersStats(range),
-      supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).order("name"),
+      supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).is("archived_at", null).order("name"),
       supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
       supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
       mode === "day" ? getDailyCollectionSummary(range.startDate, { adminId }) : Promise.resolve(null),
