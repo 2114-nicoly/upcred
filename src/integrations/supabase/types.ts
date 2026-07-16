@@ -1494,6 +1494,7 @@ export type Database = {
         Row: {
           active: boolean
           archived_at: string | null
+          archived_by: string | null
           auth_user_id: string | null
           created_at: string
           created_by: string | null
@@ -1509,6 +1510,7 @@ export type Database = {
         Insert: {
           active?: boolean
           archived_at?: string | null
+          archived_by?: string | null
           auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1524,6 +1526,7 @@ export type Database = {
         Update: {
           active?: boolean
           archived_at?: string | null
+          archived_by?: string | null
           auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1671,10 +1674,18 @@ export type Database = {
         Args: { p_note?: string; p_request_id: string }
         Returns: string
       }
-      archive_worker: { Args: { p_worker_id: string }; Returns: undefined }
+      archive_worker: {
+        Args: { p_cascade?: boolean; p_worker_id: string }
+        Returns: Json
+      }
       attach_expense_receipt: {
         Args: { p_daily_event_id: string; p_receipt: Json }
         Returns: undefined
+      }
+      bulk_archive_clients: { Args: { p_client_ids: string[] }; Returns: Json }
+      bulk_unarchive_clients: {
+        Args: { p_client_ids: string[] }
+        Returns: Json
       }
       close_daily_cash: { Args: { p_cash_date: string }; Returns: string }
       close_daily_cash_v2: {
@@ -1855,7 +1866,10 @@ export type Database = {
         Args: { p_admin_id: string; p_nome: string; p_notas?: string }
         Returns: undefined
       }
-      unarchive_worker: { Args: { p_worker_id: string }; Returns: undefined }
+      unarchive_worker: {
+        Args: { p_cascade?: boolean; p_worker_id: string }
+        Returns: Json
+      }
       update_cash_balance_atomic: {
         Args: {
           p_available_cash?: number
