@@ -1672,6 +1672,10 @@ export type Database = {
         Returns: string
       }
       archive_worker: { Args: { p_worker_id: string }; Returns: undefined }
+      attach_expense_receipt: {
+        Args: { p_daily_event_id: string; p_receipt: Json }
+        Returns: undefined
+      }
       close_daily_cash: { Args: { p_cash_date: string }; Returns: string }
       close_daily_cash_v2: {
         Args: { p_cash_date: string; p_counted: number; p_note?: string }
@@ -1782,6 +1786,15 @@ export type Database = {
         Returns: string
       }
       redact_old_credentials_log: { Args: never; Returns: number }
+      register_expense: {
+        Args: {
+          p_amount: number
+          p_cash_date: string
+          p_category: string
+          p_description: string
+        }
+        Returns: Json
+      }
       register_recovery_request: {
         Args: { p_email: string; p_login: string; p_nome: string }
         Returns: string

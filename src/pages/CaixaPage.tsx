@@ -81,6 +81,7 @@ export default function CaixaPage() {
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>("Gasolina/Transporte");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseDate, setExpenseDate] = useState<string>(today);
+  const [expenseReceipt, setExpenseReceipt] = useState<File | null>(null);
 
   // Close cash dialog
   const [closeOpen, setCloseOpen] = useState(false);
@@ -309,6 +310,12 @@ export default function CaixaPage() {
     if (desc.length < 3) { toast.error("Descrição obrigatória (mín. 3 caracteres)"); return; }
     const cashDate = expenseDate || selectedDate;
 
+    if (expenseReceipt) {
+      const okType = /^image\//.test(expenseReceipt.type) || expenseReceipt.type === "application/pdf";
+      if (!okType) { toast.error("Comprovante deve ser imagem ou PDF"); return; }
+      if (expenseReceipt.size > 10 * 1024 * 1024) { toast.error("Comprovante acima de 10 MB"); return; }
+    }
+
     const ok = await confirm({
       title: "Registrar despesa?",
       description: "O valor será descontado do Caixa Disponível.",
@@ -317,6 +324,7 @@ export default function CaixaPage() {
         { label: "Categoria", value: expenseCategory },
         { label: "Descrição", value: desc },
         { label: "Data", value: cashDate },
+        ...(expenseReceipt ? [{ label: "Comprovante", value: expenseReceipt.name }] : []),
       ],
       confirmText: "Confirmar", destructive: true,
     });
@@ -324,47 +332,69 @@ export default function CaixaPage() {
 
     setSubmitting(true);
     try {
-      await assertCashOpen(cashDate);
-      const before = Number((await getCashBalance())?.available_cash ?? 0);
-
-      await updateCashBalance({ available_cash: -amount });
-
-      const movement: any = await createCashMovement({
-        type: "despesa" as any,
-        amount: -amount,
-        observation: `[${expenseCategory}] ${desc}`,
-        cash_date: cashDate,
+      // 1) atomic RPC: cash_movement + daily_event + balance + audit (all-or-nothing for financials)
+      const { data: rpcData, error: rpcErr } = await supabase.rpc("register_expense" as any, {
+        p_cash_date: cashDate,
+        p_amount: amount,
+        p_category: expenseCategory,
+        p_description: desc,
       });
+      if (rpcErr) throw rpcErr;
+      const result: any = rpcData || {};
+      const dailyEventId: string | null = result.daily_event_id ?? null;
+      const auditOk: boolean = result.audit_ok !== false;
 
-      const event: any = await createDailyEvent({
-        cash_date: cashDate,
-        event_type: "despesa",
-        amount_in: 0,
-        amount_out: amount,
-        observation: `[${expenseCategory}] ${desc}`,
-        origin: "geral",
-        cash_movement_id: movement?.id || null,
-        metadata: { category: expenseCategory, description: desc },
-      } as any);
+      // 2) optional receipt upload — never rolls back the expense
+      let receiptStatus: "none" | "ok" | "failed" = "none";
+      if (expenseReceipt && dailyEventId) {
+        receiptStatus = "failed";
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          const safeName = (expenseReceipt.name || `comprovante-${Date.now()}`).replace(/[^\w.\-]/g, "_");
+          const path = `expenses/${user?.id || "anon"}/${dailyEventId}/${crypto.randomUUID()}-${safeName}`;
+          const { error: upErr } = await supabase.storage
+            .from("client-attachments")
+            .upload(path, expenseReceipt, { contentType: expenseReceipt.type || undefined, upsert: false });
+          if (upErr) throw upErr;
+          const receiptMeta = {
+            storage_path: path,
+            file_name: expenseReceipt.name,
+            file_type: expenseReceipt.type,
+            file_size: expenseReceipt.size,
+            uploaded_at: new Date().toISOString(),
+          };
+          const { error: linkErr } = await supabase.rpc("attach_expense_receipt" as any, {
+            p_daily_event_id: dailyEventId,
+            p_receipt: receiptMeta,
+          });
+          if (linkErr) throw linkErr;
+          receiptStatus = "ok";
+          logAction("anexar_arquivo" as any, "cash", dailyEventId, null, {
+            context: "despesa",
+            daily_event_id: dailyEventId,
+            file_name: expenseReceipt.name,
+            storage_path: path,
+          }).catch(() => {});
+        } catch (recErr: any) {
+          console.error("[caixa] receipt upload failed", recErr);
+        }
+      }
 
-      const after = before - amount;
-      await logAction("despesa", "cash", null, null, {
-        amount,
-        category: expenseCategory,
-        description: desc,
-        cash_date: cashDate,
-        movement_id: movement?.id ?? null,
-        daily_event_id: event?.id ?? null,
-        cash_before: before,
-        cash_after: after,
-      }, desc);
+      // 3) user-facing feedback — expense already saved even if audit/receipt failed
+      if (!auditOk) {
+        toast.warning("Despesa registrada com sucesso, porém houve falha ao registrar a auditoria. Avise o administrador.");
+      } else if (receiptStatus === "failed") {
+        toast.warning("Despesa registrada. Falha ao anexar o comprovante — tente novamente pelo histórico.");
+      } else {
+        toast.success("Despesa registrada!");
+      }
 
-      toast.success("Despesa registrada!");
       setExpenseOpen(false);
       setExpenseAmount("");
       setExpenseDescription("");
       setExpenseCategory("Gasolina/Transporte");
       setExpenseDate(today);
+      setExpenseReceipt(null);
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] expense failed", err);
@@ -1227,6 +1257,19 @@ export default function CaixaPage() {
             <div>
               <Label>Data</Label>
               <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Anexar comprovante <span className="text-muted-foreground text-xs">(opcional — imagem ou PDF)</span></Label>
+              <Input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setExpenseReceipt(e.target.files?.[0] ?? null)}
+              />
+              {expenseReceipt && (
+                <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                  {expenseReceipt.name} — {(expenseReceipt.size / 1024).toFixed(0)} KB
+                </p>
+              )}
             </div>
             <p className="text-[11px] text-muted-foreground">
               O valor será descontado do Caixa Disponível uma única vez e ficará separado das saídas manuais.
