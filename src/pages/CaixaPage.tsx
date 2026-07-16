@@ -1258,6 +1258,19 @@ export default function CaixaPage() {
               <Label>Data</Label>
               <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
             </div>
+            <div>
+              <Label>Anexar comprovante <span className="text-muted-foreground text-xs">(opcional — imagem ou PDF)</span></Label>
+              <Input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setExpenseReceipt(e.target.files?.[0] ?? null)}
+              />
+              {expenseReceipt && (
+                <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                  {expenseReceipt.name} — {(expenseReceipt.size / 1024).toFixed(0)} KB
+                </p>
+              )}
+            </div>
             <p className="text-[11px] text-muted-foreground">
               O valor será descontado do Caixa Disponível uma única vez e ficará separado das saídas manuais.
             </p>
