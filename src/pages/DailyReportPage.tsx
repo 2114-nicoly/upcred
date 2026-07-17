@@ -681,7 +681,7 @@ export default function DailyReportPage() {
         <CardContent className="p-4 space-y-1">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">UpCred</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Relatório Diário</p>
               <h3 className="text-base font-bold">{workerName || (selectedWorkerId ? "—" : "Selecione um trabalhador")}</h3>
               <p className="text-sm text-muted-foreground capitalize">{dateLabel}</p>
             </div>
