@@ -270,10 +270,22 @@ function WorkersTab() {
       supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
       loadWorkersStats(range),
     ]);
-    setWorkers((w as any) || []);
+    const wList = (w as any) || [];
+    setWorkers(wList);
     const map: Record<string, WorkerStats> = {};
     statsList.forEach((s) => { if (s.worker_id) map[s.worker_id] = s; });
     setStats(map);
+
+    // Current available cash per active worker (dynamic — not historical)
+    const activeIds = wList.filter((x: any) => !x.archived_at).map((x: any) => x.id);
+    if (activeIds.length > 0) {
+      const { data: cb } = await supabase.from("cash_balance").select("worker_id, available_cash").in("worker_id", activeIds);
+      const cbMap: Record<string, number> = {};
+      (cb || []).forEach((r: any) => { if (r.worker_id) cbMap[r.worker_id] = Number(r.available_cash || 0); });
+      setAvailableCash(cbMap);
+    } else {
+      setAvailableCash({});
+    }
     setLoading(false);
   }
 
