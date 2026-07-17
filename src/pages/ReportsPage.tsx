@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
-  RefreshCw, FileDown, Wallet, TrendingUp, TrendingDown, ArrowDownCircle,
+  RefreshCw, FileDown, Wallet, TrendingUp, ArrowDownCircle,
   ArrowUpCircle, Target, AlertTriangle, ChevronDown, ChevronRight,
 } from "lucide-react";
 import {
@@ -18,6 +18,10 @@ import {
 import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  ReportHeader, ReportKpiGrid, ReportKpiCard, ReportEmptyState,
+  AuditLink, formatEventLabel, REPORT_SECTIONS,
+} from "@/components/reports/ReportUI";
 
 type PeriodMode = "today" | "yesterday" | "week" | "month" | "custom";
 
