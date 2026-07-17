@@ -256,7 +256,7 @@ export default function ReportsPage() {
         head: [["Data/Hora", "Tipo", "Cliente/Obs", "Entrada", "Saída"]],
         body: r.movements.map((m) => [
           format(new Date(m.created_at), "dd/MM HH:mm"),
-          EVENT_LABEL[m.event_type] || m.event_type,
+          formatEventLabel(m.event_type),
           (m.client_id ? clients[m.client_id] : "") || m.observation || "—",
           Number(m.amount_in) > 0 ? formatCurrency(Number(m.amount_in)) : "",
           Number(m.amount_out) > 0 ? formatCurrency(Number(m.amount_out)) : "",
@@ -414,7 +414,7 @@ export default function ReportsPage() {
                                     <li key={m.id} className="p-2 flex items-center justify-between text-xs gap-2">
                                       <div className="min-w-0 flex-1">
                                         <p className="font-medium truncate">
-                                          {EVENT_LABEL[m.event_type] || m.event_type}
+                                          {formatEventLabel(m.event_type)}
                                         </p>
                                         <p className="text-[11px] text-muted-foreground truncate">
                                           {format(new Date(m.created_at), "dd/MM HH:mm", { locale: ptBR })}
