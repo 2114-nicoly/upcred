@@ -416,9 +416,9 @@ export default function ReportsPage() {
                               <DetailPair label="Cancelamentos" value={String(r.totals.canc)} />
                             </div>
                             <div>
-                              <p className="text-xs font-semibold mb-1">Movimentações do período</p>
+                              <p className="text-xs font-semibold mb-1">Entradas e saídas do período</p>
                               {r.movements.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">Sem movimentações.</p>
+                                <p className="text-xs text-muted-foreground">Nenhuma movimentação neste período</p>
                               ) : (
                                 <ul className="divide-y border rounded bg-background">
                                   {r.movements.map((m) => (
