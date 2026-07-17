@@ -69,20 +69,7 @@ function computeRange(mode: PeriodMode, cs: string, ce: string) {
   return { startDate, endDate, label };
 }
 
-const EVENT_LABEL: Record<string, string> = {
-  pagamento: "Pagamento",
-  recebimento_multa: "Recebimento de multa",
-  emprestimo_novo: "Empréstimo novo",
-  renovacao: "Renovação",
-  nao_pagou: "Não pagou",
-  entrada_manual: "Entrada manual",
-  saida_manual: "Saída manual",
-  saida: "Saída",
-  despesa: "Despesa",
-  cancelamento: "Cancelamento",
-  estorno_pagamento: "Estorno de pagamento",
-  estorno_manual: "Estorno manual",
-};
+// Nomes amigáveis vêm de formatEventLabel (compartilhado).
 
 export default function ReportsPage() {
   const [mode, setMode] = useState<PeriodMode>("today");
