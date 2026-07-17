@@ -58,6 +58,7 @@ export default function DailyReportPage() {
     opening: number; expected: number; counted: number | null; diff: number | null;
     closingObs: string | null;
   } | null>(null);
+  const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
@@ -163,6 +164,17 @@ export default function DailyReportPage() {
           setCashStatus(null);
           setCashSummary(null);
         }
+
+        // Current available cash (dynamic — does NOT overwrite historical opening/closing snapshots)
+        let cbRow: any = null;
+        if (selectedWorkerId) {
+          const { data } = await supabase.from("cash_balance").select("available_cash").eq("worker_id", selectedWorkerId).maybeSingle();
+          cbRow = data;
+        } else if (isSuperAdmin && selectedAdminId) {
+          const { data } = await supabase.from("cash_balance").select("available_cash").eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
+          cbRow = data;
+        }
+        setCurrentAvailableCash(cbRow ? Number(cbRow.available_cash || 0) : null);
       } catch (err: any) {
         console.error(err);
         toast.error("Erro ao carregar relatório");
@@ -333,18 +345,21 @@ export default function DailyReportPage() {
     writeBlockTitle("1. Resumo do Dia");
 
     const opening = cashSummary?.opening ?? 0;
-    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses);
+    // Caixa final do dia = snapshot registrado no fechamento (imutável). Se ainda não fechou, mostramos o esperado calculado.
+    const closedFinal = cashSummary?.counted != null
+      ? cashSummary.counted
+      : (cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
     const cashRows: [string, string][] = [
-      ["Caixa Disponível no Início do Dia", formatCurrency(opening)],
+      ["Caixa inicial do dia", formatCurrency(opening)],
       ["Recebido Hoje", formatCurrency(totals.payments)],
       ["Multas Recebidas", formatCurrency(totals.penalties)],
       ["Emprestado Hoje", formatCurrency(totals.loans + totals.renewals)],
       ["Entradas Manuais", formatCurrency(totals.manualIn)],
       ["Saídas Manuais", formatCurrency(totals.manualOut)],
       ["Despesas Operacionais", formatCurrency(totals.expenses)],
-      ["Caixa Disponível Final", formatCurrency(finalCash)],
-      ...(cashSummary?.counted != null ? [["Dinheiro Contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
-      ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
+      ["Caixa final do dia" + (cashSummary?.counted != null ? " (fechamento)" : " (previsto)"), formatCurrency(closedFinal)],
+      ...(cashSummary?.diff != null ? [["Diferença de fechamento", formatCurrency(cashSummary.diff)] as [string,string]] : []),
+      ...(currentAvailableCash != null ? [["Caixa disponível atual (valor atual)", formatCurrency(currentAvailableCash)] as [string,string]] : []),
       ...(cashSummary?.closingObs ? [["Observação do fechamento", cashSummary.closingObs] as [string,string]] : []),
       ["Clientes visitados", String(visitedClients.size)],
       ["Clientes não visitados (não pagou)", String(notVisitedCount)],
@@ -681,20 +696,26 @@ export default function DailyReportPage() {
 
       <Card>
         <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <Stat label="Caixa Disponível no Início do Dia" value={formatCurrency(cashSummary?.opening ?? 0)} />
+          <Stat label="Caixa inicial do dia" value={formatCurrency(cashSummary?.opening ?? 0)} />
+          <Stat
+            label={cashSummary?.counted != null ? "Caixa final do dia (fechamento)" : "Caixa final do dia (previsto)"}
+            value={formatCurrency(
+              cashSummary?.counted != null
+                ? cashSummary.counted
+                : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))
+            )}
+          />
+          {currentAvailableCash != null && (
+            <Stat label="Caixa disponível atual (valor atual)" value={formatCurrency(currentAvailableCash)} />
+          )}
           <Stat label="Recebido Hoje" value={formatCurrency(totals.payments)} positive />
           <Stat label="Multas Recebidas" value={formatCurrency(totals.penalties)} positive />
           <Stat label="Emprestado Hoje" value={formatCurrency(totals.loans + totals.renewals)} negative />
           <Stat label="Entradas Manuais" value={formatCurrency(totals.manualIn)} positive />
           <Stat label="Saídas Manuais" value={formatCurrency(totals.manualOut)} negative />
           <Stat label="Despesas Operacionais" value={formatCurrency(totals.expenses)} negative />
-          <Stat
-            label="Caixa Disponível Final"
-            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))}
-          />
-          {cashSummary?.counted != null && <Stat label="Dinheiro Contado" value={formatCurrency(cashSummary.counted)} />}
           {cashSummary?.diff != null && (
-            <Stat label="Diferença" value={formatCurrency(cashSummary.diff)} positive={cashSummary.diff >= 0} negative={cashSummary.diff < 0} />
+            <Stat label="Diferença de fechamento" value={formatCurrency(cashSummary.diff)} positive={cashSummary.diff >= 0} negative={cashSummary.diff < 0} />
           )}
           <Stat label="Não pagou" value={String(totals.notPaidCount)} />
         </CardContent>

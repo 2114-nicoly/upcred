@@ -8,6 +8,7 @@ export type WorkerOption = {
   login_codigo: string;
   active: boolean;
   parent_admin_id?: string | null;
+  archived_at?: string | null;
 };
 
 export type AdminOption = {
@@ -80,16 +81,21 @@ export function WorkerFilterProvider({ children }: { children: ReactNode }) {
       setWorkers([]); setAdmins([]); return;
     }
     setLoading(true);
+    // Operational filters only show ACTIVE (non-archived) workers.
+    // Archived workers exist only in dedicated "Arquivados" areas that
+    // query the database directly (not via this context).
+    const filterActive = (list: WorkerOption[]) =>
+      list.filter((w) => !w.archived_at);
     if (isSuperAdmin) {
       const [{ data: ad }, { data: ws }] = await Promise.all([
         supabase.rpc("super_admin_list_admins" as any),
-        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: selectedAdminId, p_include_archived: true }),
+        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: selectedAdminId, p_include_archived: false }),
       ]);
       setAdmins((ad as AdminOption[]) || []);
-      setWorkers((ws as WorkerOption[]) || []);
+      setWorkers(filterActive((ws as WorkerOption[]) || []));
     } else {
-      const { data } = await supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null, p_include_archived: true });
-      setWorkers((data as WorkerOption[]) || []);
+      const { data } = await supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null, p_include_archived: false });
+      setWorkers(filterActive((data as WorkerOption[]) || []));
       setAdmins([]);
     }
     setLoading(false);

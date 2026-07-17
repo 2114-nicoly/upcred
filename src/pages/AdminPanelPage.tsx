@@ -208,6 +208,7 @@ function WorkersTab() {
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   // resetRequests removed: handled by PasswordRecoveryBell in header
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
+  const [availableCash, setAvailableCash] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
@@ -269,10 +270,22 @@ function WorkersTab() {
       supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
       loadWorkersStats(range),
     ]);
-    setWorkers((w as any) || []);
+    const wList = (w as any) || [];
+    setWorkers(wList);
     const map: Record<string, WorkerStats> = {};
     statsList.forEach((s) => { if (s.worker_id) map[s.worker_id] = s; });
     setStats(map);
+
+    // Current available cash per active worker (dynamic — not historical)
+    const activeIds = wList.filter((x: any) => !x.archived_at).map((x: any) => x.id);
+    if (activeIds.length > 0) {
+      const { data: cb } = await supabase.from("cash_balance").select("worker_id, available_cash").in("worker_id", activeIds);
+      const cbMap: Record<string, number> = {};
+      (cb || []).forEach((r: any) => { if (r.worker_id) cbMap[r.worker_id] = Number(r.available_cash || 0); });
+      setAvailableCash(cbMap);
+    } else {
+      setAvailableCash({});
+    }
     setLoading(false);
   }
 
@@ -536,6 +549,12 @@ function WorkersTab() {
                       <div><div className="text-muted-foreground">N.Pagos hoje</div><div className="font-bold text-destructive">{s.naoPagosCount}</div></div>
                       <div className="col-span-2"><div className="text-muted-foreground">Previsto hoje</div><div className="font-bold">{formatCurrency(s.previsto)}</div></div>
                       <div className="col-span-2"><div className="text-muted-foreground">Recebido hoje</div><div className="font-bold text-success">{formatCurrency(s.recebido)}</div></div>
+                    </div>
+                  )}
+                  {!w.archived_at && availableCash[w.id] != null && (
+                    <div className="mt-2 pt-2 border-t flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground">Caixa disponível atual</span>
+                      <span className="font-bold">{formatCurrency(availableCash[w.id])}</span>
                     </div>
                   )}
                 </CardContent>
