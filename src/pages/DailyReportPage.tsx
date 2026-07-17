@@ -696,20 +696,26 @@ export default function DailyReportPage() {
 
       <Card>
         <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <Stat label="Caixa Disponível no Início do Dia" value={formatCurrency(cashSummary?.opening ?? 0)} />
+          <Stat label="Caixa inicial do dia" value={formatCurrency(cashSummary?.opening ?? 0)} />
+          <Stat
+            label={cashSummary?.counted != null ? "Caixa final do dia (fechamento)" : "Caixa final do dia (previsto)"}
+            value={formatCurrency(
+              cashSummary?.counted != null
+                ? cashSummary.counted
+                : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))
+            )}
+          />
+          {currentAvailableCash != null && (
+            <Stat label="Caixa disponível atual (valor atual)" value={formatCurrency(currentAvailableCash)} />
+          )}
           <Stat label="Recebido Hoje" value={formatCurrency(totals.payments)} positive />
           <Stat label="Multas Recebidas" value={formatCurrency(totals.penalties)} positive />
           <Stat label="Emprestado Hoje" value={formatCurrency(totals.loans + totals.renewals)} negative />
           <Stat label="Entradas Manuais" value={formatCurrency(totals.manualIn)} positive />
           <Stat label="Saídas Manuais" value={formatCurrency(totals.manualOut)} negative />
           <Stat label="Despesas Operacionais" value={formatCurrency(totals.expenses)} negative />
-          <Stat
-            label="Caixa Disponível Final"
-            value={formatCurrency(cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))}
-          />
-          {cashSummary?.counted != null && <Stat label="Dinheiro Contado" value={formatCurrency(cashSummary.counted)} />}
           {cashSummary?.diff != null && (
-            <Stat label="Diferença" value={formatCurrency(cashSummary.diff)} positive={cashSummary.diff >= 0} negative={cashSummary.diff < 0} />
+            <Stat label="Diferença de fechamento" value={formatCurrency(cashSummary.diff)} positive={cashSummary.diff >= 0} negative={cashSummary.diff < 0} />
           )}
           <Stat label="Não pagou" value={String(totals.notPaidCount)} />
         </CardContent>
