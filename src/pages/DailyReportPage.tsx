@@ -58,6 +58,7 @@ export default function DailyReportPage() {
     opening: number; expected: number; counted: number | null; diff: number | null;
     closingObs: string | null;
   } | null>(null);
+  const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
