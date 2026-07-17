@@ -97,6 +97,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
       "/active-loans": "Empréstimos da Equipe",
       "/clients": "Clientes da Equipe",
       "/admin": "Painel da Equipe",
+      "/reports": "Relatórios",
       "/audit": "Auditoria da Equipe",
     };
   }
