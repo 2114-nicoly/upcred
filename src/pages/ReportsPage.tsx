@@ -341,31 +341,36 @@ export default function ReportsPage() {
         <p className="p-4 text-center text-muted-foreground">Carregando...</p>
       ) : (
         <>
-          {/* Summary cards */}
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <KpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial" value={formatCurrency(summary.caixaInicial)} />
-            <KpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} valueClass="text-success" />
-            <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
-            <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas manuais" value={formatCurrency(summary.entradasManuais)} />
-            <KpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas manuais" value={formatCurrency(summary.saidasManuais)} valueClass="text-destructive" />
-            <KpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final previsto" value={formatCurrency(summary.caixaFinalPrevisto)} />
-            <KpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa final contado" value={formatCurrency(summary.caixaFinalContado)} />
-            <KpiCard
-              icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
-              label="Diferença de caixa"
-              value={formatCurrency(summary.diferenca)}
-              valueClass={summary.diferenca >= 0 ? "text-success" : "text-destructive"}
-            />
+          {/* Resumo financeiro do período */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              {REPORT_SECTIONS.resumo}
+            </p>
+            <ReportKpiGrid>
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial" value={formatCurrency(summary.caixaInicial)} />
+              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
+              <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
+              <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas manuais" value={formatCurrency(summary.entradasManuais)} tone="positive" />
+              <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas manuais" value={formatCurrency(summary.saidasManuais)} tone="negative" />
+              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final previsto" value={formatCurrency(summary.caixaFinalPrevisto)} />
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa final contado" value={formatCurrency(summary.caixaFinalContado)} />
+              <ReportKpiCard
+                icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
+                label="Diferença de caixa"
+                value={formatCurrency(summary.diferenca)}
+                tone={summary.diferenca >= 0 ? "positive" : "negative"}
+              />
+            </ReportKpiGrid>
           </div>
 
-          {/* Team table */}
+          {/* Detalhamento por trabalhador */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Resumo da Equipe</CardTitle>
+              <CardTitle className="text-base">Detalhamento por trabalhador</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {workerRows.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground text-center">Nenhum trabalhador para o filtro.</p>
+                <p className="p-6 text-sm text-muted-foreground text-center">Nenhum trabalhador neste período.</p>
               ) : (
                 <div className="divide-y">
                   {workerRows.map((r) => {
