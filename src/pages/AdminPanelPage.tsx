@@ -208,6 +208,7 @@ function WorkersTab() {
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   // resetRequests removed: handled by PasswordRecoveryBell in header
   const [stats, setStats] = useState<Record<string, WorkerStats>>({});
+  const [availableCash, setAvailableCash] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
