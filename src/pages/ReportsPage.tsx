@@ -268,14 +268,20 @@ export default function ReportsPage() {
     doc.save(`relatorio_${startDate}_${endDate}.pdf`);
   };
 
+  const workerLabel =
+    selectedWorker === "all"
+      ? "Todos os trabalhadores"
+      : (workers.find((w) => w.id === selectedWorker)?.nome || "—");
+
   return (
-    <div className="mx-auto max-w-4xl p-4 pb-24">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h1 className="text-xl font-bold">Relatórios</h1>
-          <p className="text-sm text-muted-foreground">{label}</p>
-        </div>
-      </div>
+    <div className="mx-auto max-w-4xl p-4 pb-24 space-y-3">
+      <ReportHeader
+        title="Relatórios"
+        subject={workerLabel}
+        period={label}
+        right={<AuditLink />}
+      />
+
 
       {/* Filters */}
       <Card className="mb-4">
