@@ -461,19 +461,6 @@ export default function ReportsPage() {
   );
 }
 
-function KpiCard({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-2.5">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          {icon}
-          <p className="text-[11px] text-muted-foreground">{label}</p>
-        </div>
-        <p className={`text-sm font-bold ${valueClass || ""}`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function DetailPair({ label, value }: { label: string; value: string }) {
   return (
