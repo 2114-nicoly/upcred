@@ -56,85 +56,56 @@ export default function AdminPanelPage() {
   return (
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
-      <Tabs defaultValue="operacao">
+      <Tabs defaultValue="painel">
         <TabsList className="grid grid-cols-5 w-full">
-          <TabsTrigger value="operacao" className="text-[10px]">Operação</TabsTrigger>
-          <TabsTrigger value="workers" className="text-[10px]">Equipe</TabsTrigger>
+          <TabsTrigger value="painel" className="text-[10px]">Painel</TabsTrigger>
+          <TabsTrigger value="equipe" className="text-[10px]">Equipe</TabsTrigger>
           <TabsTrigger value="reports" className="text-[10px]">Relatórios</TabsTrigger>
+          <TabsTrigger value="caixa" className="text-[10px]">Caixa</TabsTrigger>
           <TabsTrigger value="audit" className="text-[10px]">Auditoria</TabsTrigger>
-          <TabsTrigger value="maintenance" className="text-[10px]">Manutenção</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="operacao" className="mt-3">
-          <OperacaoTab />
-        </TabsContent>
-        <TabsContent value="workers" className="mt-3">
+        <TabsContent value="painel" className="mt-3">
           <OverviewTab />
-          <div className="h-3" />
+        </TabsContent>
+        <TabsContent value="equipe" className="mt-3">
           <WorkersTab />
         </TabsContent>
         <TabsContent value="reports" className="mt-3">
-          <ReportsTab />
+          <ReportsPage />
+        </TabsContent>
+        <TabsContent value="caixa" className="mt-3">
+          <CaixaTab />
         </TabsContent>
         <TabsContent value="audit" className="mt-3 space-y-3">
           <RemindersAdminList />
           <AuditLogList />
-        </TabsContent>
-        <TabsContent value="maintenance" className="mt-3">
-          <MaintenanceTab />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-/* ============= OPERAÇÃO TAB ============= */
-function OperacaoTab() {
+/* ============= CAIXA TAB ============= */
+function CaixaTab() {
   const navigate = useNavigate();
-  const items: { label: string; path: string }[] = [
-    { label: "Rota do dia", path: "/" },
-    { label: "Caixa do dia", path: "/caixa" },
-    { label: "Clientes", path: "/clients" },
-    { label: "Empréstimos ativos", path: "/active-loans" },
-    { label: "Parcelas em atraso", path: "/overdue-loans" },
+  const items: { label: string; path: string; icon: any }[] = [
+    { label: "Caixa do dia", path: "/caixa", icon: Wallet },
+    { label: "Histórico do Caixa (aberturas, fechamentos, diferenças)", path: "/daily-cash-history", icon: CalendarDays },
+    { label: "Histórico de movimentações", path: "/cash-history", icon: History },
   ];
   return (
     <div className="space-y-2">
       {items.map((it) => (
         <Button key={it.path} variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate(it.path)}>
-          {it.label} <ExternalLink className="h-3.5 w-3.5" />
+          <span className="flex items-center gap-2"><it.icon className="h-4 w-4" /> {it.label}</span>
+          <ExternalLink className="h-3.5 w-3.5" />
         </Button>
       ))}
     </div>
   );
 }
 
-/* ============= RELATÓRIOS TAB ============= */
-function ReportsTab() {
-  const navigate = useNavigate();
-  return (
-    <div className="space-y-3">
-      <Card>
-        <CardHeader className="p-4 pb-2"><CardTitle className="text-sm">Atalhos</CardTitle></CardHeader>
-        <CardContent className="p-4 pt-2 space-y-2">
-          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-report")}>
-            Relatório Diário (PDF) <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/reports")}>
-            Relatórios financeiros <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-cash-history")}>
-            Histórico de caixa <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-        </CardContent>
-      </Card>
-      <TeamDailyReport />
-      <div className="border rounded-lg overflow-hidden">
-        <DailyReportPage />
-      </div>
-    </div>
-  );
-}
 
 
 /* ============= OVERVIEW TAB ============= */
