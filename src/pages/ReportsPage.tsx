@@ -1,32 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
-  TrendingUp, TrendingDown, AlertTriangle, DollarSign, ArrowDownCircle,
-  ArrowUpCircle, Wallet, ChevronRight, Target,
+  RefreshCw, FileDown, Wallet, TrendingUp, TrendingDown, ArrowDownCircle,
+  ArrowUpCircle, Target, AlertTriangle, ChevronDown, ChevronRight,
 } from "lucide-react";
 import {
-  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, parseISO,
+  format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
-type PeriodMode = "day" | "week" | "month" | "custom";
+type PeriodMode = "today" | "yesterday" | "week" | "month" | "custom";
 
-type Installment = {
+type DailyCashRow = {
   id: string;
-  amount: number;
-  paid_amount: number;
-  due_date: string;
+  cash_date: string;
+  worker_id: string | null;
   status: string;
-  is_penalty: boolean;
-  loan_id: string;
+  opening_balance: number;
+  expected_closing_balance: number;
+  counted_closing_balance: number | null;
+  closing_difference: number | null;
 };
 
 type DailyEventRow = {
@@ -37,267 +40,421 @@ type DailyEventRow = {
   amount_out: number;
   client_id: string | null;
   loan_id: string | null;
+  worker_id: string | null;
   observation: string | null;
+  created_at: string;
 };
 
-type ClientRow = { id: string; name: string };
+type WorkerRow = { id: string; nome: string; active: boolean; archived_at: string | null };
 
 const todayISO = () => format(new Date(), "yyyy-MM-dd");
 
+function computeRange(mode: PeriodMode, cs: string, ce: string) {
+  const today = new Date();
+  let s: Date, e: Date;
+  if (mode === "today") { s = today; e = today; }
+  else if (mode === "yesterday") { s = subDays(today, 1); e = subDays(today, 1); }
+  else if (mode === "week") { s = startOfWeek(today, { weekStartsOn: 1 }); e = endOfWeek(today, { weekStartsOn: 1 }); }
+  else if (mode === "month") { s = startOfMonth(today); e = endOfMonth(today); }
+  else { s = parseISO(cs + "T12:00:00"); e = parseISO(ce + "T12:00:00"); }
+  const startDate = format(s, "yyyy-MM-dd");
+  const endDate = format(e, "yyyy-MM-dd");
+  const label = startDate === endDate
+    ? format(s, "dd/MM/yyyy")
+    : `${format(s, "dd/MM/yyyy")} a ${format(e, "dd/MM/yyyy")}`;
+  return { startDate, endDate, label };
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  pagamento: "Pagamento",
+  recebimento_multa: "Recebimento de multa",
+  emprestimo_novo: "Empréstimo novo",
+  renovacao: "Renovação",
+  nao_pagou: "Não pagou",
+  entrada_manual: "Entrada manual",
+  saida_manual: "Saída manual",
+  saida: "Saída",
+  despesa: "Despesa",
+  cancelamento: "Cancelamento",
+  estorno_pagamento: "Estorno de pagamento",
+  estorno_manual: "Estorno manual",
+};
+
 export default function ReportsPage() {
-  const { isAdmin, isSuperAdmin, workerId } = useAuth();
-  const [mode, setMode] = useState<PeriodMode>("day");
+  const [mode, setMode] = useState<PeriodMode>("today");
   const [customStart, setCustomStart] = useState(todayISO());
   const [customEnd, setCustomEnd] = useState(todayISO());
+  const [selectedWorker, setSelectedWorker] = useState<string>("all");
 
-  const [installments, setInstallments] = useState<Installment[]>([]);
+  const [workers, setWorkers] = useState<WorkerRow[]>([]);
+  const [cashRows, setCashRows] = useState<DailyCashRow[]>([]);
   const [events, setEvents] = useState<DailyEventRow[]>([]);
   const [clients, setClients] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [drillDay, setDrillDay] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // Period range
-  const { startDate, endDate, label } = useMemo(() => {
-    const today = new Date();
-    let s: Date, e: Date;
-    if (mode === "day") { s = today; e = today; }
-    else if (mode === "week") { s = startOfWeek(today, { weekStartsOn: 1 }); e = endOfWeek(today, { weekStartsOn: 1 }); }
-    else if (mode === "month") { s = startOfMonth(today); e = endOfMonth(today); }
-    else { s = parseISO(customStart + "T12:00:00"); e = parseISO(customEnd + "T12:00:00"); }
-    const sIso = format(s, "yyyy-MM-dd");
-    const eIso = format(e, "yyyy-MM-dd");
-    const lbl = sIso === eIso
-      ? `Relatório de ${format(s, "dd/MM/yyyy")}`
-      : `Relatório de ${format(s, "dd/MM/yyyy")} a ${format(e, "dd/MM/yyyy")}`;
-    return { startDate: sIso, endDate: eIso, label: lbl };
-  }, [mode, customStart, customEnd]);
-
-  useEffect(() => {
-    let cancel = false;
-    async function load() {
-      setLoading(true);
-      const scopeWorker = !isAdmin && !isSuperAdmin && workerId;
-      let insQ: any = supabase
-        .from("installments")
-        .select("id, amount, paid_amount, due_date, status, is_penalty, loan_id, loans!inner(worker_id)")
-        .gte("due_date", startDate)
-        .lte("due_date", endDate);
-      if (scopeWorker) insQ = insQ.eq("loans.worker_id", workerId);
-
-      let evQ: any = supabase
-        .from("daily_events" as any)
-        .select("id, cash_date, event_type, amount_in, amount_out, client_id, loan_id, observation")
-        .gte("cash_date", startDate)
-        .lte("cash_date", endDate)
-        .is("reversed_at", null);
-      if (scopeWorker) evQ = evQ.eq("worker_id", workerId);
-
-      const [insRes, evRes, clRes] = await Promise.all([
-        insQ, evQ, supabase.from("clients").select("id, name"),
-      ]);
-      if (cancel) return;
-      setInstallments((insRes.data as Installment[]) || []);
-      setEvents((evRes.data as unknown as DailyEventRow[]) || []);
-      const cmap: Record<string, string> = {};
-      ((clRes.data as ClientRow[]) || []).forEach((c) => { cmap[c.id] = c.name; });
-      setClients(cmap);
-      setLoading(false);
-    }
-    load();
-    return () => { cancel = true; };
-  }, [startDate, endDate]);
-
-  // Aggregations
-  const totals = useMemo(() => {
-    const regularInst = installments.filter((i) => !i.is_penalty);
-    const previsto = regularInst.reduce((s, i) => s + Number(i.amount), 0);
-
-    const sum = (filter: (e: DailyEventRow) => boolean, field: "amount_in" | "amount_out") =>
-      events.filter(filter).reduce((s, e) => s + Number(e[field] || 0), 0);
-
-    const recebido = sum((e) => e.event_type === "pagamento", "amount_in");
-    const recebidoMulta = sum((e) => e.event_type === "recebimento_multa", "amount_in");
-    const emprestado = sum((e) => e.event_type === "emprestimo_novo" || e.event_type === "renovacao", "amount_out");
-    const retirada = sum((e) => e.event_type === "saida_manual" || e.event_type === "saida", "amount_out");
-    const aporte = sum((e) => e.event_type === "entrada_manual", "amount_in");
-
-    const naoPagosEvents = events.filter((e) => e.event_type === "nao_pagou");
-    const naoPagosCount = naoPagosEvents.length;
-    const naoPagosValor = naoPagosEvents.reduce((s, e) => s + Number(e.amount_out || 0), 0);
-
-    const totalRecebido = recebido + recebidoMulta;
-    const faltaReceber = Math.max(0, previsto - totalRecebido);
-    const percentual = previsto > 0 ? (totalRecebido / previsto) * 100 : 0;
-    const saldoLiquido = totalRecebido + aporte - emprestado - retirada;
-    const totalSaidas = emprestado + retirada;
-
-    return {
-      previsto, recebido, recebidoMulta, totalRecebido, faltaReceber, percentual,
-      emprestado, retirada, aporte, totalSaidas, saldoLiquido, naoPagosCount, naoPagosValor,
-    };
-  }, [installments, events]);
-
-  // Per-day breakdown
-  const days = useMemo(() => {
-    const start = parseISO(startDate + "T12:00:00");
-    const end = parseISO(endDate + "T12:00:00");
-    const list = eachDayOfInterval({ start, end });
-    return list.map((d) => {
-      const iso = format(d, "yyyy-MM-dd");
-      const dayEvents = events.filter((e) => e.cash_date === iso);
-      const dayInst = installments.filter((i) => !i.is_penalty && i.due_date === iso);
-      const previsto = dayInst.reduce((s, i) => s + Number(i.amount), 0);
-      const recebido = dayEvents
-        .filter((e) => e.event_type === "pagamento" || e.event_type === "recebimento_multa")
-        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
-      const emprestado = dayEvents
-        .filter((e) => e.event_type === "emprestimo_novo" || e.event_type === "renovacao")
-        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
-      const retirada = dayEvents
-        .filter((e) => e.event_type === "saida_manual" || e.event_type === "saida")
-        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
-      const aporte = dayEvents
-        .filter((e) => e.event_type === "entrada_manual")
-        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
-      const pagos = dayEvents.filter((e) => e.event_type === "pagamento").length;
-      const naoPagos = dayEvents.filter((e) => e.event_type === "nao_pagou").length;
-      const saldo = recebido + aporte - emprestado - retirada;
-      return { iso, previsto, recebido, emprestado, retirada, aporte, saldo, pagos, naoPagos };
-    });
-  }, [startDate, endDate, events, installments]);
-
-  const drillEvents = useMemo(
-    () => (drillDay ? events.filter((e) => e.cash_date === drillDay) : []),
-    [drillDay, events]
+  const { startDate, endDate, label } = useMemo(
+    () => computeRange(mode, customStart, customEnd),
+    [mode, customStart, customEnd],
   );
 
-  if (loading) return <p className="p-4 text-center text-muted-foreground">Carregando...</p>;
+  const load = useCallback(async () => {
+    setLoading(true);
+    const wRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: false });
+    const allWorkers = ((wRes.data as WorkerRow[]) || []).filter((w) => w.active && !w.archived_at);
+    setWorkers(allWorkers);
+
+    const [cashRes, evRes, clRes] = await Promise.all([
+      supabase
+        .from("daily_cash")
+        .select("id, cash_date, worker_id, status, opening_balance, expected_closing_balance, counted_closing_balance, closing_difference")
+        .gte("cash_date", startDate)
+        .lte("cash_date", endDate),
+      supabase
+        .from("daily_events" as any)
+        .select("id, cash_date, event_type, amount_in, amount_out, client_id, loan_id, worker_id, observation, created_at")
+        .gte("cash_date", startDate)
+        .lte("cash_date", endDate)
+        .is("reversed_at", null)
+        .order("created_at", { ascending: true }),
+      supabase.from("clients").select("id, name"),
+    ]);
+    setCashRows((cashRes.data as DailyCashRow[]) || []);
+    setEvents((evRes.data as unknown as DailyEventRow[]) || []);
+    const cmap: Record<string, string> = {};
+    ((clRes.data as { id: string; name: string }[]) || []).forEach((c) => { cmap[c.id] = c.name; });
+    setClients(cmap);
+    setLoading(false);
+  }, [startDate, endDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filterWorker = <T extends { worker_id: string | null }>(rows: T[]): T[] =>
+    selectedWorker === "all" ? rows : rows.filter((r) => r.worker_id === selectedWorker);
+
+  const scopedCash = useMemo(() => filterWorker(cashRows), [cashRows, selectedWorker]);
+  const scopedEvents = useMemo(() => filterWorker(events), [events, selectedWorker]);
+
+  // Summary totals
+  const summary = useMemo(() => {
+    const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
+      scopedEvents.filter((e) => types.includes(e.event_type))
+        .reduce((s, e) => s + Number(e[field] || 0), 0);
+
+    const caixaInicial = scopedCash.reduce((s, c) => s + Number(c.opening_balance || 0), 0);
+    const caixaFinalPrevisto = scopedCash.reduce((s, c) => s + Number(c.expected_closing_balance || 0), 0);
+    const caixaFinalContado = scopedCash.reduce((s, c) => s + Number(c.counted_closing_balance || 0), 0);
+    const diferenca = scopedCash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
+
+    const recebido = sumEv(["pagamento", "recebimento_multa"], "amount_in");
+    const emprestado = sumEv(["emprestimo_novo", "renovacao"], "amount_out");
+    const entradasManuais = sumEv(["entrada_manual"], "amount_in");
+    const saidasManuais = sumEv(["saida_manual", "saida", "despesa"], "amount_out");
+
+    return { caixaInicial, caixaFinalPrevisto, caixaFinalContado, diferenca, recebido, emprestado, entradasManuais, saidasManuais };
+  }, [scopedCash, scopedEvents]);
+
+  // Per-worker table
+  const workerRows = useMemo(() => {
+    const list = selectedWorker === "all" ? workers : workers.filter((w) => w.id === selectedWorker);
+    return list.map((w) => {
+      const wCash = cashRows.filter((c) => c.worker_id === w.id);
+      const wEvents = events.filter((e) => e.worker_id === w.id);
+
+      // status: last row in range for the worker
+      const latest = wCash.slice().sort((a, b) => (a.cash_date < b.cash_date ? 1 : -1))[0];
+      let statusLabel: "Aberto" | "Fechado" | "Não aberto" = "Não aberto";
+      if (latest) statusLabel = latest.status === "closed" ? "Fechado" : "Aberto";
+
+      const opening = wCash.reduce((s, c) => s + Number(c.opening_balance || 0), 0);
+      const expected = wCash.reduce((s, c) => s + Number(c.expected_closing_balance || 0), 0);
+      const counted = wCash.reduce((s, c) => s + Number(c.counted_closing_balance || 0), 0);
+      const diff = wCash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
+
+      const recebimentos = wEvents.filter((e) => e.event_type === "pagamento" || e.event_type === "recebimento_multa")
+        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
+      const novos = wEvents.filter((e) => e.event_type === "emprestimo_novo")
+        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
+      const renov = wEvents.filter((e) => e.event_type === "renovacao")
+        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
+      const pagamentos = wEvents.filter((e) => e.event_type === "pagamento")
+        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
+      const naoPagos = wEvents.filter((e) => e.event_type === "nao_pagou").length;
+      const entMan = wEvents.filter((e) => e.event_type === "entrada_manual")
+        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
+      const saiMan = wEvents.filter((e) => e.event_type === "saida_manual" || e.event_type === "saida" || e.event_type === "despesa")
+        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
+      const canc = wEvents.filter((e) => e.event_type === "cancelamento").length;
+
+      return {
+        worker: w,
+        statusLabel,
+        opening, expected, counted, diff,
+        totals: { recebimentos, novos, renov, pagamentos, naoPagos, entMan, saiMan, canc },
+        movements: wEvents.slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      };
+    });
+  }, [workers, cashRows, events, selectedWorker]);
+
+  const toggleExpanded = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const workerName = selectedWorker === "all" ? "Todos os trabalhadores" : (workers.find((w) => w.id === selectedWorker)?.nome || "-");
+    doc.setFontSize(14);
+    doc.text("Relatório Administrativo", 40, 40);
+    doc.setFontSize(10);
+    doc.text(`Período: ${label}`, 40, 58);
+    doc.text(`Trabalhador: ${workerName}`, 40, 72);
+
+    autoTable(doc, {
+      startY: 90,
+      head: [["Resumo do período", "Valor"]],
+      body: [
+        ["Caixa inicial", formatCurrency(summary.caixaInicial)],
+        ["Total recebido", formatCurrency(summary.recebido)],
+        ["Total emprestado", formatCurrency(summary.emprestado)],
+        ["Entradas manuais", formatCurrency(summary.entradasManuais)],
+        ["Saídas manuais", formatCurrency(summary.saidasManuais)],
+        ["Caixa final previsto", formatCurrency(summary.caixaFinalPrevisto)],
+        ["Caixa final contado", formatCurrency(summary.caixaFinalContado)],
+        ["Diferença de caixa", formatCurrency(summary.diferenca)],
+      ],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [30, 41, 59] },
+    });
+
+    autoTable(doc, {
+      head: [["Trabalhador", "Status", "Cx. Inicial", "Recebido", "Emprestado", "Diferença"]],
+      body: workerRows.map((r) => [
+        r.worker.nome, r.statusLabel,
+        formatCurrency(r.opening),
+        formatCurrency(r.totals.recebimentos),
+        formatCurrency(r.totals.novos + r.totals.renov),
+        formatCurrency(r.diff),
+      ]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [30, 41, 59] },
+    });
+
+    // Expanded worker details
+    workerRows.forEach((r) => {
+      if (!expanded[r.worker.id]) return;
+      doc.addPage();
+      doc.setFontSize(12);
+      doc.text(`Detalhes — ${r.worker.nome}`, 40, 40);
+      autoTable(doc, {
+        startY: 55,
+        head: [["Indicador", "Valor"]],
+        body: [
+          ["Caixa inicial", formatCurrency(r.opening)],
+          ["Caixa final previsto", formatCurrency(r.expected)],
+          ["Caixa final contado", formatCurrency(r.counted)],
+          ["Recebimentos", formatCurrency(r.totals.recebimentos)],
+          ["Novos empréstimos", formatCurrency(r.totals.novos)],
+          ["Renovações", formatCurrency(r.totals.renov)],
+          ["Pagamentos", formatCurrency(r.totals.pagamentos)],
+          ["Não pagamentos", String(r.totals.naoPagos)],
+          ["Entradas manuais", formatCurrency(r.totals.entMan)],
+          ["Saídas manuais", formatCurrency(r.totals.saiMan)],
+          ["Cancelamentos", String(r.totals.canc)],
+        ],
+        styles: { fontSize: 9 },
+      });
+      autoTable(doc, {
+        head: [["Data/Hora", "Tipo", "Cliente/Obs", "Entrada", "Saída"]],
+        body: r.movements.map((m) => [
+          format(new Date(m.created_at), "dd/MM HH:mm"),
+          EVENT_LABEL[m.event_type] || m.event_type,
+          (m.client_id ? clients[m.client_id] : "") || m.observation || "—",
+          Number(m.amount_in) > 0 ? formatCurrency(Number(m.amount_in)) : "",
+          Number(m.amount_out) > 0 ? formatCurrency(Number(m.amount_out)) : "",
+        ]),
+        styles: { fontSize: 8 },
+      });
+    });
+
+    doc.save(`relatorio_${startDate}_${endDate}.pdf`);
+  };
 
   return (
-    <div className="mx-auto max-w-2xl p-4 pb-24">
-      <h1 className="text-xl font-bold mb-1">Relatórios</h1>
-      <p className="mb-3 text-sm text-muted-foreground">{label}</p>
-
-      {/* Period selector */}
-      <Tabs value={mode} onValueChange={(v) => setMode(v as PeriodMode)} className="mb-3">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="day">Dia</TabsTrigger>
-          <TabsTrigger value="week">Semana</TabsTrigger>
-          <TabsTrigger value="month">Mês</TabsTrigger>
-          <TabsTrigger value="custom">Período</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {mode === "custom" && (
-        <Card className="mb-4">
-          <CardContent className="p-3 grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs">Início</Label>
-              <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-            </div>
-            <div>
-              <Label className="text-xs">Fim</Label>
-              <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Main KPIs */}
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <KpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Previsto" value={formatCurrency(totals.previsto)} />
-        <KpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(totals.totalRecebido)} valueClass="text-success" />
-        <KpiCard icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Falta receber" value={formatCurrency(totals.faltaReceber)} valueClass="text-destructive" />
-        <KpiCard icon={<TrendingUp className="h-4 w-4 text-primary" />} label="% Recebido" value={`${totals.percentual.toFixed(1)}%`} />
-        <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado" value={formatCurrency(totals.emprestado)} />
-        <KpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Retirado da rota" value={formatCurrency(totals.retirada)} />
-        <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Aporte na rota" value={formatCurrency(totals.aporte)} />
-        <KpiCard icon={<TrendingDown className="h-4 w-4 text-destructive" />} label="Total saídas" value={formatCurrency(totals.totalSaidas)} />
+    <div className="mx-auto max-w-4xl p-4 pb-24">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h1 className="text-xl font-bold">Relatórios</h1>
+          <p className="text-sm text-muted-foreground">{label}</p>
+        </div>
       </div>
 
+      {/* Filters */}
       <Card className="mb-4">
-        <CardContent className="p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-primary" />
-            <div>
-              <p className="text-xs text-muted-foreground">Saldo líquido do período</p>
-              <p className={`text-lg font-bold ${totals.saldoLiquido >= 0 ? "text-success" : "text-destructive"}`}>
-                {formatCurrency(totals.saldoLiquido)}
-              </p>
+        <CardContent className="p-3 space-y-3">
+          <div>
+            <Label className="text-xs mb-1 block">Período</Label>
+            <div className="flex flex-wrap gap-1">
+              {([
+                ["today", "Hoje"], ["yesterday", "Ontem"], ["week", "Semana"],
+                ["month", "Mês"], ["custom", "Personalizado"],
+              ] as [PeriodMode, string][]).map(([v, l]) => (
+                <Button key={v} size="sm" variant={mode === v ? "default" : "outline"} onClick={() => setMode(v)}>
+                  {l}
+                </Button>
+              ))}
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Não pagos</p>
-            <p className="text-sm font-bold text-destructive">{totals.naoPagosCount}</p>
-            <p className="text-[11px] text-muted-foreground">{formatCurrency(totals.naoPagosValor)}</p>
+
+          {mode === "custom" && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">Início</Label>
+                <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Fim</Label>
+                <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <Label className="text-xs mb-1 block">Trabalhador</Label>
+            <Select value={selectedWorker} onValueChange={setSelectedWorker}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {workers.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Atualizar
+            </Button>
+            <Button size="sm" onClick={exportPDF} disabled={loading}>
+              <FileDown className="h-4 w-4 mr-1" /> Baixar PDF
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Per-day breakdown */}
-      {days.length > 1 && (
-        <Card className="mb-4">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Quebra por dia</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {days.map((d) => {
-                const dt = parseISO(d.iso + "T12:00:00");
-                const isFuture = d.iso > todayISO();
-                return (
-                  <button
-                    key={d.iso}
-                    onClick={() => setDrillDay(d.iso)}
-                    className="w-full flex items-center justify-between p-3 hover:bg-muted/40 text-left"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        {format(dt, "EEE dd/MM", { locale: ptBR })}
-                        {isFuture && <span className="ml-1 text-[10px] text-muted-foreground">(futuro)</span>}
-                      </p>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
-                        <span>Prev: <b>{formatCurrency(d.previsto)}</b></span>
-                        <span className="text-success">Rec: <b>{formatCurrency(d.recebido)}</b></span>
-                        <span>Empr: <b>{formatCurrency(d.emprestado)}</b></span>
-                        <span className="text-destructive">Ret: <b>{formatCurrency(d.retirada)}</b></span>
-                        <span className="text-success">Apt: <b>{formatCurrency(d.aporte)}</b></span>
-                      </div>
-                      <div className="text-[11px] mt-0.5">
-                        <span className="text-success">{d.pagos} pagos</span>
-                        <span className="mx-1 text-muted-foreground">·</span>
-                        <span className="text-destructive">{d.naoPagos} não pagos</span>
-                        <span className="mx-1 text-muted-foreground">·</span>
-                        <span className={d.saldo >= 0 ? "text-success" : "text-destructive"}>
-                          Saldo: <b>{formatCurrency(d.saldo)}</b>
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {loading ? (
+        <p className="p-4 text-center text-muted-foreground">Carregando...</p>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <KpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial" value={formatCurrency(summary.caixaInicial)} />
+            <KpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} valueClass="text-success" />
+            <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
+            <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas manuais" value={formatCurrency(summary.entradasManuais)} />
+            <KpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas manuais" value={formatCurrency(summary.saidasManuais)} valueClass="text-destructive" />
+            <KpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final previsto" value={formatCurrency(summary.caixaFinalPrevisto)} />
+            <KpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa final contado" value={formatCurrency(summary.caixaFinalContado)} />
+            <KpiCard
+              icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
+              label="Diferença de caixa"
+              value={formatCurrency(summary.diferenca)}
+              valueClass={summary.diferenca >= 0 ? "text-success" : "text-destructive"}
+            />
+          </div>
 
-      {/* Drill-down dialog */}
-      <Dialog open={!!drillDay} onOpenChange={(o) => !o && setDrillDay(null)}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {drillDay && format(parseISO(drillDay + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR })}
-            </DialogTitle>
-          </DialogHeader>
-          <DrillSection title="Pagamentos" items={drillEvents.filter((e) => e.event_type === "pagamento" || e.event_type === "recebimento_multa")} clients={clients} amountKey="amount_in" emptyText="Nenhum pagamento" />
-          <DrillSection title="Não pagos" items={drillEvents.filter((e) => e.event_type === "nao_pagou")} clients={clients} amountKey="amount_out" emptyText="Nenhum não pago" />
-          <DrillSection title="Empréstimos novos" items={drillEvents.filter((e) => e.event_type === "emprestimo_novo")} clients={clients} amountKey="amount_out" emptyText="Nenhum empréstimo" />
-          <DrillSection title="Renovações" items={drillEvents.filter((e) => e.event_type === "renovacao")} clients={clients} amountKey="amount_out" emptyText="Nenhuma renovação" />
-          <DrillSection title="Retiradas da rota" items={drillEvents.filter((e) => e.event_type === "saida_manual" || e.event_type === "saida")} clients={clients} amountKey="amount_out" emptyText="Nenhuma retirada" />
-          <DrillSection title="Aportes na rota" items={drillEvents.filter((e) => e.event_type === "entrada_manual")} clients={clients} amountKey="amount_in" emptyText="Nenhum aporte" />
-        </DialogContent>
-      </Dialog>
+          {/* Team table */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Resumo da Equipe</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {workerRows.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground text-center">Nenhum trabalhador para o filtro.</p>
+              ) : (
+                <div className="divide-y">
+                  {workerRows.map((r) => {
+                    const isOpen = !!expanded[r.worker.id];
+                    return (
+                      <div key={r.worker.id}>
+                        <div className="p-3 flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{r.worker.nome}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
+                              <span>
+                                Status: <b className={
+                                  r.statusLabel === "Aberto" ? "text-success" :
+                                  r.statusLabel === "Fechado" ? "text-muted-foreground" : "text-destructive"
+                                }>{r.statusLabel}</b>
+                              </span>
+                              <span>Cx.Inicial: <b>{formatCurrency(r.opening)}</b></span>
+                              <span className="text-success">Rec: <b>{formatCurrency(r.totals.recebimentos)}</b></span>
+                              <span>Empr: <b>{formatCurrency(r.totals.novos + r.totals.renov)}</b></span>
+                              <span className={r.diff >= 0 ? "text-success" : "text-destructive"}>
+                                Dif: <b>{formatCurrency(r.diff)}</b>
+                              </span>
+                            </div>
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={() => toggleExpanded(r.worker.id)}>
+                            {isOpen ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
+                            Ver detalhes
+                          </Button>
+                        </div>
+                        {isOpen && (
+                          <div className="px-3 pb-3 bg-muted/20">
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                              <DetailPair label="Caixa inicial" value={formatCurrency(r.opening)} />
+                              <DetailPair label="Cx. final previsto" value={formatCurrency(r.expected)} />
+                              <DetailPair label="Cx. final contado" value={formatCurrency(r.counted)} />
+                              <DetailPair label="Recebimentos" value={formatCurrency(r.totals.recebimentos)} />
+                              <DetailPair label="Novos empréstimos" value={formatCurrency(r.totals.novos)} />
+                              <DetailPair label="Renovações" value={formatCurrency(r.totals.renov)} />
+                              <DetailPair label="Pagamentos" value={formatCurrency(r.totals.pagamentos)} />
+                              <DetailPair label="Não pagamentos" value={String(r.totals.naoPagos)} />
+                              <DetailPair label="Entradas manuais" value={formatCurrency(r.totals.entMan)} />
+                              <DetailPair label="Saídas manuais" value={formatCurrency(r.totals.saiMan)} />
+                              <DetailPair label="Cancelamentos" value={String(r.totals.canc)} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold mb-1">Movimentações do período</p>
+                              {r.movements.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">Sem movimentações.</p>
+                              ) : (
+                                <ul className="divide-y border rounded bg-background">
+                                  {r.movements.map((m) => (
+                                    <li key={m.id} className="p-2 flex items-center justify-between text-xs gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="font-medium truncate">
+                                          {EVENT_LABEL[m.event_type] || m.event_type}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground truncate">
+                                          {format(new Date(m.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                                          {" · "}
+                                          {(m.client_id && clients[m.client_id]) || m.observation || "—"}
+                                        </p>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        {Number(m.amount_in) > 0 && (
+                                          <p className="text-success font-medium">+{formatCurrency(Number(m.amount_in))}</p>
+                                        )}
+                                        {Number(m.amount_out) > 0 && (
+                                          <p className="text-destructive font-medium">-{formatCurrency(Number(m.amount_out))}</p>
+                                        )}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
@@ -316,34 +473,11 @@ function KpiCard({ icon, label, value, valueClass }: { icon: React.ReactNode; la
   );
 }
 
-function DrillSection({
-  title, items, clients, amountKey, emptyText,
-}: {
-  title: string;
-  items: DailyEventRow[];
-  clients: Record<string, string>;
-  amountKey: "amount_in" | "amount_out";
-  emptyText: string;
-}) {
-  const total = items.reduce((s, e) => s + Number(e[amountKey] || 0), 0);
+function DetailPair({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-t pt-2 mt-2 first:border-t-0 first:mt-0 first:pt-0">
-      <div className="flex justify-between items-center mb-1">
-        <h4 className="text-sm font-semibold">{title} <span className="text-xs text-muted-foreground">({items.length})</span></h4>
-        {items.length > 0 && <span className="text-xs font-medium">{formatCurrency(total)}</span>}
-      </div>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{emptyText}</p>
-      ) : (
-        <ul className="space-y-1">
-          {items.map((e) => (
-            <li key={e.id} className="flex justify-between text-xs">
-              <span className="truncate flex-1 mr-2">{e.client_id ? clients[e.client_id] || "—" : (e.observation || "—")}</span>
-              <span className="font-medium">{formatCurrency(Number(e[amountKey] || 0))}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="rounded border bg-background p-2">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold">{value}</p>
     </div>
   );
 }
