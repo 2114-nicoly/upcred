@@ -164,6 +164,17 @@ export default function DailyReportPage() {
           setCashStatus(null);
           setCashSummary(null);
         }
+
+        // Current available cash (dynamic — does NOT overwrite historical opening/closing snapshots)
+        let cbRow: any = null;
+        if (selectedWorkerId) {
+          const { data } = await supabase.from("cash_balance").select("available_cash").eq("worker_id", selectedWorkerId).maybeSingle();
+          cbRow = data;
+        } else if (isSuperAdmin && selectedAdminId) {
+          const { data } = await supabase.from("cash_balance").select("available_cash").eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
+          cbRow = data;
+        }
+        setCurrentAvailableCash(cbRow ? Number(cbRow.available_cash || 0) : null);
       } catch (err: any) {
         console.error(err);
         toast.error("Erro ao carregar relatório");
