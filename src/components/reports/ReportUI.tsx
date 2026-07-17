@@ -121,7 +121,7 @@ export function ReportEmptyState({ message }: { message: string }) {
 }
 
 /** Botão discreto "Ver auditoria" para separar auditoria técnica do relatório financeiro. */
-export function AuditLink({ to = "/auditoria" }: { to?: string }) {
+export function AuditLink({ to = "/audit" }: { to?: string }) {
   return (
     <Button asChild size="sm" variant="ghost">
       <Link to={to}>
