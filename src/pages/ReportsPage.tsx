@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
-  RefreshCw, FileDown, Wallet, TrendingUp, TrendingDown, ArrowDownCircle,
+  RefreshCw, FileDown, Wallet, TrendingUp, ArrowDownCircle,
   ArrowUpCircle, Target, AlertTriangle, ChevronDown, ChevronRight,
 } from "lucide-react";
 import {
@@ -18,6 +18,10 @@ import {
 import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  ReportHeader, ReportKpiGrid, ReportKpiCard, ReportEmptyState,
+  AuditLink, formatEventLabel, REPORT_SECTIONS,
+} from "@/components/reports/ReportUI";
 
 type PeriodMode = "today" | "yesterday" | "week" | "month" | "custom";
 
@@ -65,20 +69,7 @@ function computeRange(mode: PeriodMode, cs: string, ce: string) {
   return { startDate, endDate, label };
 }
 
-const EVENT_LABEL: Record<string, string> = {
-  pagamento: "Pagamento",
-  recebimento_multa: "Recebimento de multa",
-  emprestimo_novo: "Empréstimo novo",
-  renovacao: "Renovação",
-  nao_pagou: "Não pagou",
-  entrada_manual: "Entrada manual",
-  saida_manual: "Saída manual",
-  saida: "Saída",
-  despesa: "Despesa",
-  cancelamento: "Cancelamento",
-  estorno_pagamento: "Estorno de pagamento",
-  estorno_manual: "Estorno manual",
-};
+// Nomes amigáveis vêm de formatEventLabel (compartilhado).
 
 export default function ReportsPage() {
   const [mode, setMode] = useState<PeriodMode>("today");
@@ -265,7 +256,7 @@ export default function ReportsPage() {
         head: [["Data/Hora", "Tipo", "Cliente/Obs", "Entrada", "Saída"]],
         body: r.movements.map((m) => [
           format(new Date(m.created_at), "dd/MM HH:mm"),
-          EVENT_LABEL[m.event_type] || m.event_type,
+          formatEventLabel(m.event_type),
           (m.client_id ? clients[m.client_id] : "") || m.observation || "—",
           Number(m.amount_in) > 0 ? formatCurrency(Number(m.amount_in)) : "",
           Number(m.amount_out) > 0 ? formatCurrency(Number(m.amount_out)) : "",
@@ -277,14 +268,20 @@ export default function ReportsPage() {
     doc.save(`relatorio_${startDate}_${endDate}.pdf`);
   };
 
+  const workerLabel =
+    selectedWorker === "all"
+      ? "Todos os trabalhadores"
+      : (workers.find((w) => w.id === selectedWorker)?.nome || "—");
+
   return (
-    <div className="mx-auto max-w-4xl p-4 pb-24">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h1 className="text-xl font-bold">Relatórios</h1>
-          <p className="text-sm text-muted-foreground">{label}</p>
-        </div>
-      </div>
+    <div className="mx-auto max-w-4xl p-4 pb-24 space-y-3">
+      <ReportHeader
+        title="Relatórios"
+        subject={workerLabel}
+        period={label}
+        right={<AuditLink />}
+      />
+
 
       {/* Filters */}
       <Card className="mb-4">
@@ -344,31 +341,36 @@ export default function ReportsPage() {
         <p className="p-4 text-center text-muted-foreground">Carregando...</p>
       ) : (
         <>
-          {/* Summary cards */}
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <KpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial" value={formatCurrency(summary.caixaInicial)} />
-            <KpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} valueClass="text-success" />
-            <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
-            <KpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas manuais" value={formatCurrency(summary.entradasManuais)} />
-            <KpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas manuais" value={formatCurrency(summary.saidasManuais)} valueClass="text-destructive" />
-            <KpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final previsto" value={formatCurrency(summary.caixaFinalPrevisto)} />
-            <KpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa final contado" value={formatCurrency(summary.caixaFinalContado)} />
-            <KpiCard
-              icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
-              label="Diferença de caixa"
-              value={formatCurrency(summary.diferenca)}
-              valueClass={summary.diferenca >= 0 ? "text-success" : "text-destructive"}
-            />
+          {/* Resumo financeiro do período */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              {REPORT_SECTIONS.resumo}
+            </p>
+            <ReportKpiGrid>
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial" value={formatCurrency(summary.caixaInicial)} />
+              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
+              <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
+              <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas manuais" value={formatCurrency(summary.entradasManuais)} tone="positive" />
+              <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas manuais" value={formatCurrency(summary.saidasManuais)} tone="negative" />
+              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final previsto" value={formatCurrency(summary.caixaFinalPrevisto)} />
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa final contado" value={formatCurrency(summary.caixaFinalContado)} />
+              <ReportKpiCard
+                icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
+                label="Diferença de caixa"
+                value={formatCurrency(summary.diferenca)}
+                tone={summary.diferenca >= 0 ? "positive" : "negative"}
+              />
+            </ReportKpiGrid>
           </div>
 
-          {/* Team table */}
+          {/* Detalhamento por trabalhador */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Resumo da Equipe</CardTitle>
+              <CardTitle className="text-base">Detalhamento por trabalhador</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {workerRows.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground text-center">Nenhum trabalhador para o filtro.</p>
+                <p className="p-6 text-sm text-muted-foreground text-center">Nenhum trabalhador neste período.</p>
               ) : (
                 <div className="divide-y">
                   {workerRows.map((r) => {
@@ -414,16 +416,16 @@ export default function ReportsPage() {
                               <DetailPair label="Cancelamentos" value={String(r.totals.canc)} />
                             </div>
                             <div>
-                              <p className="text-xs font-semibold mb-1">Movimentações do período</p>
+                              <p className="text-xs font-semibold mb-1">Entradas e saídas do período</p>
                               {r.movements.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">Sem movimentações.</p>
+                                <p className="text-xs text-muted-foreground">Nenhuma movimentação neste período</p>
                               ) : (
                                 <ul className="divide-y border rounded bg-background">
                                   {r.movements.map((m) => (
                                     <li key={m.id} className="p-2 flex items-center justify-between text-xs gap-2">
                                       <div className="min-w-0 flex-1">
                                         <p className="font-medium truncate">
-                                          {EVENT_LABEL[m.event_type] || m.event_type}
+                                          {formatEventLabel(m.event_type)}
                                         </p>
                                         <p className="text-[11px] text-muted-foreground truncate">
                                           {format(new Date(m.created_at), "dd/MM HH:mm", { locale: ptBR })}
@@ -459,19 +461,6 @@ export default function ReportsPage() {
   );
 }
 
-function KpiCard({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-2.5">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          {icon}
-          <p className="text-[11px] text-muted-foreground">{label}</p>
-        </div>
-        <p className={`text-sm font-bold ${valueClass || ""}`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function DetailPair({ label, value }: { label: string; value: string }) {
   return (
