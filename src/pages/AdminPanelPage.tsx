@@ -551,6 +551,12 @@ function WorkersTab() {
                       <div className="col-span-2"><div className="text-muted-foreground">Recebido hoje</div><div className="font-bold text-success">{formatCurrency(s.recebido)}</div></div>
                     </div>
                   )}
+                  {!w.archived_at && availableCash[w.id] != null && (
+                    <div className="mt-2 pt-2 border-t flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground">Caixa disponível atual</span>
+                      <span className="font-bold">{formatCurrency(availableCash[w.id])}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
