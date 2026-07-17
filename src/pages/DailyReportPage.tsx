@@ -345,18 +345,21 @@ export default function DailyReportPage() {
     writeBlockTitle("1. Resumo do Dia");
 
     const opening = cashSummary?.opening ?? 0;
-    const finalCash = cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses);
+    // Caixa final do dia = snapshot registrado no fechamento (imutável). Se ainda não fechou, mostramos o esperado calculado.
+    const closedFinal = cashSummary?.counted != null
+      ? cashSummary.counted
+      : (cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
     const cashRows: [string, string][] = [
-      ["Caixa Disponível no Início do Dia", formatCurrency(opening)],
+      ["Caixa inicial do dia", formatCurrency(opening)],
       ["Recebido Hoje", formatCurrency(totals.payments)],
       ["Multas Recebidas", formatCurrency(totals.penalties)],
       ["Emprestado Hoje", formatCurrency(totals.loans + totals.renewals)],
       ["Entradas Manuais", formatCurrency(totals.manualIn)],
       ["Saídas Manuais", formatCurrency(totals.manualOut)],
       ["Despesas Operacionais", formatCurrency(totals.expenses)],
-      ["Caixa Disponível Final", formatCurrency(finalCash)],
-      ...(cashSummary?.counted != null ? [["Dinheiro Contado", formatCurrency(cashSummary.counted)] as [string,string]] : []),
-      ...(cashSummary?.diff != null ? [["Diferença", formatCurrency(cashSummary.diff)] as [string,string]] : []),
+      ["Caixa final do dia" + (cashSummary?.counted != null ? " (fechamento)" : " (previsto)"), formatCurrency(closedFinal)],
+      ...(cashSummary?.diff != null ? [["Diferença de fechamento", formatCurrency(cashSummary.diff)] as [string,string]] : []),
+      ...(currentAvailableCash != null ? [["Caixa disponível atual (valor atual)", formatCurrency(currentAvailableCash)] as [string,string]] : []),
       ...(cashSummary?.closingObs ? [["Observação do fechamento", cashSummary.closingObs] as [string,string]] : []),
       ["Clientes visitados", String(visitedClients.size)],
       ["Clientes não visitados (não pagou)", String(notVisitedCount)],
