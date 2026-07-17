@@ -8,6 +8,7 @@ export type WorkerOption = {
   login_codigo: string;
   active: boolean;
   parent_admin_id?: string | null;
+  archived_at?: string | null;
 };
 
 export type AdminOption = {
