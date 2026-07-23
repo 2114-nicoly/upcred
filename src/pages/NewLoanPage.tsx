@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
-import { settleLoan, registerPayment } from "@/lib/payment-utils";
+import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
 import { logAction, logLoanAction, getCurrentActorIdentity } from "@/lib/audit-utils";
