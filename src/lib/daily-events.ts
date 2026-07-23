@@ -23,7 +23,9 @@ export type DailyEventType =
   | "parcela_editada"
   | "transferencia_cliente"
   | "anexo_adicionado"
-  | "anexo_removido";
+  | "anexo_removido"
+  | "renovacao_absorvida"
+  | "ajuste_fechamento";
 
 /** Categorias de despesa operacional. */
 export const EXPENSE_CATEGORIES = [
