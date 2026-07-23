@@ -23,7 +23,9 @@ export type DailyEventType =
   | "parcela_editada"
   | "transferencia_cliente"
   | "anexo_adicionado"
-  | "anexo_removido";
+  | "anexo_removido"
+  | "renovacao_absorvida"
+  | "ajuste_fechamento";
 
 /** Categorias de despesa operacional. */
 export const EXPENSE_CATEGORIES = [
@@ -351,6 +353,8 @@ export function getEventTypeLabel(type: string): string {
     case "anexo_removido": return "Anexo Removido";
     case "caixa_aberto": return "Caixa Aberto";
     case "caixa_fechado": return "Caixa Fechado";
+    case "renovacao_absorvida": return "Renovação - Saldo Absorvido";
+    case "ajuste_fechamento": return "Ajuste de Fechamento";
     default: return type;
   }
 }

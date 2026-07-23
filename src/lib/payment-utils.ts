@@ -827,3 +827,131 @@ export async function cancelLoan(params: {
   );
 }
 
+/**
+ * Absorb the remaining balance of an old loan into a renewal.
+ *
+ * The absorbed amount is NOT physical cash — it must NOT be:
+ *  - registered as a payment (recebimento_normal / pagamento),
+ *  - added to available_cash,
+ *  - counted as "Recebido no dia" nor create a cash_movement.
+ *
+ * What it MUST do:
+ *  - Zero the old loan's remaining_balance via apply_loan_payment RPC.
+ *  - Reduce money_lent / interest_receivable so those receivables migrate to the new loan.
+ *  - Mark collectible installments as paid.
+ *  - Register an informative daily_event ("renovacao_absorvida", amount_in=0, amount_out=0)
+ *    so the history/audit shows exactly how much was absorbed by the new contract.
+ */
+export async function absorbLoanBalance(params: {
+  loanId: string;
+  newLoanId?: string | null;
+  clientId: string;
+  clientName: string;
+  cashDate: string;
+}) {
+  const { loanId, newLoanId, clientId, clientName, cashDate } = params;
+
+  const { data: loanData } = await supabase
+    .from("loans")
+    .select("remaining_balance, amount, total_amount, status")
+    .eq("id", loanId)
+    .single();
+  if (!loanData) throw new Error("Empréstimo não encontrado");
+  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode ser absorvido.");
+
+  const absorbed = Math.max(0, Number(loanData.remaining_balance));
+
+  // Nothing to absorb: just ensure status/installments are consistent.
+  if (absorbed <= 0.01) {
+    await supabase.from("loans").update({ status: LOAN_STATUS.PAID }).eq("id", loanId);
+    await recalculateInstallments(loanId);
+    return { absorbed: 0 };
+  }
+
+  // 1) Zero the old loan balance atomically.
+  const { error: rpcError } = await supabase.rpc("apply_loan_payment", { p_loan_id: loanId, p_amount: absorbed });
+  if (rpcError) throw rpcError;
+
+  // 2) Migrate receivables from old loan (no available_cash change).
+  const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
+  const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
+  const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
+  const toInterest = Math.min(absorbed, interestRemaining);
+  const toPrincipal = absorbed - toInterest;
+  try {
+    await updateCashBalance({
+      interest_receivable: -toInterest,
+      money_lent: -toPrincipal,
+    });
+  } catch (err) {
+    // Roll back the RPC balance move on failure.
+    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: absorbed });
+    throw err;
+  }
+
+  // 3) Mark all collectible installments as paid.
+  const { data: unpaid } = await supabase
+    .from("installments")
+    .select("id, amount, is_penalty")
+    .eq("loan_id", loanId)
+    .in("status", INSTALLMENT_COLLECTIBLE_STATUSES as unknown as string[]);
+  for (const i of ((unpaid as any[]) || [])) {
+    if (i.is_penalty) continue;
+    await supabase.from("installments").update({
+      paid_amount: Number(i.amount),
+      status: INSTALLMENT_STATUS.PAID,
+      paid_at: new Date(cashDate + "T12:00:00").toISOString(),
+    }).eq("id", i.id);
+  }
+
+  // 4) Informative ledger event — NOT a payment, NOT cash. amount_in/out = 0.
+  try {
+    await createDailyEvent({
+      cash_date: cashDate,
+      event_type: "renovacao_absorvida" as any,
+      client_id: clientId,
+      loan_id: loanId,
+      amount_in: 0,
+      amount_out: 0,
+      observation: `Saldo absorvido pela renovação - ${clientName} (${formatCurrency(absorbed)})`,
+      origin: "renovacao",
+      metadata: {
+        absorbed_amount: absorbed,
+        old_loan_id: loanId,
+        new_loan_id: newLoanId || null,
+        client_id: clientId,
+        client_name: clientName,
+        cash_date: cashDate,
+        note: "Absorção contábil — não representa entrada de caixa.",
+      },
+    } as any);
+  } catch (err) {
+    console.warn("[absorbLoanBalance] evento informativo falhou", err);
+  }
+
+  await recalculateInstallments(loanId);
+  await recalculateCashBalanceFromLedger();
+
+  await logAction(
+    "renovacao_absorvida",
+    "loan",
+    loanId,
+    { remaining_balance: absorbed, status: loanData.status },
+    {
+      status: LOAN_STATUS.PAID,
+      remaining_balance: 0,
+      absorbed_amount: absorbed,
+      new_loan_id: newLoanId || null,
+      client_id: clientId,
+      client_name: clientName,
+      cash_date: cashDate,
+      cash_impact: 0,
+      note: "Saldo absorvido pelo novo contrato — sem entrada de caixa.",
+    },
+    `Renovação: saldo absorvido ${formatCurrency(absorbed)} - ${clientName}`,
+  );
+
+  return { absorbed };
+}
+
+

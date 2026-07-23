@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
-import { settleLoan, registerPayment } from "@/lib/payment-utils";
+import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
 import { logAction, logLoanAction, getCurrentActorIdentity } from "@/lib/audit-utils";
@@ -503,7 +503,9 @@ export default function NewLoanPage() {
       }
     }
 
-    // Se ainda restou saldo no antigo após o pagamento, quitar (absorvido pelo novo)
+    // Se ainda restou saldo no antigo após o pagamento, ABSORVER (não é caixa).
+    // O saldo absorvido migra para o novo contrato — NÃO conta como recebimento,
+    // NÃO cria cash_movement, NÃO aumenta available_cash.
     if (renewFromLoanId) {
       const { data: oldLoanState } = await supabase
         .from("loans")
@@ -512,12 +514,12 @@ export default function NewLoanPage() {
         .single();
       const stillOwed = Number(oldLoanState?.remaining_balance) || 0;
       if (stillOwed > 0.01) {
-        await settleLoan({
+        await absorbLoanBalance({
           loanId: renewFromLoanId,
+          newLoanId: loan.id,
           clientId: clientId!,
           clientName: clientName,
           cashDate: loanDate,
-          origin: "renovacao",
         });
       } else {
         await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
