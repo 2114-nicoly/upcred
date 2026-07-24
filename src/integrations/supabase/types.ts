@@ -579,7 +579,9 @@ export type Database = {
           daily_cash_id: string
           id: string
           payload: Json
+          reopen_reason: string | null
           updated_at: string
+          version: number
           worker_id: string | null
         }
         Insert: {
@@ -591,7 +593,9 @@ export type Database = {
           daily_cash_id: string
           id?: string
           payload: Json
+          reopen_reason?: string | null
           updated_at?: string
+          version?: number
           worker_id?: string | null
         }
         Update: {
@@ -603,14 +607,16 @@ export type Database = {
           daily_cash_id?: string
           id?: string
           payload?: Json
+          reopen_reason?: string | null
           updated_at?: string
+          version?: number
           worker_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "daily_cash_snapshots_daily_cash_id_fkey"
             columns: ["daily_cash_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "daily_cash"
             referencedColumns: ["id"]
           },
