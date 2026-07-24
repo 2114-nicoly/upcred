@@ -192,16 +192,20 @@ export default function CaixaPage() {
     const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
     const totalIn = received + penalty + manualIn;
     const totalOut = lent + manualOut + expenses;
-    // Dinheiro contado no caixa = totalIn - totalOut (calculado automaticamente, sem input).
+    // Dinheiro do trabalhador esperado = totalIn - totalOut (calculado automaticamente).
+    const expected = totalIn - totalOut;
+    // Dinheiro contado no caixa = valor digitado pelo trabalhador ao fechar. Quando aberto,
+    // por padrão é igual ao esperado (o input do modal pré-preenche com esse valor).
     const counted = useSnapshot
-      ? Number(dailyCashRow.counted_closing_balance ?? (totalIn - totalOut))
-      : totalIn - totalOut;
-    // Caixa disponível final = Caixa disponível inicial + Dinheiro contado no caixa.
-    const finalCash = opening + counted;
+      ? Number(dailyCashRow.counted_closing_balance ?? expected)
+      : expected;
+    // Caixa Disponível no Final do Dia = Caixa disponível inicial + esperado (auto).
+    const finalCash = opening + expected;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
       totalIn, totalOut,
+      expected,
       counted,
       finalCash,
       notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
@@ -411,13 +415,21 @@ export default function CaixaPage() {
   const openCloseDialog = () => {
     if (isClosed) return;
     setCloseNote("");
+    setCountedAmount(summary.expected.toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    // Dinheiro contado no caixa = totalIn - totalOut (auto). Sem input, sem diferença.
-    const counted = Number(summary.counted.toFixed(2));
+    const expected = Number(summary.expected.toFixed(2));
+    const parsed = parseFloat((countedAmount || "").replace(",", "."));
+    if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
+    const counted = Number(parsed.toFixed(2));
+    const differs = Math.abs(counted - expected) > 0.005;
+    if (differs && closeNote.trim().length < 3) {
+      toast.error("O valor contado difere do esperado. Observação é obrigatória.");
+      return;
+    }
     setSubmitting(true);
     try {
       const { error } = await supabase.rpc(
@@ -443,6 +455,7 @@ export default function CaixaPage() {
             despesas: Number(summary.expenses.toFixed(2)),
             saidas_manuais: Number(summary.manualOut.toFixed(2)),
             total_saidas: Number(summary.totalOut.toFixed(2)),
+            dinheiro_trabalhador_esperado: expected,
             dinheiro_contado: counted,
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
@@ -792,17 +805,27 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Dinheiro contado no caixa (auto = totalIn - totalOut) */}
+            {/* Dinheiro do trabalhador esperado (auto = totalIn - totalOut) */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
-              <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
-                {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
+              <span className="text-xs font-semibold">Dinheiro do trabalhador esperado</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>
+                {summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}
               </span>
             </div>
 
-            {/* Caixa disponível final */}
+            {/* Dinheiro contado no caixa (input do trabalhador — só após fechar) */}
+            {isClosed && dailyCashRow && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
+                <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
+                  {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
+                </span>
+              </div>
+            )}
+
+            {/* Caixa Disponível no Final do Dia */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Disponível Final</span>
+              <span className="text-xs font-semibold">Caixa Disponível no Final do Dia</span>
               <span className={`text-sm font-bold tabular-nums ${summary.finalCash < 0 ? "text-destructive" : "text-primary"}`}>
                 {formatCurrency(summary.finalCash)}
               </span>
@@ -832,8 +855,14 @@ export default function CaixaPage() {
                     <span className="text-xs font-medium">{(dailyCashRow as any).closed_by_name}</span>
                   </div>
                 )}
+                {(dailyCashRow as any).closing_note && (
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Observação</span>
+                    <span className="text-xs text-right whitespace-pre-wrap break-words">{(dailyCashRow as any).closing_note}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-t pt-1 mt-1">
-                  <span className="text-xs font-semibold">Caixa Disponível após o Fechamento</span>
+                  <span className="text-xs font-semibold">Caixa Disponível no Final do Dia</span>
                   <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(summary.finalCash)}</span>
                 </div>
               </div>
@@ -1458,20 +1487,43 @@ export default function CaixaPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
                 <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
               </div>
-              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro contado no caixa</span><span className={`tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>{summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível Final</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
+              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro do trabalhador esperado</span><span className={`tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>{summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
               <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              O dinheiro contado é calculado automaticamente pelas movimentações reais do dia. O fechamento não cria ajustes nem altera o caixa disponível.
-            </p>
-            <div>
-              <Label>Observação <span className="text-muted-foreground">(opcional)</span></Label>
-              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Observações do fechamento..." />
-            </div>
-            <Button onClick={handleCloseCash} disabled={submitting} className="w-full">
-              {submitting ? "Salvando..." : "Confirmar fechamento"}
-            </Button>
+            {(() => {
+              const parsed = parseFloat((countedAmount || "").replace(",", "."));
+              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.expected.toFixed(2))) > 0.005;
+              return (
+                <>
+                  <div>
+                    <Label>Dinheiro contado no caixa <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number" inputMode="decimal" step="0.01"
+                      value={countedAmount}
+                      onChange={(e) => setCountedAmount(e.target.value)}
+                      placeholder="0,00"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Pré-preenchido com o esperado. Ajuste conforme o dinheiro real em mãos.
+                    </p>
+                  </div>
+                  <div>
+                    <Label>
+                      Observação {differs ? <span className="text-destructive">* (obrigatória)</span> : <span className="text-muted-foreground">(opcional)</span>}
+                    </Label>
+                    <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder={differs ? "Explique por que o valor contado difere do esperado..." : "Observações do fechamento..."} />
+                  </div>
+                  <Button
+                    onClick={handleCloseCash}
+                    disabled={submitting || isNaN(parsed) || (differs && closeNote.trim().length < 3)}
+                    className="w-full"
+                  >
+                    {submitting ? "Salvando..." : "Confirmar fechamento"}
+                  </Button>
+                </>
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>
