@@ -958,14 +958,23 @@ export default function CaixaPage() {
               <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
             </Button>
           ) : (
-            <Button
-              onClick={() => setReopenOpen(true)}
-              disabled={submitting}
-              variant="outline"
-              className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-            >
-              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
-            </Button>
+            <>
+              <Button
+                onClick={() => setReopenOpen(true)}
+                disabled={submitting}
+                variant="outline"
+                className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+              >
+                <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
+              </Button>
+              <Button
+                onClick={openVersionsDialog}
+                variant="ghost"
+                className="text-[11px] h-8 col-span-2 text-muted-foreground hover:text-foreground"
+              >
+                <History className="mr-1.5 h-3.5 w-3.5" /> Ver versões
+              </Button>
+            </>
           )}
         </div>
       )}
