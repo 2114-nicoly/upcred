@@ -569,6 +569,53 @@ export type Database = {
           },
         ]
       }
+      daily_cash_snapshots: {
+        Row: {
+          admin_id: string | null
+          cash_date: string
+          closed_at: string
+          closed_by: string | null
+          created_at: string
+          daily_cash_id: string
+          id: string
+          payload: Json
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          admin_id?: string | null
+          cash_date: string
+          closed_at?: string
+          closed_by?: string | null
+          created_at?: string
+          daily_cash_id: string
+          id?: string
+          payload: Json
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          admin_id?: string | null
+          cash_date?: string
+          closed_at?: string
+          closed_by?: string | null
+          created_at?: string
+          daily_cash_id?: string
+          id?: string
+          payload?: Json
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_cash_snapshots_daily_cash_id_fkey"
+            columns: ["daily_cash_id"]
+            isOneToOne: true
+            referencedRelation: "daily_cash"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_events: {
         Row: {
           admin_id: string | null
