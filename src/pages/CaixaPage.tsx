@@ -792,62 +792,56 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Movimentação líquida */}
+            {/* Dinheiro contado no caixa (auto = totalIn - totalOut) */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Movimentação líquida</span>
-              <span className={`text-sm font-bold tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>
-                {summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}
+              <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
+                {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
               </span>
             </div>
 
-            {/* Caixa esperado no final */}
+            {/* Caixa disponível final */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Esperado no Final</span>
-              <span className={`text-sm font-bold tabular-nums ${expectedNegative ? "text-destructive" : "text-primary"}`}>
-                {formatCurrency(summary.expected)}
+              <span className="text-xs font-semibold">Caixa Disponível Final</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.finalCash < 0 ? "text-destructive" : "text-primary"}`}>
+                {formatCurrency(summary.finalCash)}
               </span>
             </div>
 
             {!isClosed && (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
-                  <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
-                    {formatCurrency(availableNow)}
-                  </span>
-                </div>
-                {Math.abs(availableNow - summary.expected) > 0.01 && (
-                  <p className="text-[10px] text-warning">
-                    Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
-                  </p>
-                )}
-              </>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
+                <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
+                  {formatCurrency(availableNow)}
+                </span>
+              </div>
             )}
 
-            {isClosed && closedCounted != null && (
+            {isClosed && dailyCashRow && (
               <div className="pt-1.5 border-t space-y-0.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Dinheiro Contado</span>
-                  <span className="text-sm font-bold tabular-nums">{formatCurrency(closedCounted)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Diferença</span>
-                  <span className={`text-sm font-bold tabular-nums ${Math.abs(closedDiff || 0) < 0.01 ? "text-muted-foreground" : (closedDiff || 0) < 0 ? "text-destructive" : "text-success"}`}>
-                    {(closedDiff || 0) >= 0 ? "+" : ""}{formatCurrency(closedDiff || 0)}
-                  </span>
-                </div>
-                {closedFinal != null && (
-                  <div className="flex items-center justify-between border-t pt-1 mt-1">
-                    <span className="text-xs font-semibold">Caixa Disponível Após o Fechamento</span>
-                    <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(closedFinal)}</span>
+                {dailyCashRow.closed_at && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Data/hora do fechamento</span>
+                    <span className="text-xs tabular-nums">{new Date(dailyCashRow.closed_at).toLocaleString("pt-BR")}</span>
                   </div>
                 )}
+                {(dailyCashRow as any).closed_by_name && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Trabalhador responsável</span>
+                    <span className="text-xs font-medium">{(dailyCashRow as any).closed_by_name}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t pt-1 mt-1">
+                  <span className="text-xs font-semibold">Caixa Disponível após o Fechamento</span>
+                  <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(summary.finalCash)}</span>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
+
 
 
 
