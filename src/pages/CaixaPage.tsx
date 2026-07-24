@@ -1430,6 +1430,23 @@ export default function CaixaPage() {
         </Button>
       </div>
 
+      {/* Final action: Close cash day */}
+      {!isNotStarted && !isClosed && (
+        <div className="pt-8 pb-2">
+          <Button
+            onClick={openCloseDialog}
+            disabled={submitting}
+            className="w-full h-[58px] rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold text-base shadow-md"
+          >
+            <Lock className="mr-2 h-5 w-5" /> Fechar caixa do dia
+          </Button>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+            Após fechar, as informações deste dia serão registradas e congeladas.
+          </p>
+        </div>
+      )}
+
+
       {/* Expense dialog */}
       <Dialog open={expenseOpen} onOpenChange={(o) => { if (!o) setExpenseOpen(false); }}>
         <DialogContent>
