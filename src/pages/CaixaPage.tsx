@@ -111,14 +111,13 @@ export default function CaixaPage() {
         applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
       ]);
       setBalance(bal);
-      setEvents(dayEvents);
       const dc = (dcRes?.data as any) || null;
       setDailyCashRow(dc);
-      setDailyCashStatus(
+      const status =
         dc && dc.status !== "cancelled_empty" && dc.status !== "void"
           ? (dc.status || "open")
-          : "sem_caixa"
-      );
+          : "sem_caixa";
+      setDailyCashStatus(status);
 
       // Saldo inicial = opening_balance salvo na abertura (nunca herda de dias anteriores,
       // nunca fica negativo). Se ainda não existe daily_cash, exibe 0.
@@ -129,14 +128,26 @@ export default function CaixaPage() {
       }
       setInheritedOpening(safeOpening);
 
+      // Se o caixa está FECHADO e existe snapshot, congelar os dados exibidos
+      // usando o snapshot ao invés dos dados vivos.
+      let snap: DailyCashSnapshotPayload | null = null;
+      if (status === "closed") {
+        try { snap = await loadDailyCashSnapshot(selectedDate); } catch { snap = null; }
+      }
+      setSnapshot(snap);
+
+      const effectiveEvents = snap?.events ?? dayEvents;
+      setEvents(effectiveEvents);
+
       // Fetch client names for all events
-      const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
+      const namesFromSnapshot: Record<string, string> = { ...(snap?.client_names || {}) };
+      const clientIds = [...new Set(effectiveEvents.filter(e => e.client_id).map(e => e.client_id!))]
+        .filter(id => !namesFromSnapshot[id]);
       if (clientIds.length > 0) {
         const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);
-        const names: Record<string, string> = {};
-        for (const c of (clients || [])) names[c.id] = c.name;
-        setClientNames(names);
+        for (const c of (clients || [])) namesFromSnapshot[c.id] = c.name;
       }
+      setClientNames(namesFromSnapshot);
     } catch (err) {
       console.error("Error in CaixaPage fetchData:", err);
       toast.error("Erro ao carregar dados do caixa");
