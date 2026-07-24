@@ -612,6 +612,40 @@ export default function CaixaPage() {
     }
   };
 
+  // Snapshot versions: open modal + hydrate selected version.
+  const openVersionsDialog = async () => {
+    setVersionsOpen(true);
+    setVersionsLoading(true);
+    try {
+      const list = await listDailyCashSnapshotVersions(selectedDate);
+      setVersions(list);
+      const latestId = list[0]?.id ?? null;
+      setSelectedVersionId((prev) => prev ?? latestId);
+    } catch (err: any) {
+      console.error("[caixa] list versions failed", err);
+      toast.error(err?.message || "Erro ao carregar versões");
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
+  const pickVersion = async (v: DailyCashSnapshotVersion) => {
+    setSelectedVersionId(v.id);
+    const snap = v.payload as DailyCashSnapshotPayload;
+    setSnapshot(snap);
+    setEvents(snap.events || []);
+    const names: Record<string, string> = { ...(snap.client_names || {}) };
+    const missing = [...new Set((snap.events || []).filter(e => e.client_id).map(e => e.client_id!))]
+      .filter(id => !names[id]);
+    if (missing.length > 0) {
+      const { data: cs } = await supabase.from("clients").select("id, name").in("id", missing);
+      for (const c of (cs || [])) names[c.id] = c.name;
+    }
+    setClientNames(names);
+    setVersionsOpen(false);
+    toast.success(`Exibindo Versão ${v.version}`);
+  };
+
   const handleReviewRequest = async () => {
     if (!reviewTarget || submitting) return;
     setSubmitting(true);
