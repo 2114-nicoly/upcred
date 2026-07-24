@@ -69,6 +69,7 @@ export type DailyCashSnapshotPayload = {
   closed_at: string;
   closed_by: { id: string | null; name: string | null; role: string | null };
   observation: string | null;
+  reopen_reason?: string | null;
   totals: {
     opening_balance: number;
     expected_worker_cash: number;   // dinheiro do trabalhador esperado
@@ -102,6 +103,17 @@ export type DailyCashSnapshotPayload = {
   not_paid_marks: SnapshotNotPaidMark[];
   new_loans: SnapshotNewLoan[];
   expense_breakdown: Record<string, number>;
+};
+
+export type DailyCashSnapshotVersion = {
+  id: string;
+  daily_cash_id: string;
+  version: number;
+  closed_at: string;
+  closed_by: string | null;
+  reopen_reason: string | null;
+  payload: DailyCashSnapshotPayload;
+  created_at: string;
 };
 
 // --- helpers copied from DailyCashPage to build paid groups identically ---
@@ -356,10 +368,11 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
 }
 
 /**
- * Save (upsert) a snapshot for the given closed daily_cash. Called by the
- * page immediately after `close_daily_cash_v2` succeeds.
+ * Save a new snapshot version for the given closed daily_cash. Each call
+ * creates a NEW row (version = last + 1). Old versions are preserved.
+ * Returns the new version number.
  */
-export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCashSnapshotPayload): Promise<void> {
+export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCashSnapshotPayload): Promise<number> {
   const scope = await getCurrentDailyCashScope();
   // Locate the daily_cash id for this date/scope
   const { data: dcRow, error: dcErr } = await applyDailyCashScope(
@@ -370,38 +383,86 @@ export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCash
   const dailyCashId = (dcRow as any)?.id;
   if (!dailyCashId) throw new Error("daily_cash não encontrado para snapshot");
 
+  // Compute next version for this daily_cash_id
+  const { data: last } = await supabase
+    .from("daily_cash_snapshots" as any)
+    .select("version")
+    .eq("daily_cash_id", dailyCashId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextVersion = ((last as any)?.version || 0) + 1;
+
+  // Look up latest reopen reason since the previous snapshot (from audit_logs).
+  let reopenReason: string | null = null;
+  if (nextVersion > 1) {
+    try {
+      const { data: reopenLogs } = await supabase
+        .from("audit_logs")
+        .select("new_value, created_at")
+        .eq("action_type", "reabrir_caixa")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      const match = (reopenLogs || []).find((l: any) => (l?.new_value?.cash_date === cashDate));
+      reopenReason = (match as any)?.new_value?.reason || null;
+    } catch { reopenReason = null; }
+  }
+
+  const versionedPayload: DailyCashSnapshotPayload = { ...payload, reopen_reason: reopenReason };
+
   const row = {
     daily_cash_id: dailyCashId,
     cash_date: cashDate,
     worker_id: scope.worker_id,
     admin_id: scope.admin_id,
-    closed_at: (dcRow as any)?.closed_at || payload.closed_at,
-    closed_by: (dcRow as any)?.closed_by || payload.closed_by.id,
-    payload: payload as any,
+    closed_at: payload.closed_at,
+    closed_by: payload.closed_by.id,
+    version: nextVersion,
+    reopen_reason: reopenReason,
+    payload: versionedPayload as any,
   };
 
   const { error } = await supabase
     .from("daily_cash_snapshots" as any)
-    .upsert(row as any, { onConflict: "daily_cash_id" } as any);
+    .insert(row as any);
   if (error) throw error;
+  return nextVersion;
 }
 
 /**
- * Load the snapshot for a given closed day, if any. Returns null when no
- * snapshot exists (e.g. day closed before this feature shipped).
+ * Load the LATEST snapshot version for a given closed day, if any. Returns
+ * null when no snapshot exists (e.g. day closed before this feature shipped).
  */
 export async function loadDailyCashSnapshot(cashDate: string): Promise<DailyCashSnapshotPayload | null> {
   const scope = await getCurrentDailyCashScope();
   let q: any = supabase.from("daily_cash_snapshots" as any)
-    .select("payload")
+    .select("payload, version")
     .eq("cash_date", cashDate);
   if (scope.worker_id) q = q.eq("worker_id", scope.worker_id);
   else if (scope.admin_id) q = q.eq("admin_id", scope.admin_id).is("worker_id", null);
-  const { data, error } = await q.maybeSingle();
+  const { data, error } = await q.order("version", { ascending: false }).limit(1).maybeSingle();
   if (error) {
     console.warn("[daily-snapshot] load failed", error);
     return null;
   }
   if (!data) return null;
   return (data as any).payload as DailyCashSnapshotPayload;
+}
+
+/**
+ * List all snapshot versions for a given closed day (ordered newest → oldest).
+ */
+export async function listDailyCashSnapshotVersions(cashDate: string): Promise<DailyCashSnapshotVersion[]> {
+  const scope = await getCurrentDailyCashScope();
+  let q: any = supabase.from("daily_cash_snapshots" as any)
+    .select("id, daily_cash_id, version, closed_at, closed_by, reopen_reason, payload, created_at")
+    .eq("cash_date", cashDate);
+  if (scope.worker_id) q = q.eq("worker_id", scope.worker_id);
+  else if (scope.admin_id) q = q.eq("admin_id", scope.admin_id).is("worker_id", null);
+  const { data, error } = await q.order("version", { ascending: false });
+  if (error) {
+    console.warn("[daily-snapshot] list versions failed", error);
+    return [];
+  }
+  return ((data as any[]) || []) as DailyCashSnapshotVersion[];
 }

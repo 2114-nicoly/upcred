@@ -37,7 +37,7 @@ import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals, getDailyCollectionSummary } from "@/lib/daily-totals";
-import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, type DailyCashSnapshotPayload } from "@/lib/daily-snapshot";
+import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
@@ -66,6 +66,11 @@ export default function CaixaPage() {
   const [submitting, setSubmitting] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versions, setVersions] = useState<DailyCashSnapshotVersion[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [currentVersionNumber, setCurrentVersionNumber] = useState<number | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
   const [undoReason, setUndoReason] = useState("");
   const [reopenRequests, setReopenRequests] = useState<any[]>([]);
@@ -129,12 +134,30 @@ export default function CaixaPage() {
       setInheritedOpening(safeOpening);
 
       // Se o caixa está FECHADO e existe snapshot, congelar os dados exibidos
-      // usando o snapshot ao invés dos dados vivos.
+      // usando o snapshot ao invés dos dados vivos. Por padrão exibe a versão
+      // mais recente; se o usuário selecionou uma versão específica, a lista
+      // carregada em `versions` sobrepõe via `applySnapshot` mais abaixo.
       let snap: DailyCashSnapshotPayload | null = null;
+      let versionNumber: number | null = null;
+      let versionId: string | null = null;
       if (status === "closed") {
-        try { snap = await loadDailyCashSnapshot(selectedDate); } catch { snap = null; }
+        try {
+          const allVersions = await listDailyCashSnapshotVersions(selectedDate);
+          setVersions(allVersions);
+          const latest = allVersions[0];
+          if (latest) {
+            snap = latest.payload as DailyCashSnapshotPayload;
+            versionNumber = latest.version;
+            versionId = latest.id;
+          }
+        } catch { snap = null; }
+      } else {
+        setSelectedVersionId(null);
+        setVersions([]);
       }
       setSnapshot(snap);
+      setCurrentVersionNumber(versionNumber);
+      setSelectedVersionId(versionId);
 
       const effectiveEvents = snap?.events ?? dayEvents;
       setEvents(effectiveEvents);
@@ -603,6 +626,41 @@ export default function CaixaPage() {
     }
   };
 
+  // Snapshot versions: open modal + hydrate selected version.
+  const openVersionsDialog = async () => {
+    setVersionsOpen(true);
+    setVersionsLoading(true);
+    try {
+      const list = await listDailyCashSnapshotVersions(selectedDate);
+      setVersions(list);
+      const latestId = list[0]?.id ?? null;
+      setSelectedVersionId((prev) => prev ?? latestId);
+    } catch (err: any) {
+      console.error("[caixa] list versions failed", err);
+      toast.error(err?.message || "Erro ao carregar versões");
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
+  const pickVersion = async (v: DailyCashSnapshotVersion) => {
+    setSelectedVersionId(v.id);
+    setCurrentVersionNumber(v.version);
+    const snap = v.payload as DailyCashSnapshotPayload;
+    setSnapshot(snap);
+    setEvents(snap.events || []);
+    const names: Record<string, string> = { ...(snap.client_names || {}) };
+    const missing = [...new Set((snap.events || []).filter(e => e.client_id).map(e => e.client_id!))]
+      .filter(id => !names[id]);
+    if (missing.length > 0) {
+      const { data: cs } = await supabase.from("clients").select("id, name").in("id", missing);
+      for (const c of (cs || [])) names[c.id] = c.name;
+    }
+    setClientNames(names);
+    setVersionsOpen(false);
+    toast.success(`Exibindo Versão ${v.version}`);
+  };
+
   const handleReviewRequest = async () => {
     if (!reviewTarget || submitting) return;
     setSubmitting(true);
@@ -875,7 +933,14 @@ export default function CaixaPage() {
 
             {isClosed && dailyCashRow && (
               <div className="pt-1.5 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
+                  {currentVersionNumber != null && (
+                    <span className="text-[10px] font-semibold text-primary">
+                      Versão {currentVersionNumber}{versions.length > 1 ? ` de ${versions.length}` : ""}
+                    </span>
+                  )}
+                </div>
                 {dailyCashRow.closed_at && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Data/hora do fechamento</span>
@@ -915,14 +980,23 @@ export default function CaixaPage() {
               <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
             </Button>
           ) : (
-            <Button
-              onClick={() => setReopenOpen(true)}
-              disabled={submitting}
-              variant="outline"
-              className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-            >
-              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
-            </Button>
+            <>
+              <Button
+                onClick={() => setReopenOpen(true)}
+                disabled={submitting}
+                variant="outline"
+                className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+              >
+                <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
+              </Button>
+              <Button
+                onClick={openVersionsDialog}
+                variant="ghost"
+                className="text-[11px] h-8 col-span-2 text-muted-foreground hover:text-foreground"
+              >
+                <History className="mr-1.5 h-3.5 w-3.5" /> Ver versões
+              </Button>
+            </>
           )}
         </div>
       )}
@@ -1603,6 +1677,66 @@ export default function CaixaPage() {
                   {submitting ? "Estornando..." : "Confirmar estorno"}
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Versions dialog: lista todos os snapshots (fechamentos) do dia */}
+      <Dialog open={versionsOpen} onOpenChange={(o) => setVersionsOpen(o)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Versões do Caixa · {format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}</DialogTitle>
+          </DialogHeader>
+          {versionsLoading ? (
+            <p className="text-xs text-muted-foreground">Carregando versões…</p>
+          ) : versions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhuma versão salva para este dia.</p>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {versions.map((v) => {
+                const isSelected = v.id === selectedVersionId;
+                const isLatest = v.version === versions[0].version;
+                const closedBy = (v.payload as any)?.closed_by?.name || "—";
+                const obs = (v.payload as any)?.observation as string | null;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => pickVersion(v)}
+                    className={`w-full text-left rounded-md border p-2.5 space-y-1 transition-colors ${
+                      isSelected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">
+                        Versão {v.version} {isLatest && <span className="text-[10px] font-normal text-primary">(mais recente)</span>}
+                      </span>
+                      {isSelected && <CheckCircle className="h-3.5 w-3.5 text-primary" />}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Fechado em</span>
+                      <span className="tabular-nums text-foreground">{new Date(v.closed_at).toLocaleString("pt-BR")}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Responsável</span>
+                      <span className="text-foreground">{closedBy}</span>
+                    </div>
+                    {v.reopen_reason && (
+                      <div className="text-[11px] text-muted-foreground">
+                        <span className="font-medium text-warning">Motivo da reabertura anterior:</span>{" "}
+                        <span className="text-foreground">{v.reopen_reason}</span>
+                      </div>
+                    )}
+                    {obs && (
+                      <div className="text-[11px] text-muted-foreground">
+                        <span className="font-medium">Observação:</span>{" "}
+                        <span className="text-foreground whitespace-pre-wrap break-words">{obs}</span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </DialogContent>
