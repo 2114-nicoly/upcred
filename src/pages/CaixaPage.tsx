@@ -745,68 +745,120 @@ export default function CaixaPage() {
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conferência do Caixa</p>
-              <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {isClosed ? "Snapshot do fechamento" : `${summary.eventsCount} atividade${summary.eventsCount === 1 ? "" : "s"}`}
+              </span>
             </div>
+
+            {/* Caixa disponível no início do dia */}
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Caixa no Início do Dia</span>
+              <span className="text-[11px] text-muted-foreground">Caixa Disponível no Início do Dia</span>
               <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
             </div>
-            <div className="pt-1.5 border-t space-y-1">
+
+            {/* Entradas */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-success">Entradas</p>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-success">Recebido Hoje</span>
-                <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span>
+                <span className="text-xs text-muted-foreground pl-2">Pagamentos recebidos</span>
+                <span className="text-xs font-medium text-success tabular-nums">+{formatCurrency(summary.received)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-primary">Emprestado Hoje</span>
-                <span className="text-sm font-bold text-primary tabular-nums">-{formatCurrency(summary.lent)}</span>
+                <span className="text-xs text-muted-foreground pl-2">Multas recebidas</span>
+                <span className="text-xs font-medium text-success tabular-nums">+{formatCurrency(summary.penalty)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Entradas Manuais</span>
-                <span className="text-xs font-semibold text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span>
+                <span className="text-xs text-muted-foreground pl-2">Entradas manuais</span>
+                <span className="text-xs font-medium text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Saídas Manuais</span>
-                <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Despesas</span>
-                <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
+              <div className="flex items-center justify-between border-t pt-1 mt-1">
+                <span className="text-xs font-semibold">Total de entradas</span>
+                <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span>
               </div>
             </div>
+
+            {/* Saídas */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Novos empréstimos liberados</span>
+                <span className="text-xs font-medium text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Dinheiro adicional em renovações</span>
+                <span className="text-xs font-medium text-primary tabular-nums">-{formatCurrency(summary.renewals)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Despesas</span>
+                <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Saídas manuais</span>
+                <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t pt-1 mt-1">
+                <span className="text-xs font-semibold">Total de saídas</span>
+                <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
+              </div>
+            </div>
+
+            {/* Movimentação líquida */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Esperado</span>
+              <span className="text-xs font-semibold">Movimentação líquida</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>
+                {summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}
+              </span>
+            </div>
+
+            {/* Caixa esperado no final */}
+            <div className="flex items-center justify-between border-t pt-1.5">
+              <span className="text-xs font-semibold">Caixa Esperado no Final</span>
               <span className={`text-sm font-bold tabular-nums ${expectedNegative ? "text-destructive" : "text-primary"}`}>
                 {formatCurrency(summary.expected)}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
-              <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
-                {formatCurrency(availableNow)}
-              </span>
-            </div>
-            {Math.abs(availableNow - summary.expected) > 0.01 && !isClosed && (
-              <p className="text-[10px] text-warning">
-                Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
-              </p>
-            )}
-            {isClosed && dailyCashRow?.counted_closing_balance != null && (
+
+            {!isClosed && (
               <>
                 <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
+                  <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
+                    {formatCurrency(availableNow)}
+                  </span>
+                </div>
+                {Math.abs(availableNow - summary.expected) > 0.01 && (
+                  <p className="text-[10px] text-warning">
+                    Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
+                  </p>
+                )}
+              </>
+            )}
+
+            {isClosed && closedCounted != null && (
+              <div className="pt-1.5 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
+                <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Dinheiro Contado</span>
-                  <span className="text-sm font-bold tabular-nums">{formatCurrency(Number(dailyCashRow.counted_closing_balance))}</span>
+                  <span className="text-sm font-bold tabular-nums">{formatCurrency(closedCounted)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Diferença</span>
-                  <span className={`text-sm font-bold tabular-nums ${(Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0)) === 0 ? "text-muted-foreground" : (Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0)) < 0 ? "text-destructive" : "text-success"}`}>
-                    {formatCurrency(Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0))}
+                  <span className={`text-sm font-bold tabular-nums ${Math.abs(closedDiff || 0) < 0.01 ? "text-muted-foreground" : (closedDiff || 0) < 0 ? "text-destructive" : "text-success"}`}>
+                    {(closedDiff || 0) >= 0 ? "+" : ""}{formatCurrency(closedDiff || 0)}
                   </span>
                 </div>
-              </>
+                {closedFinal != null && (
+                  <div className="flex items-center justify-between border-t pt-1 mt-1">
+                    <span className="text-xs font-semibold">Caixa Disponível Após o Fechamento</span>
+                    <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(closedFinal)}</span>
+                  </div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
       )}
+
 
 
       {/* Close / Reopen cash actions */}
