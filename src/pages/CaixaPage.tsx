@@ -176,44 +176,43 @@ export default function CaixaPage() {
   const liveTotals = computeDailyTotals(scopedEvents as any, 0);
   const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
-  // When closed, prefer authoritative totals stored in daily_cash.
-  const summary = isClosed && dailyCashRow ? {
-    opening: Number(dailyCashRow.opening_balance || 0),
-    totalIn: Number(dailyCashRow.total_in || 0),
-    totalOut: Number(dailyCashRow.total_out || 0),
-    received: Number(dailyCashRow.total_received || 0),
-    penalty: Number(dailyCashRow.total_penalty_received || 0),
-    lent: Number(dailyCashRow.total_lent || 0),
-    manualIn: Number(dailyCashRow.total_manual_in || 0),
-    manualOut: Number(dailyCashRow.total_manual_out || 0),
-    expenses: Number((dailyCashRow as any).total_expenses || 0),
-    expected: Number(dailyCashRow.expected_closing_balance || 0),
-    notPaidCount: Number(dailyCashRow.total_not_paid_count || 0),
-    eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
-  } : (() => {
-    const opening = inheritedOpening;
-    const received = liveTotals.pagamentos;
-    const penalty = liveTotals.multas;
-    const manualIn = liveTotals.entradasManuais;
-    const lent = liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes;
-    const manualOut = liveTotals.saidasManuais;
-    const expenses = liveTotals.despesas;
-    // Caixa Esperado = calculado a partir das movimentações reais do dia.
-    // NÃO usar available_cash como substituto — este é apenas o saldo dinâmico do banco.
-    const expected = opening + received + penalty + manualIn - lent - manualOut - expenses;
+  // Summary: quando fechado, usa valores gravados no fechamento (snapshot imutável).
+  // Detalhamentos (novos vs renovações) são derivados dos eventos, que também são imutáveis.
+  const summary = (() => {
+    const useSnapshot = isClosed && !!dailyCashRow;
+    const opening = useSnapshot ? Number(dailyCashRow.opening_balance || 0) : inheritedOpening;
+    const received = useSnapshot ? Number(dailyCashRow.total_received || 0) : liveTotals.pagamentos;
+    const penalty = useSnapshot ? Number(dailyCashRow.total_penalty_received || 0) : liveTotals.multas;
+    const manualIn = useSnapshot ? Number(dailyCashRow.total_manual_in || 0) : liveTotals.entradasManuais;
+    const manualOut = useSnapshot ? Number(dailyCashRow.total_manual_out || 0) : liveTotals.saidasManuais;
+    const expenses = useSnapshot ? Number((dailyCashRow as any).total_expenses || 0) : liveTotals.despesas;
+    // Split (novo vs renovação) sempre a partir dos eventos — histórico imutável.
+    const newLoans = liveTotals.emprestimosLiberados;
+    const renewals = liveTotals.renovacoes + liveTotals.renegociacoes;
+    const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
+    const totalIn = received + penalty + manualIn;
+    const totalOut = lent + manualOut + expenses;
+    const expected = useSnapshot
+      ? Number(dailyCashRow.expected_closing_balance || 0)
+      : opening + totalIn - totalOut;
     return {
-      opening,
-      totalIn: liveTotals.entradas,
-      totalOut: liveTotals.saidas,
-      received, penalty, lent, manualIn, manualOut, expenses,
+      opening, received, penalty, manualIn, manualOut, expenses,
+      newLoans, renewals, lent,
+      totalIn, totalOut,
+      liquido: totalIn - totalOut,
       expected,
-      notPaidCount: liveTotals.naoPagos,
-      eventsCount: scopedEvents.length,
+      notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
+      eventsCount: useSnapshot ? Number(dailyCashRow.total_events_count || scopedEvents.length) : scopedEvents.length,
     };
   })();
-  const expectedDisplay = Math.max(0, summary.expected);
   const expectedNegative = summary.expected < -0.005;
   const availableNow = Number(balance?.available_cash ?? 0);
+  // Snapshot do fechamento (só usado quando fechado)
+  const closedCounted = isClosed && dailyCashRow?.counted_closing_balance != null
+    ? Number(dailyCashRow.counted_closing_balance) : null;
+  const closedDiff = closedCounted != null ? closedCounted - summary.expected : null;
+  // Após o fechamento, o caixa físico foi ajustado para bater com o valor contado.
+  const closedFinal = closedCounted;
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
