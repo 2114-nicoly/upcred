@@ -66,6 +66,10 @@ export default function CaixaPage() {
   const [submitting, setSubmitting] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versions, setVersions] = useState<DailyCashSnapshotVersion[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
   const [undoReason, setUndoReason] = useState("");
   const [reopenRequests, setReopenRequests] = useState<any[]>([]);
