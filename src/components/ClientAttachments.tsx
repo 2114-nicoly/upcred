@@ -117,66 +117,119 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
     return () => { cancelled = true; };
   }, [items]);
 
+  const ALLOWED_EXT = /\.(jpe?g|png|webp|gif|heic|heif|pdf|docx?|xlsx?|txt)$/i;
+  const ALLOWED_MIME = /^(image\/|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet)|application\/vnd\.ms-excel|text\/plain)/i;
+
+  const resolveTenantFolder = async (): Promise<{ folder: string | null; error?: string }> => {
+    if (adminId) return { folder: String(adminId) };
+    const { data: clientRow, error: clientErr } = await supabase
+      .from("clients").select("admin_id").eq("id", clientId).maybeSingle();
+    if (clientErr) return { folder: null, error: clientErr.message };
+    if (!clientRow?.admin_id) return { folder: null, error: "cliente sem administrador vinculado" };
+    return { folder: String((clientRow as any).admin_id) };
+  };
+
+  const uploadSingle = async (
+    file: File,
+    tenantFolder: string,
+    queueId: string,
+  ): Promise<{ ok: boolean; message?: string; stage?: UploadStatus["stage"] }> => {
+    const safeName = (file.name || `arquivo-${Date.now()}`).replace(/[^\w.\-]/g, "_");
+    const path = `${tenantFolder}/${clientId}/${crypto.randomUUID()}-${safeName}`;
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+    });
+    if (upErr) {
+      console.error("[attachments] storage upload", { file: file.name, error: upErr });
+      return { ok: false, stage: "storage", message: upErr.message };
+    }
+    const { data: ins, error: dbErr } = await supabase
+      .from("client_attachments" as any)
+      .insert({
+        client_id: clientId,
+        file_name: file.name || safeName,
+        storage_path: path,
+        file_type: file.type || null,
+        file_size: file.size,
+        category: null,
+      } as any)
+      .select().single();
+    if (dbErr) {
+      console.error("[attachments] db insert", { file: file.name, error: dbErr });
+      await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
+      return { ok: false, stage: "db", message: dbErr.message };
+    }
+    logAction("anexar_arquivo" as any, "client", clientId, null, {
+      file_name: file.name, attachment_id: (ins as any)?.id, category: null,
+    });
+    return { ok: true };
+  };
+
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    const { data: clientRow, error: clientErr } = await supabase
-      .from("clients")
-      .select("admin_id")
-      .eq("id", clientId)
-      .maybeSingle();
-    if (clientErr || !clientRow?.admin_id) {
-      setUploading(false);
-      toast.error("Não foi possível identificar o administrador do cliente");
+
+    const { folder, error: scopeErr } = await resolveTenantFolder();
+    if (!folder) {
+      console.error("[attachments] scope", scopeErr);
+      toast.error(`Não foi possível identificar o administrador do cliente${scopeErr ? `: ${scopeErr}` : ""}`);
       return;
     }
-    const tenantFolder = String((clientRow as any).admin_id);
-    let okCount = 0;
+
+    const queued: UploadStatus[] = [];
     for (const file of Array.from(files)) {
-      if (file.size > MAX_SIZE) {
-        toast.error(`${file.name}: arquivo maior que 10MB`);
-        continue;
-      }
-      const safeName = (file.name || `arquivo-${Date.now()}`).replace(/[^\w.\-]/g, "_");
-      const path = `${tenantFolder}/${clientId}/${crypto.randomUUID()}-${safeName}`;
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
-        contentType: file.type || undefined,
-        upsert: false,
-      });
-      if (upErr) { toast.error(`Falha ao enviar ${file.name}`); continue; }
-      const { data: ins, error: dbErr } = await supabase
-        .from("client_attachments" as any)
-        .insert({
-          client_id: clientId,
-          file_name: file.name || safeName,
-          storage_path: path,
-          file_type: file.type || null,
-          file_size: file.size,
-          category: null,
-        } as any)
-        .select()
-        .single();
-      if (dbErr) {
-        await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
-        toast.error(`Falha ao registrar ${file.name}`);
-        continue;
-      }
-      okCount++;
-      logAction("anexar_arquivo" as any, "client", clientId, null, {
-        file_name: file.name, attachment_id: (ins as any)?.id, category: null,
-      });
+      if (file.size > MAX_SIZE) { toast.error(`${file.name}: arquivo maior que 10MB`); continue; }
+      const okExt = ALLOWED_EXT.test(file.name) || ALLOWED_MIME.test(file.type || "");
+      if (!okExt) { toast.error(`${file.name}: tipo não permitido`); continue; }
+      queued.push({ id: crypto.randomUUID(), name: file.name, file, state: "uploading" });
     }
-    setUploading(false);
+    if (queued.length === 0) return;
+    setUploadQueue((q) => [...q, ...queued]);
     [fileRef, cameraRef, galleryRef].forEach((r) => { if (r.current) r.current.value = ""; });
-    if (okCount > 0) toast.success(`${okCount} arquivo(s) enviado(s)`);
+
+    for (const item of queued) {
+      const res = await uploadSingle(item.file, folder, item.id);
+      setUploadQueue((q) => q.map((u) => u.id === item.id
+        ? { ...u, state: res.ok ? "done" : "error", message: res.message, stage: res.stage }
+        : u));
+      if (res.ok) {
+        // remove done items shortly after
+        setTimeout(() => setUploadQueue((q) => q.filter((u) => u.id !== item.id)), 1500);
+      }
+    }
     fetchItems();
+  };
+
+  const retryUpload = async (queueId: string) => {
+    const item = uploadQueue.find((u) => u.id === queueId);
+    if (!item) return;
+    const { folder, error: scopeErr } = await resolveTenantFolder();
+    if (!folder) {
+      setUploadQueue((q) => q.map((u) => u.id === queueId ? { ...u, state: "error", stage: "scope", message: scopeErr } : u));
+      return;
+    }
+    setUploadQueue((q) => q.map((u) => u.id === queueId ? { ...u, state: "uploading", message: undefined } : u));
+    const res = await uploadSingle(item.file, folder, queueId);
+    setUploadQueue((q) => q.map((u) => u.id === queueId
+      ? { ...u, state: res.ok ? "done" : "error", message: res.message, stage: res.stage }
+      : u));
+    if (res.ok) {
+      setTimeout(() => setUploadQueue((q) => q.filter((u) => u.id !== queueId)), 1500);
+      fetchItems();
+    }
   };
 
   const getSignedUrl = async (path: string) => {
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 5);
-    if (error || !data) { toast.error("Não foi possível gerar link"); return null; }
+    if (error || !data) {
+      console.error("[attachments] signed url", { path, error });
+      toast.error(`Não foi possível gerar link${error?.message ? `: ${error.message}` : ""}`);
+      return null;
+    }
     return data.signedUrl;
   };
+
+
 
   const handlePreview = async (att: Attachment) => {
     const url = await getSignedUrl(att.storage_path);
