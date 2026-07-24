@@ -376,6 +376,31 @@ export default function ClientAttachments({ clientId, adminId }: { clientId: str
           className="hidden" onChange={(e) => handleUpload(e.target.files)} />
       </div>
 
+      {uploadQueue.length > 0 && (
+        <div className="space-y-1 border rounded-md p-2 bg-muted/40">
+          {uploadQueue.map((u) => (
+            <div key={u.id} className="flex items-center gap-2 text-xs">
+              {u.state === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+              {u.state === "done" && <span className="h-2 w-2 rounded-full bg-green-500" />}
+              {u.state === "error" && <span className="h-2 w-2 rounded-full bg-destructive" />}
+              <span className="flex-1 truncate">{u.name}</span>
+              {u.state === "uploading" && <span className="text-muted-foreground">Enviando...</span>}
+              {u.state === "done" && <span className="text-green-600">Enviado</span>}
+              {u.state === "error" && (
+                <>
+                  <span className="text-destructive truncate max-w-[140px]" title={u.message}>
+                    {u.stage === "storage" ? "Falha ao enviar" : u.stage === "db" ? "Falha ao registrar" : u.stage === "scope" ? "Sem permissão" : "Erro"}
+                  </span>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => retryUpload(u.id)}>Tentar</Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setUploadQueue((q) => q.filter((x) => x.id !== u.id))}>×</Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+
       {loading ? (
         <p className="text-xs text-muted-foreground">Carregando...</p>
       ) : loadError ? (
