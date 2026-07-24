@@ -22,10 +22,13 @@ export async function uploadPendingAttachments(
     .eq("id", clientId)
     .maybeSingle();
   if (clientErr || !clientRow?.admin_id) {
-    for (const it of items) result.failed.push({ item: it, reason: "admin_id não encontrado" });
+    const reason = clientErr?.message || "admin_id não encontrado";
+    console.error("[pending-attachments] scope", reason);
+    for (const it of items) result.failed.push({ item: it, reason });
     return result;
   }
   const tenantFolder = String((clientRow as any).admin_id);
+
 
   for (const it of items) {
     const safeName = (it.file.name || `arquivo-${Date.now()}`).replace(/[^\w.\-]/g, "_");
