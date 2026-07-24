@@ -449,6 +449,11 @@ export default function NewLoanPage() {
           receivable_created: calc.totalAmount,
           first_due_date: firstDueStr,
           released_amount: cashOut,
+          ...(renewFromLoanId ? {
+            renew_paid_amount: Math.min(renewPaid, faltaQuitar),
+            renew_absorbed_amount: Math.max(faltaQuitar - renewPaid, 0),
+            renew_additional_cash: cashOut,
+          } : {}),
           created_at: new Date().toISOString(),
         };
 
