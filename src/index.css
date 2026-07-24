@@ -119,6 +119,9 @@
 
     --card-overdue-bg: 0 60% 15%;
     --card-due-today-bg: 145 40% 15%;
+    --card-overdue-soft: 48 40% 18%;
+    --card-overdue-mid: 210 45% 20%;
+    --card-overdue-high: 0 50% 20%;
 
     --border: 220 20% 20%;
     --input: 220 20% 20%;
