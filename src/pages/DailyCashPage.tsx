@@ -39,6 +39,7 @@ import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { getDailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
+import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
 
 type InstallmentWithLoan = {
   id: string;
@@ -452,6 +453,33 @@ export default function DailyCashPage() {
         ? (dcData.status || "open")
         : "sem_caixa";
       setDailyCashStatus(status);
+
+      // Dia FECHADO com snapshot → congelar a Rota exibindo apenas o snapshot.
+      // Dados vivos (empréstimos, parcelas, movimentações) NÃO são mais lidos.
+      if (status === "closed") {
+        try {
+          const snap = await loadDailyCashSnapshot(selectedDate);
+          if (!isStale() && snap) {
+            setOpeningBalance(Number(snap.totals.opening_balance) || 0);
+            setManualInToday(Number(snap.totals.manual_in) || 0);
+            setManualOutToday(Number(snap.totals.manual_out) || 0);
+            setNewLoans((snap.new_loans as any) || []);
+            setRenewalEvents((snap.renewal_events as any) || []);
+            setReversedEvents((snap.reversed_events as any) || []);
+            setPaidGroups((snap.paid_groups as any) || []);
+            setNotPaidMarks((snap.not_paid_marks as any) || []);
+            setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
+            setPendingInstallments([]);
+            setSelectedForNotPaid(new Set());
+            setPendingPenalties([]);
+            setRescheduledInstIds(new Set());
+            return; // finally ainda roda (resumo + loading off)
+          }
+        } catch (e) {
+          console.warn("[DailyCashPage] snapshot load failed", e);
+        }
+      }
+
       const visibleNewLoans = ((newLoanData as NewLoanInfo[]) || []).filter(
         (loan: any) => isLoanActive(loan)
       );

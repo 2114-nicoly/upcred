@@ -37,6 +37,7 @@ import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals, getDailyCollectionSummary } from "@/lib/daily-totals";
+import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, type DailyCashSnapshotPayload } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
@@ -55,6 +56,7 @@ export default function CaixaPage() {
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
+  const [snapshot, setSnapshot] = useState<DailyCashSnapshotPayload | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
   const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -109,14 +111,13 @@ export default function CaixaPage() {
         applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
       ]);
       setBalance(bal);
-      setEvents(dayEvents);
       const dc = (dcRes?.data as any) || null;
       setDailyCashRow(dc);
-      setDailyCashStatus(
+      const status =
         dc && dc.status !== "cancelled_empty" && dc.status !== "void"
           ? (dc.status || "open")
-          : "sem_caixa"
-      );
+          : "sem_caixa";
+      setDailyCashStatus(status);
 
       // Saldo inicial = opening_balance salvo na abertura (nunca herda de dias anteriores,
       // nunca fica negativo). Se ainda não existe daily_cash, exibe 0.
@@ -127,14 +128,26 @@ export default function CaixaPage() {
       }
       setInheritedOpening(safeOpening);
 
+      // Se o caixa está FECHADO e existe snapshot, congelar os dados exibidos
+      // usando o snapshot ao invés dos dados vivos.
+      let snap: DailyCashSnapshotPayload | null = null;
+      if (status === "closed") {
+        try { snap = await loadDailyCashSnapshot(selectedDate); } catch { snap = null; }
+      }
+      setSnapshot(snap);
+
+      const effectiveEvents = snap?.events ?? dayEvents;
+      setEvents(effectiveEvents);
+
       // Fetch client names for all events
-      const clientIds = [...new Set(dayEvents.filter(e => e.client_id).map(e => e.client_id!))];
+      const namesFromSnapshot: Record<string, string> = { ...(snap?.client_names || {}) };
+      const clientIds = [...new Set(effectiveEvents.filter(e => e.client_id).map(e => e.client_id!))]
+        .filter(id => !namesFromSnapshot[id]);
       if (clientIds.length > 0) {
         const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);
-        const names: Record<string, string> = {};
-        for (const c of (clients || [])) names[c.id] = c.name;
-        setClientNames(names);
+        for (const c of (clients || [])) namesFromSnapshot[c.id] = c.name;
       }
+      setClientNames(namesFromSnapshot);
     } catch (err) {
       console.error("Error in CaixaPage fetchData:", err);
       toast.error("Erro ao carregar dados do caixa");
@@ -462,6 +475,34 @@ export default function CaixaPage() {
           closeNote.trim() || null,
         );
       } catch (e) { console.warn("[caixa] audit log failed", e); }
+
+      // Snapshot: congela o estado exato do dia no momento do fechamento.
+      try {
+        const payload = await buildDailyCashSnapshotPayload(selectedDate, {
+          opening_balance: Number(summary.opening.toFixed(2)),
+          expected_worker_cash: expected,
+          counted_cash: counted,
+          final_cash: Number(summary.finalCash.toFixed(2)),
+          received: Number(summary.received.toFixed(2)),
+          penalty: Number(summary.penalty.toFixed(2)),
+          manual_in: Number(summary.manualIn.toFixed(2)),
+          manual_out: Number(summary.manualOut.toFixed(2)),
+          expenses: Number(summary.expenses.toFixed(2)),
+          new_loans: Number(summary.newLoans.toFixed(2)),
+          renewals: Number(summary.renewals.toFixed(2)),
+          lent: Number(summary.lent.toFixed(2)),
+          total_in: Number(summary.totalIn.toFixed(2)),
+          total_out: Number(summary.totalOut.toFixed(2)),
+          not_paid_count: Number(summary.notPaidCount || 0),
+          events_count: Number(summary.eventsCount || 0),
+          observation: closeNote.trim() || null,
+        });
+        await saveDailyCashSnapshot(selectedDate, payload);
+      } catch (e) {
+        console.warn("[caixa] snapshot save failed", e);
+        toast.warning("Caixa fechado, mas o snapshot não foi salvo. Contate o administrador.");
+      }
+
       toast.success("Caixa fechado!");
       setCloseOpen(false);
       await fetchData();
