@@ -192,27 +192,24 @@ export default function CaixaPage() {
     const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
     const totalIn = received + penalty + manualIn;
     const totalOut = lent + manualOut + expenses;
-    const expected = useSnapshot
-      ? Number(dailyCashRow.expected_closing_balance || 0)
-      : opening + totalIn - totalOut;
+    // Dinheiro contado no caixa = totalIn - totalOut (calculado automaticamente, sem input).
+    const counted = useSnapshot
+      ? Number(dailyCashRow.counted_closing_balance ?? (totalIn - totalOut))
+      : totalIn - totalOut;
+    // Caixa disponível final = Caixa disponível inicial + Dinheiro contado no caixa.
+    const finalCash = opening + counted;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
       totalIn, totalOut,
-      liquido: totalIn - totalOut,
-      expected,
+      counted,
+      finalCash,
       notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
       eventsCount: useSnapshot ? Number(dailyCashRow.total_events_count || scopedEvents.length) : scopedEvents.length,
     };
   })();
-  const expectedNegative = summary.expected < -0.005;
   const availableNow = Number(balance?.available_cash ?? 0);
-  // Snapshot do fechamento (só usado quando fechado)
-  const closedCounted = isClosed && dailyCashRow?.counted_closing_balance != null
-    ? Number(dailyCashRow.counted_closing_balance) : null;
-  const closedDiff = closedCounted != null ? closedCounted - summary.expected : null;
-  // Após o fechamento, o caixa físico foi ajustado para bater com o valor contado.
-  const closedFinal = closedCounted;
+
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
@@ -413,22 +410,14 @@ export default function CaixaPage() {
 
   const openCloseDialog = () => {
     if (isClosed) return;
-    // Prefill com o caixa esperado (calculado), não com o available_cash.
-    setCountedAmount(Math.max(0, summary.expected).toFixed(2));
     setCloseNote("");
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    const counted = parseFloat(countedAmount);
-    if (!isFinite(counted)) { toast.error("Informe o valor contado no caixa"); return; }
-    const expected = summary.expected;
-    const availableBefore = availableNow;
-    const diff = counted - expected;
-    if (Math.abs(diff) > 0.01 && closeNote.trim().length < 3) {
-      toast.error("Informe a observação para justificar a diferença"); return;
-    }
+    // Dinheiro contado no caixa = totalIn - totalOut (auto). Sem input, sem diferença.
+    const counted = Number(summary.counted.toFixed(2));
     setSubmitting(true);
     try {
       const { error } = await supabase.rpc(
@@ -436,7 +425,6 @@ export default function CaixaPage() {
         { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
       );
       if (error) throw error;
-      // Auditoria detalhada — mostra esperado (cálculo), contado e disponível antes/depois.
       try {
         await logAction(
           "fechar_caixa",
@@ -446,21 +434,22 @@ export default function CaixaPage() {
           {
             cash_date: selectedDate,
             caixa_inicio_dia: Number(summary.opening.toFixed(2)),
-            recebido_hoje: Number((summary.received + summary.penalty).toFixed(2)),
-            emprestado_hoje: Number(summary.lent.toFixed(2)),
+            pagamentos_recebidos: Number(summary.received.toFixed(2)),
+            multas_recebidas: Number(summary.penalty.toFixed(2)),
             entradas_manuais: Number(summary.manualIn.toFixed(2)),
-            saidas_manuais: Number(summary.manualOut.toFixed(2)),
+            total_entradas: Number(summary.totalIn.toFixed(2)),
+            novos_emprestimos: Number(summary.newLoans.toFixed(2)),
+            renovacoes_dinheiro_novo: Number(summary.renewals.toFixed(2)),
             despesas: Number(summary.expenses.toFixed(2)),
-            caixa_esperado: Number(expected.toFixed(2)),
-            dinheiro_contado: Number(counted.toFixed(2)),
-            diferenca: Number(diff.toFixed(2)),
-            caixa_disponivel_antes: Number(availableBefore.toFixed(2)),
-            caixa_disponivel_depois: Number((availableBefore + diff).toFixed(2)),
+            saidas_manuais: Number(summary.manualOut.toFixed(2)),
+            total_saidas: Number(summary.totalOut.toFixed(2)),
+            dinheiro_contado: counted,
+            caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
           closeNote.trim() || null,
         );
       } catch (e) { console.warn("[caixa] audit log failed", e); }
-      toast.success(`Caixa fechado! Diferença: ${formatCurrency(diff)}`);
+      toast.success("Caixa fechado!");
       setCloseOpen(false);
       await fetchData();
     } catch (err: any) {
@@ -470,6 +459,7 @@ export default function CaixaPage() {
       setSubmitting(false);
     }
   };
+
 
   const handleReopenCash = async () => {
     if (submitting) return;
@@ -802,62 +792,56 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Movimentação líquida */}
+            {/* Dinheiro contado no caixa (auto = totalIn - totalOut) */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Movimentação líquida</span>
-              <span className={`text-sm font-bold tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>
-                {summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}
+              <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
+                {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
               </span>
             </div>
 
-            {/* Caixa esperado no final */}
+            {/* Caixa disponível final */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Esperado no Final</span>
-              <span className={`text-sm font-bold tabular-nums ${expectedNegative ? "text-destructive" : "text-primary"}`}>
-                {formatCurrency(summary.expected)}
+              <span className="text-xs font-semibold">Caixa Disponível Final</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.finalCash < 0 ? "text-destructive" : "text-primary"}`}>
+                {formatCurrency(summary.finalCash)}
               </span>
             </div>
 
             {!isClosed && (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
-                  <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
-                    {formatCurrency(availableNow)}
-                  </span>
-                </div>
-                {Math.abs(availableNow - summary.expected) > 0.01 && (
-                  <p className="text-[10px] text-warning">
-                    Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
-                  </p>
-                )}
-              </>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
+                <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
+                  {formatCurrency(availableNow)}
+                </span>
+              </div>
             )}
 
-            {isClosed && closedCounted != null && (
+            {isClosed && dailyCashRow && (
               <div className="pt-1.5 border-t space-y-0.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Dinheiro Contado</span>
-                  <span className="text-sm font-bold tabular-nums">{formatCurrency(closedCounted)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Diferença</span>
-                  <span className={`text-sm font-bold tabular-nums ${Math.abs(closedDiff || 0) < 0.01 ? "text-muted-foreground" : (closedDiff || 0) < 0 ? "text-destructive" : "text-success"}`}>
-                    {(closedDiff || 0) >= 0 ? "+" : ""}{formatCurrency(closedDiff || 0)}
-                  </span>
-                </div>
-                {closedFinal != null && (
-                  <div className="flex items-center justify-between border-t pt-1 mt-1">
-                    <span className="text-xs font-semibold">Caixa Disponível Após o Fechamento</span>
-                    <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(closedFinal)}</span>
+                {dailyCashRow.closed_at && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Data/hora do fechamento</span>
+                    <span className="text-xs tabular-nums">{new Date(dailyCashRow.closed_at).toLocaleString("pt-BR")}</span>
                   </div>
                 )}
+                {(dailyCashRow as any).closed_by_name && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Trabalhador responsável</span>
+                    <span className="text-xs font-medium">{(dailyCashRow as any).closed_by_name}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t pt-1 mt-1">
+                  <span className="text-xs font-semibold">Caixa Disponível após o Fechamento</span>
+                  <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(summary.finalCash)}</span>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
+
 
 
 
@@ -1474,38 +1458,16 @@ export default function CaixaPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
                 <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
               </div>
-              <div className="flex justify-between border-t pt-1"><span>Movimentação líquida</span><span className={`tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>{summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado no Final</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro contado no caixa</span><span className={`tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>{summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível Final</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
               <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
+            <p className="text-[10px] text-muted-foreground">
+              O dinheiro contado é calculado automaticamente pelas movimentações reais do dia. O fechamento não cria ajustes nem altera o caixa disponível.
+            </p>
             <div>
-              <Label>Dinheiro contado no caixa (R$) <span className="text-destructive">*</span></Label>
-              <Input type="number" step="0.01" value={countedAmount} onChange={(e) => setCountedAmount(e.target.value)} placeholder="0.00" />
-            </div>
-            {(() => {
-              const counted = parseFloat(countedAmount);
-              if (!isFinite(counted)) return null;
-              const diff = counted - summary.expected;
-              const hasDiff = Math.abs(diff) > 0.01;
-              return (
-                <div className={`rounded-md border p-2 text-xs ${hasDiff ? "border-destructive/40 bg-destructive/5" : "border-success/40 bg-success/5"}`}>
-                  <div className="flex justify-between font-semibold">
-                    <span>Diferença (contado − esperado)</span>
-                    <span className={`tabular-nums ${hasDiff ? "text-destructive" : "text-success"}`}>
-                      {diff >= 0 ? "+" : ""}{formatCurrency(diff)}
-                    </span>
-                  </div>
-                  {hasDiff && <p className="text-[10px] mt-1 text-muted-foreground">Observação obrigatória. O ajuste será aplicado ao caixa disponível.</p>}
-                </div>
-              );
-            })()}
-            <div>
-              <Label>Observação {(() => {
-                const counted = parseFloat(countedAmount);
-                const diff = isFinite(counted) ? counted - summary.expected : 0;
-                return Math.abs(diff) > 0.01 ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>;
-              })()}</Label>
-              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Motivo da diferença, observações..." />
+              <Label>Observação <span className="text-muted-foreground">(opcional)</span></Label>
+              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Observações do fechamento..." />
             </div>
             <Button onClick={handleCloseCash} disabled={submitting} className="w-full">
               {submitting ? "Salvando..." : "Confirmar fechamento"}
@@ -1513,6 +1475,7 @@ export default function CaixaPage() {
           </div>
         </DialogContent>
       </Dialog>
+
 
       {/* Undo reason dialog */}
       <Dialog open={!!undoTarget} onOpenChange={(o) => { if (!o) { setUndoTarget(null); setUndoReason(""); } }}>
