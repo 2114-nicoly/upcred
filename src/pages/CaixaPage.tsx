@@ -1066,6 +1066,19 @@ export default function CaixaPage() {
                         )}
                         {m?.first_due_date && <p>Primeira cobrança: <span className="font-medium">{m.first_due_date}</span></p>}
                         {m?.receivable_created != null && <p>A Receber criado: <span className="font-medium">{formatCurrency(Number(m.receivable_created))}</span></p>}
+                        {isRenewal && (
+                          <div className="mt-1 pt-1 border-t border-primary/20 space-y-0.5">
+                            {m?.renew_paid_amount != null && (
+                              <p>Valor pago no contrato anterior: <span className="font-medium text-success">{formatCurrency(Number(m.renew_paid_amount))}</span></p>
+                            )}
+                            {m?.renew_absorbed_amount != null && Number(m.renew_absorbed_amount) > 0 && (
+                              <p>Saldo absorvido (sem caixa): <span className="font-medium text-muted-foreground">{formatCurrency(Number(m.renew_absorbed_amount))}</span></p>
+                            )}
+                            {m?.renew_additional_cash != null && (
+                              <p>Dinheiro adicional entregue: <span className="font-medium text-primary">{formatCurrency(Number(m.renew_additional_cash))}</span></p>
+                            )}
+                          </div>
+                        )}
                         <p className="text-muted-foreground/70">{dtLabel}</p>
                       </div>
                     </div>
