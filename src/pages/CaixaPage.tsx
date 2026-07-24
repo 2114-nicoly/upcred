@@ -192,16 +192,20 @@ export default function CaixaPage() {
     const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
     const totalIn = received + penalty + manualIn;
     const totalOut = lent + manualOut + expenses;
-    // Dinheiro contado no caixa = totalIn - totalOut (calculado automaticamente, sem input).
+    // Dinheiro do trabalhador esperado = totalIn - totalOut (calculado automaticamente).
+    const expected = totalIn - totalOut;
+    // Dinheiro contado no caixa = valor digitado pelo trabalhador ao fechar. Quando aberto,
+    // por padrão é igual ao esperado (o input do modal pré-preenche com esse valor).
     const counted = useSnapshot
-      ? Number(dailyCashRow.counted_closing_balance ?? (totalIn - totalOut))
-      : totalIn - totalOut;
-    // Caixa disponível final = Caixa disponível inicial + Dinheiro contado no caixa.
-    const finalCash = opening + counted;
+      ? Number(dailyCashRow.counted_closing_balance ?? expected)
+      : expected;
+    // Caixa Disponível no Final do Dia = Caixa disponível inicial + esperado (auto).
+    const finalCash = opening + expected;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
       totalIn, totalOut,
+      expected,
       counted,
       finalCash,
       notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
