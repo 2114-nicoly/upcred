@@ -176,44 +176,43 @@ export default function CaixaPage() {
   const liveTotals = computeDailyTotals(scopedEvents as any, 0);
   const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
-  // When closed, prefer authoritative totals stored in daily_cash.
-  const summary = isClosed && dailyCashRow ? {
-    opening: Number(dailyCashRow.opening_balance || 0),
-    totalIn: Number(dailyCashRow.total_in || 0),
-    totalOut: Number(dailyCashRow.total_out || 0),
-    received: Number(dailyCashRow.total_received || 0),
-    penalty: Number(dailyCashRow.total_penalty_received || 0),
-    lent: Number(dailyCashRow.total_lent || 0),
-    manualIn: Number(dailyCashRow.total_manual_in || 0),
-    manualOut: Number(dailyCashRow.total_manual_out || 0),
-    expenses: Number((dailyCashRow as any).total_expenses || 0),
-    expected: Number(dailyCashRow.expected_closing_balance || 0),
-    notPaidCount: Number(dailyCashRow.total_not_paid_count || 0),
-    eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
-  } : (() => {
-    const opening = inheritedOpening;
-    const received = liveTotals.pagamentos;
-    const penalty = liveTotals.multas;
-    const manualIn = liveTotals.entradasManuais;
-    const lent = liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes;
-    const manualOut = liveTotals.saidasManuais;
-    const expenses = liveTotals.despesas;
-    // Caixa Esperado = calculado a partir das movimentações reais do dia.
-    // NÃO usar available_cash como substituto — este é apenas o saldo dinâmico do banco.
-    const expected = opening + received + penalty + manualIn - lent - manualOut - expenses;
+  // Summary: quando fechado, usa valores gravados no fechamento (snapshot imutável).
+  // Detalhamentos (novos vs renovações) são derivados dos eventos, que também são imutáveis.
+  const summary = (() => {
+    const useSnapshot = isClosed && !!dailyCashRow;
+    const opening = useSnapshot ? Number(dailyCashRow.opening_balance || 0) : inheritedOpening;
+    const received = useSnapshot ? Number(dailyCashRow.total_received || 0) : liveTotals.pagamentos;
+    const penalty = useSnapshot ? Number(dailyCashRow.total_penalty_received || 0) : liveTotals.multas;
+    const manualIn = useSnapshot ? Number(dailyCashRow.total_manual_in || 0) : liveTotals.entradasManuais;
+    const manualOut = useSnapshot ? Number(dailyCashRow.total_manual_out || 0) : liveTotals.saidasManuais;
+    const expenses = useSnapshot ? Number((dailyCashRow as any).total_expenses || 0) : liveTotals.despesas;
+    // Split (novo vs renovação) sempre a partir dos eventos — histórico imutável.
+    const newLoans = liveTotals.emprestimosLiberados;
+    const renewals = liveTotals.renovacoes + liveTotals.renegociacoes;
+    const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
+    const totalIn = received + penalty + manualIn;
+    const totalOut = lent + manualOut + expenses;
+    const expected = useSnapshot
+      ? Number(dailyCashRow.expected_closing_balance || 0)
+      : opening + totalIn - totalOut;
     return {
-      opening,
-      totalIn: liveTotals.entradas,
-      totalOut: liveTotals.saidas,
-      received, penalty, lent, manualIn, manualOut, expenses,
+      opening, received, penalty, manualIn, manualOut, expenses,
+      newLoans, renewals, lent,
+      totalIn, totalOut,
+      liquido: totalIn - totalOut,
       expected,
-      notPaidCount: liveTotals.naoPagos,
-      eventsCount: scopedEvents.length,
+      notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
+      eventsCount: useSnapshot ? Number(dailyCashRow.total_events_count || scopedEvents.length) : scopedEvents.length,
     };
   })();
-  const expectedDisplay = Math.max(0, summary.expected);
   const expectedNegative = summary.expected < -0.005;
   const availableNow = Number(balance?.available_cash ?? 0);
+  // Snapshot do fechamento (só usado quando fechado)
+  const closedCounted = isClosed && dailyCashRow?.counted_closing_balance != null
+    ? Number(dailyCashRow.counted_closing_balance) : null;
+  const closedDiff = closedCounted != null ? closedCounted - summary.expected : null;
+  // Após o fechamento, o caixa físico foi ajustado para bater com o valor contado.
+  const closedFinal = closedCounted;
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
@@ -746,68 +745,120 @@ export default function CaixaPage() {
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conferência do Caixa</p>
-              <span className="text-[10px] text-muted-foreground">{summary.eventsCount} atividade{summary.eventsCount === 1 ? "" : "s"}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {isClosed ? "Snapshot do fechamento" : `${summary.eventsCount} atividade${summary.eventsCount === 1 ? "" : "s"}`}
+              </span>
             </div>
+
+            {/* Caixa disponível no início do dia */}
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Caixa no Início do Dia</span>
+              <span className="text-[11px] text-muted-foreground">Caixa Disponível no Início do Dia</span>
               <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.opening)}</span>
             </div>
-            <div className="pt-1.5 border-t space-y-1">
+
+            {/* Entradas */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-success">Entradas</p>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-success">Recebido Hoje</span>
-                <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span>
+                <span className="text-xs text-muted-foreground pl-2">Pagamentos recebidos</span>
+                <span className="text-xs font-medium text-success tabular-nums">+{formatCurrency(summary.received)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-primary">Emprestado Hoje</span>
-                <span className="text-sm font-bold text-primary tabular-nums">-{formatCurrency(summary.lent)}</span>
+                <span className="text-xs text-muted-foreground pl-2">Multas recebidas</span>
+                <span className="text-xs font-medium text-success tabular-nums">+{formatCurrency(summary.penalty)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Entradas Manuais</span>
-                <span className="text-xs font-semibold text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span>
+                <span className="text-xs text-muted-foreground pl-2">Entradas manuais</span>
+                <span className="text-xs font-medium text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Saídas Manuais</span>
-                <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Despesas</span>
-                <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
+              <div className="flex items-center justify-between border-t pt-1 mt-1">
+                <span className="text-xs font-semibold">Total de entradas</span>
+                <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span>
               </div>
             </div>
+
+            {/* Saídas */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Novos empréstimos liberados</span>
+                <span className="text-xs font-medium text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Dinheiro adicional em renovações</span>
+                <span className="text-xs font-medium text-primary tabular-nums">-{formatCurrency(summary.renewals)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Despesas</span>
+                <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground pl-2">Saídas manuais</span>
+                <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t pt-1 mt-1">
+                <span className="text-xs font-semibold">Total de saídas</span>
+                <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
+              </div>
+            </div>
+
+            {/* Movimentação líquida */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Esperado</span>
+              <span className="text-xs font-semibold">Movimentação líquida</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>
+                {summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}
+              </span>
+            </div>
+
+            {/* Caixa esperado no final */}
+            <div className="flex items-center justify-between border-t pt-1.5">
+              <span className="text-xs font-semibold">Caixa Esperado no Final</span>
               <span className={`text-sm font-bold tabular-nums ${expectedNegative ? "text-destructive" : "text-primary"}`}>
                 {formatCurrency(summary.expected)}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
-              <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
-                {formatCurrency(availableNow)}
-              </span>
-            </div>
-            {Math.abs(availableNow - summary.expected) > 0.01 && !isClosed && (
-              <p className="text-[10px] text-warning">
-                Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
-              </p>
-            )}
-            {isClosed && dailyCashRow?.counted_closing_balance != null && (
+
+            {!isClosed && (
               <>
                 <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
+                  <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
+                    {formatCurrency(availableNow)}
+                  </span>
+                </div>
+                {Math.abs(availableNow - summary.expected) > 0.01 && (
+                  <p className="text-[10px] text-warning">
+                    Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
+                  </p>
+                )}
+              </>
+            )}
+
+            {isClosed && closedCounted != null && (
+              <div className="pt-1.5 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
+                <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Dinheiro Contado</span>
-                  <span className="text-sm font-bold tabular-nums">{formatCurrency(Number(dailyCashRow.counted_closing_balance))}</span>
+                  <span className="text-sm font-bold tabular-nums">{formatCurrency(closedCounted)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Diferença</span>
-                  <span className={`text-sm font-bold tabular-nums ${(Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0)) === 0 ? "text-muted-foreground" : (Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0)) < 0 ? "text-destructive" : "text-success"}`}>
-                    {formatCurrency(Number(dailyCashRow.counted_closing_balance) - Number(dailyCashRow.expected_closing_balance || 0))}
+                  <span className={`text-sm font-bold tabular-nums ${Math.abs(closedDiff || 0) < 0.01 ? "text-muted-foreground" : (closedDiff || 0) < 0 ? "text-destructive" : "text-success"}`}>
+                    {(closedDiff || 0) >= 0 ? "+" : ""}{formatCurrency(closedDiff || 0)}
                   </span>
                 </div>
-              </>
+                {closedFinal != null && (
+                  <div className="flex items-center justify-between border-t pt-1 mt-1">
+                    <span className="text-xs font-semibold">Caixa Disponível Após o Fechamento</span>
+                    <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(closedFinal)}</span>
+                  </div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
       )}
+
 
 
       {/* Close / Reopen cash actions */}
@@ -1015,6 +1066,19 @@ export default function CaixaPage() {
                         )}
                         {m?.first_due_date && <p>Primeira cobrança: <span className="font-medium">{m.first_due_date}</span></p>}
                         {m?.receivable_created != null && <p>A Receber criado: <span className="font-medium">{formatCurrency(Number(m.receivable_created))}</span></p>}
+                        {isRenewal && (
+                          <div className="mt-1 pt-1 border-t border-primary/20 space-y-0.5">
+                            {m?.renew_paid_amount != null && (
+                              <p>Valor pago no contrato anterior: <span className="font-medium text-success">{formatCurrency(Number(m.renew_paid_amount))}</span></p>
+                            )}
+                            {m?.renew_absorbed_amount != null && Number(m.renew_absorbed_amount) > 0 && (
+                              <p>Saldo absorvido (sem caixa): <span className="font-medium text-muted-foreground">{formatCurrency(Number(m.renew_absorbed_amount))}</span></p>
+                            )}
+                            {m?.renew_additional_cash != null && (
+                              <p>Dinheiro adicional entregue: <span className="font-medium text-primary">{formatCurrency(Number(m.renew_additional_cash))}</span></p>
+                            )}
+                          </div>
+                        )}
                         <p className="text-muted-foreground/70">{dtLabel}</p>
                       </div>
                     </div>
@@ -1394,13 +1458,24 @@ export default function CaixaPage() {
           <DialogHeader><DialogTitle>Fechar caixa do dia</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Recebido Hoje</span><span className="text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Entradas Manuais</span><span className="text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Emprestado Hoje</span><span className="text-primary tabular-nums">-{formatCurrency(summary.lent)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Saídas Manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Disponível no Início do Dia</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-success">Entradas</p>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Pagamentos recebidos</span><span className="text-success tabular-nums">+{formatCurrency(summary.received)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Multas recebidas</span><span className="text-success tabular-nums">+{formatCurrency(summary.penalty)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Entradas manuais</span><span className="text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total de entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
+              </div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Novos empréstimos liberados</span><span className="text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Dinheiro adicional em renovações</span><span className="text-primary tabular-nums">-{formatCurrency(summary.renewals)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+              </div>
+              <div className="flex justify-between border-t pt-1"><span>Movimentação líquida</span><span className={`tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>{summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado no Final</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
               <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
             <div>
