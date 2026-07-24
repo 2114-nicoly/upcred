@@ -1394,12 +1394,14 @@ export default function CaixaPage() {
           <DialogHeader><DialogTitle>Fechar caixa do dia</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Disponível no Início do Dia</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Recebido Hoje</span><span className="text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Emprestado Hoje</span><span className="text-primary tabular-nums">-{formatCurrency(summary.lent)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Entradas Manuais</span><span className="text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Emprestado Hoje</span><span className="text-primary tabular-nums">-{formatCurrency(summary.lent)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Saídas Manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível Atual</span><span className="tabular-nums">{formatCurrency(Number(balance?.available_cash || 0))}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
             <div>
               <Label>Dinheiro contado no caixa (R$) <span className="text-destructive">*</span></Label>
@@ -1408,24 +1410,24 @@ export default function CaixaPage() {
             {(() => {
               const counted = parseFloat(countedAmount);
               if (!isFinite(counted)) return null;
-              const diff = counted - Number(balance?.available_cash || 0);
+              const diff = counted - summary.expected;
               const hasDiff = Math.abs(diff) > 0.01;
               return (
                 <div className={`rounded-md border p-2 text-xs ${hasDiff ? "border-destructive/40 bg-destructive/5" : "border-success/40 bg-success/5"}`}>
                   <div className="flex justify-between font-semibold">
-                    <span>Diferença</span>
+                    <span>Diferença (contado − esperado)</span>
                     <span className={`tabular-nums ${hasDiff ? "text-destructive" : "text-success"}`}>
                       {diff >= 0 ? "+" : ""}{formatCurrency(diff)}
                     </span>
                   </div>
-                  {hasDiff && <p className="text-[10px] mt-1 text-muted-foreground">Observação obrigatória quando há diferença.</p>}
+                  {hasDiff && <p className="text-[10px] mt-1 text-muted-foreground">Observação obrigatória. O ajuste será aplicado ao caixa disponível.</p>}
                 </div>
               );
             })()}
             <div>
               <Label>Observação {(() => {
                 const counted = parseFloat(countedAmount);
-                const diff = isFinite(counted) ? counted - Number(balance?.available_cash || 0) : 0;
+                const diff = isFinite(counted) ? counted - summary.expected : 0;
                 return Math.abs(diff) > 0.01 ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>;
               })()}</Label>
               <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Motivo da diferença, observações..." />
