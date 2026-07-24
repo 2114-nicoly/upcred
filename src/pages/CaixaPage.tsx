@@ -192,27 +192,24 @@ export default function CaixaPage() {
     const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
     const totalIn = received + penalty + manualIn;
     const totalOut = lent + manualOut + expenses;
-    const expected = useSnapshot
-      ? Number(dailyCashRow.expected_closing_balance || 0)
-      : opening + totalIn - totalOut;
+    // Dinheiro contado no caixa = totalIn - totalOut (calculado automaticamente, sem input).
+    const counted = useSnapshot
+      ? Number(dailyCashRow.counted_closing_balance ?? (totalIn - totalOut))
+      : totalIn - totalOut;
+    // Caixa disponível final = Caixa disponível inicial + Dinheiro contado no caixa.
+    const finalCash = opening + counted;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
       totalIn, totalOut,
-      liquido: totalIn - totalOut,
-      expected,
+      counted,
+      finalCash,
       notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
       eventsCount: useSnapshot ? Number(dailyCashRow.total_events_count || scopedEvents.length) : scopedEvents.length,
     };
   })();
-  const expectedNegative = summary.expected < -0.005;
   const availableNow = Number(balance?.available_cash ?? 0);
-  // Snapshot do fechamento (só usado quando fechado)
-  const closedCounted = isClosed && dailyCashRow?.counted_closing_balance != null
-    ? Number(dailyCashRow.counted_closing_balance) : null;
-  const closedDiff = closedCounted != null ? closedCounted - summary.expected : null;
-  // Após o fechamento, o caixa físico foi ajustado para bater com o valor contado.
-  const closedFinal = closedCounted;
+
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
