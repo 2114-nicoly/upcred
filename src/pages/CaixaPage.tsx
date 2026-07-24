@@ -645,6 +645,7 @@ export default function CaixaPage() {
 
   const pickVersion = async (v: DailyCashSnapshotVersion) => {
     setSelectedVersionId(v.id);
+    setCurrentVersionNumber(v.version);
     const snap = v.payload as DailyCashSnapshotPayload;
     setSnapshot(snap);
     setEvents(snap.events || []);
