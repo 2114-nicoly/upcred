@@ -399,12 +399,12 @@ export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCash
     try {
       const { data: reopenLogs } = await supabase
         .from("audit_logs")
-        .select("new_data, created_at")
-        .eq("action", "reabrir_caixa")
+        .select("new_value, created_at")
+        .eq("action_type", "reabrir_caixa")
         .order("created_at", { ascending: false })
         .limit(10);
-      const match = (reopenLogs || []).find((l: any) => (l?.new_data?.cash_date === cashDate));
-      reopenReason = (match as any)?.new_data?.reason || null;
+      const match = (reopenLogs || []).find((l: any) => (l?.new_value?.cash_date === cashDate));
+      reopenReason = (match as any)?.new_value?.reason || null;
     } catch { reopenReason = null; }
   }
 
