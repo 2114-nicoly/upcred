@@ -1481,7 +1481,7 @@ export default function CaixaPage() {
               </div>
               <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro do trabalhador esperado</span><span className={`tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>{summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}</span></div>
               <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
-              <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
+              
             </div>
             {(() => {
               const parsed = parseFloat((countedAmount || "").replace(",", "."));
