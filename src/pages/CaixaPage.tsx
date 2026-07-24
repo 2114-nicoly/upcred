@@ -133,10 +133,15 @@ export default function CaixaPage() {
       setInheritedOpening(safeOpening);
 
       // Se o caixa está FECHADO e existe snapshot, congelar os dados exibidos
-      // usando o snapshot ao invés dos dados vivos.
+      // usando o snapshot ao invés dos dados vivos. Por padrão exibe a versão
+      // mais recente; se o usuário selecionou uma versão específica, a lista
+      // carregada em `versions` sobrepõe via `applySnapshot` mais abaixo.
       let snap: DailyCashSnapshotPayload | null = null;
       if (status === "closed") {
         try { snap = await loadDailyCashSnapshot(selectedDate); } catch { snap = null; }
+      } else {
+        // Ao voltar a estar aberto (reabertura), limpa seleção de versão.
+        setSelectedVersionId(null);
       }
       setSnapshot(snap);
 
