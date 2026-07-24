@@ -415,13 +415,21 @@ export default function CaixaPage() {
   const openCloseDialog = () => {
     if (isClosed) return;
     setCloseNote("");
+    setCountedAmount(summary.expected.toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    // Dinheiro contado no caixa = totalIn - totalOut (auto). Sem input, sem diferença.
-    const counted = Number(summary.counted.toFixed(2));
+    const expected = Number(summary.expected.toFixed(2));
+    const parsed = parseFloat((countedAmount || "").replace(",", "."));
+    if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
+    const counted = Number(parsed.toFixed(2));
+    const differs = Math.abs(counted - expected) > 0.005;
+    if (differs && closeNote.trim().length < 3) {
+      toast.error("O valor contado difere do esperado. Observação é obrigatória.");
+      return;
+    }
     setSubmitting(true);
     try {
       const { error } = await supabase.rpc(
@@ -447,6 +455,7 @@ export default function CaixaPage() {
             despesas: Number(summary.expenses.toFixed(2)),
             saidas_manuais: Number(summary.manualOut.toFixed(2)),
             total_saidas: Number(summary.totalOut.toFixed(2)),
+            dinheiro_trabalhador_esperado: expected,
             dinheiro_contado: counted,
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
