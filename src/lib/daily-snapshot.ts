@@ -69,6 +69,7 @@ export type DailyCashSnapshotPayload = {
   closed_at: string;
   closed_by: { id: string | null; name: string | null; role: string | null };
   observation: string | null;
+  reopen_reason?: string | null;
   totals: {
     opening_balance: number;
     expected_worker_cash: number;   // dinheiro do trabalhador esperado
@@ -102,6 +103,17 @@ export type DailyCashSnapshotPayload = {
   not_paid_marks: SnapshotNotPaidMark[];
   new_loans: SnapshotNewLoan[];
   expense_breakdown: Record<string, number>;
+};
+
+export type DailyCashSnapshotVersion = {
+  id: string;
+  daily_cash_id: string;
+  version: number;
+  closed_at: string;
+  closed_by: string | null;
+  reopen_reason: string | null;
+  payload: DailyCashSnapshotPayload;
+  created_at: string;
 };
 
 // --- helpers copied from DailyCashPage to build paid groups identically ---
