@@ -1445,13 +1445,24 @@ export default function CaixaPage() {
           <DialogHeader><DialogTitle>Fechar caixa do dia</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Inicial</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Recebido Hoje</span><span className="text-success tabular-nums">+{formatCurrency(summary.received + summary.penalty)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Entradas Manuais</span><span className="text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Emprestado Hoje</span><span className="text-primary tabular-nums">-{formatCurrency(summary.lent)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Saídas Manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Caixa Disponível no Início do Dia</span><span className="tabular-nums">{formatCurrency(summary.opening)}</span></div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-success">Entradas</p>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Pagamentos recebidos</span><span className="text-success tabular-nums">+{formatCurrency(summary.received)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Multas recebidas</span><span className="text-success tabular-nums">+{formatCurrency(summary.penalty)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Entradas manuais</span><span className="text-success tabular-nums">+{formatCurrency(summary.manualIn)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total de entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
+              </div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Novos empréstimos liberados</span><span className="text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Dinheiro adicional em renovações</span><span className="text-primary tabular-nums">-{formatCurrency(summary.renewals)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+              </div>
+              <div className="flex justify-between border-t pt-1"><span>Movimentação líquida</span><span className={`tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>{summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado no Final</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
               <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
             <div>
