@@ -1223,9 +1223,9 @@ export default function DailyCashPage() {
           overdueDays >= 7
             ? "bg-card-overdue-high border-destructive/30"
             : overdueDays >= 3
-              ? "bg-card-overdue-mid border-primary/30"
+              ? "bg-card-overdue-soft border-warning/30"
               : overdueDays >= 1
-                ? "bg-card-overdue-soft border-warning/30"
+                ? "bg-card-overdue-mid border-primary/30"
                 : "bg-card-due-today-bg border-border"
         } ${isSelected ? "ring-2 ring-primary/40" : ""}`}
       >
