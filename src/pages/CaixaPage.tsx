@@ -1458,38 +1458,16 @@ export default function CaixaPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
                 <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
               </div>
-              <div className="flex justify-between border-t pt-1"><span>Movimentação líquida</span><span className={`tabular-nums ${summary.liquido >= 0 ? "text-success" : "text-destructive"}`}>{summary.liquido >= 0 ? "+" : ""}{formatCurrency(summary.liquido)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Esperado no Final</span><span className="tabular-nums">{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro contado no caixa</span><span className={`tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>{summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível Final</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
               <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
+            <p className="text-[10px] text-muted-foreground">
+              O dinheiro contado é calculado automaticamente pelas movimentações reais do dia. O fechamento não cria ajustes nem altera o caixa disponível.
+            </p>
             <div>
-              <Label>Dinheiro contado no caixa (R$) <span className="text-destructive">*</span></Label>
-              <Input type="number" step="0.01" value={countedAmount} onChange={(e) => setCountedAmount(e.target.value)} placeholder="0.00" />
-            </div>
-            {(() => {
-              const counted = parseFloat(countedAmount);
-              if (!isFinite(counted)) return null;
-              const diff = counted - summary.expected;
-              const hasDiff = Math.abs(diff) > 0.01;
-              return (
-                <div className={`rounded-md border p-2 text-xs ${hasDiff ? "border-destructive/40 bg-destructive/5" : "border-success/40 bg-success/5"}`}>
-                  <div className="flex justify-between font-semibold">
-                    <span>Diferença (contado − esperado)</span>
-                    <span className={`tabular-nums ${hasDiff ? "text-destructive" : "text-success"}`}>
-                      {diff >= 0 ? "+" : ""}{formatCurrency(diff)}
-                    </span>
-                  </div>
-                  {hasDiff && <p className="text-[10px] mt-1 text-muted-foreground">Observação obrigatória. O ajuste será aplicado ao caixa disponível.</p>}
-                </div>
-              );
-            })()}
-            <div>
-              <Label>Observação {(() => {
-                const counted = parseFloat(countedAmount);
-                const diff = isFinite(counted) ? counted - summary.expected : 0;
-                return Math.abs(diff) > 0.01 ? <span className="text-destructive">*</span> : <span className="text-muted-foreground">(opcional)</span>;
-              })()}</Label>
-              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Motivo da diferença, observações..." />
+              <Label>Observação <span className="text-muted-foreground">(opcional)</span></Label>
+              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Observações do fechamento..." />
             </div>
             <Button onClick={handleCloseCash} disabled={submitting} className="w-full">
               {submitting ? "Salvando..." : "Confirmar fechamento"}
@@ -1497,6 +1475,7 @@ export default function CaixaPage() {
           </div>
         </DialogContent>
       </Dialog>
+
 
       {/* Undo reason dialog */}
       <Dialog open={!!undoTarget} onOpenChange={(o) => { if (!o) { setUndoTarget(null); setUndoReason(""); } }}>
