@@ -805,17 +805,27 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Dinheiro contado no caixa (auto = totalIn - totalOut) */}
+            {/* Dinheiro do trabalhador esperado (auto = totalIn - totalOut) */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
-              <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
-                {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
+              <span className="text-xs font-semibold">Dinheiro do trabalhador esperado</span>
+              <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>
+                {summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}
               </span>
             </div>
 
-            {/* Caixa disponível final */}
+            {/* Dinheiro contado no caixa (input do trabalhador — só após fechar) */}
+            {isClosed && dailyCashRow && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
+                <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
+                  {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
+                </span>
+              </div>
+            )}
+
+            {/* Caixa Disponível no Final do Dia */}
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Disponível Final</span>
+              <span className="text-xs font-semibold">Caixa Disponível no Final do Dia</span>
               <span className={`text-sm font-bold tabular-nums ${summary.finalCash < 0 ? "text-destructive" : "text-primary"}`}>
                 {formatCurrency(summary.finalCash)}
               </span>
@@ -845,8 +855,14 @@ export default function CaixaPage() {
                     <span className="text-xs font-medium">{(dailyCashRow as any).closed_by_name}</span>
                   </div>
                 )}
+                {(dailyCashRow as any).closing_note && (
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Observação</span>
+                    <span className="text-xs text-right whitespace-pre-wrap break-words">{(dailyCashRow as any).closing_note}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-t pt-1 mt-1">
-                  <span className="text-xs font-semibold">Caixa Disponível após o Fechamento</span>
+                  <span className="text-xs font-semibold">Caixa Disponível no Final do Dia</span>
                   <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(summary.finalCash)}</span>
                 </div>
               </div>
