@@ -138,13 +138,26 @@ export default function CaixaPage() {
       // mais recente; se o usuário selecionou uma versão específica, a lista
       // carregada em `versions` sobrepõe via `applySnapshot` mais abaixo.
       let snap: DailyCashSnapshotPayload | null = null;
+      let versionNumber: number | null = null;
+      let versionId: string | null = null;
       if (status === "closed") {
-        try { snap = await loadDailyCashSnapshot(selectedDate); } catch { snap = null; }
+        try {
+          const allVersions = await listDailyCashSnapshotVersions(selectedDate);
+          setVersions(allVersions);
+          const latest = allVersions[0];
+          if (latest) {
+            snap = latest.payload as DailyCashSnapshotPayload;
+            versionNumber = latest.version;
+            versionId = latest.id;
+          }
+        } catch { snap = null; }
       } else {
-        // Ao voltar a estar aberto (reabertura), limpa seleção de versão.
         setSelectedVersionId(null);
+        setVersions([]);
       }
       setSnapshot(snap);
+      setCurrentVersionNumber(versionNumber);
+      setSelectedVersionId(versionId);
 
       const effectiveEvents = snap?.events ?? dayEvents;
       setEvents(effectiveEvents);
