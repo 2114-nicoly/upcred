@@ -1681,6 +1681,66 @@ export default function CaixaPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Versions dialog: lista todos os snapshots (fechamentos) do dia */}
+      <Dialog open={versionsOpen} onOpenChange={(o) => setVersionsOpen(o)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Versões do Caixa · {format(new Date(selectedDate + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}</DialogTitle>
+          </DialogHeader>
+          {versionsLoading ? (
+            <p className="text-xs text-muted-foreground">Carregando versões…</p>
+          ) : versions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhuma versão salva para este dia.</p>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {versions.map((v) => {
+                const isSelected = v.id === selectedVersionId;
+                const isLatest = v.version === versions[0].version;
+                const closedBy = (v.payload as any)?.closed_by?.name || "—";
+                const obs = (v.payload as any)?.observation as string | null;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => pickVersion(v)}
+                    className={`w-full text-left rounded-md border p-2.5 space-y-1 transition-colors ${
+                      isSelected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">
+                        Versão {v.version} {isLatest && <span className="text-[10px] font-normal text-primary">(mais recente)</span>}
+                      </span>
+                      {isSelected && <CheckCircle className="h-3.5 w-3.5 text-primary" />}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Fechado em</span>
+                      <span className="tabular-nums text-foreground">{new Date(v.closed_at).toLocaleString("pt-BR")}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Responsável</span>
+                      <span className="text-foreground">{closedBy}</span>
+                    </div>
+                    {v.reopen_reason && (
+                      <div className="text-[11px] text-muted-foreground">
+                        <span className="font-medium text-warning">Motivo da reabertura anterior:</span>{" "}
+                        <span className="text-foreground">{v.reopen_reason}</span>
+                      </div>
+                    )}
+                    {obs && (
+                      <div className="text-[11px] text-muted-foreground">
+                        <span className="font-medium">Observação:</span>{" "}
+                        <span className="text-foreground whitespace-pre-wrap break-words">{obs}</span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
