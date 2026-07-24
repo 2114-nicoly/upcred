@@ -1487,20 +1487,43 @@ export default function CaixaPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
                 <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
               </div>
-              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro contado no caixa</span><span className={`tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>{summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível Final</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
+              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro do trabalhador esperado</span><span className={`tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>{summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}</span></div>
+              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
               <div className="flex justify-between text-[10px] text-muted-foreground"><span>Caixa Disponível Atual (referência)</span><span className="tabular-nums">{formatCurrency(availableNow)}</span></div>
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              O dinheiro contado é calculado automaticamente pelas movimentações reais do dia. O fechamento não cria ajustes nem altera o caixa disponível.
-            </p>
-            <div>
-              <Label>Observação <span className="text-muted-foreground">(opcional)</span></Label>
-              <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="Observações do fechamento..." />
-            </div>
-            <Button onClick={handleCloseCash} disabled={submitting} className="w-full">
-              {submitting ? "Salvando..." : "Confirmar fechamento"}
-            </Button>
+            {(() => {
+              const parsed = parseFloat((countedAmount || "").replace(",", "."));
+              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.expected.toFixed(2))) > 0.005;
+              return (
+                <>
+                  <div>
+                    <Label>Dinheiro contado no caixa <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number" inputMode="decimal" step="0.01"
+                      value={countedAmount}
+                      onChange={(e) => setCountedAmount(e.target.value)}
+                      placeholder="0,00"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Pré-preenchido com o esperado. Ajuste conforme o dinheiro real em mãos.
+                    </p>
+                  </div>
+                  <div>
+                    <Label>
+                      Observação {differs ? <span className="text-destructive">* (obrigatória)</span> : <span className="text-muted-foreground">(opcional)</span>}
+                    </Label>
+                    <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder={differs ? "Explique por que o valor contado difere do esperado..." : "Observações do fechamento..."} />
+                  </div>
+                  <Button
+                    onClick={handleCloseCash}
+                    disabled={submitting || isNaN(parsed) || (differs && closeNote.trim().length < 3)}
+                    className="w-full"
+                  >
+                    {submitting ? "Salvando..." : "Confirmar fechamento"}
+                  </Button>
+                </>
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>
