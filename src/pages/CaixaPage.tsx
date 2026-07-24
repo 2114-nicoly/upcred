@@ -831,14 +831,6 @@ export default function CaixaPage() {
               </span>
             </div>
 
-            {!isClosed && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
-                <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
-                  {formatCurrency(availableNow)}
-                </span>
-              </div>
-            )}
 
             {isClosed && dailyCashRow && (
               <div className="pt-1.5 border-t space-y-0.5">
