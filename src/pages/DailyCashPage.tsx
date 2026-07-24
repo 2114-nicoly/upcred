@@ -39,6 +39,7 @@ import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { getDailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
+import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
 
 type InstallmentWithLoan = {
   id: string;
