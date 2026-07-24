@@ -56,11 +56,21 @@ type Attachment = {
 const BUCKET = "client-attachments";
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-export default function ClientAttachments({ clientId }: { clientId: string; adminId?: string | null }) {
+type UploadStatus = {
+  id: string;
+  name: string;
+  file: File;
+  state: "uploading" | "error" | "done";
+  message?: string;
+  stage?: "storage" | "db" | "scope";
+};
+
+export default function ClientAttachments({ clientId, adminId }: { clientId: string; adminId?: string | null }) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState<UploadStatus[]>([]);
+  const uploading = uploadQueue.some((u) => u.state === "uploading");
   const [showArchived, setShowArchived] = useState(false);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<{ url: string; kind: "image" | "pdf" | "other"; name: string; att: Attachment } | null>(null);
