@@ -918,7 +918,12 @@ export default function CaixaPage() {
 
             {isClosed && dailyCashRow && (
               <div className="pt-1.5 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fechamento</p>
+                  {snapshot?.version != null && (
+                    <span className="text-[10px] font-semibold text-primary">Versão {(snapshot as any).version ?? 1}</span>
+                  )}
+                </div>
                 {dailyCashRow.closed_at && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Data/hora do fechamento</span>
