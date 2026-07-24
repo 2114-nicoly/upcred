@@ -765,13 +765,28 @@ export default function CaixaPage() {
                 <span className="text-xs text-muted-foreground">Saídas Manuais</span>
                 <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Despesas</span>
+                <span className="text-xs font-semibold text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
+              </div>
             </div>
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Caixa Disponível Atual</span>
-              <span className={`text-sm font-bold tabular-nums ${Number(balance?.available_cash || 0) < 0 ? "text-destructive" : "text-primary"}`}>
-                {formatCurrency(Number(balance?.available_cash || 0))}
+              <span className="text-xs font-semibold">Caixa Esperado</span>
+              <span className={`text-sm font-bold tabular-nums ${expectedNegative ? "text-destructive" : "text-primary"}`}>
+                {formatCurrency(summary.expected)}
               </span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Caixa Disponível Atual</span>
+              <span className={`text-xs font-semibold tabular-nums ${availableNow < 0 ? "text-destructive" : "text-primary"}`}>
+                {formatCurrency(availableNow)}
+              </span>
+            </div>
+            {Math.abs(availableNow - summary.expected) > 0.01 && !isClosed && (
+              <p className="text-[10px] text-warning">
+                Divergência entre disponível e esperado: {formatCurrency(availableNow - summary.expected)}
+              </p>
+            )}
             {isClosed && dailyCashRow?.counted_closing_balance != null && (
               <>
                 <div className="flex items-center justify-between">
