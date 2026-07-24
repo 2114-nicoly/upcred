@@ -414,8 +414,8 @@ export default function CaixaPage() {
 
   const openCloseDialog = () => {
     if (isClosed) return;
-    const cur = Number(balance?.available_cash || 0);
-    setCountedAmount(Math.max(0, cur).toFixed(2));
+    // Prefill com o caixa esperado (calculado), não com o available_cash.
+    setCountedAmount(Math.max(0, summary.expected).toFixed(2));
     setCloseNote("");
     setCloseOpen(true);
   };
@@ -424,8 +424,9 @@ export default function CaixaPage() {
     if (submitting || isClosed) return;
     const counted = parseFloat(countedAmount);
     if (!isFinite(counted)) { toast.error("Informe o valor contado no caixa"); return; }
-    const currentAvailable = Number(balance?.available_cash || 0);
-    const diff = counted - currentAvailable;
+    const expected = summary.expected;
+    const availableBefore = availableNow;
+    const diff = counted - expected;
     if (Math.abs(diff) > 0.01 && closeNote.trim().length < 3) {
       toast.error("Informe a observação para justificar a diferença"); return;
     }
@@ -436,7 +437,7 @@ export default function CaixaPage() {
         { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
       );
       if (error) throw error;
-      // Auditoria detalhada baseada no Caixa Disponível Atual.
+      // Auditoria detalhada — mostra esperado (cálculo), contado e disponível antes/depois.
       try {
         await logAction(
           "fechar_caixa",
@@ -450,9 +451,12 @@ export default function CaixaPage() {
             emprestado_hoje: Number(summary.lent.toFixed(2)),
             entradas_manuais: Number(summary.manualIn.toFixed(2)),
             saidas_manuais: Number(summary.manualOut.toFixed(2)),
-            caixa_disponivel_final: Number(currentAvailable.toFixed(2)),
+            despesas: Number(summary.expenses.toFixed(2)),
+            caixa_esperado: Number(expected.toFixed(2)),
             dinheiro_contado: Number(counted.toFixed(2)),
             diferenca: Number(diff.toFixed(2)),
+            caixa_disponivel_antes: Number(availableBefore.toFixed(2)),
+            caixa_disponivel_depois: Number((availableBefore + diff).toFixed(2)),
           },
           closeNote.trim() || null,
         );
