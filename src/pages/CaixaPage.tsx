@@ -410,22 +410,14 @@ export default function CaixaPage() {
 
   const openCloseDialog = () => {
     if (isClosed) return;
-    // Prefill com o caixa esperado (calculado), não com o available_cash.
-    setCountedAmount(Math.max(0, summary.expected).toFixed(2));
     setCloseNote("");
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    const counted = parseFloat(countedAmount);
-    if (!isFinite(counted)) { toast.error("Informe o valor contado no caixa"); return; }
-    const expected = summary.expected;
-    const availableBefore = availableNow;
-    const diff = counted - expected;
-    if (Math.abs(diff) > 0.01 && closeNote.trim().length < 3) {
-      toast.error("Informe a observação para justificar a diferença"); return;
-    }
+    // Dinheiro contado no caixa = totalIn - totalOut (auto). Sem input, sem diferença.
+    const counted = Number(summary.counted.toFixed(2));
     setSubmitting(true);
     try {
       const { error } = await supabase.rpc(
@@ -433,7 +425,6 @@ export default function CaixaPage() {
         { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
       );
       if (error) throw error;
-      // Auditoria detalhada — mostra esperado (cálculo), contado e disponível antes/depois.
       try {
         await logAction(
           "fechar_caixa",
@@ -443,21 +434,22 @@ export default function CaixaPage() {
           {
             cash_date: selectedDate,
             caixa_inicio_dia: Number(summary.opening.toFixed(2)),
-            recebido_hoje: Number((summary.received + summary.penalty).toFixed(2)),
-            emprestado_hoje: Number(summary.lent.toFixed(2)),
+            pagamentos_recebidos: Number(summary.received.toFixed(2)),
+            multas_recebidas: Number(summary.penalty.toFixed(2)),
             entradas_manuais: Number(summary.manualIn.toFixed(2)),
-            saidas_manuais: Number(summary.manualOut.toFixed(2)),
+            total_entradas: Number(summary.totalIn.toFixed(2)),
+            novos_emprestimos: Number(summary.newLoans.toFixed(2)),
+            renovacoes_dinheiro_novo: Number(summary.renewals.toFixed(2)),
             despesas: Number(summary.expenses.toFixed(2)),
-            caixa_esperado: Number(expected.toFixed(2)),
-            dinheiro_contado: Number(counted.toFixed(2)),
-            diferenca: Number(diff.toFixed(2)),
-            caixa_disponivel_antes: Number(availableBefore.toFixed(2)),
-            caixa_disponivel_depois: Number((availableBefore + diff).toFixed(2)),
+            saidas_manuais: Number(summary.manualOut.toFixed(2)),
+            total_saidas: Number(summary.totalOut.toFixed(2)),
+            dinheiro_contado: counted,
+            caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
           closeNote.trim() || null,
         );
       } catch (e) { console.warn("[caixa] audit log failed", e); }
-      toast.success(`Caixa fechado! Diferença: ${formatCurrency(diff)}`);
+      toast.success("Caixa fechado!");
       setCloseOpen(false);
       await fetchData();
     } catch (err: any) {
@@ -467,6 +459,7 @@ export default function CaixaPage() {
       setSubmitting(false);
     }
   };
+
 
   const handleReopenCash = async () => {
     if (submitting) return;
