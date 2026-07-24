@@ -972,32 +972,24 @@ export default function CaixaPage() {
 
 
 
-      {/* Close / Reopen cash actions */}
-      {!isNotStarted && (
+      {/* Reopen / Versions actions (Close button moved to bottom of page) */}
+      {!isNotStarted && isClosed && (
         <div className="grid grid-cols-2 gap-2">
-          {!isClosed ? (
-            <Button onClick={openCloseDialog} disabled={submitting} variant="outline" className="text-xs h-9 col-span-2 border-primary/40 text-primary">
-              <Lock className="mr-1.5 h-3.5 w-3.5" /> Fechar caixa do dia
-            </Button>
-          ) : (
-            <>
-              <Button
-                onClick={() => setReopenOpen(true)}
-                disabled={submitting}
-                variant="outline"
-                className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-              >
-                <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
-              </Button>
-              <Button
-                onClick={openVersionsDialog}
-                variant="ghost"
-                className="text-[11px] h-8 col-span-2 text-muted-foreground hover:text-foreground"
-              >
-                <History className="mr-1.5 h-3.5 w-3.5" /> Ver versões
-              </Button>
-            </>
-          )}
+          <Button
+            onClick={() => setReopenOpen(true)}
+            disabled={submitting}
+            variant="outline"
+            className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+          >
+            <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
+          </Button>
+          <Button
+            onClick={openVersionsDialog}
+            variant="ghost"
+            className="text-[11px] h-8 col-span-2 text-muted-foreground hover:text-foreground"
+          >
+            <History className="mr-1.5 h-3.5 w-3.5" /> Ver versões
+          </Button>
         </div>
       )}
 
@@ -1437,6 +1429,23 @@ export default function CaixaPage() {
           <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
         </Button>
       </div>
+
+      {/* Final action: Close cash day */}
+      {!isNotStarted && !isClosed && (
+        <div className="pt-8 pb-2">
+          <Button
+            onClick={openCloseDialog}
+            disabled={submitting}
+            className="w-full h-[58px] rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold text-base shadow-md"
+          >
+            <Lock className="mr-2 h-5 w-5" /> Fechar caixa do dia
+          </Button>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+            Após fechar, as informações deste dia serão registradas e congeladas.
+          </p>
+        </div>
+      )}
+
 
       {/* Expense dialog */}
       <Dialog open={expenseOpen} onOpenChange={(o) => { if (!o) setExpenseOpen(false); }}>
