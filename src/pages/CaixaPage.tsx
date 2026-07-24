@@ -186,26 +186,34 @@ export default function CaixaPage() {
     lent: Number(dailyCashRow.total_lent || 0),
     manualIn: Number(dailyCashRow.total_manual_in || 0),
     manualOut: Number(dailyCashRow.total_manual_out || 0),
+    expenses: Number((dailyCashRow as any).total_expenses || 0),
     expected: Number(dailyCashRow.expected_closing_balance || 0),
     notPaidCount: Number(dailyCashRow.total_not_paid_count || 0),
     eventsCount: Number(dailyCashRow.total_events_count || scopedEvents.length),
-  } : {
-    opening: inheritedOpening,
-    totalIn: liveTotals.entradas,
-    totalOut: liveTotals.saidas,
-    received: liveTotals.pagamentos,
-    penalty: liveTotals.multas,
-    lent: liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes,
-    manualIn: liveTotals.entradasManuais,
-    manualOut: liveTotals.saidasManuais,
-    // Valor Esperado no Caixa = cash_balance.available_cash atual (fonte única da verdade).
-    // Já reflete abertura + todas as movimentações do dia.
-    expected: Number(balance?.available_cash ?? 0),
-    notPaidCount: liveTotals.naoPagos,
-    eventsCount: scopedEvents.length,
-  };
+  } : (() => {
+    const opening = inheritedOpening;
+    const received = liveTotals.pagamentos;
+    const penalty = liveTotals.multas;
+    const manualIn = liveTotals.entradasManuais;
+    const lent = liveTotals.emprestimosLiberados + liveTotals.renovacoes + liveTotals.renegociacoes;
+    const manualOut = liveTotals.saidasManuais;
+    const expenses = liveTotals.despesas;
+    // Caixa Esperado = calculado a partir das movimentações reais do dia.
+    // NÃO usar available_cash como substituto — este é apenas o saldo dinâmico do banco.
+    const expected = opening + received + penalty + manualIn - lent - manualOut - expenses;
+    return {
+      opening,
+      totalIn: liveTotals.entradas,
+      totalOut: liveTotals.saidas,
+      received, penalty, lent, manualIn, manualOut, expenses,
+      expected,
+      notPaidCount: liveTotals.naoPagos,
+      eventsCount: scopedEvents.length,
+    };
+  })();
   const expectedDisplay = Math.max(0, summary.expected);
   const expectedNegative = summary.expected < -0.005;
+  const availableNow = Number(balance?.available_cash ?? 0);
 
   const pagamentos = scopedEvents.filter(e => e.event_type === "pagamento" || e.event_type === "recebimento_multa");
   const naoPagos = scopedEvents.filter(e => e.event_type === "nao_pagou");
