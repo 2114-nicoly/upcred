@@ -77,6 +77,9 @@ export default {
         },
         "card-overdue-bg": "hsl(var(--card-overdue-bg))",
         "card-due-today-bg": "hsl(var(--card-due-today-bg))",
+        "card-overdue-soft": "hsl(var(--card-overdue-soft))",
+        "card-overdue-mid": "hsl(var(--card-overdue-mid))",
+        "card-overdue-high": "hsl(var(--card-overdue-high))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

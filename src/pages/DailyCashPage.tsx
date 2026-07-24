@@ -1219,7 +1219,15 @@ export default function DailyCashPage() {
     return (
       <div
         key={safeKey("pending", inst.id, inst.loan_id)}
-        className={`rounded-lg border overflow-hidden transition-all ${isOverdue ? "bg-card-overdue-bg border-destructive/30" : "bg-card-due-today-bg border-border"} ${isSelected ? "ring-2 ring-primary/40" : ""}`}
+        className={`rounded-lg border overflow-hidden transition-all ${
+          overdueDays >= 7
+            ? "bg-card-overdue-high border-destructive/30"
+            : overdueDays >= 3
+              ? "bg-card-overdue-mid border-primary/30"
+              : overdueDays >= 1
+                ? "bg-card-overdue-soft border-warning/30"
+                : "bg-card-due-today-bg border-border"
+        } ${isSelected ? "ring-2 ring-primary/40" : ""}`}
       >
         <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
           <Checkbox
