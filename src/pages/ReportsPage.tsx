@@ -88,6 +88,16 @@ export default function ReportsPage() {
   const [clients, setClients] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [adminName, setAdminName] = useState<string>("");
+  const { adminId } = useAuth();
+
+  useEffect(() => {
+    if (!adminId) return;
+    supabase.from("admins" as any).select("nome").eq("id", adminId).maybeSingle()
+      .then(({ data }) => setAdminName(((data as any)?.nome as string) || ""));
+  }, [adminId]);
+
 
   const { startDate, endDate, label } = useMemo(
     () => computeRange(mode, customStart, customEnd),
