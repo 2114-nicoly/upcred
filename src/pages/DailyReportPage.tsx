@@ -967,13 +967,12 @@ function RecordGroupSections({
 
 function DaySection({
   day,
-  clientNames,
 }: {
   day: {
-    date: string; events: DailyEvent[]; groups: DayGroups; status: string | null; reopened: boolean;
+    date: string; events: DailyEvent[]; groups: DayGroups; recordGroups: RecordGroups; pendentes: ReportRecord[];
+    status: string | null; reopened: boolean;
     opening: number; finalCash: number; diff: number | null; received: number; out: number; closingObs: string | null;
   };
-  clientNames: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
   const label = format(new Date(day.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
@@ -1020,15 +1019,7 @@ function DaySection({
             {day.closingObs && (
               <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">Obs. fechamento: {day.closingObs}</p>
             )}
-            <div className="space-y-2">
-              <EventSection title="Pagamentos" events={day.groups.pagamentos} clientNames={clientNames} />
-              <EventSection title="Não pagamentos" events={day.groups.naoPagamentos} clientNames={clientNames} />
-              <EventSection title="Novos empréstimos" events={day.groups.novosEmprestimos} clientNames={clientNames} />
-              <EventSection title="Renovações e renegociações" events={day.groups.renovacoes} clientNames={clientNames} />
-              <EventSection title="Entradas e saídas" events={day.groups.movimentacoes} clientNames={clientNames} />
-              <EventSection title="Despesas" events={day.groups.despesas} clientNames={clientNames} />
-              <EventSection title="Estornos" events={day.groups.estornos} clientNames={clientNames} />
-            </div>
+            <RecordGroupSections groups={day.recordGroups} pendentes={day.pendentes} />
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -1049,50 +1040,16 @@ function StatCard({ label, value, tone, sub }: { label: string; value: string; t
   );
 }
 
-function EventSection({ title, events, clientNames }: { title: string; events: DailyEvent[]; clientNames: Record<string, string> }) {
-  const [open, setOpen] = useState(false);
-  const total = events.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
-
+/** Contador simples de registros do período. */
+function CountCard({ label, value }: { label: string; value: number }) {
   return (
     <Card>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="w-full" disabled={events.length === 0}>
-          <div className="flex items-center justify-between gap-2 p-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""} ${events.length === 0 ? "opacity-30" : ""}`} />
-              <span className="text-sm font-medium truncate">{title}</span>
-              <Badge variant="outline" className="h-5 text-[10px] shrink-0">{events.length}</Badge>
-            </div>
-            {total > 0 && <span className="text-xs font-semibold tabular-nums shrink-0">{formatCurrency(total)}</span>}
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="divide-y border-t">
-            {events.map((e) => (
-              <div key={e.id} className="flex items-start justify-between gap-2 p-3 text-sm">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground tabular-nums">{format(new Date(e.created_at), "HH:mm")}</span>
-                    <span className="font-medium truncate">
-                      {e.client_id ? (clientNames[e.client_id] || "—") : getEventTypeLabel(e.event_type)}
-                    </span>
-                    {e.reversed_at && <Badge variant="outline" className="text-[10px] h-4 shrink-0">Estornado</Badge>}
-                  </div>
-                  <p className="text-xs text-muted-foreground break-words">
-                    {getEventTypeLabel(e.event_type)}
-                    {e.observation ? ` · ${e.observation}` : ""}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  {Number(e.amount_in || 0) > 0 && <p className="text-success text-xs font-semibold">+ {formatCurrency(Number(e.amount_in))}</p>}
-                  {Number(e.amount_out || 0) > 0 && <p className="text-destructive text-xs font-semibold">- {formatCurrency(Number(e.amount_out))}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      <CardContent className="p-3">
+        <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
+        <p className="font-bold text-sm mt-1 tabular-nums">{value}</p>
+      </CardContent>
     </Card>
   );
 }
+
 
