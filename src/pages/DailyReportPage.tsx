@@ -335,6 +335,13 @@ export default function DailyReportPage({
   // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
   const groups = useMemo(() => buildGroups(events), [events]);
 
+  // Registros detalhados (mesmos eventos, com todos os detalhes disponíveis)
+  const recordGroups = useMemo(
+    () => buildRecordGroups(events, details.recordFor),
+    [events, details],
+  );
+
+
   const estornosTotal = useMemo(
     () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
     [groups.estornos]
