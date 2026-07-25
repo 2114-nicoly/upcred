@@ -720,6 +720,20 @@ export default function DailyReportPage() {
     ? cashSummary.counted
     : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
 
+  const oldestDay = days.length ? days[days.length - 1] : null;
+  const newestDay = days.length ? days[0] : null;
+  const periodOpening = isMultiDay ? (oldestDay?.opening ?? 0) : (cashSummary?.opening ?? 0);
+  const periodFinal = isMultiDay ? (newestDay?.finalCash ?? 0) : finalCash;
+  const periodDiffValue = isMultiDay ? periodDiff : (cashSummary?.diff ?? 0);
+
+  const PRESETS: { key: Preset; label: string }[] = [
+    { key: "hoje", label: "Hoje" },
+    { key: "ontem", label: "Ontem" },
+    { key: "semana", label: "Esta semana" },
+    { key: "mes", label: "Este mês" },
+    { key: "custom", label: "Personalizado" },
+  ];
+
   return (
     <div className="mx-auto w-full max-w-3xl p-4 space-y-4 overflow-x-hidden">
       {/* Filtros */}
@@ -731,16 +745,46 @@ export default function DailyReportPage() {
               <div className="min-w-0">
                 <h2 className="text-lg font-semibold leading-tight">Relatório Diário</h2>
                 <p className="text-xs text-muted-foreground truncate">
-                  {(workerName || (selectedWorkerId ? "—" : "Selecione um trabalhador"))} · <span className="capitalize">{dateLabel}</span>
+                  {(workerName || (selectedWorkerId ? "—" : "Selecione um trabalhador"))} · {periodLabel}
                 </p>
               </div>
             </div>
-            {cashStatus && (
+            {!isMultiDay && cashStatus && (
               <Badge variant={cashStatus === "closed" ? "secondary" : "default"} className="shrink-0">
                 Caixa {cashStatus === "closed" ? "Fechado" : "Aberto"}
               </Badge>
             )}
           </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map((p) => (
+              <Button
+                key={p.key}
+                size="sm"
+                variant={preset === p.key ? "default" : "outline"}
+                className="h-8 text-xs"
+                onClick={() => applyPreset(p.key)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+
+          {preset === "custom" ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">Data inicial</Label>
+                <Input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Data final</Label>
+                <Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Período: {periodLabel}</p>
+          )}
+
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
