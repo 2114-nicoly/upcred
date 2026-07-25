@@ -27,6 +27,13 @@ import {
   AuditLink, formatEventLabel, REPORT_SECTIONS,
 } from "@/components/reports/ReportUI";
 import DailyReportPage from "@/pages/DailyReportPage";
+import {
+  fetchReportDetails, emptyReportDetails,
+  type ReportDetailsData, type ReportRecord,
+} from "@/lib/report-details";
+import { RecordSection } from "@/components/reports/RecordSection";
+
+
 
 
 
@@ -188,6 +195,31 @@ export default function ReportsPage() {
     [events, activeIds],
   );
 
+  // Detalhamento (somente leitura): clientes pendentes de registro e atrasados por trabalhador.
+  const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
+  useEffect(() => {
+    let alive = true;
+    const ids = Array.from(activeIds);
+    if (!ids.length) { setDetails(emptyReportDetails()); return; }
+    fetchReportDetails({
+      events: scopedEvents as any,
+      startDate,
+      endDate,
+      workerIds: ids,
+    })
+      .then((d) => { if (alive) setDetails(d); })
+      .catch(() => { if (alive) setDetails(emptyReportDetails()); });
+    return () => { alive = false; };
+  }, [scopedEvents, activeIds, startDate, endDate]);
+
+  const pendentesTotal = useMemo(
+    () => Object.values(details.pendentesByDate).reduce((s, l: ReportRecord[]) => s + l.length, 0),
+    [details],
+  );
+
+
+
+
 
   const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
@@ -330,6 +362,8 @@ export default function ReportsPage() {
       ["Multas", formatCurrency(summary.multas)],
       ["Estornos", formatCurrency(summary.estornos)],
       ["Diferença total de caixa", formatCurrency(summary.diferenca)],
+      ["Clientes pendentes de registro", String(pendentesTotal)],
+      ["Clientes atrasados", String(details.atrasados.length)],
     ], { rightCols: [1] });
 
     pdf.blockTitle("Comparação dos trabalhadores");
@@ -338,7 +372,7 @@ export default function ReportsPage() {
     }
     pdf.table(
       null,
-      ["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença"],
+      ["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença", "Pend.", "Atras."],
       workerRows.map((r) => [
         r.worker.nome, r.statusLabel,
         formatCurrency(r.totals.caixaInicial),
@@ -347,9 +381,22 @@ export default function ReportsPage() {
         formatCurrency(r.totals.emprestado),
         formatCurrency(r.totals.despesas),
         formatCurrency(r.totals.diferenca),
+        String(details.pendentesByWorker[r.worker.id] || 0),
+        String(details.atrasadosByWorker[r.worker.id] || 0),
       ]),
-      { rightCols: [2, 3, 4, 5, 6, 7] },
+      { rightCols: [2, 3, 4, 5, 6, 7, 8, 9] },
     );
+
+    // Detalhamento completo de clientes atrasados (situação atual da carteira)
+    if (details.atrasados.length) {
+      pdf.blockTitle("Clientes atrasados");
+      pdf.table(
+        null,
+        ["Cliente", "Trabalhador", "Resumo"],
+        details.atrasados.map((r) => [r.clientName, r.workerName, r.summary]),
+      );
+    }
+
 
     if (startDate !== endDate) {
       pdf.blockTitle("Detalhamento por dia");
@@ -367,6 +414,8 @@ export default function ReportsPage() {
           ["Diferença total de caixa", formatCurrency(d.totals.diferenca)],
           ["Caixas abertos", String(d.openCount)],
           ["Caixas fechados", String(d.closedCount)],
+          ["Clientes pendentes de registro", String((details.pendentesByDate[d.date] || []).length)],
+
         ], { rightCols: [1] });
 
         pdf.table(
@@ -577,7 +626,20 @@ export default function ReportsPage() {
                 value={formatCurrency(summary.diferenca)}
                 tone={summary.diferenca >= 0 ? "positive" : "negative"}
               />
+              <ReportKpiCard
+                icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+                label="Clientes pendentes de registro"
+                value={String(pendentesTotal)}
+                tone={pendentesTotal > 0 ? "warning" : "neutral"}
+              />
+              <ReportKpiCard
+                icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
+                label="Clientes atrasados"
+                value={String(details.atrasados.length)}
+                tone={details.atrasados.length > 0 ? "negative" : "neutral"}
+              />
             </ReportKpiGrid>
+
           </div>
 
           {/* Comparação entre empresas (SuperAdmin — todas as empresas) */}
@@ -666,7 +728,10 @@ export default function ReportsPage() {
                               {formatCurrency(r.totals.diferenca)}
                             </b>
                           </span>
+                          <span>Pendentes: <b className="text-warning">{details.pendentesByWorker[r.worker.id] || 0}</b></span>
+                          <span>Atrasados: <b className="text-destructive">{details.atrasadosByWorker[r.worker.id] || 0}</b></span>
                         </div>
+
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </button>
@@ -676,6 +741,13 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
           )}
+
+          {/* Situação atual da carteira da equipe */}
+          {!globalMode && (
+            <RecordSection title="Clientes atrasados" records={details.atrasados} showWorker />
+          )}
+
+
 
           {/* Detalhamento por dia */}
           {!globalMode && startDate !== endDate && (
@@ -726,7 +798,9 @@ export default function ReportsPage() {
                                 </span>
                                 <span>Caixas abertos: <b className="text-foreground">{d.openCount}</b></span>
                                 <span>Caixas fechados: <b className="text-foreground">{d.closedCount}</b></span>
+                                <span>Pendentes de registro: <b className="text-warning">{(details.pendentesByDate[d.date] || []).length}</b></span>
                               </div>
+
 
                               {d.perWorker.length === 0 ? (
                                 <p className="text-[11px] text-muted-foreground">Nenhum trabalhador com movimentação.</p>

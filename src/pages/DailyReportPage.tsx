@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
+import { fetchReportDetails, emptyReportDetails, type ReportDetailsData, type ReportRecord } from "@/lib/report-details";
+import { RecordSection } from "@/components/reports/RecordSection";
+
 
 
 type AuditRow = {
@@ -107,8 +110,10 @@ export default function DailyReportPage({
   } | null>(null);
   const [cashRows, setCashRows] = useState<any[]>([]);
   const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
+  const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
 
 
   // Load admins (super_admin only)
@@ -232,6 +237,23 @@ export default function DailyReportPage({
           cbRow = data;
         }
         setCurrentAvailableCash(cbRow ? Number(cbRow.available_cash || 0) : null);
+
+        // Detalhamento (somente leitura) — pagamentos, empréstimos, renovações,
+        // renegociações, atrasos e clientes pendentes de registro.
+        try {
+          const det = await fetchReportDetails({
+            events: eventList,
+            startDate,
+            endDate,
+            workerId: selectedWorkerId,
+            adminId: selectedWorkerId ? null : (isSuperAdmin ? selectedAdminId : myAdminId),
+          });
+          setDetails(det);
+        } catch (detErr) {
+          console.warn("[DailyReport] detalhamento indisponível", detErr);
+          setDetails(emptyReportDetails());
+        }
+
       } catch (err: any) {
         console.error(err);
         toast.error("Erro ao carregar relatório");
@@ -313,6 +335,21 @@ export default function DailyReportPage({
   // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
   const groups = useMemo(() => buildGroups(events), [events]);
 
+  // Registros detalhados (mesmos eventos, com todos os detalhes disponíveis)
+  const recordGroups = useMemo(
+    () => buildRecordGroups(events, details.recordFor),
+    [events, details],
+  );
+
+  /** Clientes pendentes de registro em todo o período (sem duplicar dias). */
+  const pendentesPeriodo = useMemo(
+    () => Object.values(details.pendentesByDate).flat(),
+    [details],
+  );
+
+
+
+
   const estornosTotal = useMemo(
     () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
     [groups.estornos]
@@ -340,6 +377,9 @@ export default function DailyReportPage({
           date: d,
           events: dayEvents,
           groups: buildGroups(dayEvents),
+          recordGroups: buildRecordGroups(dayEvents, details.recordFor),
+          pendentes: details.pendentesByDate[d] || [],
+
           status: closed ? "closed" : dc ? "open" : null,
           reopened,
           opening,
@@ -353,7 +393,7 @@ export default function DailyReportPage({
           closingObs: dc?.closing_note || null,
         };
       });
-  }, [events, cashRows]);
+  }, [events, cashRows, details]);
 
   const periodDiff = useMemo(
     () => days.reduce((s, d) => s + (d.diff ?? 0), 0),
@@ -466,43 +506,45 @@ export default function DailyReportPage({
       });
     };
 
-    const nameOf = (cid: string | null) => (cid ? clientNames[cid] || "—" : "—");
-
-    // Linhas de eventos, no mesmo formato das seções da tela.
-    const eventLines = (list: DailyEvent[]) =>
-      list.map((e) => [
-        format(new Date(e.created_at), "HH:mm"),
-        e.client_id ? nameOf(e.client_id) : getEventTypeLabel(e.event_type),
-        getEventTypeLabel(e.event_type) + (e.reversed_at ? " (estornado)" : ""),
-        Number(e.amount_in || 0) > 0 ? `+ ${formatCurrency(Number(e.amount_in))}` : "",
-        Number(e.amount_out || 0) > 0 ? `- ${formatCurrency(Number(e.amount_out))}` : "",
-        e.observation || "",
+    // Linhas de registros, no mesmo formato das seções da tela.
+    const RECORD_HEAD = ["Hora", "Cliente", "Tipo", "Entrada", "Saída", "Resumo"];
+    const recordLines = (list: ReportRecord[]) =>
+      list.map((r) => [
+        r.time,
+        r.clientName,
+        r.title + (r.reversed ? " (estornado)" : ""),
+        r.amountIn > 0 ? `+ ${formatCurrency(r.amountIn)}` : "",
+        r.amountOut > 0 ? `- ${formatCurrency(r.amountOut)}` : "",
+        r.summary,
       ]);
-    const EVENT_HEAD = ["Hora", "Cliente", "Tipo", "Entrada", "Saída", "Obs."];
 
-    const GROUP_ORDER: { key: keyof DayGroups; label: string }[] = [
-      { key: "pagamentos", label: "Pagamentos" },
-      { key: "naoPagamentos", label: "Não pagamentos" },
-      { key: "novosEmprestimos", label: "Novos empréstimos" },
-      { key: "renovacoes", label: "Renovações e renegociações" },
-      { key: "movimentacoes", label: "Entradas e saídas" },
-      { key: "despesas", label: "Despesas" },
-      { key: "estornos", label: "Estornos" },
-    ];
-
-    const writeGroups = (g: DayGroups) => {
-      GROUP_ORDER.forEach(({ key, label }) => {
-        const list = g[key];
-        if (!list.length) return;
-        const total = list.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
+    /** Uma seção: tabela-resumo + detalhamento completo de cada registro. */
+    const writeRecordSection = (label: string, list: ReportRecord[]) => {
+      if (!list.length) return;
+      const total = list.reduce((s, r) => s + r.amountIn + r.amountOut, 0);
+      addTable(
+        `${label} (${list.length})${total > 0 ? ` — ${formatCurrency(total)}` : ""}`,
+        RECORD_HEAD,
+        recordLines(list),
+        { rightCols: [3, 4] }
+      );
+      list.forEach((r) => {
+        if (!r.details.length) return;
         addTable(
-          `${label} (${list.length})${total > 0 ? ` — ${formatCurrency(total)}` : ""}`,
-          EVENT_HEAD,
-          eventLines(list),
-          { rightCols: [3, 4] }
+          `${r.time} · ${r.clientName} — ${r.title}`,
+          ["Detalhe", "Informação"],
+          r.details.map((d) => [d.label, d.value]),
         );
       });
     };
+
+    const writeRecordGroups = (g: RecordGroups, pendentes: ReportRecord[], atrasados?: ReportRecord[]) => {
+      RECORD_GROUP_ORDER.slice(0, 6).forEach(({ key, label }) => writeRecordSection(label, g[key]));
+      writeRecordSection("Clientes pendentes de registro", pendentes);
+      if (atrasados) writeRecordSection("Clientes atrasados", atrasados);
+      RECORD_GROUP_ORDER.slice(6).forEach(({ key, label }) => writeRecordSection(label, g[key]));
+    };
+
 
     // ===== 1. Resumo financeiro (mesmos cards da tela) =====
     writeBlockTitle("1. Resumo Financeiro");
@@ -535,14 +577,19 @@ export default function DailyReportPage({
       null,
       ["Indicador", "Quantidade"],
       [
-        ["Pagamentos registrados", String(groups.pagamentos.length)],
-        ["Não pagamentos", String(groups.naoPagamentos.length)],
-        ["Novos empréstimos", String(groups.novosEmprestimos.length)],
-        ["Renovações e renegociações", String(groups.renovacoes.length)],
-        ["Entradas e saídas", String(groups.movimentacoes.length)],
-        ["Despesas", String(groups.despesas.length)],
-        ["Estornos", String(groups.estornos.length)],
+        ["Pagamentos registrados", String(recordGroups.pagamentos.length)],
+        ["Pagamentos parciais", String(recordGroups.pagamentosParciais.length)],
+        ["Novos empréstimos", String(recordGroups.novosEmprestimos.length)],
+        ["Renovações", String(recordGroups.renovacoes.length)],
+        ["Renegociações", String(recordGroups.renegociacoes.length)],
+        ["Clientes não pagos", String(recordGroups.naoPagos.length)],
+        ["Clientes pendentes de registro", String(pendentesPeriodo.length)],
+        ["Clientes atrasados", String(details.atrasados.length)],
+        ["Despesas", String(recordGroups.despesas.length)],
+        ["Entradas e saídas", String(recordGroups.outras.length)],
+        ["Estornos", String(recordGroups.estornos.length)],
         ["Total de registros", String(events.length)],
+
       ],
       { rightCols: [1] }
     );
@@ -550,8 +597,9 @@ export default function DailyReportPage({
     // ===== 3. Detalhamento =====
     writeBlockTitle("3. Detalhamento");
 
-    if (events.length === 0) {
+    if (events.length === 0 && pendentesPeriodo.length === 0 && details.atrasados.length === 0) {
       writeText("Não houve movimentações no período selecionado.", 10);
+
     } else if (isMultiDay) {
       days.forEach((d) => {
         const dayLabel = format(new Date(d.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
@@ -572,14 +620,16 @@ export default function DailyReportPage({
         );
         (doc as any).lastAutoTable = { finalY: y + 6 };
         if (d.closingObs) writeText(`Obs. fechamento: ${d.closingObs}`, 8);
-        if (d.events.length === 0) writeText("Sem movimentações neste dia.", 8);
-        else writeGroups(d.groups);
+        if (d.events.length === 0 && d.pendentes.length === 0) writeText("Sem movimentações neste dia.", 8);
+        else writeRecordGroups(d.recordGroups, d.pendentes);
       });
+      writeRecordSection("Clientes atrasados (situação atual)", details.atrasados);
     } else {
       if (cashSummary?.closingObs) writeText(`Obs. fechamento: ${cashSummary.closingObs}`, 8);
       if (!isMultiDay && cashStatus !== "closed") writeText("Caixa ainda aberto — valores do dia podem mudar.", 8);
-      writeGroups(groups);
+      writeRecordGroups(recordGroups, details.pendentesByDate[endDate] || [], details.atrasados);
     }
+
 
     // ===== 4. Totais finais =====
     writeBlockTitle("4. Totais Finais");
@@ -798,6 +848,20 @@ export default function DailyReportPage({
         </Button>
       </div>
 
+      {/* Contagens do período */}
+      {!loading && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
+          <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
+          <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
+          <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
+          <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
+          <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
+          <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
+          <CountCard label="Clientes atrasados" value={details.atrasados.length} />
+        </div>
+      )}
+
       {/* Registros */}
       {loading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
@@ -808,20 +872,19 @@ export default function DailyReportPage({
             <p className="text-center text-sm text-muted-foreground py-8">Nenhuma movimentação no período.</p>
           )}
           {days.map((d) => (
-            <DaySection key={d.date} day={d} clientNames={clientNames} />
+            <DaySection key={d.date} day={d} />
           ))}
+          <p className="text-xs font-semibold text-muted-foreground uppercase pt-2">Situação atual da carteira</p>
+          <RecordSection title="Clientes atrasados" records={details.atrasados} />
         </div>
       ) : (
-        <div className="space-y-2">
-          <EventSection title="Pagamentos" events={groups.pagamentos} clientNames={clientNames} />
-          <EventSection title="Não pagamentos" events={groups.naoPagamentos} clientNames={clientNames} />
-          <EventSection title="Novos empréstimos" events={groups.novosEmprestimos} clientNames={clientNames} />
-          <EventSection title="Renovações e renegociações" events={groups.renovacoes} clientNames={clientNames} />
-          <EventSection title="Entradas e saídas" events={groups.movimentacoes} clientNames={clientNames} />
-          <EventSection title="Despesas" events={groups.despesas} clientNames={clientNames} />
-          <EventSection title="Estornos" events={groups.estornos} clientNames={clientNames} />
-        </div>
+        <RecordGroupSections
+          groups={recordGroups}
+          pendentes={details.pendentesByDate[endDate] || []}
+          atrasados={details.atrasados}
+        />
       )}
+
     </div>
   );
 }
@@ -842,15 +905,84 @@ function buildGroups(list: DailyEvent[]) {
   };
 }
 
+type RecordGroups = ReturnType<typeof buildRecordGroups>;
+
+/**
+ * Agrupa os registros detalhados por tipo de movimentação (apresentação apenas).
+ * Não altera valores, saldos nem regras financeiras.
+ */
+function buildRecordGroups(list: DailyEvent[], recordFor: (e: DailyEvent) => ReportRecord) {
+  const recs = list.map(recordFor);
+  const of = (kinds: string[], filter?: (r: ReportRecord) => boolean) =>
+    recs.filter((r) => kinds.includes(r.kind) && !r.reversed && (!filter || filter(r)));
+
+  const pagamentosAll = of(["pagamento", "recebimento_multa"]);
+  const parciais = pagamentosAll.filter((r) => r.title === "Pagamento parcial");
+  const pagamentos = pagamentosAll.filter((r) => r.title !== "Pagamento parcial");
+  const known = new Set([
+    "pagamento", "recebimento_multa", "nao_pagou", "emprestimo_novo", "emprestimo_importado",
+    "renovacao", "renovacao_absorvida", "renegociacao", "despesa",
+  ]);
+  return {
+    pagamentos,
+    pagamentosParciais: parciais,
+    novosEmprestimos: of(["emprestimo_novo", "emprestimo_importado"]),
+    renovacoes: of(["renovacao", "renovacao_absorvida"]),
+    renegociacoes: of(["renegociacao"]),
+    naoPagos: of(["nao_pagou"]),
+    despesas: of(["despesa"]),
+    outras: recs.filter((r) => !r.reversed && !known.has(r.kind)),
+    estornos: recs.filter((r) => r.reversed),
+  };
+}
+
+const RECORD_GROUP_ORDER: { key: keyof RecordGroups; label: string }[] = [
+  { key: "pagamentos", label: "Pagamentos" },
+  { key: "pagamentosParciais", label: "Pagamentos parciais" },
+  { key: "novosEmprestimos", label: "Novos empréstimos" },
+  { key: "renovacoes", label: "Renovações" },
+  { key: "renegociacoes", label: "Renegociações" },
+  { key: "naoPagos", label: "Clientes não pagos" },
+  { key: "despesas", label: "Despesas" },
+  { key: "outras", label: "Outras movimentações" },
+  { key: "estornos", label: "Estornos" },
+];
+
+/** Seções detalhadas de um dia/período (mesma ordem na tela e no PDF). */
+function RecordGroupSections({
+  groups,
+  pendentes,
+  atrasados,
+  showWorker,
+}: {
+  groups: RecordGroups;
+  pendentes: ReportRecord[];
+  atrasados?: ReportRecord[];
+  showWorker?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      {RECORD_GROUP_ORDER.slice(0, 6).map((g) => (
+        <RecordSection key={g.key} title={g.label} records={groups[g.key]} showWorker={showWorker} />
+      ))}
+      <RecordSection title="Clientes pendentes de registro" records={pendentes} showWorker={showWorker} />
+      {atrasados && <RecordSection title="Clientes atrasados" records={atrasados} showWorker={showWorker} />}
+      {RECORD_GROUP_ORDER.slice(6).map((g) => (
+        <RecordSection key={g.key} title={g.label} records={groups[g.key]} showWorker={showWorker} />
+      ))}
+    </div>
+  );
+}
+
+
 function DaySection({
   day,
-  clientNames,
 }: {
   day: {
-    date: string; events: DailyEvent[]; groups: DayGroups; status: string | null; reopened: boolean;
+    date: string; events: DailyEvent[]; groups: DayGroups; recordGroups: RecordGroups; pendentes: ReportRecord[];
+    status: string | null; reopened: boolean;
     opening: number; finalCash: number; diff: number | null; received: number; out: number; closingObs: string | null;
   };
-  clientNames: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
   const label = format(new Date(day.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
@@ -897,15 +1029,7 @@ function DaySection({
             {day.closingObs && (
               <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">Obs. fechamento: {day.closingObs}</p>
             )}
-            <div className="space-y-2">
-              <EventSection title="Pagamentos" events={day.groups.pagamentos} clientNames={clientNames} />
-              <EventSection title="Não pagamentos" events={day.groups.naoPagamentos} clientNames={clientNames} />
-              <EventSection title="Novos empréstimos" events={day.groups.novosEmprestimos} clientNames={clientNames} />
-              <EventSection title="Renovações e renegociações" events={day.groups.renovacoes} clientNames={clientNames} />
-              <EventSection title="Entradas e saídas" events={day.groups.movimentacoes} clientNames={clientNames} />
-              <EventSection title="Despesas" events={day.groups.despesas} clientNames={clientNames} />
-              <EventSection title="Estornos" events={day.groups.estornos} clientNames={clientNames} />
-            </div>
+            <RecordGroupSections groups={day.recordGroups} pendentes={day.pendentes} />
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -926,50 +1050,16 @@ function StatCard({ label, value, tone, sub }: { label: string; value: string; t
   );
 }
 
-function EventSection({ title, events, clientNames }: { title: string; events: DailyEvent[]; clientNames: Record<string, string> }) {
-  const [open, setOpen] = useState(false);
-  const total = events.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
-
+/** Contador simples de registros do período. */
+function CountCard({ label, value }: { label: string; value: number }) {
   return (
     <Card>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="w-full" disabled={events.length === 0}>
-          <div className="flex items-center justify-between gap-2 p-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""} ${events.length === 0 ? "opacity-30" : ""}`} />
-              <span className="text-sm font-medium truncate">{title}</span>
-              <Badge variant="outline" className="h-5 text-[10px] shrink-0">{events.length}</Badge>
-            </div>
-            {total > 0 && <span className="text-xs font-semibold tabular-nums shrink-0">{formatCurrency(total)}</span>}
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="divide-y border-t">
-            {events.map((e) => (
-              <div key={e.id} className="flex items-start justify-between gap-2 p-3 text-sm">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground tabular-nums">{format(new Date(e.created_at), "HH:mm")}</span>
-                    <span className="font-medium truncate">
-                      {e.client_id ? (clientNames[e.client_id] || "—") : getEventTypeLabel(e.event_type)}
-                    </span>
-                    {e.reversed_at && <Badge variant="outline" className="text-[10px] h-4 shrink-0">Estornado</Badge>}
-                  </div>
-                  <p className="text-xs text-muted-foreground break-words">
-                    {getEventTypeLabel(e.event_type)}
-                    {e.observation ? ` · ${e.observation}` : ""}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  {Number(e.amount_in || 0) > 0 && <p className="text-success text-xs font-semibold">+ {formatCurrency(Number(e.amount_in))}</p>}
-                  {Number(e.amount_out || 0) > 0 && <p className="text-destructive text-xs font-semibold">- {formatCurrency(Number(e.amount_out))}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      <CardContent className="p-3">
+        <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
+        <p className="font-bold text-sm mt-1 tabular-nums">{value}</p>
+      </CardContent>
     </Card>
   );
 }
+
 
