@@ -134,8 +134,9 @@ export default function DailyReportPage() {
     (async () => {
       setLoading(true);
       try {
-        // daily_events
-        let eq: any = supabase.from("daily_events" as any).select("*").eq("cash_date", date);
+        // daily_events (período selecionado)
+        let eq: any = supabase.from("daily_events" as any).select("*")
+          .gte("cash_date", startDate).lte("cash_date", endDate);
         if (selectedWorkerId) eq = eq.eq("worker_id", selectedWorkerId);
         else if (isSuperAdmin && selectedAdminId) eq = eq.eq("admin_id", selectedAdminId).is("worker_id", null);
         else if (isAdmin && !isSuperAdmin && myAdminId) eq = eq.eq("admin_id", myAdminId).is("worker_id", null);
@@ -143,9 +144,9 @@ export default function DailyReportPage() {
         const eventList = (evs as unknown as DailyEvent[]) || [];
         setEvents(eventList);
 
-        // audit_logs for the day
-        const dayStart = `${date}T00:00:00`;
-        const dayEnd = `${date}T23:59:59`;
+        // audit_logs do período
+        const dayStart = `${startDate}T00:00:00`;
+        const dayEnd = `${endDate}T23:59:59`;
         let aq: any = supabase.from("audit_logs").select("*")
           .gte("created_at", dayStart).lte("created_at", dayEnd)
           .in("entity_type", ["client", "loan", "installment", "penalty", "transfer", "payment", "cash"]);
@@ -170,15 +171,22 @@ export default function DailyReportPage() {
           setClientNames({});
         }
 
-        // daily_cash status (worker scope) + closing details
-        let dcRow: any = null;
+        // daily_cash do período (dados salvos no fechamento — não recalculados)
+        let dcList: any[] = [];
         if (selectedWorkerId) {
-          const { data: dc } = await supabase.from("daily_cash").select("*").eq("cash_date", date).eq("worker_id", selectedWorkerId).maybeSingle();
-          dcRow = dc;
+          const { data: dc } = await supabase.from("daily_cash").select("*")
+            .gte("cash_date", startDate).lte("cash_date", endDate)
+            .eq("worker_id", selectedWorkerId).order("cash_date", { ascending: false });
+          dcList = dc || [];
         } else if (isSuperAdmin && selectedAdminId) {
-          const { data: dc } = await supabase.from("daily_cash").select("*").eq("cash_date", date).eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
-          dcRow = dc;
+          const { data: dc } = await supabase.from("daily_cash").select("*")
+            .gte("cash_date", startDate).lte("cash_date", endDate)
+            .eq("admin_id", selectedAdminId).is("worker_id", null).order("cash_date", { ascending: false });
+          dcList = dc || [];
         }
+        setCashRows(dcList);
+
+        const dcRow: any = dcList.find((r) => r.cash_date === endDate) || null;
         if (dcRow) {
           setCashStatus(dcRow.status || null);
           const opening = Number(dcRow.opening_balance || 0);
@@ -208,7 +216,8 @@ export default function DailyReportPage() {
         setLoading(false);
       }
     })();
-  }, [date, selectedWorkerId, selectedAdminId, isAdmin, isSuperAdmin, myAdminId]);
+  }, [startDate, endDate, selectedWorkerId, selectedAdminId, isAdmin, isSuperAdmin, myAdminId]);
+
 
   // Build rows from events + audits
   type Row = {
