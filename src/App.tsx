@@ -66,6 +66,20 @@ function WorkerOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Página oficial de "Relatórios".
+ * Trabalhador: relatório diário completo (DailyReportPage).
+ * Admin/SuperAdmin: relatórios consolidados (ReportsPage) — inalterado.
+ */
+function ReportsRoute() {
+  const { isAdmin, isSuperAdmin, loading } = useAuth();
+  if (loading) {
+    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
+  }
+  if (isAdmin || isSuperAdmin) return <ReportsPage />;
+  return <DailyReportPage />;
+}
+
 
 
 
@@ -129,7 +143,7 @@ function AppRoutes() {
                 <Route path="/payment-history" element={<WrappedRoute element={<PaymentHistoryPage />} />} />
                 <Route path="/caixa" element={<WrappedRoute element={<CaixaPage />} />} />
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
-                <Route path="/reports" element={<AdminRoute><WrappedRoute element={<ReportsPage />} /></AdminRoute>} />
+                <Route path="/reports" element={<WrappedRoute element={<ReportsRoute />} />} />
 
                 <Route path="/admin-tools" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
                 <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
