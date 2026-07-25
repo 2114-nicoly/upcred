@@ -232,6 +232,30 @@ export default function ReportsPage() {
     });
   }, [workers, scopedCash, scopedEvents]);
 
+  // Comparativo por empresa (SuperAdmin — "Todas as empresas")
+  const companyRows = useMemo(() => {
+    if (!globalMode) return [];
+    return admins.map((a) => {
+      const aWorkers = workers.filter((w) => w.parent_admin_id === a.id);
+      const ids = new Set(aWorkers.map((w) => w.id));
+      const aCash = scopedCash.filter((c) => c.worker_id && ids.has(c.worker_id));
+      const aEvents = scopedEvents.filter((e) => e.worker_id && ids.has(e.worker_id));
+      const openCount = aCash.filter((c) => c.status !== "closed").length;
+      const statusLabel = aCash.length === 0
+        ? "Sem caixa no período"
+        : openCount > 0 ? `${openCount} caixa(s) aberto(s)` : "Todos fechados";
+      return {
+        admin: a,
+        workersCount: aWorkers.length,
+        statusLabel,
+        hasOpen: openCount > 0,
+        totals: sumTotals(aCash, aEvents),
+      };
+    });
+  }, [globalMode, admins, workers, scopedCash, scopedEvents]);
+
+
+
   // Detalhamento por dia (equipe) — sem misturar datas
   const dayRows = useMemo(() => {
     const dates = new Set<string>();
