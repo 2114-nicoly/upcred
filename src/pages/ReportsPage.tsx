@@ -360,6 +360,8 @@ export default function ReportsPage() {
       ["Multas", formatCurrency(summary.multas)],
       ["Estornos", formatCurrency(summary.estornos)],
       ["Diferença total de caixa", formatCurrency(summary.diferenca)],
+      ["Clientes pendentes de registro", String(pendentesTotal)],
+      ["Clientes atrasados", String(details.atrasados.length)],
     ], { rightCols: [1] });
 
     pdf.blockTitle("Comparação dos trabalhadores");
@@ -368,7 +370,7 @@ export default function ReportsPage() {
     }
     pdf.table(
       null,
-      ["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença"],
+      ["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença", "Pend.", "Atras."],
       workerRows.map((r) => [
         r.worker.nome, r.statusLabel,
         formatCurrency(r.totals.caixaInicial),
@@ -377,9 +379,22 @@ export default function ReportsPage() {
         formatCurrency(r.totals.emprestado),
         formatCurrency(r.totals.despesas),
         formatCurrency(r.totals.diferenca),
+        String(details.pendentesByWorker[r.worker.id] || 0),
+        String(details.atrasadosByWorker[r.worker.id] || 0),
       ]),
-      { rightCols: [2, 3, 4, 5, 6, 7] },
+      { rightCols: [2, 3, 4, 5, 6, 7, 8, 9] },
     );
+
+    // Detalhamento completo de clientes atrasados (situação atual da carteira)
+    if (details.atrasados.length) {
+      pdf.blockTitle("Clientes atrasados");
+      pdf.table(
+        null,
+        ["Cliente", "Trabalhador", "Resumo"],
+        details.atrasados.map((r) => [r.clientName, r.workerName, r.summary]),
+      );
+    }
+
 
     if (startDate !== endDate) {
       pdf.blockTitle("Detalhamento por dia");
