@@ -57,7 +57,13 @@ type DailyEventRow = {
   created_at: string;
 };
 
-type WorkerRow = { id: string; nome: string; active: boolean; archived_at: string | null };
+type WorkerRow = {
+  id: string; nome: string; active: boolean;
+  archived_at: string | null; parent_admin_id: string | null;
+};
+
+type AdminRow = { id: string; nome: string; active: boolean };
+
 
 const todayISO = () => format(new Date(), "yyyy-MM-dd");
 
