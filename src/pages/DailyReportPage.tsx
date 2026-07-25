@@ -691,64 +691,68 @@ export default function DailyReportPage({
             )}
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {PRESETS.map((p) => (
-              <Button
-                key={p.key}
-                size="sm"
-                variant={preset === p.key ? "default" : "outline"}
-                className="h-8 text-xs"
-                onClick={() => applyPreset(p.key)}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
+          {!embedded && (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {PRESETS.map((p) => (
+                  <Button
+                    key={p.key}
+                    size="sm"
+                    variant={preset === p.key ? "default" : "outline"}
+                    className="h-8 text-xs"
+                    onClick={() => applyPreset(p.key)}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
 
-          {preset === "custom" ? (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs">Data inicial</Label>
-                <Input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} />
+              {preset === "custom" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Data inicial</Label>
+                    <Input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Data final</Label>
+                    <Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Período: {periodLabel}</p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {isSuperAdmin && (
+                  <div>
+                    <Label className="text-xs">Administrador</Label>
+                    <select
+                      className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={selectedAdminId || ""}
+                      onChange={(e) => { setSelectedAdminId(e.target.value || null); setSelectedWorkerId(null); }}
+                    >
+                      <option value="">Todos / Geral</option>
+                      {admins.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                    </select>
+                  </div>
+                )}
+                {(isAdmin || isSuperAdmin) && (
+                  <div>
+                    <Label className="text-xs">Trabalhador</Label>
+                    <select
+                      className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={selectedWorkerId || ""}
+                      onChange={(e) => setSelectedWorkerId(e.target.value || null)}
+                    >
+                      <option value="">— Selecione —</option>
+                      {workers.map((w) => <option key={w.id} value={w.id}>{w.nome}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div>
-                <Label className="text-xs">Data final</Label>
-                <Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Período: {periodLabel}</p>
+            </>
           )}
 
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {isSuperAdmin && (
-              <div>
-                <Label className="text-xs">Administrador</Label>
-                <select
-                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  value={selectedAdminId || ""}
-                  onChange={(e) => { setSelectedAdminId(e.target.value || null); setSelectedWorkerId(null); }}
-                >
-                  <option value="">Todos / Geral</option>
-                  {admins.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
-                </select>
-              </div>
-            )}
-            {(isAdmin || isSuperAdmin) && (
-              <div>
-                <Label className="text-xs">Trabalhador</Label>
-                <select
-                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  value={selectedWorkerId || ""}
-                  onChange={(e) => setSelectedWorkerId(e.target.value || null)}
-                >
-                  <option value="">— Selecione —</option>
-                  {workers.map((w) => <option key={w.id} value={w.id}>{w.nome}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
         </CardContent>
       </Card>
 
