@@ -288,26 +288,61 @@ export default function DailyReportPage() {
   }, [events]);
 
   // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
-  const groups = useMemo(() => {
-    const active = (t: string | string[]) =>
-      events.filter((e) => (Array.isArray(t) ? t.includes(e.event_type) : e.event_type === t) && !e.reversed_at);
-    return {
-      pagamentos: active(["pagamento", "recebimento_multa"]),
-      naoPagamentos: active("nao_pagou"),
-      novosEmprestimos: active("emprestimo_novo"),
-      renovacoes: active(["renovacao", "renegociacao"]),
-      movimentacoes: active(["entrada_manual", "saida_manual", "saida"]),
-      despesas: active("despesa"),
-      estornos: events.filter((e) => !!e.reversed_at),
-    };
-  }, [events]);
+  const groups = useMemo(() => buildGroups(events), [events]);
 
   const estornosTotal = useMemo(
     () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
     [groups.estornos]
   );
 
+  const isMultiDay = startDate !== endDate;
+
+  // Dias do período (mais recente → mais antigo), cada um com seus próprios registros
+  const days = useMemo(() => {
+    const set = new Set<string>();
+    events.forEach((e) => set.add(String((e as any).cash_date)));
+    cashRows.forEach((r) => set.add(String(r.cash_date)));
+    return Array.from(set)
+      .sort((a, b) => b.localeCompare(a))
+      .map((d) => {
+        const dayEvents = events.filter((e) => String((e as any).cash_date) === d);
+        const dc = cashRows.find((r) => r.cash_date === d) || null;
+        const closed = dc?.status === "closed";
+        const reopened = !!(dc?.reopened_at || (dc?.reopen_count ?? 0) > 0);
+        const opening = dc ? Number(dc.opening_balance || 0) : 0;
+        const savedExpected = dc?.expected_closing_balance != null ? Number(dc.expected_closing_balance) : null;
+        const counted = dc?.counted_closing_balance != null ? Number(dc.counted_closing_balance) : null;
+        const t = computeDailyTotals(dayEvents as any, 0);
+        return {
+          date: d,
+          events: dayEvents,
+          groups: buildGroups(dayEvents),
+          status: closed ? "closed" : dc ? "open" : null,
+          reopened,
+          opening,
+          // Dias fechados: valores salvos no fechamento (sem recálculo). Dias abertos: previsão do dia.
+          finalCash: closed
+            ? (counted ?? savedExpected ?? 0)
+            : (savedExpected ?? (opening + t.pagamentos + t.multas + t.entradasManuais - (t.emprestimosLiberados + t.renovacoes + t.renegociacoes) - t.saidasManuais - t.despesas)),
+          diff: closed && counted != null ? counted - (savedExpected ?? 0) : null,
+          received: closed ? Number(dc.total_in ?? t.pagamentos) : t.pagamentos,
+          out: closed ? Number(dc.total_out ?? 0) : (t.emprestimosLiberados + t.renovacoes + t.renegociacoes),
+          closingObs: dc?.closing_note || null,
+        };
+      });
+  }, [events, cashRows]);
+
+  const periodDiff = useMemo(
+    () => days.reduce((s, d) => s + (d.diff ?? 0), 0),
+    [days]
+  );
+
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);
+  const periodLabel = useMemo(() => {
+    const f = (d: string) => format(new Date(d + "T12:00:00"), "dd/MM/yyyy");
+    return isMultiDay ? `${f(startDate)} — ${f(endDate)}` : dateLabel;
+  }, [isMultiDay, startDate, endDate, dateLabel]);
+
 
 
   const buildPdf = (): { doc: jsPDF; filename: string } => {
