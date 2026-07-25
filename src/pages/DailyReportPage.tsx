@@ -385,7 +385,7 @@ export default function DailyReportPage({
           closingObs: dc?.closing_note || null,
         };
       });
-  }, [events, cashRows]);
+  }, [events, cashRows, details]);
 
   const periodDiff = useMemo(
     () => days.reduce((s, d) => s + (d.diff ?? 0), 0),
