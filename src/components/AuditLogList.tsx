@@ -517,7 +517,8 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                   {" · "}
                   {openLog.user_role === "super_admin" ? "Super Admin"
                     : openLog.user_role === "admin" ? `Admin${adminName(openLog.admin_id) ? ` · ${adminName(openLog.admin_id)}` : ""}`
-                    : workerName(openLog.worker_id)}
+                    : (workerNameFromPayload(openLog) || workerName(openLog.worker_id))}
+                  {` · ${roleLabel(openLog.user_role)}`}
                 </DialogDescription>
               </DialogHeader>
 
@@ -525,7 +526,9 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                 {clientName(openLog) && (
                   <div><span className="font-semibold">Cliente:</span> {clientName(openLog)}</div>
                 )}
-                <div><span className="font-semibold">Entidade:</span> {openLog.entity_type}{openLog.entity_id ? ` · ${openLog.entity_id.slice(0, 8)}…` : ""}</div>
+                <div><span className="font-semibold">Perfil do usuário:</span> {roleLabel(openLog.user_role)}</div>
+                <div><span className="font-semibold">Entidade afetada:</span> {entityLabel(openLog.entity_type)}{openLog.entity_id ? ` · ${openLog.entity_id.slice(0, 8)}…` : ""}</div>
+
                 {openLog.observation && (
                   <div className="rounded bg-muted/50 p-2 italic">{openLog.observation}</div>
                 )}
