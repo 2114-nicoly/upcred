@@ -789,7 +789,9 @@ export default function ReportsPage() {
                                 </span>
                                 <span>Caixas abertos: <b className="text-foreground">{d.openCount}</b></span>
                                 <span>Caixas fechados: <b className="text-foreground">{d.closedCount}</b></span>
+                                <span>Pendentes de registro: <b className="text-warning">{(details.pendentesByDate[d.date] || []).length}</b></span>
                               </div>
+
 
                               {d.perWorker.length === 0 ? (
                                 <p className="text-[11px] text-muted-foreground">Nenhum trabalhador com movimentação.</p>
