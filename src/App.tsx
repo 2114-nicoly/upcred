@@ -153,7 +153,7 @@ function AppRoutes() {
                 <Route path="/new-loan" element={<WrappedRoute element={<NewLoanSelectClientPage />} />} />
                 <Route path="/active-loans" element={<WrappedRoute element={<ActiveLoansPage />} />} />
                 <Route path="/overdue" element={<WrappedRoute element={<OverdueLoansPage />} />} />
-                <Route path="/today-summary" element={<AdminRoute><WrappedRoute element={<TodaySummaryPage />} /></AdminRoute>} />
+                <Route path="/today-summary" element={<Navigate to="/reports" replace />} />
                 <Route path="/payment-history" element={<WrappedRoute element={<PaymentHistoryPage />} />} />
                 <Route path="/caixa" element={<WrappedRoute element={<CaixaPage />} />} />
                 <Route path="/cash-history" element={<WrappedRoute element={<CashHistoryPage />} />} />
@@ -162,7 +162,7 @@ function AppRoutes() {
                 <Route path="/admin-tools" element={<AdminRoute><WrappedRoute element={<AdminPage />} /></AdminRoute>} />
                 <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
                 <Route path="/account" element={<WrappedRoute element={<AccountPage />} />} />
-                <Route path="/daily-report" element={<WrappedRoute element={<DailyReportPage />} />} />
+                <Route path="/daily-report" element={<WrappedRoute element={<LegacyDailyReportRoute />} />} />
                 
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
