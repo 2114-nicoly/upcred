@@ -506,43 +506,45 @@ export default function DailyReportPage({
       });
     };
 
-    const nameOf = (cid: string | null) => (cid ? clientNames[cid] || "—" : "—");
-
-    // Linhas de eventos, no mesmo formato das seções da tela.
-    const eventLines = (list: DailyEvent[]) =>
-      list.map((e) => [
-        format(new Date(e.created_at), "HH:mm"),
-        e.client_id ? nameOf(e.client_id) : getEventTypeLabel(e.event_type),
-        getEventTypeLabel(e.event_type) + (e.reversed_at ? " (estornado)" : ""),
-        Number(e.amount_in || 0) > 0 ? `+ ${formatCurrency(Number(e.amount_in))}` : "",
-        Number(e.amount_out || 0) > 0 ? `- ${formatCurrency(Number(e.amount_out))}` : "",
-        e.observation || "",
+    // Linhas de registros, no mesmo formato das seções da tela.
+    const RECORD_HEAD = ["Hora", "Cliente", "Tipo", "Entrada", "Saída", "Resumo"];
+    const recordLines = (list: ReportRecord[]) =>
+      list.map((r) => [
+        r.time,
+        r.clientName,
+        r.title + (r.reversed ? " (estornado)" : ""),
+        r.amountIn > 0 ? `+ ${formatCurrency(r.amountIn)}` : "",
+        r.amountOut > 0 ? `- ${formatCurrency(r.amountOut)}` : "",
+        r.summary,
       ]);
-    const EVENT_HEAD = ["Hora", "Cliente", "Tipo", "Entrada", "Saída", "Obs."];
 
-    const GROUP_ORDER: { key: keyof DayGroups; label: string }[] = [
-      { key: "pagamentos", label: "Pagamentos" },
-      { key: "naoPagamentos", label: "Não pagamentos" },
-      { key: "novosEmprestimos", label: "Novos empréstimos" },
-      { key: "renovacoes", label: "Renovações e renegociações" },
-      { key: "movimentacoes", label: "Entradas e saídas" },
-      { key: "despesas", label: "Despesas" },
-      { key: "estornos", label: "Estornos" },
-    ];
-
-    const writeGroups = (g: DayGroups) => {
-      GROUP_ORDER.forEach(({ key, label }) => {
-        const list = g[key];
-        if (!list.length) return;
-        const total = list.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
+    /** Uma seção: tabela-resumo + detalhamento completo de cada registro. */
+    const writeRecordSection = (label: string, list: ReportRecord[]) => {
+      if (!list.length) return;
+      const total = list.reduce((s, r) => s + r.amountIn + r.amountOut, 0);
+      addTable(
+        `${label} (${list.length})${total > 0 ? ` — ${formatCurrency(total)}` : ""}`,
+        RECORD_HEAD,
+        recordLines(list),
+        { rightCols: [3, 4] }
+      );
+      list.forEach((r) => {
+        if (!r.details.length) return;
         addTable(
-          `${label} (${list.length})${total > 0 ? ` — ${formatCurrency(total)}` : ""}`,
-          EVENT_HEAD,
-          eventLines(list),
-          { rightCols: [3, 4] }
+          `${r.time} · ${r.clientName} — ${r.title}`,
+          ["Detalhe", "Informação"],
+          r.details.map((d) => [d.label, d.value]),
         );
       });
     };
+
+    const writeRecordGroups = (g: RecordGroups, pendentes: ReportRecord[], atrasados?: ReportRecord[]) => {
+      RECORD_GROUP_ORDER.slice(0, 6).forEach(({ key, label }) => writeRecordSection(label, g[key]));
+      writeRecordSection("Clientes pendentes de registro", pendentes);
+      if (atrasados) writeRecordSection("Clientes atrasados", atrasados);
+      RECORD_GROUP_ORDER.slice(6).forEach(({ key, label }) => writeRecordSection(label, g[key]));
+    };
+
 
     // ===== 1. Resumo financeiro (mesmos cards da tela) =====
     writeBlockTitle("1. Resumo Financeiro");
