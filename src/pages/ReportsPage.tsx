@@ -413,16 +413,24 @@ export default function ReportsPage() {
             </Select>
           </div>
 
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" variant="outline" onClick={load} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
             {selectedWorker === "all" && (
-              <Button size="sm" onClick={exportPDF} disabled={loading}>
-                <FileDown className="h-4 w-4 mr-1" /> Baixar PDF
-              </Button>
+              <>
+                <Button size="sm" onClick={handleDownloadPDF} disabled={loading || generatingPdf}>
+                  {generatingPdf
+                    ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando…</>
+                    : <><FileDown className="h-4 w-4 mr-1" /> Baixar PDF</>}
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleSharePDF} disabled={loading || generatingPdf}>
+                  <Share2 className="h-4 w-4 mr-1" /> Compartilhar
+                </Button>
+              </>
             )}
           </div>
+
         </CardContent>
       </Card>
 
