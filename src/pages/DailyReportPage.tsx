@@ -345,39 +345,40 @@ export default function DailyReportPage() {
 
 
 
+  // Único gerador de PDF — usa exatamente os mesmos valores exibidos na tela.
   const buildPdf = (): { doc: jsPDF; filename: string } => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const issuedAt = format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
-    const cashLabel =
-      cashStatus === "closed" ? "Fechado" :
-      cashStatus === "open" ? "Aberto" :
-      cashStatus ? cashStatus : "—";
+    const cashLabel = isMultiDay
+      ? `${days.length} dia(s) no período`
+      : cashStatus === "closed"
+        ? "Fechado"
+        : cashStatus === "open"
+          ? "Aberto"
+          : "Sem caixa";
 
-    // Layout constants — never use fixed absolute Y positions after this point;
-    // always route through cursorY() / ensureSpace() / addSection().
     const HEADER_BOTTOM = 42;
-    const PAGE_BOTTOM = pageHeight - 22;
+    const PAGE_BOTTOM = pageHeight - 16;
 
     const drawHeader = () => {
       doc.setFontSize(15);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(0, 0, 0);
-      doc.text("UpCred — Relatório Diário", 14, 16);
+      doc.text("UpCredit — Relatório do Trabalhador", 14, 16);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.text(`Emitido em ${issuedAt}`, pageWidth - 14, 16, { align: "right" });
       doc.setFontSize(10);
       doc.text(`Trabalhador: ${workerName || "—"}`, 14, 24);
-      doc.text(`Data: ${dateLabel}`, 14, 30);
+      doc.text(`Período: ${periodLabel}`, 14, 30);
       doc.text(`Caixa: ${cashLabel}`, 14, 36);
       doc.setDrawColor(200);
       doc.line(14, 38, pageWidth - 14, 38);
     };
 
     drawHeader();
-    // Seed lastAutoTable so the first cursorY() call sits below the header.
     (doc as any).lastAutoTable = { finalY: HEADER_BOTTOM };
 
     const cursorY = () => (doc as any).lastAutoTable?.finalY ?? HEADER_BOTTOM;
@@ -391,8 +392,8 @@ export default function DailyReportPage() {
     };
 
     const writeBlockTitle = (title: string) => {
-      ensureSpace(14);
-      const y = cursorY() + 8;
+      ensureSpace(16);
+      const y = cursorY() + 9;
       doc.setFillColor(59, 130, 246);
       doc.rect(14, y - 5, pageWidth - 28, 8, "F");
       doc.setTextColor(255, 255, 255);
@@ -404,265 +405,174 @@ export default function DailyReportPage() {
       (doc as any).lastAutoTable = { finalY: y + 3 };
     };
 
-    const addSection = (title: string, body: (string | number)[][], head: string[]) => {
+    const writeText = (text: string, size = 9) => {
+      ensureSpace(10);
+      const y = cursorY() + 6;
+      doc.setFontSize(size);
+      doc.text(text, 14, y);
+      (doc as any).lastAutoTable = { finalY: y };
+    };
+
+    const addTable = (
+      title: string | null,
+      head: string[],
+      body: (string | number)[][],
+      opts: { rightCols?: number[] } = {}
+    ) => {
       if (body.length === 0) return;
-      ensureSpace(20);
-      const startY = cursorY() + 6;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text(title, 14, startY);
-      doc.setFont("helvetica", "normal");
+      ensureSpace(22);
+      let startY = cursorY() + 6;
+      if (title) {
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text(title, 14, startY);
+        doc.setFont("helvetica", "normal");
+        startY += 2;
+      }
+      const columnStyles: any = {};
+      (opts.rightCols || []).forEach((c) => { columnStyles[c] = { halign: "right" }; });
       autoTable(doc, {
-        startY: startY + 2,
+        startY,
         head: [head],
         body,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [59, 130, 246] },
-        margin: { top: HEADER_BOTTOM, left: 14, right: 14, bottom: 22 },
-        // Repeat main report header on every new page the table spans.
+        columnStyles,
+        margin: { top: HEADER_BOTTOM, left: 14, right: 14, bottom: 16 },
         didDrawPage: () => drawHeader(),
       });
     };
 
-    // Counts: visitados / não visitados
-    const paidEvents = events.filter((e) => e.event_type === "pagamento" && !e.reversed_at);
-    const notPaidEvents = events.filter((e) => e.event_type === "nao_pagou" && !e.reversed_at);
-    const visitedClients = new Set<string>();
-    paidEvents.forEach((e) => e.client_id && visitedClients.add(e.client_id));
-    notPaidEvents.forEach((e) => e.client_id && visitedClients.add(e.client_id));
-    const notVisitedCount = notPaidEvents.length;
+    const nameOf = (cid: string | null) => (cid ? clientNames[cid] || "—" : "—");
 
-    // ============ BLOCO 1: RESUMO DO DIA ============
-    writeBlockTitle("1. Resumo do Dia");
-
-    const opening = cashSummary?.opening ?? 0;
-    // Caixa final do dia = snapshot registrado no fechamento (imutável). Se ainda não fechou, mostramos o esperado calculado.
-    const closedFinal = cashSummary?.counted != null
-      ? cashSummary.counted
-      : (cashSummary?.expected ?? (opening + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
-    const cashRows: [string, string][] = [
-      ["Caixa inicial do dia", formatCurrency(opening)],
-      ["Recebido Hoje", formatCurrency(totals.payments)],
-      ["Multas Recebidas", formatCurrency(totals.penalties)],
-      ["Emprestado Hoje", formatCurrency(totals.loans + totals.renewals)],
-      ["Entradas Manuais", formatCurrency(totals.manualIn)],
-      ["Saídas Manuais", formatCurrency(totals.manualOut)],
-      ["Despesas Operacionais", formatCurrency(totals.expenses)],
-      ["Caixa final do dia" + (cashSummary?.counted != null ? " (fechamento)" : " (previsto)"), formatCurrency(closedFinal)],
-      ...(cashSummary?.diff != null ? [["Diferença de fechamento", formatCurrency(cashSummary.diff)] as [string,string]] : []),
-      ...(currentAvailableCash != null ? [["Caixa disponível atual (valor atual)", formatCurrency(currentAvailableCash)] as [string,string]] : []),
-      ...(cashSummary?.closingObs ? [["Observação do fechamento", cashSummary.closingObs] as [string,string]] : []),
-      ["Clientes visitados", String(visitedClients.size)],
-      ["Clientes não visitados (não pagou)", String(notVisitedCount)],
-    ];
-    ensureSpace(20);
-    autoTable(doc, {
-      startY: cursorY() + 4,
-      head: [["Indicador", "Valor"]],
-      body: cashRows,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [59, 130, 246] },
-      columnStyles: { 1: { halign: "right" } },
-      margin: { top: HEADER_BOTTOM, left: 14, right: 14, bottom: 22 },
-      didDrawPage: () => drawHeader(),
-    });
-
-    // Categorize (financial events)
-    const paid = paidEvents;
-    const notPaid = notPaidEvents;
-    const partials = paid.filter((e) => (e.observation || "").toLowerCase().includes("parcial"));
-    const newLoans = events.filter((e) => e.event_type === "emprestimo_novo" && !e.reversed_at);
-    const renewals = events.filter((e) => (e.event_type === "renovacao" || e.event_type === "renegociacao") && !e.reversed_at);
-    const cancels = events.filter((e) => e.event_type === "cancelamento");
-    const penaltiesAdded = events.filter((e) => e.event_type === "multa_adicionada" && !e.reversed_at);
-    const penaltiesPaid = events.filter((e) => e.event_type === "recebimento_multa" && !e.reversed_at);
-    const expenses = events.filter((e) => e.event_type === "despesa" && !e.reversed_at);
-    const importedOngoing = auditRows.filter((a) =>
-      a.action_type === "criar_emprestimo_importado" ||
-      (a.action_type === "criar_emprestimo" &&
-        (a as any).new_value && typeof (a as any).new_value === "object" && (a as any).new_value.imported_ongoing === true)
-    );
-    const quitacoes = auditRows.filter((a) => a.action_type === "quitar_emprestimo");
-
-    // Audit-only rows (belong to "Auditoria")
-    const penaltiesCancelled = auditRows.filter((a) => a.action_type === "multa_cancelada");
-    const partialPayments = auditRows.filter((a) => a.action_type === "pagamento_parcial");
-    const auditResumo = auditRows.filter((a) =>
-      a.action_type === "editar_cliente" ||
-      a.action_type === "editar_parcela" ||
-      a.action_type === "alterar_data_parcela" ||
-      a.action_type === "desfazer_pagamento" ||
-      a.action_type === "estorno_pagamento" ||
-      a.action_type === "estorno_manual" ||
-      a.action_type === "transferencia_cliente" ||
-      a.action_type === "fechar_caixa" ||
-      a.action_type === "reabrir_caixa"
-    );
-
-    const nameOf = (cid: string | null) => cid ? (clientNames[cid] || "—") : "—";
-
-    // ============ BLOCO 2: MOVIMENTAÇÕES FINANCEIRAS ============
-    writeBlockTitle("2. Movimentações Financeiras");
-
-    addSection("Clientes que pagaram", paid.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      formatCurrency(Number(e.amount_in || 0)),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Valor", "Obs."]);
-
-    addSection("Pagamentos parciais", partials.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      formatCurrency(Number(e.amount_in || 0)),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Valor", "Obs."]);
-
-    addSection("Clientes que não pagaram", notPaid.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Obs."]);
-
-    addSection("Multas aplicadas", penaltiesAdded.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      formatCurrency(Number(e.amount_in || e.amount_out || (e.metadata as any)?.amount || 0)),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Valor", "Obs."]);
-
-    addSection("Multas pagas", penaltiesPaid.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      formatCurrency(Number(e.amount_in || 0)),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Valor", "Obs."]);
-
-    addSection("Empréstimos novos", newLoans.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      formatCurrency(Number(e.amount_out || 0)),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Liberado", "Obs."]);
-
-    addSection("Empréstimos em andamento cadastrados", importedOngoing.map((a) => {
-      const nv: any = (a as any).new_value || {};
-      return [
-        format(new Date(a.created_at), "HH:mm"),
-        nv.client_name || nameOf(nv.client_id || null),
-        formatCurrency(Number(nv.total_amount || 0)),
-        formatCurrency(Number(nv.amount_already_paid || 0)),
-        formatCurrency(Number(nv.initial_remaining_balance || nv.principal_receivable || 0)),
-      ];
-    }), ["Hora", "Cliente / Empréstimo", "Total", "Já pago", "Saldo restante"]);
-
-    addSection("Renovações", renewals.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      formatCurrency(Number(e.amount_out || 0)),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Liberado", "Obs."]);
-
-    addSection("Cancelamentos", cancels.map((e) => [
-      format(new Date(e.created_at), "HH:mm"),
-      nameOf(e.client_id),
-      e.observation || "",
-    ]), ["Hora", "Cliente", "Motivo / Obs."]);
-
-    addSection("Despesas Operacionais", expenses.map((e) => {
-      const m: any = (e as any).metadata || {};
-      return [
+    // Linhas de eventos, no mesmo formato das seções da tela.
+    const eventLines = (list: DailyEvent[]) =>
+      list.map((e) => [
         format(new Date(e.created_at), "HH:mm"),
-        m.category || "Sem categoria",
-        m.description || e.observation || "",
-        formatCurrency(Number(e.amount_out || 0)),
-      ];
-    }), ["Hora", "Categoria", "Descrição", "Valor"]);
+        e.client_id ? nameOf(e.client_id) : getEventTypeLabel(e.event_type),
+        getEventTypeLabel(e.event_type) + (e.reversed_at ? " (estornado)" : ""),
+        Number(e.amount_in || 0) > 0 ? `+ ${formatCurrency(Number(e.amount_in))}` : "",
+        Number(e.amount_out || 0) > 0 ? `- ${formatCurrency(Number(e.amount_out))}` : "",
+        e.observation || "",
+      ]);
+    const EVENT_HEAD = ["Hora", "Cliente", "Tipo", "Entrada", "Saída", "Obs."];
 
-    addSection("Despesas por Categoria", Object.entries(totals.expensesByCategory).map(([cat, val]) => [
-      cat, formatCurrency(Number(val)),
-    ]), ["Categoria", "Total"]);
+    const GROUP_ORDER: { key: keyof DayGroups; label: string }[] = [
+      { key: "pagamentos", label: "Pagamentos" },
+      { key: "naoPagamentos", label: "Não pagamentos" },
+      { key: "novosEmprestimos", label: "Novos empréstimos" },
+      { key: "renovacoes", label: "Renovações e renegociações" },
+      { key: "movimentacoes", label: "Entradas e saídas" },
+      { key: "despesas", label: "Despesas" },
+      { key: "estornos", label: "Estornos" },
+    ];
 
-    addSection("Quitações", quitacoes.map((a) => {
-      const nv: any = (a as any).new_value || {};
-      return [
-        format(new Date(a.created_at), "HH:mm"),
-        nv.client_name || nameOf(nv.client_id || null),
-        formatCurrency(Number(nv.amount_paid || nv.remaining_balance || 0)),
-        a.observation || "",
-      ];
-    }), ["Hora", "Cliente", "Valor", "Obs."]);
+    const writeGroups = (g: DayGroups) => {
+      GROUP_ORDER.forEach(({ key, label }) => {
+        const list = g[key];
+        if (!list.length) return;
+        const total = list.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
+        addTable(
+          `${label} (${list.length})${total > 0 ? ` — ${formatCurrency(total)}` : ""}`,
+          EVENT_HEAD,
+          eventLines(list),
+          { rightCols: [3, 4] }
+        );
+      });
+    };
 
-    // ============ BLOCO 3: AUDITORIA ============
-    writeBlockTitle("3. Auditoria");
+    // ===== 1. Resumo financeiro (mesmos cards da tela) =====
+    writeBlockTitle("1. Resumo Financeiro");
+    addTable(
+      null,
+      ["Indicador", "Valor"],
+      [
+        [isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial", formatCurrency(periodOpening)],
+        [
+          isMultiDay
+            ? "Caixa final (último dia)"
+            : cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)",
+          formatCurrency(periodFinal),
+        ],
+        ["Total recebido", formatCurrency(totals.payments)],
+        ["Total emprestado", formatCurrency(totals.loans + totals.renewals)],
+        ["Entradas", formatCurrency(totals.manualIn)],
+        ["Saídas", formatCurrency(totals.manualOut)],
+        ["Despesas", formatCurrency(totals.expenses)],
+        ["Multas", formatCurrency(totals.penalties)],
+        ["Estornos", `${formatCurrency(estornosTotal)} (${groups.estornos.length})`],
+        ["Diferença de caixa", formatCurrency(periodDiffValue)],
+      ],
+      { rightCols: [1] }
+    );
 
-    addSection("Pagamentos parciais (registrados)", partialPayments.map((a) => {
-      const nv: any = (a as any).new_value || {};
-      return [
-        format(new Date(a.created_at), "HH:mm"),
-        nv.client_name || nameOf(nv.client_id || null),
-        `#${nv.installment_number ?? "—"}`,
-        formatCurrency(Number(nv.amount_paid || 0)),
-        formatCurrency(Number(nv.installment_amount || 0)),
-        formatCurrency(Number(nv.installment_remaining || 0)),
-      ];
-    }), ["Hora", "Cliente", "Parcela", "Pago", "Valor parcela", "Restante"]);
+    // ===== 2. Indicadores operacionais =====
+    writeBlockTitle("2. Indicadores Operacionais");
+    addTable(
+      null,
+      ["Indicador", "Quantidade"],
+      [
+        ["Pagamentos registrados", String(groups.pagamentos.length)],
+        ["Não pagamentos", String(groups.naoPagamentos.length)],
+        ["Novos empréstimos", String(groups.novosEmprestimos.length)],
+        ["Renovações e renegociações", String(groups.renovacoes.length)],
+        ["Entradas e saídas", String(groups.movimentacoes.length)],
+        ["Despesas", String(groups.despesas.length)],
+        ["Estornos", String(groups.estornos.length)],
+        ["Total de registros", String(events.length)],
+      ],
+      { rightCols: [1] }
+    );
 
-    addSection("Multas canceladas", penaltiesCancelled.map((a) => [
-      format(new Date(a.created_at), "HH:mm"),
-      nameOf((a as any).new_value?.client_id || null),
-      a.observation || "",
-    ]), ["Hora", "Cliente", "Motivo / Obs."]);
+    // ===== 3. Detalhamento =====
+    writeBlockTitle("3. Detalhamento");
 
-    addSection("Ações administrativas / correções", auditResumo.map((a) => {
-      const nv: any = (a as any).new_value || {};
-      const label =
-        a.action_type === "editar_cliente" ? "Cliente editado" :
-        a.action_type === "editar_parcela" ? "Parcela editada" :
-        a.action_type === "alterar_data_parcela" ? "Data de parcela alterada" :
-        a.action_type === "desfazer_pagamento" ? "Pagamento desfeito" :
-        a.action_type === "estorno_pagamento" ? "Pagamento estornado" :
-        a.action_type === "estorno_manual" ? "Movimentação estornada" :
-        a.action_type === "transferencia_cliente" ? "Cliente transferido" :
-        a.action_type === "fechar_caixa" ? "Caixa fechado" :
-        a.action_type === "reabrir_caixa" ? "Caixa reaberto" :
-        a.action_type;
-      return [
-        format(new Date(a.created_at), "HH:mm"),
-        label,
-        nv.client_name || nameOf((a.entity_type === "client" ? a.entity_id : nv.client_id) || null),
-        a.observation || "",
-      ];
-    }), ["Hora", "Ação", "Cliente", "Obs."]);
-
-    // Observações livres (page-break safe)
-    const obsList = events.filter((e) => (e.observation || "").trim().length > 0)
-      .map((e) => `• ${format(new Date(e.created_at), "HH:mm")} ${nameOf(e.client_id)} — ${e.observation}`);
-    if (obsList.length > 0) {
-      ensureSpace(14);
-      const startY = cursorY() + 6;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Observações", 14, startY);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      const wrapped: string[] = doc.splitTextToSize(obsList.join("\n"), pageWidth - 28);
-      let y = startY + 5;
-      const lineHeight = 4;
-      for (const line of wrapped) {
-        if (y + lineHeight > PAGE_BOTTOM) {
-          doc.addPage();
-          drawHeader();
-          y = HEADER_BOTTOM + 6;
-          doc.setFontSize(8);
-        }
-        doc.text(line, 14, y);
-        y += lineHeight;
-      }
-      (doc as any).lastAutoTable = { finalY: y };
+    if (events.length === 0) {
+      writeText("Não houve movimentações no período selecionado.", 10);
+    } else if (isMultiDay) {
+      days.forEach((d) => {
+        const dayLabel = format(new Date(d.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
+        const statusLabel =
+          d.status === "closed" ? (d.reopened ? "Reaberto e fechado" : "Fechado")
+          : d.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
+        ensureSpace(18);
+        const y = cursorY() + 8;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text(`${dayLabel} — ${statusLabel}`, 14, y);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text(
+          `Caixa inicial ${formatCurrency(d.opening)} · Recebido ${formatCurrency(d.received)} · Caixa final ${formatCurrency(d.finalCash)}${d.diff != null ? ` · Diferença ${formatCurrency(d.diff)}` : ""}`,
+          14,
+          y + 5
+        );
+        (doc as any).lastAutoTable = { finalY: y + 6 };
+        if (d.closingObs) writeText(`Obs. fechamento: ${d.closingObs}`, 8);
+        if (d.events.length === 0) writeText("Sem movimentações neste dia.", 8);
+        else writeGroups(d.groups);
+      });
+    } else {
+      if (cashSummary?.closingObs) writeText(`Obs. fechamento: ${cashSummary.closingObs}`, 8);
+      if (!isMultiDay && cashStatus !== "closed") writeText("Caixa ainda aberto — valores do dia podem mudar.", 8);
+      writeGroups(groups);
     }
 
-    // Signatures — always reserve room; add a page if it would overlap content.
+    // ===== 4. Totais finais =====
+    writeBlockTitle("4. Totais Finais");
+    addTable(
+      null,
+      ["Total", "Valor"],
+      [
+        ["Entradas do período", formatCurrency(totals.totalIn)],
+        ["Saídas do período", formatCurrency(totals.totalOut)],
+        ["Saldo do período (entradas - saídas)", formatCurrency(totals.balance)],
+        ["Caixa final do período", formatCurrency(periodFinal)],
+      ],
+      { rightCols: [1] }
+    );
+
+    // Assinaturas
     ensureSpace(35);
     const sigY = cursorY() + 25;
     doc.setDrawColor(120);
@@ -672,9 +582,13 @@ export default function DailyReportPage() {
     doc.text("Assinatura do trabalhador", 55, sigY + 5, { align: "center" });
     doc.text("Assinatura do administrador", pageWidth - 55, sigY + 5, { align: "center" });
 
-    const filename = `relatorio-${(workerName || "trabalhador").replace(/\s+/g, "_")}-${date}.pdf`;
+    const slug = (workerName || "trabalhador").replace(/\s+/g, "_");
+    const filename = isMultiDay
+      ? `relatorio-${slug}-${startDate}_a_${endDate}.pdf`
+      : `relatorio-${slug}-${date}.pdf`;
     return { doc, filename };
   };
+
 
   const handleDownloadPDF = async () => {
     if (generatingPdf) return;
@@ -700,7 +614,7 @@ export default function DailyReportPage() {
       const file = new File([blob], filename, { type: "application/pdf" });
       const nav: any = navigator;
       if (nav.canShare && nav.canShare({ files: [file] })) {
-        await nav.share({ files: [file], title: filename, text: `Relatório diário ${dateLabel}` });
+        await nav.share({ files: [file], title: filename, text: `Relatório UpCredit — ${workerName || "trabalhador"} — ${periodLabel}` });
       } else {
         const url = URL.createObjectURL(blob);
         window.open(url, "_blank");
@@ -856,12 +770,12 @@ export default function DailyReportPage() {
       )}
 
       <div className="grid grid-cols-2 gap-2">
-        <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="default">
+        <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf} variant="default">
           {generatingPdf
             ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando…</>
             : <><Download className="mr-2 h-4 w-4" /> Baixar PDF</>}
         </Button>
-        <Button onClick={handleSharePDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="outline">
+        <Button onClick={handleSharePDF} disabled={loading || generatingPdf} variant="outline">
           <Share2 className="mr-2 h-4 w-4" /> Compartilhar
         </Button>
       </div>
