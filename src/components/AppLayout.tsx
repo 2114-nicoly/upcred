@@ -49,8 +49,9 @@ const adminSidebar: NavItem[] = [
 
 const superAdminBottomNav: NavItem[] = [
   { path: "/super-admin", label: "Geral", icon: Crown },
-  { path: "/audit", label: "Auditoria", icon: FileSearch },
+  { path: "/reports", label: "Relatórios", icon: BarChart3 },
 ];
+
 const superAdminSidebar: NavItem[] = [
   { path: "/super-admin", label: "Dashboard Geral", icon: Crown },
   { path: "/clients", label: "Clientes", icon: Users },
@@ -72,9 +73,10 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
     "/admin-tools": "Manutenção",
     "/audit": "Auditoria",
     "/account": "Minha Conta",
-    "/daily-report": "Relatório Diário",
+    "/daily-report": "Relatórios",
     "/overdue": "Parcelas Atrasadas",
-    "/today-summary": "Resumo do Dia",
+    "/today-summary": "Relatórios",
+
     "/payment-history": "Histórico de Pagamentos",
     "/cash-history": "Histórico de Movimentações",
     "/new-loan": "Novo Empréstimo",

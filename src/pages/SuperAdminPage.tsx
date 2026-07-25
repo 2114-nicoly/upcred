@@ -27,9 +27,8 @@ function SuperMaintenanceTab() {
           <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/admin-tools")}>
             Abrir página de manutenção <ExternalLink className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/audit")}>
-            Auditoria Geral <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
+          {/* Auditoria fica apenas no menu oficial (evitar acessos duplicados) */}
+
           <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-cash-history")}>
             Histórico do Caixa <ExternalLink className="h-3.5 w-3.5" />
           </Button>

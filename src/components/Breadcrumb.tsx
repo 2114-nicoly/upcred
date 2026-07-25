@@ -46,9 +46,10 @@ export default function Breadcrumb() {
     "/payment-history": "Pagamentos",
     "/reports": "Relatórios",
     "/admin-tools": "Manutenção",
-    "/today-summary": "Resumo do Dia",
+    "/today-summary": "Relatórios",
     "/daily-cash-history": "Histórico do Caixa",
-    "/daily-report": "Relatório Diário",
+    "/daily-report": "Relatórios",
+
     "/new-loan": "Novo Empréstimo",
   };
   let current = labelMap[path];

@@ -41,23 +41,58 @@ type Log = {
 const ACTION_LABELS: Record<string, string> = {
   transferencia_cliente: "Transferência de cliente",
   criar_cliente: "Criar cliente", editar_cliente: "Editar cliente", excluir_cliente: "Arquivar cliente",
+  desarquivar_cliente: "Desarquivar cliente",
+  arquivar_clientes_lote: "Arquivar clientes (lote)", desarquivar_clientes_lote: "Desarquivar clientes (lote)",
   criar_emprestimo: "Criar empréstimo",
   criar_emprestimo_importado: "Empréstimo importado",
   editar_emprestimo: "Editar empréstimo", excluir_emprestimo: "Cancelar empréstimo",
   editar_observacao_emprestimo: "Editar obs. empréstimo",
-  renovar_emprestimo: "Renovar empréstimo", quitar_emprestimo: "Quitar empréstimo",
-  pagamento: "Pagamento", editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
+  renovar_emprestimo: "Renovar empréstimo", renovacao_emprestimo: "Renovação de empréstimo",
+  renovacao_absorvida: "Renovação absorvida",
+  renegociacao_emprestimo: "Renegociação de empréstimo",
+  quitar_emprestimo: "Quitar empréstimo",
+  pagamento: "Pagamento", pagamento_parcial: "Pagamento parcial",
+  editar_pagamento: "Editar pagamento", desfazer_pagamento: "Desfazer pagamento", nao_pagou: "Não pagou",
   estorno_manual: "Estorno manual", estorno_pagamento: "Estorno de pagamento",
   editar_parcela: "Editar parcela", alterar_data_parcela: "Reorganizar parcelas",
+  reagendamento_solicitado: "Reagendamento solicitado",
+  reagendamento_aprovado: "Reagendamento aprovado",
+  reagendamento_recusado: "Reagendamento recusado",
   multa_aplicada: "Multa aplicada", multa_paga: "Multa paga", multa_cancelada: "Multa cancelada", editar_multa: "Editar multa",
   anexar_arquivo: "Anexar arquivo", excluir_anexo: "Excluir anexo",
-  aporte: "Aporte na rota", retirada: "Retirada da rota", ajuste_caixa: "Ajuste de caixa",
-  fechar_caixa: "Fechar caixa", reabrir_caixa: "Reabrir caixa", solicitar_reabertura_caixa: "Solicitação de reabertura",
+  aporte: "Aporte na rota", retirada: "Retirada da rota", ajuste_caixa: "Alteração de saldo (ajuste de caixa)",
+  ajuste_fechamento_caixa: "Alteração de saldo no fechamento",
+  despesa: "Despesa", estorno_despesa: "Estorno de despesa",
+  fechar_caixa: "Fechamento de caixa", reabrir_caixa: "Reabertura de caixa",
+  solicitar_reabertura_caixa: "Solicitação de reabertura",
   criar_trabalhador: "Criar trabalhador", reset_senha_trabalhador: "Reset senha",
   ativar_trabalhador: "Ativar trabalhador", desativar_trabalhador: "Desativar trabalhador",
-  arquivar_trabalhador: "Arquivar trabalhador", excluir_trabalhador: "Excluir trabalhador",
+  arquivar_trabalhador: "Arquivar trabalhador", desarquivar_trabalhador: "Desarquivar trabalhador",
+  excluir_trabalhador: "Excluir trabalhador",
   ativar_admin: "Ativar admin", desativar_admin: "Desativar admin",
 };
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: "Super Admin",
+  admin: "Administrador",
+  trabalhador: "Trabalhador",
+};
+
+const ENTITY_LABELS: Record<string, string> = {
+  client: "Cliente", loan: "Empréstimo", installment: "Parcela", payment: "Pagamento",
+  cash: "Caixa", worker: "Trabalhador", transfer: "Transferência", admin: "Administrador",
+  penalty: "Multa", installment_reschedules: "Reagendamento de parcela",
+  loan_renegotiations: "Renegociação",
+};
+
+function entityLabel(t: string): string {
+  return ENTITY_LABELS[t] ?? t;
+}
+
+function roleLabel(r: string | null): string {
+  return r ? (ROLE_LABELS[r] ?? r) : "—";
+}
+
 
 type Props = { workerId?: string | null; limit?: number };
 
@@ -440,18 +475,22 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                             <Badge variant="outline" className="ml-1.5 text-[9px] h-4">{formatCurrency(amt)}</Badge>
                           )}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <p className="text-[10px] text-muted-foreground mt-0.5 break-words">
                           {l.user_role === "super_admin" ? "Super Admin"
                             : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` · ${adminName(l.admin_id)}` : ""}`
                             : (workerNameFromPayload(l) || workerName(l.worker_id))}
+                          <span className="ml-1">({roleLabel(l.user_role)})</span>
                           {isSuperAdmin && l.user_role === "trabalhador" && adminName(l.admin_id) && (
                             <span className="ml-1">· {adminName(l.admin_id)}</span>
                           )}
                           {cname && <span className="ml-1">· {cname}</span>}
                           {" · "}
+                          {entityLabel(l.entity_type)}
+                          {" · "}
                           {format(parseISO(l.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
                         </p>
-                        {l.observation && <p className="text-[11px] mt-1 italic line-clamp-2">{l.observation}</p>}
+                        {l.observation && <p className="text-[11px] mt-1 italic line-clamp-2 break-words">{l.observation}</p>}
+
                       </div>
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]" onClick={() => setOpenLog(l)}>
                         <Eye className="h-3 w-3 mr-1" /> Detalhes
@@ -478,7 +517,8 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                   {" · "}
                   {openLog.user_role === "super_admin" ? "Super Admin"
                     : openLog.user_role === "admin" ? `Admin${adminName(openLog.admin_id) ? ` · ${adminName(openLog.admin_id)}` : ""}`
-                    : workerName(openLog.worker_id)}
+                    : (workerNameFromPayload(openLog) || workerName(openLog.worker_id))}
+                  {` · ${roleLabel(openLog.user_role)}`}
                 </DialogDescription>
               </DialogHeader>
 
@@ -486,7 +526,9 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                 {clientName(openLog) && (
                   <div><span className="font-semibold">Cliente:</span> {clientName(openLog)}</div>
                 )}
-                <div><span className="font-semibold">Entidade:</span> {openLog.entity_type}{openLog.entity_id ? ` · ${openLog.entity_id.slice(0, 8)}…` : ""}</div>
+                <div><span className="font-semibold">Perfil do usuário:</span> {roleLabel(openLog.user_role)}</div>
+                <div><span className="font-semibold">Entidade afetada:</span> {entityLabel(openLog.entity_type)}{openLog.entity_id ? ` · ${openLog.entity_id.slice(0, 8)}…` : ""}</div>
+
                 {openLog.observation && (
                   <div className="rounded bg-muted/50 p-2 italic">{openLog.observation}</div>
                 )}
