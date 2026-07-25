@@ -31,6 +31,8 @@ import {
   fetchReportDetails, emptyReportDetails,
   type ReportDetailsData, type ReportRecord,
 } from "@/lib/report-details";
+import { RecordSection } from "@/components/reports/RecordSection";
+
 
 
 
