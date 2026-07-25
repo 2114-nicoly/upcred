@@ -17,7 +17,6 @@ import PaymentHistoryPage from "@/pages/PaymentHistoryPage";
 import ActiveLoansPage from "@/pages/ActiveLoansPage";
 import ReportsPage from "@/pages/ReportsPage";
 import OverdueLoansPage from "@/pages/OverdueLoansPage";
-import TodaySummaryPage from "@/pages/TodaySummaryPage";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import UnpaidInstallmentsPage from "@/pages/UnpaidInstallmentsPage";

@@ -25,7 +25,6 @@ import {
 
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
-import ReportsPage from "@/pages/ReportsPage";
 import RemindersAdminList from "@/components/RemindersAdminList";
 
 
@@ -57,10 +56,9 @@ export default function AdminPanelPage() {
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Painel Administrador</h1>
       <Tabs defaultValue="painel">
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="painel" className="text-[10px]">Painel</TabsTrigger>
           <TabsTrigger value="equipe" className="text-[10px]">Equipe</TabsTrigger>
-          <TabsTrigger value="reports" className="text-[10px]">Relatórios</TabsTrigger>
           <TabsTrigger value="caixa" className="text-[10px]">Caixa</TabsTrigger>
           <TabsTrigger value="audit" className="text-[10px]">Auditoria</TabsTrigger>
         </TabsList>
@@ -70,9 +68,6 @@ export default function AdminPanelPage() {
         </TabsContent>
         <TabsContent value="equipe" className="mt-3">
           <WorkersTab />
-        </TabsContent>
-        <TabsContent value="reports" className="mt-3">
-          <ReportsPage />
         </TabsContent>
         <TabsContent value="caixa" className="mt-3">
           <CaixaTab />
