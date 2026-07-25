@@ -614,7 +614,7 @@ export default function DailyReportPage() {
       const file = new File([blob], filename, { type: "application/pdf" });
       const nav: any = navigator;
       if (nav.canShare && nav.canShare({ files: [file] })) {
-        await nav.share({ files: [file], title: filename, text: `Relatório diário ${dateLabel}` });
+        await nav.share({ files: [file], title: filename, text: `Relatório UpCredit — ${workerName || "trabalhador"} — ${periodLabel}` });
       } else {
         const url = URL.createObjectURL(blob);
         window.open(url, "_blank");
