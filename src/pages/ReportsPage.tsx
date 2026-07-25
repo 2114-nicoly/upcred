@@ -312,110 +312,65 @@ export default function ReportsPage() {
               {REPORT_SECTIONS.resumo}
             </p>
             <ReportKpiGrid>
-              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial" value={formatCurrency(summary.caixaInicial)} />
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial da equipe" value={formatCurrency(summary.caixaInicial)} />
+              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final da equipe" value={formatCurrency(summary.caixaFinal)} />
               <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
-              <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas manuais" value={formatCurrency(summary.entradasManuais)} tone="positive" />
-              <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas manuais" value={formatCurrency(summary.saidasManuais)} tone="negative" />
-              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final previsto" value={formatCurrency(summary.caixaFinalPrevisto)} />
-              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa final contado" value={formatCurrency(summary.caixaFinalContado)} />
+              <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas" value={formatCurrency(summary.entradas)} tone="positive" />
+              <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas" value={formatCurrency(summary.saidas)} tone="negative" />
+              <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Despesas" value={formatCurrency(summary.despesas)} tone="negative" />
+              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Multas" value={formatCurrency(summary.multas)} tone="positive" />
+              <ReportKpiCard icon={<RefreshCw className="h-4 w-4 text-muted-foreground" />} label="Estornos" value={formatCurrency(summary.estornos)} />
               <ReportKpiCard
                 icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
-                label="Diferença de caixa"
+                label="Diferença total de caixa"
                 value={formatCurrency(summary.diferenca)}
                 tone={summary.diferenca >= 0 ? "positive" : "negative"}
               />
             </ReportKpiGrid>
           </div>
 
-          {/* Detalhamento por trabalhador */}
+          {/* Comparativo dos trabalhadores ativos */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Detalhamento por trabalhador</CardTitle>
+              <CardTitle className="text-base">Trabalhadores ativos</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {workerRows.length === 0 ? (
-                <p className="p-6 text-sm text-muted-foreground text-center">Nenhum trabalhador neste período.</p>
+                <p className="p-6 text-sm text-muted-foreground text-center">Nenhum trabalhador ativo.</p>
               ) : (
                 <div className="divide-y">
-                  {workerRows.map((r) => {
-                    const isOpen = !!expanded[r.worker.id];
-                    return (
-                      <div key={r.worker.id}>
-                        <div className="p-3 flex items-center gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{r.worker.nome}</p>
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
-                              <span>
-                                Status: <b className={
-                                  r.statusLabel === "Aberto" ? "text-success" :
-                                  r.statusLabel === "Fechado" ? "text-muted-foreground" : "text-destructive"
-                                }>{r.statusLabel}</b>
-                              </span>
-                              <span>Cx.Inicial: <b>{formatCurrency(r.opening)}</b></span>
-                              <span className="text-success">Rec: <b>{formatCurrency(r.totals.recebimentos)}</b></span>
-                              <span>Empr: <b>{formatCurrency(r.totals.novos + r.totals.renov)}</b></span>
-                              <span className={r.diff >= 0 ? "text-success" : "text-destructive"}>
-                                Dif: <b>{formatCurrency(r.diff)}</b>
-                              </span>
-                            </div>
-                          </div>
-                          <Button size="sm" variant="ghost" onClick={() => toggleExpanded(r.worker.id)}>
-                            {isOpen ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
-                            Ver detalhes
-                          </Button>
+                  {workerRows.map((r) => (
+                    <button
+                      key={r.worker.id}
+                      type="button"
+                      onClick={() => setSelectedWorker(r.worker.id)}
+                      className="w-full text-left p-3 flex items-center gap-2 hover:bg-muted/40 active:bg-muted/60 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{r.worker.nome}</p>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
+                            r.statusLabel === "Aberto" ? "text-success border-success/40" :
+                            r.statusLabel === "Fechado" ? "text-muted-foreground" : "text-destructive border-destructive/40"
+                          }`}>{r.statusLabel}</span>
                         </div>
-                        {isOpen && (
-                          <div className="px-3 pb-3 bg-muted/20">
-                            <div className="grid grid-cols-2 gap-2 mb-3">
-                              <DetailPair label="Caixa inicial" value={formatCurrency(r.opening)} />
-                              <DetailPair label="Cx. final previsto" value={formatCurrency(r.expected)} />
-                              <DetailPair label="Cx. final contado" value={formatCurrency(r.counted)} />
-                              <DetailPair label="Recebimentos" value={formatCurrency(r.totals.recebimentos)} />
-                              <DetailPair label="Novos empréstimos" value={formatCurrency(r.totals.novos)} />
-                              <DetailPair label="Renovações" value={formatCurrency(r.totals.renov)} />
-                              <DetailPair label="Pagamentos" value={formatCurrency(r.totals.pagamentos)} />
-                              <DetailPair label="Não pagamentos" value={String(r.totals.naoPagos)} />
-                              <DetailPair label="Entradas manuais" value={formatCurrency(r.totals.entMan)} />
-                              <DetailPair label="Saídas manuais" value={formatCurrency(r.totals.saiMan)} />
-                              <DetailPair label="Cancelamentos" value={String(r.totals.canc)} />
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold mb-1">Entradas e saídas do período</p>
-                              {r.movements.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">Nenhuma movimentação neste período</p>
-                              ) : (
-                                <ul className="divide-y border rounded bg-background">
-                                  {r.movements.map((m) => (
-                                    <li key={m.id} className="p-2 flex items-center justify-between text-xs gap-2">
-                                      <div className="min-w-0 flex-1">
-                                        <p className="font-medium truncate">
-                                          {formatEventLabel(m.event_type)}
-                                        </p>
-                                        <p className="text-[11px] text-muted-foreground truncate">
-                                          {format(new Date(m.created_at), "dd/MM HH:mm", { locale: ptBR })}
-                                          {" · "}
-                                          {(m.client_id && clients[m.client_id]) || m.observation || "—"}
-                                        </p>
-                                      </div>
-                                      <div className="text-right shrink-0">
-                                        {Number(m.amount_in) > 0 && (
-                                          <p className="text-success font-medium">+{formatCurrency(Number(m.amount_in))}</p>
-                                        )}
-                                        {Number(m.amount_out) > 0 && (
-                                          <p className="text-destructive font-medium">-{formatCurrency(Number(m.amount_out))}</p>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                          <span>Cx. inicial: <b className="text-foreground">{formatCurrency(r.totals.caixaInicial)}</b></span>
+                          <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
+                          <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
+                          <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
+                          <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
+                          <span>
+                            Diferença: <b className={r.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
+                              {formatCurrency(r.totals.diferenca)}
+                            </b>
+                          </span>
+                        </div>
                       </div>
-                    );
-                  })}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -426,12 +381,3 @@ export default function ReportsPage() {
   );
 }
 
-
-function DetailPair({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border bg-background p-2">
-      <p className="text-[10px] text-muted-foreground">{label}</p>
-      <p className="text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
