@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
+import { fetchReportDetails, emptyReportDetails, type ReportDetailsData, type ReportRecord } from "@/lib/report-details";
+import { RecordSection } from "@/components/reports/RecordSection";
+
 
 
 type AuditRow = {
