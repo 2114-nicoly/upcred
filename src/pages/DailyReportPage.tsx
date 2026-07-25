@@ -12,7 +12,8 @@ import { formatCurrency } from "@/lib/loan-utils";
 import { getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { computeDailyTotals } from "@/lib/daily-totals";
 import { useAuth } from "@/hooks/useAuth";
-import { Download, FileText, Loader2, Share2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, Download, FileText, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -252,7 +253,28 @@ export default function DailyReportPage() {
     };
   }, [events]);
 
+  // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
+  const groups = useMemo(() => {
+    const active = (t: string | string[]) =>
+      events.filter((e) => (Array.isArray(t) ? t.includes(e.event_type) : e.event_type === t) && !e.reversed_at);
+    return {
+      pagamentos: active(["pagamento", "recebimento_multa"]),
+      naoPagamentos: active("nao_pagou"),
+      novosEmprestimos: active("emprestimo_novo"),
+      renovacoes: active(["renovacao", "renegociacao"]),
+      movimentacoes: active(["entrada_manual", "saida_manual", "saida"]),
+      despesas: active("despesa"),
+      estornos: events.filter((e) => !!e.reversed_at),
+    };
+  }, [events]);
+
+  const estornosTotal = useMemo(
+    () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
+    [groups.estornos]
+  );
+
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);
+
 
   const buildPdf = (): { doc: jsPDF; filename: string } => {
     const doc = new jsPDF();
@@ -625,111 +647,94 @@ export default function DailyReportPage() {
     }
   };
 
-  return (
-    <div className="mx-auto max-w-3xl p-4 space-y-4">
-      {(isAdmin || isSuperAdmin) && (
-        <div className="sticky top-0 z-20 -mx-4 -mt-4 px-4 pt-4 pb-2 bg-background/95 backdrop-blur border-b">
-          <Card>
-            <CardContent className="p-3 space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase">1. Trabalhador/equipe</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {isSuperAdmin && (
-                  <div>
-                    <Label className="text-xs">Administrador</Label>
-                    <select
-                      className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-                      value={selectedAdminId || ""}
-                      onChange={(e) => { setSelectedAdminId(e.target.value || null); setSelectedWorkerId(null); }}
-                    >
-                      <option value="">Todos / Geral</option>
-                      {admins.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
-                    </select>
-                  </div>
-                )}
-                <div>
-                  <Label className="text-xs">Trabalhador</Label>
-                  <select
-                    className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-                    value={selectedWorkerId || ""}
-                    onChange={(e) => setSelectedWorkerId(e.target.value || null)}
-                  >
-                    <option value="">— Selecione —</option>
-                    {workers.map((w) => <option key={w.id} value={w.id}>{w.nome}</option>)}
-                  </select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+  const finalCash = cashSummary?.counted != null
+    ? cashSummary.counted
+    : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
 
+  return (
+    <div className="mx-auto w-full max-w-3xl p-4 space-y-4 overflow-x-hidden">
+      {/* Filtros */}
       <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Relatório Diário</h2>
-          </div>
-          <div>
-            <Label className="text-xs">2. Data</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-        </CardContent>
-      </Card>
-
-
-      <Card>
-        <CardContent className="p-4 space-y-1">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Relatório Diário</p>
-              <h3 className="text-base font-bold">{workerName || (selectedWorkerId ? "—" : "Selecione um trabalhador")}</h3>
-              <p className="text-sm text-muted-foreground capitalize">{dateLabel}</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="h-5 w-5 text-primary shrink-0" />
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-tight">Relatório Diário</h2>
+                <p className="text-xs text-muted-foreground truncate">
+                  {(workerName || (selectedWorkerId ? "—" : "Selecione um trabalhador"))} · <span className="capitalize">{dateLabel}</span>
+                </p>
+              </div>
             </div>
             {cashStatus && (
-              <Badge variant={cashStatus === "closed" ? "secondary" : "default"}>
+              <Badge variant={cashStatus === "closed" ? "secondary" : "default"} className="shrink-0">
                 Caixa {cashStatus === "closed" ? "Fechado" : "Aberto"}
               </Badge>
             )}
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Data</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            {isSuperAdmin && (
+              <div>
+                <Label className="text-xs">Administrador</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={selectedAdminId || ""}
+                  onChange={(e) => { setSelectedAdminId(e.target.value || null); setSelectedWorkerId(null); }}
+                >
+                  <option value="">Todos / Geral</option>
+                  {admins.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                </select>
+              </div>
+            )}
+            {(isAdmin || isSuperAdmin) && (
+              <div>
+                <Label className="text-xs">Trabalhador</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={selectedWorkerId || ""}
+                  onChange={(e) => setSelectedWorkerId(e.target.value || null)}
+                >
+                  <option value="">— Selecione —</option>
+                  {workers.map((w) => <option key={w.id} value={w.id}>{w.nome}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <Stat label="Caixa inicial do dia" value={formatCurrency(cashSummary?.opening ?? 0)} />
-          <Stat
-            label={cashSummary?.counted != null ? "Caixa final do dia (fechamento)" : "Caixa final do dia (previsto)"}
-            value={formatCurrency(
-              cashSummary?.counted != null
-                ? cashSummary.counted
-                : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses))
-            )}
-          />
-          {currentAvailableCash != null && (
-            <Stat label="Caixa disponível atual (valor atual)" value={formatCurrency(currentAvailableCash)} />
-          )}
-          <Stat label="Recebido Hoje" value={formatCurrency(totals.payments)} positive />
-          <Stat label="Multas Recebidas" value={formatCurrency(totals.penalties)} positive />
-          <Stat label="Emprestado Hoje" value={formatCurrency(totals.loans + totals.renewals)} negative />
-          <Stat label="Entradas Manuais" value={formatCurrency(totals.manualIn)} positive />
-          <Stat label="Saídas Manuais" value={formatCurrency(totals.manualOut)} negative />
-          <Stat label="Despesas Operacionais" value={formatCurrency(totals.expenses)} negative />
-          {cashSummary?.diff != null && (
-            <Stat label="Diferença de fechamento" value={formatCurrency(cashSummary.diff)} positive={cashSummary.diff >= 0} negative={cashSummary.diff < 0} />
-          )}
-          <Stat label="Não pagou" value={String(totals.notPaidCount)} />
-        </CardContent>
-      </Card>
+      {/* Indicadores */}
+      <div className="grid grid-cols-2 gap-2">
+        <StatCard label="Caixa inicial" value={formatCurrency(cashSummary?.opening ?? 0)} />
+        <StatCard label={cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)"} value={formatCurrency(finalCash)} />
+        <StatCard label="Total recebido" value={formatCurrency(totals.payments)} tone="positive" />
+        <StatCard label="Total emprestado" value={formatCurrency(totals.loans + totals.renewals)} tone="negative" />
+        <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
+        <StatCard label="Saídas" value={formatCurrency(totals.manualOut)} tone="negative" />
+        <StatCard label="Despesas" value={formatCurrency(totals.expenses)} tone="negative" />
+        <StatCard label="Multas" value={formatCurrency(totals.penalties)} tone="positive" />
+        <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
+        <StatCard
+          label="Diferença de caixa"
+          value={formatCurrency(cashSummary?.diff ?? 0)}
+          tone={cashSummary?.diff == null || cashSummary.diff === 0 ? undefined : cashSummary.diff > 0 ? "positive" : "negative"}
+          sub={cashSummary?.counted == null ? "aguardando fechamento" : undefined}
+        />
+      </div>
 
       {cashSummary?.closingObs && (
         <Card>
           <CardContent className="p-3 text-xs">
             <p className="text-muted-foreground mb-1">Observação do fechamento</p>
-            <p className="whitespace-pre-wrap">{cashSummary.closingObs}</p>
+            <p className="whitespace-pre-wrap break-words">{cashSummary.closingObs}</p>
           </CardContent>
         </Card>
       )}
-
 
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="default">
@@ -742,46 +747,80 @@ export default function DailyReportPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : rows.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-10">Nenhuma movimentação registrada nesta data.</p>
-          ) : (
-            <div className="divide-y">
-              {rows.map((r, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 p-3 text-sm">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground tabular-nums">{r.time}</span>
-                      <span className="font-medium truncate">{r.typeLabel}</span>
-                      {r.reversed && <Badge variant="outline" className="text-[10px] h-4">Estornado</Badge>}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {r.clientName !== "—" ? r.clientName : ""}
-                      {r.observation ? ` · ${r.observation}` : ""}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    {r.amountIn > 0 && <p className="text-success text-xs font-semibold">+ {formatCurrency(r.amountIn)}</p>}
-                    {r.amountOut > 0 && <p className="text-destructive text-xs font-semibold">- {formatCurrency(r.amountOut)}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Registros por tipo */}
+      {loading ? (
+        <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : (
+        <div className="space-y-2">
+          <EventSection title="Pagamentos" events={groups.pagamentos} clientNames={clientNames} />
+          <EventSection title="Não pagamentos" events={groups.naoPagamentos} clientNames={clientNames} />
+          <EventSection title="Novos empréstimos" events={groups.novosEmprestimos} clientNames={clientNames} />
+          <EventSection title="Renovações e renegociações" events={groups.renovacoes} clientNames={clientNames} />
+          <EventSection title="Entradas e saídas" events={groups.movimentacoes} clientNames={clientNames} />
+          <EventSection title="Despesas" events={groups.despesas} clientNames={clientNames} />
+          <EventSection title="Estornos" events={groups.estornos} clientNames={clientNames} />
+        </div>
+      )}
     </div>
   );
 }
 
-function Stat({ label, value, positive, negative }: { label: string; value: string; positive?: boolean; negative?: boolean }) {
+function StatCard({ label, value, tone, sub }: { label: string; value: string; tone?: "positive" | "negative"; sub?: string }) {
   return (
-    <div>
-      <p className="text-muted-foreground">{label}</p>
-      <p className={`font-bold text-sm ${positive ? "text-success" : negative ? "text-destructive" : ""}`}>{value}</p>
-    </div>
+    <Card>
+      <CardContent className="p-3">
+        <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
+        <p className={`font-bold text-sm mt-1 break-words ${tone === "positive" ? "text-success" : tone === "negative" ? "text-destructive" : ""}`}>{value}</p>
+        {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+      </CardContent>
+    </Card>
   );
 }
+
+function EventSection({ title, events, clientNames }: { title: string; events: DailyEvent[]; clientNames: Record<string, string> }) {
+  const [open, setOpen] = useState(false);
+  const total = events.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
+
+  return (
+    <Card>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="w-full" disabled={events.length === 0}>
+          <div className="flex items-center justify-between gap-2 p-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""} ${events.length === 0 ? "opacity-30" : ""}`} />
+              <span className="text-sm font-medium truncate">{title}</span>
+              <Badge variant="outline" className="h-5 text-[10px] shrink-0">{events.length}</Badge>
+            </div>
+            {total > 0 && <span className="text-xs font-semibold tabular-nums shrink-0">{formatCurrency(total)}</span>}
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="divide-y border-t">
+            {events.map((e) => (
+              <div key={e.id} className="flex items-start justify-between gap-2 p-3 text-sm">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground tabular-nums">{format(new Date(e.created_at), "HH:mm")}</span>
+                    <span className="font-medium truncate">
+                      {e.client_id ? (clientNames[e.client_id] || "—") : getEventTypeLabel(e.event_type)}
+                    </span>
+                    {e.reversed_at && <Badge variant="outline" className="text-[10px] h-4 shrink-0">Estornado</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground break-words">
+                    {getEventTypeLabel(e.event_type)}
+                    {e.observation ? ` · ${e.observation}` : ""}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  {Number(e.amount_in || 0) > 0 && <p className="text-success text-xs font-semibold">+ {formatCurrency(Number(e.amount_in))}</p>}
+                  {Number(e.amount_out || 0) > 0 && <p className="text-destructive text-xs font-semibold">- {formatCurrency(Number(e.amount_out))}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
