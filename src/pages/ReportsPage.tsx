@@ -709,7 +709,10 @@ export default function ReportsPage() {
                               {formatCurrency(r.totals.diferenca)}
                             </b>
                           </span>
+                          <span>Pendentes: <b className="text-warning">{details.pendentesByWorker[r.worker.id] || 0}</b></span>
+                          <span>Atrasados: <b className="text-destructive">{details.atrasadosByWorker[r.worker.id] || 0}</b></span>
                         </div>
+
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </button>
