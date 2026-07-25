@@ -431,6 +431,12 @@ export default function ReportsPage() {
 
 
 
+  const companyLabel =
+    !isSuperAdmin ? undefined
+      : selectedAdmin === "all"
+        ? "Todas as empresas"
+        : (admins.find((a) => a.id === selectedAdmin)?.nome || "—");
+
   const workerLabel =
     selectedWorker === "all"
       ? "Todos os trabalhadores"
@@ -440,10 +446,11 @@ export default function ReportsPage() {
     <div className="mx-auto max-w-4xl p-4 pb-24 space-y-3">
       <ReportHeader
         title="Relatórios"
-        subject={workerLabel}
+        subject={companyLabel ? `${companyLabel} · ${globalMode ? "Visão global do sistema" : workerLabel}` : workerLabel}
         period={label}
         right={<AuditLink />}
       />
+
 
 
       {/* Filters */}
