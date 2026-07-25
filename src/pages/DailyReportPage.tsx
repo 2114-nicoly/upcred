@@ -41,11 +41,34 @@ export default function DailyReportPage() {
   const [searchParams] = useSearchParams();
 
   const today = format(new Date(), "yyyy-MM-dd");
-  const [date, setDate] = useState<string>(searchParams.get("date") || today);
+  const initialDate = searchParams.get("date") || today;
+  type Preset = "hoje" | "ontem" | "semana" | "mes" | "custom";
+  const [preset, setPreset] = useState<Preset>(initialDate === today ? "hoje" : "custom");
+  const [startDate, setStartDate] = useState<string>(initialDate);
+  const [endDate, setEndDate] = useState<string>(initialDate);
+  // Usado pelo PDF/cabeçalho (dia de referência = fim do período)
+  const date = endDate;
   const [selectedAdminId, setSelectedAdminId] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(
     isSuperAdmin || isAdmin ? searchParams.get("worker") : myWorkerId
   );
+
+  const applyPreset = (p: Preset) => {
+    setPreset(p);
+    const now = new Date();
+    const fmt = (d: Date) => format(d, "yyyy-MM-dd");
+    if (p === "hoje") { setStartDate(fmt(now)); setEndDate(fmt(now)); }
+    else if (p === "ontem") {
+      const y = new Date(now); y.setDate(now.getDate() - 1);
+      setStartDate(fmt(y)); setEndDate(fmt(y));
+    } else if (p === "semana") {
+      const s = new Date(now); s.setDate(now.getDate() - now.getDay());
+      setStartDate(fmt(s)); setEndDate(fmt(now));
+    } else if (p === "mes") {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(fmt(s)); setEndDate(fmt(now));
+    }
+  };
 
   const [admins, setAdmins] = useState<AdminOpt[]>([]);
   const [workers, setWorkers] = useState<WorkerOpt[]>([]);
@@ -59,9 +82,11 @@ export default function DailyReportPage() {
     opening: number; expected: number; counted: number | null; diff: number | null;
     closingObs: string | null;
   } | null>(null);
+  const [cashRows, setCashRows] = useState<any[]>([]);
   const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
 
   // Load admins (super_admin only)
   useEffect(() => {
