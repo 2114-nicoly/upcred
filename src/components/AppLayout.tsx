@@ -56,8 +56,7 @@ const superAdminSidebar: NavItem[] = [
   { path: "/clients", label: "Clientes", icon: Users },
   { path: "/active-loans", label: "Empréstimos", icon: Landmark },
   { path: "/caixa", label: "Caixa Geral", icon: Wallet },
-  { path: "/reports", label: "Relatórios Gerais", icon: BarChart3 },
-  { path: "/daily-report", label: "Relatório Diário", icon: FileText },
+  { path: "/reports", label: "Relatórios", icon: BarChart3 },
   { path: "/audit", label: "Auditoria Geral", icon: FileSearch },
   { path: "/admin-tools", label: "Manutenção", icon: Wrench },
   { path: "/account", label: "Minha Conta", icon: UserCircle },
@@ -86,7 +85,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
       "/caixa": "Caixa do Dia",
       "/active-loans": "Empréstimos",
       "/clients": "Clientes",
-      "/reports": "Relatórios Gerais",
+      "/reports": "Relatórios",
       "/audit": "Auditoria Geral",
       "/super-admin": "Dashboard Geral",
     };

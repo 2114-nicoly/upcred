@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/loan-utils";
 import {
   RefreshCw, FileDown, Wallet, TrendingUp, ArrowDownCircle,
   ArrowUpCircle, Target, AlertTriangle, ChevronDown, ChevronRight,
+  Building2, Users,
 } from "lucide-react";
 import {
   format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO,
@@ -18,6 +19,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { Share2, Loader2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { createReportPdf, downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
 import {
@@ -25,6 +27,7 @@ import {
   AuditLink, formatEventLabel, REPORT_SECTIONS,
 } from "@/components/reports/ReportUI";
 import DailyReportPage from "@/pages/DailyReportPage";
+
 
 
 
@@ -54,7 +57,13 @@ type DailyEventRow = {
   created_at: string;
 };
 
-type WorkerRow = { id: string; nome: string; active: boolean; archived_at: string | null };
+type WorkerRow = {
+  id: string; nome: string; active: boolean;
+  archived_at: string | null; parent_admin_id: string | null;
+};
+
+type AdminRow = { id: string; nome: string; active: boolean };
+
 
 const todayISO = () => format(new Date(), "yyyy-MM-dd");
 
@@ -81,8 +90,10 @@ export default function ReportsPage() {
   const [customStart, setCustomStart] = useState(todayISO());
   const [customEnd, setCustomEnd] = useState(todayISO());
   const [selectedWorker, setSelectedWorker] = useState<string>("all");
+  const [selectedAdmin, setSelectedAdmin] = useState<string>("all");
 
-  const [workers, setWorkers] = useState<WorkerRow[]>([]);
+  const [allWorkers, setAllWorkers] = useState<WorkerRow[]>([]);
+  const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [cashRows, setCashRows] = useState<DailyCashRow[]>([]);
   const [events, setEvents] = useState<DailyEventRow[]>([]);
   const [clients, setClients] = useState<Record<string, string>>({});
@@ -90,7 +101,20 @@ export default function ReportsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [adminName, setAdminName] = useState<string>("");
-  const { adminId } = useAuth();
+  const { adminId, isSuperAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Empresa vinda de link externo (ex.: painel do SuperAdmin) — sem criar nova rota.
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const qp = searchParams.get("admin");
+    if (qp) {
+      setSelectedAdmin(qp);
+      searchParams.delete("admin");
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     if (!adminId) return;
@@ -107,8 +131,14 @@ export default function ReportsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const wRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: false });
-    const allWorkers = ((wRes.data as WorkerRow[]) || []).filter((w) => w.active && !w.archived_at);
-    setWorkers(allWorkers);
+    setAllWorkers(((wRes.data as WorkerRow[]) || []).filter((w) => w.active && !w.archived_at));
+
+    if (isSuperAdmin) {
+      const aRes = await supabase.rpc("super_admin_list_admins" as any);
+      setAdmins(((aRes.data as AdminRow[]) || []).filter((a) => a.active));
+    } else {
+      setAdmins([]);
+    }
 
     const [cashRes, evRes, clRes] = await Promise.all([
       supabase
@@ -131,9 +161,20 @@ export default function ReportsPage() {
     ((clRes.data as { id: string; name: string }[]) || []).forEach((c) => { cmap[c.id] = c.name; });
     setClients(cmap);
     setLoading(false);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, isSuperAdmin]);
 
   useEffect(() => { load(); }, [load]);
+
+  /** Visão global do sistema: SuperAdmin com "Todas as empresas". */
+  const globalMode = isSuperAdmin && selectedAdmin === "all";
+
+  // Trabalhadores visíveis conforme a empresa selecionada.
+  const workers = useMemo(
+    () => (isSuperAdmin && selectedAdmin !== "all"
+      ? allWorkers.filter((w) => w.parent_admin_id === selectedAdmin)
+      : allWorkers),
+    [allWorkers, isSuperAdmin, selectedAdmin],
+  );
 
   const activeIds = useMemo(() => new Set(workers.map((w) => w.id)), [workers]);
 
@@ -146,6 +187,7 @@ export default function ReportsPage() {
     () => events.filter((e) => e.worker_id && activeIds.has(e.worker_id)),
     [events, activeIds],
   );
+
 
   const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
@@ -189,6 +231,30 @@ export default function ReportsPage() {
       return { worker: w, statusLabel, totals: sumTotals(wCash, wEvents) };
     });
   }, [workers, scopedCash, scopedEvents]);
+
+  // Comparativo por empresa (SuperAdmin — "Todas as empresas")
+  const companyRows = useMemo(() => {
+    if (!globalMode) return [];
+    return admins.map((a) => {
+      const aWorkers = workers.filter((w) => w.parent_admin_id === a.id);
+      const ids = new Set(aWorkers.map((w) => w.id));
+      const aCash = scopedCash.filter((c) => c.worker_id && ids.has(c.worker_id));
+      const aEvents = scopedEvents.filter((e) => e.worker_id && ids.has(e.worker_id));
+      const openCount = aCash.filter((c) => c.status !== "closed").length;
+      const statusLabel = aCash.length === 0
+        ? "Sem caixa no período"
+        : openCount > 0 ? `${openCount} caixa(s) aberto(s)` : "Todos fechados";
+      return {
+        admin: a,
+        workersCount: aWorkers.length,
+        statusLabel,
+        hasOpen: openCount > 0,
+        totals: sumTotals(aCash, aEvents),
+      };
+    });
+  }, [globalMode, admins, workers, scopedCash, scopedEvents]);
+
+
 
   // Detalhamento por dia (equipe) — sem misturar datas
   const dayRows = useMemo(() => {
@@ -365,6 +431,12 @@ export default function ReportsPage() {
 
 
 
+  const companyLabel =
+    !isSuperAdmin ? undefined
+      : selectedAdmin === "all"
+        ? "Todas as empresas"
+        : (admins.find((a) => a.id === selectedAdmin)?.nome || "—");
+
   const workerLabel =
     selectedWorker === "all"
       ? "Todos os trabalhadores"
@@ -374,10 +446,11 @@ export default function ReportsPage() {
     <div className="mx-auto max-w-4xl p-4 pb-24 space-y-3">
       <ReportHeader
         title="Relatórios"
-        subject={workerLabel}
+        subject={companyLabel ? `${companyLabel} · ${globalMode ? "Visão global do sistema" : workerLabel}` : workerLabel}
         period={label}
         right={<AuditLink />}
       />
+
 
 
       {/* Filters */}
@@ -410,24 +483,45 @@ export default function ReportsPage() {
             </div>
           )}
 
-          <div>
-            <Label className="text-xs mb-1 block">Trabalhador</Label>
-            <Select value={selectedWorker} onValueChange={setSelectedWorker}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os trabalhadores</SelectItem>
-                {workers.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {isSuperAdmin && (
+            <div>
+              <Label className="text-xs mb-1 block">Empresa (Administrador)</Label>
+              <Select
+                value={selectedAdmin}
+                onValueChange={(v) => { setSelectedAdmin(v); setSelectedWorker("all"); }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {admins.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {!globalMode && (
+            <div>
+              <Label className="text-xs mb-1 block">Trabalhador</Label>
+              <Select value={selectedWorker} onValueChange={setSelectedWorker}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os trabalhadores</SelectItem>
+                  {workers.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" variant="outline" onClick={load} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
-            {selectedWorker === "all" && (
+            {selectedWorker === "all" && !globalMode && (
               <>
                 <Button size="sm" onClick={handleDownloadPDF} disabled={loading || generatingPdf}>
                   {generatingPdf
@@ -458,11 +552,18 @@ export default function ReportsPage() {
           {/* Resumo financeiro do período */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-              {REPORT_SECTIONS.resumo}
+              {globalMode ? "Resumo geral do sistema" : REPORT_SECTIONS.resumo}
             </p>
             <ReportKpiGrid>
-              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial da equipe" value={formatCurrency(summary.caixaInicial)} />
-              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final da equipe" value={formatCurrency(summary.caixaFinal)} />
+              {globalMode && (
+                <>
+                  <ReportKpiCard icon={<Building2 className="h-4 w-4 text-primary" />} label="Empresas ativas" value={String(admins.length)} />
+                  <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Trabalhadores ativos" value={String(workers.length)} />
+                </>
+              )}
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa inicial consolidado" : "Caixa inicial da equipe"} value={formatCurrency(summary.caixaInicial)} />
+
+              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa final consolidado" : "Caixa final da equipe"} value={formatCurrency(summary.caixaFinal)} />
               <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas" value={formatCurrency(summary.entradas)} tone="positive" />
@@ -479,8 +580,58 @@ export default function ReportsPage() {
             </ReportKpiGrid>
           </div>
 
+          {/* Comparação entre empresas (SuperAdmin — todas as empresas) */}
+          {globalMode && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Empresas</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {companyRows.length === 0 ? (
+                  <ReportEmptyState message="Nenhuma empresa ativa." />
+                ) : (
+                  <div className="divide-y">
+                    {companyRows.map((r) => (
+                      <button
+                        key={r.admin.id}
+                        type="button"
+                        onClick={() => { setSelectedAdmin(r.admin.id); setSelectedWorker("all"); }}
+                        className="w-full text-left p-3 flex items-center gap-2 hover:bg-muted/40 active:bg-muted/60 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate">{r.admin.nome}</p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
+                              r.hasOpen ? "text-success border-success/40" : "text-muted-foreground"
+                            }`}>{r.statusLabel}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                            <span>Trabalhadores: <b className="text-foreground">{r.workersCount}</b></span>
+                            <span>Cx. inicial: <b className="text-foreground">{formatCurrency(r.totals.caixaInicial)}</b></span>
+                            <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
+                            <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
+                            <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
+                            <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
+                            <span>
+                              Diferença: <b className={r.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
+                                {formatCurrency(r.totals.diferenca)}
+                              </b>
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Comparativo dos trabalhadores ativos */}
+          {!globalMode && (
           <Card>
+
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Trabalhadores ativos</CardTitle>
             </CardHeader>
@@ -524,9 +675,10 @@ export default function ReportsPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Detalhamento por dia */}
-          {startDate !== endDate && (
+          {!globalMode && startDate !== endDate && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Detalhamento por dia</CardTitle>

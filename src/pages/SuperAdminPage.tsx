@@ -309,7 +309,7 @@ function AdminsTab() {
                   <Button size="sm" variant="default" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
                     <Users className="h-3.5 w-3.5 mr-1" /> Equipe
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate(`/reports?admin=${a.id}`)}>
                     <BarChart3 className="h-3.5 w-3.5 mr-1" /> Relat.
                   </Button>
                   <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => resetAdminPassword(a)}>
