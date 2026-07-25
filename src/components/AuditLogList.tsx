@@ -475,18 +475,22 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
                             <Badge variant="outline" className="ml-1.5 text-[9px] h-4">{formatCurrency(amt)}</Badge>
                           )}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <p className="text-[10px] text-muted-foreground mt-0.5 break-words">
                           {l.user_role === "super_admin" ? "Super Admin"
                             : l.user_role === "admin" ? `Admin${adminName(l.admin_id) ? ` · ${adminName(l.admin_id)}` : ""}`
                             : (workerNameFromPayload(l) || workerName(l.worker_id))}
+                          <span className="ml-1">({roleLabel(l.user_role)})</span>
                           {isSuperAdmin && l.user_role === "trabalhador" && adminName(l.admin_id) && (
                             <span className="ml-1">· {adminName(l.admin_id)}</span>
                           )}
                           {cname && <span className="ml-1">· {cname}</span>}
                           {" · "}
+                          {entityLabel(l.entity_type)}
+                          {" · "}
                           {format(parseISO(l.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
                         </p>
-                        {l.observation && <p className="text-[11px] mt-1 italic line-clamp-2">{l.observation}</p>}
+                        {l.observation && <p className="text-[11px] mt-1 italic line-clamp-2 break-words">{l.observation}</p>}
+
                       </div>
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]" onClick={() => setOpenLog(l)}>
                         <Eye className="h-3 w-3 mr-1" /> Detalhes
