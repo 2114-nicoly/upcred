@@ -188,6 +188,30 @@ export default function ReportsPage() {
     [events, activeIds],
   );
 
+  // Detalhamento (somente leitura): clientes pendentes de registro e atrasados por trabalhador.
+  const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
+  useEffect(() => {
+    let alive = true;
+    const ids = Array.from(activeIds);
+    if (!ids.length) { setDetails(emptyReportDetails()); return; }
+    fetchReportDetails({
+      events: scopedEvents as any,
+      startDate,
+      endDate,
+      workerIds: ids,
+    })
+      .then((d) => { if (alive) setDetails(d); })
+      .catch(() => { if (alive) setDetails(emptyReportDetails()); });
+    return () => { alive = false; };
+  }, [scopedEvents, activeIds, startDate, endDate]);
+
+  const pendentesTotal = useMemo(
+    () => Object.values(details.pendentesByDate).reduce((s, l) => s + l.length, 0),
+    [details],
+  );
+
+
+
 
   const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
