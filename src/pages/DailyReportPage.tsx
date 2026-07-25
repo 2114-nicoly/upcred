@@ -577,14 +577,19 @@ export default function DailyReportPage({
       null,
       ["Indicador", "Quantidade"],
       [
-        ["Pagamentos registrados", String(groups.pagamentos.length)],
-        ["Não pagamentos", String(groups.naoPagamentos.length)],
-        ["Novos empréstimos", String(groups.novosEmprestimos.length)],
-        ["Renovações e renegociações", String(groups.renovacoes.length)],
-        ["Entradas e saídas", String(groups.movimentacoes.length)],
-        ["Despesas", String(groups.despesas.length)],
-        ["Estornos", String(groups.estornos.length)],
+        ["Pagamentos registrados", String(recordGroups.pagamentos.length)],
+        ["Pagamentos parciais", String(recordGroups.pagamentosParciais.length)],
+        ["Novos empréstimos", String(recordGroups.novosEmprestimos.length)],
+        ["Renovações", String(recordGroups.renovacoes.length)],
+        ["Renegociações", String(recordGroups.renegociacoes.length)],
+        ["Clientes não pagos", String(recordGroups.naoPagos.length)],
+        ["Clientes pendentes de registro", String(pendentesPeriodo.length)],
+        ["Clientes atrasados", String(details.atrasados.length)],
+        ["Despesas", String(recordGroups.despesas.length)],
+        ["Entradas e saídas", String(recordGroups.outras.length)],
+        ["Estornos", String(recordGroups.estornos.length)],
         ["Total de registros", String(events.length)],
+
       ],
       { rightCols: [1] }
     );
