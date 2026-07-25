@@ -90,8 +90,10 @@ export default function ReportsPage() {
   const [customStart, setCustomStart] = useState(todayISO());
   const [customEnd, setCustomEnd] = useState(todayISO());
   const [selectedWorker, setSelectedWorker] = useState<string>("all");
+  const [selectedAdmin, setSelectedAdmin] = useState<string>("all");
 
-  const [workers, setWorkers] = useState<WorkerRow[]>([]);
+  const [allWorkers, setAllWorkers] = useState<WorkerRow[]>([]);
+  const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [cashRows, setCashRows] = useState<DailyCashRow[]>([]);
   const [events, setEvents] = useState<DailyEventRow[]>([]);
   const [clients, setClients] = useState<Record<string, string>>({});
@@ -99,7 +101,20 @@ export default function ReportsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [adminName, setAdminName] = useState<string>("");
-  const { adminId } = useAuth();
+  const { adminId, isSuperAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Empresa vinda de link externo (ex.: painel do SuperAdmin) — sem criar nova rota.
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const qp = searchParams.get("admin");
+    if (qp) {
+      setSelectedAdmin(qp);
+      searchParams.delete("admin");
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     if (!adminId) return;
@@ -116,8 +131,14 @@ export default function ReportsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const wRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: false });
-    const allWorkers = ((wRes.data as WorkerRow[]) || []).filter((w) => w.active && !w.archived_at);
-    setWorkers(allWorkers);
+    setAllWorkers(((wRes.data as WorkerRow[]) || []).filter((w) => w.active && !w.archived_at));
+
+    if (isSuperAdmin) {
+      const aRes = await supabase.rpc("super_admin_list_admins" as any);
+      setAdmins(((aRes.data as AdminRow[]) || []).filter((a) => a.active));
+    } else {
+      setAdmins([]);
+    }
 
     const [cashRes, evRes, clRes] = await Promise.all([
       supabase
@@ -140,9 +161,20 @@ export default function ReportsPage() {
     ((clRes.data as { id: string; name: string }[]) || []).forEach((c) => { cmap[c.id] = c.name; });
     setClients(cmap);
     setLoading(false);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, isSuperAdmin]);
 
   useEffect(() => { load(); }, [load]);
+
+  /** Visão global do sistema: SuperAdmin com "Todas as empresas". */
+  const globalMode = isSuperAdmin && selectedAdmin === "all";
+
+  // Trabalhadores visíveis conforme a empresa selecionada.
+  const workers = useMemo(
+    () => (isSuperAdmin && selectedAdmin !== "all"
+      ? allWorkers.filter((w) => w.parent_admin_id === selectedAdmin)
+      : allWorkers),
+    [allWorkers, isSuperAdmin, selectedAdmin],
+  );
 
   const activeIds = useMemo(() => new Set(workers.map((w) => w.id)), [workers]);
 
@@ -155,6 +187,7 @@ export default function ReportsPage() {
     () => events.filter((e) => e.worker_id && activeIds.has(e.worker_id)),
     [events, activeIds],
   );
+
 
   const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
