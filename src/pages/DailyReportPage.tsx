@@ -341,6 +341,14 @@ export default function DailyReportPage({
     [events, details],
   );
 
+  /** Clientes pendentes de registro em todo o período (sem duplicar dias). */
+  const pendentesPeriodo = useMemo(
+    () => Object.values(details.pendentesByDate).flat(),
+    [details],
+  );
+
+
+
 
   const estornosTotal = useMemo(
     () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
