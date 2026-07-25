@@ -177,6 +177,49 @@ export default function ReportsPage() {
     });
   }, [workers, scopedCash, scopedEvents]);
 
+  // Detalhamento por dia (equipe) — sem misturar datas
+  const dayRows = useMemo(() => {
+    const dates = new Set<string>();
+    scopedCash.forEach((c) => dates.add(c.cash_date));
+    scopedEvents.forEach((e) => dates.add(e.cash_date));
+    return Array.from(dates)
+      .sort((a, b) => (a < b ? 1 : -1))
+      .map((date) => {
+        const dCash = scopedCash.filter((c) => c.cash_date === date);
+        const dEvents = scopedEvents.filter((e) => e.cash_date === date);
+        const openCount = dCash.filter((c) => c.status !== "closed").length;
+        const closedCount = dCash.filter((c) => c.status === "closed").length;
+
+        const perWorker = workers
+          .map((w) => {
+            const wCash = dCash.filter((c) => c.worker_id === w.id);
+            const wEvents = dEvents.filter((e) => e.worker_id === w.id);
+            if (wCash.length === 0 && wEvents.length === 0) return null;
+            const cash = wCash[0];
+            const isOpen = !!cash && cash.status !== "closed";
+            return {
+              worker: w,
+              isOpen,
+              statusLabel: !cash ? "Não aberto" : isOpen ? "Caixa ainda aberto" : "Fechado",
+              totals: sumTotals(wCash, wEvents),
+            };
+          })
+          .filter(Boolean) as {
+            worker: WorkerRow; isOpen: boolean; statusLabel: string;
+            totals: ReturnType<typeof sumTotals>;
+          }[];
+
+        return { date, openCount, closedCount, totals: sumTotals(dCash, dEvents), perWorker };
+      });
+  }, [scopedCash, scopedEvents, workers]);
+
+  const openWorkerOnDay = (workerId: string, date: string) => {
+    setMode("custom");
+    setCustomStart(date);
+    setCustomEnd(date);
+    setSelectedWorker(workerId);
+  };
+
 
   const exportPDF = () => {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
