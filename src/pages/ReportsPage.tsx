@@ -178,86 +178,51 @@ export default function ReportsPage() {
   }, [workers, scopedCash, scopedEvents]);
 
 
-  const toggleExpanded = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
-
   const exportPDF = () => {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
-    const workerName = selectedWorker === "all" ? "Todos os trabalhadores" : (workers.find((w) => w.id === selectedWorker)?.nome || "-");
     doc.setFontSize(14);
     doc.text("Relatório Administrativo", 40, 40);
     doc.setFontSize(10);
     doc.text(`Período: ${label}`, 40, 58);
-    doc.text(`Trabalhador: ${workerName}`, 40, 72);
+    doc.text(`Trabalhador: Todos os trabalhadores`, 40, 72);
 
     autoTable(doc, {
       startY: 90,
       head: [["Resumo do período", "Valor"]],
       body: [
-        ["Caixa inicial", formatCurrency(summary.caixaInicial)],
+        ["Caixa inicial da equipe", formatCurrency(summary.caixaInicial)],
+        ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
         ["Total recebido", formatCurrency(summary.recebido)],
         ["Total emprestado", formatCurrency(summary.emprestado)],
-        ["Entradas manuais", formatCurrency(summary.entradasManuais)],
-        ["Saídas manuais", formatCurrency(summary.saidasManuais)],
-        ["Caixa final previsto", formatCurrency(summary.caixaFinalPrevisto)],
-        ["Caixa final contado", formatCurrency(summary.caixaFinalContado)],
-        ["Diferença de caixa", formatCurrency(summary.diferenca)],
+        ["Entradas", formatCurrency(summary.entradas)],
+        ["Saídas", formatCurrency(summary.saidas)],
+        ["Despesas", formatCurrency(summary.despesas)],
+        ["Multas", formatCurrency(summary.multas)],
+        ["Estornos", formatCurrency(summary.estornos)],
+        ["Diferença total de caixa", formatCurrency(summary.diferenca)],
       ],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [30, 41, 59] },
     });
 
     autoTable(doc, {
-      head: [["Trabalhador", "Status", "Cx. Inicial", "Recebido", "Emprestado", "Diferença"]],
+      head: [["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença"]],
       body: workerRows.map((r) => [
         r.worker.nome, r.statusLabel,
-        formatCurrency(r.opening),
-        formatCurrency(r.totals.recebimentos),
-        formatCurrency(r.totals.novos + r.totals.renov),
-        formatCurrency(r.diff),
+        formatCurrency(r.totals.caixaInicial),
+        formatCurrency(r.totals.caixaFinal),
+        formatCurrency(r.totals.recebido),
+        formatCurrency(r.totals.emprestado),
+        formatCurrency(r.totals.despesas),
+        formatCurrency(r.totals.diferenca),
       ]),
-      styles: { fontSize: 9 },
+      styles: { fontSize: 8 },
       headStyles: { fillColor: [30, 41, 59] },
-    });
-
-    // Expanded worker details
-    workerRows.forEach((r) => {
-      if (!expanded[r.worker.id]) return;
-      doc.addPage();
-      doc.setFontSize(12);
-      doc.text(`Detalhes — ${r.worker.nome}`, 40, 40);
-      autoTable(doc, {
-        startY: 55,
-        head: [["Indicador", "Valor"]],
-        body: [
-          ["Caixa inicial", formatCurrency(r.opening)],
-          ["Caixa final previsto", formatCurrency(r.expected)],
-          ["Caixa final contado", formatCurrency(r.counted)],
-          ["Recebimentos", formatCurrency(r.totals.recebimentos)],
-          ["Novos empréstimos", formatCurrency(r.totals.novos)],
-          ["Renovações", formatCurrency(r.totals.renov)],
-          ["Pagamentos", formatCurrency(r.totals.pagamentos)],
-          ["Não pagamentos", String(r.totals.naoPagos)],
-          ["Entradas manuais", formatCurrency(r.totals.entMan)],
-          ["Saídas manuais", formatCurrency(r.totals.saiMan)],
-          ["Cancelamentos", String(r.totals.canc)],
-        ],
-        styles: { fontSize: 9 },
-      });
-      autoTable(doc, {
-        head: [["Data/Hora", "Tipo", "Cliente/Obs", "Entrada", "Saída"]],
-        body: r.movements.map((m) => [
-          format(new Date(m.created_at), "dd/MM HH:mm"),
-          formatEventLabel(m.event_type),
-          (m.client_id ? clients[m.client_id] : "") || m.observation || "—",
-          Number(m.amount_in) > 0 ? formatCurrency(Number(m.amount_in)) : "",
-          Number(m.amount_out) > 0 ? formatCurrency(Number(m.amount_out)) : "",
-        ]),
-        styles: { fontSize: 8 },
-      });
     });
 
     doc.save(`relatorio_${startDate}_${endDate}.pdf`);
   };
+
 
   const workerLabel =
     selectedWorker === "all"
