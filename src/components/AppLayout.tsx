@@ -25,7 +25,8 @@ const workerSidebar: NavItem[] = [
   { path: "/active-loans", label: "Empréstimos Ativos", icon: Landmark },
   { path: "/overdue", label: "Atrasados", icon: AlertTriangle },
   { path: "/daily-cash-history", label: "Histórico do Caixa", icon: CalendarDays },
-  { path: "/daily-report", label: "Relatório Diário", icon: FileText },
+  { path: "/reports", label: "Relatórios", icon: BarChart3 },
+
   { path: "/account", label: "Minha Conta", icon: UserCircle },
 ];
 
