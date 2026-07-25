@@ -66,6 +66,20 @@ function WorkerOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Página oficial de "Relatórios".
+ * Trabalhador: relatório diário completo (DailyReportPage).
+ * Admin/SuperAdmin: relatórios consolidados (ReportsPage) — inalterado.
+ */
+function ReportsRoute() {
+  const { isAdmin, isSuperAdmin, loading } = useAuth();
+  if (loading) {
+    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
+  }
+  if (isAdmin || isSuperAdmin) return <ReportsPage />;
+  return <DailyReportPage />;
+}
+
 
 
 
