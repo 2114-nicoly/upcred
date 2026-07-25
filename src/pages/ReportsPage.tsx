@@ -211,9 +211,10 @@ export default function ReportsPage() {
   }, [scopedEvents, activeIds, startDate, endDate]);
 
   const pendentesTotal = useMemo(
-    () => Object.values(details.pendentesByDate).reduce((s, l) => s + l.length, 0),
+    () => Object.values(details.pendentesByDate).reduce((s, l: ReportRecord[]) => s + l.length, 0),
     [details],
   );
+
 
 
 
