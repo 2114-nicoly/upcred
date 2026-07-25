@@ -412,6 +412,8 @@ export default function ReportsPage() {
           ["Diferença total de caixa", formatCurrency(d.totals.diferenca)],
           ["Caixas abertos", String(d.openCount)],
           ["Caixas fechados", String(d.closedCount)],
+          ["Clientes pendentes de registro", String((details.pendentesByDate[d.date] || []).length)],
+
         ], { rightCols: [1] });
 
         pdf.table(
