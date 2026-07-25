@@ -830,6 +830,20 @@ export default function DailyReportPage({
         </Button>
       </div>
 
+      {/* Contagens do período */}
+      {!loading && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
+          <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
+          <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
+          <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
+          <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
+          <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
+          <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
+          <CountCard label="Clientes atrasados" value={details.atrasados.length} />
+        </div>
+      )}
+
       {/* Registros */}
       {loading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
@@ -840,20 +854,19 @@ export default function DailyReportPage({
             <p className="text-center text-sm text-muted-foreground py-8">Nenhuma movimentação no período.</p>
           )}
           {days.map((d) => (
-            <DaySection key={d.date} day={d} clientNames={clientNames} />
+            <DaySection key={d.date} day={d} />
           ))}
+          <p className="text-xs font-semibold text-muted-foreground uppercase pt-2">Situação atual da carteira</p>
+          <RecordSection title="Clientes atrasados" records={details.atrasados} />
         </div>
       ) : (
-        <div className="space-y-2">
-          <EventSection title="Pagamentos" events={groups.pagamentos} clientNames={clientNames} />
-          <EventSection title="Não pagamentos" events={groups.naoPagamentos} clientNames={clientNames} />
-          <EventSection title="Novos empréstimos" events={groups.novosEmprestimos} clientNames={clientNames} />
-          <EventSection title="Renovações e renegociações" events={groups.renovacoes} clientNames={clientNames} />
-          <EventSection title="Entradas e saídas" events={groups.movimentacoes} clientNames={clientNames} />
-          <EventSection title="Despesas" events={groups.despesas} clientNames={clientNames} />
-          <EventSection title="Estornos" events={groups.estornos} clientNames={clientNames} />
-        </div>
+        <RecordGroupSections
+          groups={recordGroups}
+          pendentes={details.pendentesByDate[endDate] || []}
+          atrasados={details.atrasados}
+        />
       )}
+
     </div>
   );
 }
