@@ -346,10 +346,8 @@ export default function ReportsPage() {
           embeddedEnd={endDate}
         />
       ) : loading ? (
-
-
-      {loading ? (
         <p className="p-4 text-center text-muted-foreground">Carregando...</p>
+
       ) : (
         <>
           {/* Resumo financeiro do período */}
