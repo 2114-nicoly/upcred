@@ -552,10 +552,17 @@ export default function ReportsPage() {
           {/* Resumo financeiro do período */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-              {REPORT_SECTIONS.resumo}
+              {globalMode ? "Resumo geral do sistema" : REPORT_SECTIONS.resumo}
             </p>
             <ReportKpiGrid>
-              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial da equipe" value={formatCurrency(summary.caixaInicial)} />
+              {globalMode && (
+                <>
+                  <ReportKpiCard icon={<Building2 className="h-4 w-4 text-primary" />} label="Empresas ativas" value={String(admins.length)} />
+                  <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Trabalhadores ativos" value={String(workers.length)} />
+                </>
+              )}
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa inicial consolidado" : "Caixa inicial da equipe"} value={formatCurrency(summary.caixaInicial)} />
+
               <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final da equipe" value={formatCurrency(summary.caixaFinal)} />
               <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
