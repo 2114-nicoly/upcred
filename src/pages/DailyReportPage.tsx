@@ -597,8 +597,9 @@ export default function DailyReportPage({
     // ===== 3. Detalhamento =====
     writeBlockTitle("3. Detalhamento");
 
-    if (events.length === 0) {
+    if (events.length === 0 && pendentesPeriodo.length === 0 && details.atrasados.length === 0) {
       writeText("Não houve movimentações no período selecionado.", 10);
+
     } else if (isMultiDay) {
       days.forEach((d) => {
         const dayLabel = format(new Date(d.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
