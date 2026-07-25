@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/loan-utils";
 import {
   RefreshCw, FileDown, Wallet, TrendingUp, ArrowDownCircle,
   ArrowUpCircle, Target, AlertTriangle, ChevronDown, ChevronRight,
+  Building2, Users,
 } from "lucide-react";
 import {
   format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO,
@@ -18,6 +19,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { Share2, Loader2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { createReportPdf, downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
 import {
@@ -25,6 +27,7 @@ import {
   AuditLink, formatEventLabel, REPORT_SECTIONS,
 } from "@/components/reports/ReportUI";
 import DailyReportPage from "@/pages/DailyReportPage";
+
 
 
 
