@@ -483,18 +483,39 @@ export default function ReportsPage() {
             </div>
           )}
 
-          <div>
-            <Label className="text-xs mb-1 block">Trabalhador</Label>
-            <Select value={selectedWorker} onValueChange={setSelectedWorker}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os trabalhadores</SelectItem>
-                {workers.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {isSuperAdmin && (
+            <div>
+              <Label className="text-xs mb-1 block">Empresa (Administrador)</Label>
+              <Select
+                value={selectedAdmin}
+                onValueChange={(v) => { setSelectedAdmin(v); setSelectedWorker("all"); }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {admins.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {!globalMode && (
+            <div>
+              <Label className="text-xs mb-1 block">Trabalhador</Label>
+              <Select value={selectedWorker} onValueChange={setSelectedWorker}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os trabalhadores</SelectItem>
+                  {workers.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" variant="outline" onClick={load} disabled={loading}>
