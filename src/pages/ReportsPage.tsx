@@ -22,6 +22,8 @@ import {
   ReportHeader, ReportKpiGrid, ReportKpiCard, ReportEmptyState,
   AuditLink, formatEventLabel, REPORT_SECTIONS,
 } from "@/components/reports/ReportUI";
+import DailyReportPage from "@/pages/DailyReportPage";
+
 
 type PeriodMode = "today" | "yesterday" | "week" | "month" | "custom";
 
