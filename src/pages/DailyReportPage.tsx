@@ -770,12 +770,12 @@ export default function DailyReportPage() {
       )}
 
       <div className="grid grid-cols-2 gap-2">
-        <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="default">
+        <Button onClick={handleDownloadPDF} disabled={loading || generatingPdf} variant="default">
           {generatingPdf
             ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando…</>
             : <><Download className="mr-2 h-4 w-4" /> Baixar PDF</>}
         </Button>
-        <Button onClick={handleSharePDF} disabled={loading || generatingPdf || (rows.length === 0 && !cashSummary)} variant="outline">
+        <Button onClick={handleSharePDF} disabled={loading || generatingPdf} variant="outline">
           <Share2 className="mr-2 h-4 w-4" /> Compartilhar
         </Button>
       </div>
