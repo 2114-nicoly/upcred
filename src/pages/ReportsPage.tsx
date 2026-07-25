@@ -580,8 +580,58 @@ export default function ReportsPage() {
             </ReportKpiGrid>
           </div>
 
+          {/* Comparação entre empresas (SuperAdmin — todas as empresas) */}
+          {globalMode && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Empresas</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {companyRows.length === 0 ? (
+                  <ReportEmptyState message="Nenhuma empresa ativa." />
+                ) : (
+                  <div className="divide-y">
+                    {companyRows.map((r) => (
+                      <button
+                        key={r.admin.id}
+                        type="button"
+                        onClick={() => { setSelectedAdmin(r.admin.id); setSelectedWorker("all"); }}
+                        className="w-full text-left p-3 flex items-center gap-2 hover:bg-muted/40 active:bg-muted/60 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate">{r.admin.nome}</p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
+                              r.hasOpen ? "text-success border-success/40" : "text-muted-foreground"
+                            }`}>{r.statusLabel}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                            <span>Trabalhadores: <b className="text-foreground">{r.workersCount}</b></span>
+                            <span>Cx. inicial: <b className="text-foreground">{formatCurrency(r.totals.caixaInicial)}</b></span>
+                            <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
+                            <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
+                            <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
+                            <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
+                            <span>
+                              Diferença: <b className={r.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
+                                {formatCurrency(r.totals.diferenca)}
+                              </b>
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Comparativo dos trabalhadores ativos */}
+          {!globalMode && (
           <Card>
+
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Trabalhadores ativos</CardTitle>
             </CardHeader>
