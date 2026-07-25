@@ -740,6 +740,13 @@ export default function ReportsPage() {
           </Card>
           )}
 
+          {/* Situação atual da carteira da equipe */}
+          {!globalMode && (
+            <RecordSection title="Clientes atrasados" records={details.atrasados} showWorker />
+          )}
+
+
+
           {/* Detalhamento por dia */}
           {!globalMode && startDate !== endDate && (
             <Card>
