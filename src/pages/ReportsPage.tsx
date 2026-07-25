@@ -521,7 +521,7 @@ export default function ReportsPage() {
             <Button size="sm" variant="outline" onClick={load} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
-            {selectedWorker === "all" && (
+            {selectedWorker === "all" && !globalMode && (
               <>
                 <Button size="sm" onClick={handleDownloadPDF} disabled={loading || generatingPdf}>
                   {generatingPdf
