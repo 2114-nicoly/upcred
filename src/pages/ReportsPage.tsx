@@ -27,6 +27,11 @@ import {
   AuditLink, formatEventLabel, REPORT_SECTIONS,
 } from "@/components/reports/ReportUI";
 import DailyReportPage from "@/pages/DailyReportPage";
+import {
+  fetchReportDetails, emptyReportDetails,
+  type ReportDetailsData, type ReportRecord,
+} from "@/lib/report-details";
+
 
 
 
