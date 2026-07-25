@@ -675,9 +675,10 @@ export default function ReportsPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Detalhamento por dia */}
-          {startDate !== endDate && (
+          {!globalMode && startDate !== endDate && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Detalhamento por dia</CardTitle>
