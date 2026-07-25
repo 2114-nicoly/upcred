@@ -16,13 +16,16 @@ import {
   format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { toast } from "sonner";
+import { Share2, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { createReportPdf, downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
 import {
   ReportHeader, ReportKpiGrid, ReportKpiCard, ReportEmptyState,
   AuditLink, formatEventLabel, REPORT_SECTIONS,
 } from "@/components/reports/ReportUI";
 import DailyReportPage from "@/pages/DailyReportPage";
+
 
 
 type PeriodMode = "today" | "yesterday" | "week" | "month" | "custom";
