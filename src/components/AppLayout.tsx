@@ -85,7 +85,7 @@ function buildRouteLabels(role: "worker" | "admin" | "super_admin"): Record<stri
       "/caixa": "Caixa do Dia",
       "/active-loans": "Empréstimos",
       "/clients": "Clientes",
-      "/reports": "Relatórios Gerais",
+      "/reports": "Relatórios",
       "/audit": "Auditoria Geral",
       "/super-admin": "Dashboard Geral",
     };
