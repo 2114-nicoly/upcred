@@ -158,6 +158,9 @@ function AppRoutes() {
                 <Route path="/audit" element={<AdminRoute><WrappedRoute element={<AuditPage />} /></AdminRoute>} />
                 <Route path="/account" element={<WrappedRoute element={<AccountPage />} />} />
                 <Route path="/daily-report" element={<WrappedRoute element={<LegacyDailyReportRoute />} />} />
+                <Route path="/team-report" element={<Navigate to="/reports" replace />} />
+                <Route path="/auditoria" element={<Navigate to="/audit" replace />} />
+                <Route path="/audit-logs" element={<Navigate to="/audit" replace />} />
                 
                 <Route path="/admin" element={<AdminRoute><WrappedRoute element={<AdminPanelPage />} /></AdminRoute>} />
                 <Route path="/admin/worker/:id" element={<AdminRoute><WrappedRoute element={<AdminWorkerDetailPage />} /></AdminRoute>} />
