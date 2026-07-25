@@ -607,7 +607,20 @@ export default function ReportsPage() {
                 value={formatCurrency(summary.diferenca)}
                 tone={summary.diferenca >= 0 ? "positive" : "negative"}
               />
+              <ReportKpiCard
+                icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+                label="Clientes pendentes de registro"
+                value={String(pendentesTotal)}
+                tone={pendentesTotal > 0 ? "warning" : "neutral"}
+              />
+              <ReportKpiCard
+                icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
+                label="Clientes atrasados"
+                value={String(details.atrasados.length)}
+                tone={details.atrasados.length > 0 ? "negative" : "neutral"}
+              />
             </ReportKpiGrid>
+
           </div>
 
           {/* Comparação entre empresas (SuperAdmin — todas as empresas) */}
