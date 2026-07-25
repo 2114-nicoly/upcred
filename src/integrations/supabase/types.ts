@@ -1376,24 +1376,30 @@ export type Database = {
       }
       route_requests: {
         Row: {
+          admin_id: string | null
           assigned_route_number: string | null
           created_at: string
           id: string
           status: string
+          worker_id: string | null
           worker_name: string
         }
         Insert: {
+          admin_id?: string | null
           assigned_route_number?: string | null
           created_at?: string
           id?: string
           status?: string
+          worker_id?: string | null
           worker_name: string
         }
         Update: {
+          admin_id?: string | null
           assigned_route_number?: string | null
           created_at?: string
           id?: string
           status?: string
+          worker_id?: string | null
           worker_name?: string
         }
         Relationships: []
