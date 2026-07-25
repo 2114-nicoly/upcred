@@ -80,6 +80,20 @@ function ReportsRoute() {
   return <DailyReportPage />;
 }
 
+/**
+ * Rota antiga "/daily-report": mantida apenas para o SuperAdmin.
+ * Admin e trabalhador são redirecionados para a área oficial "/reports".
+ */
+function LegacyDailyReportRoute() {
+  const { isSuperAdmin, loading } = useAuth();
+  const location = useLocation();
+  if (loading) {
+    return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
+  }
+  if (isSuperAdmin) return <DailyReportPage />;
+  return <Navigate to={`/reports${location.search}`} replace />;
+}
+
 
 
 
