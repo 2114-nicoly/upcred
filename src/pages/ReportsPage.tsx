@@ -563,7 +563,7 @@ export default function ReportsPage() {
               )}
               <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa inicial consolidado" : "Caixa inicial da equipe"} value={formatCurrency(summary.caixaInicial)} />
 
-              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final da equipe" value={formatCurrency(summary.caixaFinal)} />
+              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa final consolidado" : "Caixa final da equipe"} value={formatCurrency(summary.caixaFinal)} />
               <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas" value={formatCurrency(summary.entradas)} tone="positive" />
