@@ -221,36 +221,46 @@ export default function ReportsPage() {
   };
 
 
-  const exportPDF = () => {
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    doc.setFontSize(14);
-    doc.text("Relatório Administrativo", 40, 40);
-    doc.setFontSize(10);
-    doc.text(`Período: ${label}`, 40, 58);
-    doc.text(`Trabalhador: Todos os trabalhadores`, 40, 72);
-
-    autoTable(doc, {
-      startY: 90,
-      head: [["Resumo do período", "Valor"]],
-      body: [
-        ["Caixa inicial da equipe", formatCurrency(summary.caixaInicial)],
-        ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
-        ["Total recebido", formatCurrency(summary.recebido)],
-        ["Total emprestado", formatCurrency(summary.emprestado)],
-        ["Entradas", formatCurrency(summary.entradas)],
-        ["Saídas", formatCurrency(summary.saidas)],
-        ["Despesas", formatCurrency(summary.despesas)],
-        ["Multas", formatCurrency(summary.multas)],
-        ["Estornos", formatCurrency(summary.estornos)],
-        ["Diferença total de caixa", formatCurrency(summary.diferenca)],
+  // Único gerador de PDF do Administrador — mesmo padrão do Relatório do Trabalhador,
+  // usando exatamente os dados já exibidos na tela.
+  const buildPdf = () => {
+    const pdf = createReportPdf({
+      title: "UpCredit — Relatório da Equipe",
+      metaLines: [
+        `Administrador: ${adminName || "—"}`,
+        `Escopo: Todos os trabalhadores`,
+        `Período: ${label}`,
       ],
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [30, 41, 59] },
     });
 
-    autoTable(doc, {
-      head: [["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença"]],
-      body: workerRows.map((r) => [
+    const hasMovement =
+      scopedCash.length > 0 || scopedEvents.length > 0;
+
+    pdf.blockTitle("Resumo financeiro da equipe");
+    if (!hasMovement) {
+      pdf.text("Nenhuma movimentação registrada no período selecionado.");
+    }
+    pdf.table(null, ["Indicador", "Valor"], [
+      ["Caixa inicial da equipe", formatCurrency(summary.caixaInicial)],
+      ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
+      ["Total recebido", formatCurrency(summary.recebido)],
+      ["Total emprestado", formatCurrency(summary.emprestado)],
+      ["Entradas", formatCurrency(summary.entradas)],
+      ["Saídas", formatCurrency(summary.saidas)],
+      ["Despesas", formatCurrency(summary.despesas)],
+      ["Multas", formatCurrency(summary.multas)],
+      ["Estornos", formatCurrency(summary.estornos)],
+      ["Diferença total de caixa", formatCurrency(summary.diferenca)],
+    ], { rightCols: [1] });
+
+    pdf.blockTitle("Comparação dos trabalhadores");
+    if (workerRows.length === 0) {
+      pdf.text("Nenhum trabalhador ativo no período.");
+    }
+    pdf.table(
+      null,
+      ["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença"],
+      workerRows.map((r) => [
         r.worker.nome, r.statusLabel,
         formatCurrency(r.totals.caixaInicial),
         formatCurrency(r.totals.caixaFinal),
@@ -259,12 +269,87 @@ export default function ReportsPage() {
         formatCurrency(r.totals.despesas),
         formatCurrency(r.totals.diferenca),
       ]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [30, 41, 59] },
-    });
+      { rightCols: [2, 3, 4, 5, 6, 7] },
+    );
 
-    doc.save(`relatorio_${startDate}_${endDate}.pdf`);
+    if (startDate !== endDate) {
+      pdf.blockTitle("Detalhamento por dia");
+      if (dayRows.length === 0) {
+        pdf.text("Nenhuma movimentação no período.");
+      }
+      dayRows.forEach((d) => {
+        const dayLabel = format(parseISO(d.date + "T12:00:00"), "dd/MM/yyyy (EEEE)", { locale: ptBR });
+        pdf.table(dayLabel, ["Indicador", "Valor"], [
+          ["Caixa inicial", formatCurrency(d.totals.caixaInicial)],
+          ["Caixa final", formatCurrency(d.totals.caixaFinal)],
+          ["Total recebido", formatCurrency(d.totals.recebido)],
+          ["Total emprestado", formatCurrency(d.totals.emprestado)],
+          ["Despesas", formatCurrency(d.totals.despesas)],
+          ["Diferença total de caixa", formatCurrency(d.totals.diferenca)],
+          ["Caixas abertos", String(d.openCount)],
+          ["Caixas fechados", String(d.closedCount)],
+        ], { rightCols: [1] });
+
+        pdf.table(
+          null,
+          ["Trabalhador", "Recebido", "Emprestado", "Despesas", "Cx. final", "Diferença", "Status"],
+          d.perWorker.map((r) => [
+            r.worker.nome,
+            formatCurrency(r.totals.recebido),
+            formatCurrency(r.totals.emprestado),
+            formatCurrency(r.totals.despesas),
+            formatCurrency(r.totals.caixaFinal),
+            formatCurrency(r.totals.diferenca),
+            r.statusLabel,
+          ]),
+          { rightCols: [1, 2, 3, 4, 5] },
+        );
+      });
+    }
+
+    pdf.blockTitle("Totais finais");
+    pdf.table(null, ["Total", "Valor"], [
+      ["Recebido no período", formatCurrency(summary.recebido)],
+      ["Emprestado no período", formatCurrency(summary.emprestado)],
+      ["Despesas no período", formatCurrency(summary.despesas)],
+      ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
+      ["Diferença total de caixa", formatCurrency(summary.diferenca)],
+    ], { rightCols: [1] });
+
+    const filename = `relatorio-equipe-${startDate}_a_${endDate}.pdf`;
+    return { doc: pdf.doc, filename };
   };
+
+  const handleDownloadPDF = async () => {
+    if (generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+      const { doc, filename } = buildPdf();
+      downloadReportPdf(doc, filename);
+    } catch (err: any) {
+      console.error("[Reports PDF] erro:", err);
+      toast.error("Não foi possível gerar o PDF: " + (err?.message || "erro desconhecido"));
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleSharePDF = async () => {
+    if (generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+      const { doc, filename } = buildPdf();
+      await shareReportPdf(doc, filename, `Relatório UpCredit — Equipe — ${label}`);
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        console.error("[Reports share] erro:", err);
+        toast.error("Não foi possível compartilhar: " + (err?.message || "erro desconhecido"));
+      }
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
 
 
   const workerLabel =
