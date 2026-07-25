@@ -874,6 +874,76 @@ function buildGroups(list: DailyEvent[]) {
   };
 }
 
+type RecordGroups = ReturnType<typeof buildRecordGroups>;
+
+/**
+ * Agrupa os registros detalhados por tipo de movimentação (apresentação apenas).
+ * Não altera valores, saldos nem regras financeiras.
+ */
+function buildRecordGroups(list: DailyEvent[], recordFor: (e: DailyEvent) => ReportRecord) {
+  const recs = list.map(recordFor);
+  const of = (kinds: string[], filter?: (r: ReportRecord) => boolean) =>
+    recs.filter((r) => kinds.includes(r.kind) && !r.reversed && (!filter || filter(r)));
+
+  const pagamentosAll = of(["pagamento", "recebimento_multa"]);
+  const parciais = pagamentosAll.filter((r) => r.title === "Pagamento parcial");
+  const pagamentos = pagamentosAll.filter((r) => r.title !== "Pagamento parcial");
+  const known = new Set([
+    "pagamento", "recebimento_multa", "nao_pagou", "emprestimo_novo", "emprestimo_importado",
+    "renovacao", "renovacao_absorvida", "renegociacao", "despesa",
+  ]);
+  return {
+    pagamentos,
+    pagamentosParciais: parciais,
+    novosEmprestimos: of(["emprestimo_novo", "emprestimo_importado"]),
+    renovacoes: of(["renovacao", "renovacao_absorvida"]),
+    renegociacoes: of(["renegociacao"]),
+    naoPagos: of(["nao_pagou"]),
+    despesas: of(["despesa"]),
+    outras: recs.filter((r) => !r.reversed && !known.has(r.kind)),
+    estornos: recs.filter((r) => r.reversed),
+  };
+}
+
+const RECORD_GROUP_ORDER: { key: keyof RecordGroups; label: string }[] = [
+  { key: "pagamentos", label: "Pagamentos" },
+  { key: "pagamentosParciais", label: "Pagamentos parciais" },
+  { key: "novosEmprestimos", label: "Novos empréstimos" },
+  { key: "renovacoes", label: "Renovações" },
+  { key: "renegociacoes", label: "Renegociações" },
+  { key: "naoPagos", label: "Clientes não pagos" },
+  { key: "despesas", label: "Despesas" },
+  { key: "outras", label: "Outras movimentações" },
+  { key: "estornos", label: "Estornos" },
+];
+
+/** Seções detalhadas de um dia/período (mesma ordem na tela e no PDF). */
+function RecordGroupSections({
+  groups,
+  pendentes,
+  atrasados,
+  showWorker,
+}: {
+  groups: RecordGroups;
+  pendentes: ReportRecord[];
+  atrasados?: ReportRecord[];
+  showWorker?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      {RECORD_GROUP_ORDER.slice(0, 6).map((g) => (
+        <RecordSection key={g.key} title={g.label} records={groups[g.key]} showWorker={showWorker} />
+      ))}
+      <RecordSection title="Clientes pendentes de registro" records={pendentes} showWorker={showWorker} />
+      {atrasados && <RecordSection title="Clientes atrasados" records={atrasados} showWorker={showWorker} />}
+      {RECORD_GROUP_ORDER.slice(6).map((g) => (
+        <RecordSection key={g.key} title={g.label} records={groups[g.key]} showWorker={showWorker} />
+      ))}
+    </div>
+  );
+}
+
+
 function DaySection({
   day,
   clientNames,
