@@ -17,6 +17,8 @@ import { ChevronDown, Download, FileText, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
+
 
 type AuditRow = {
   id: string;
