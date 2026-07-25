@@ -670,7 +670,7 @@ export default function DailyReportPage({
   ];
 
   return (
-    <div className="mx-auto w-full max-w-3xl p-4 space-y-4 overflow-x-hidden">
+    <div className={embedded ? "w-full space-y-4 overflow-x-hidden" : "mx-auto w-full max-w-3xl p-4 space-y-4 overflow-x-hidden"}>
       {/* Filtros */}
       <Card>
         <CardContent className="p-4 space-y-3">
