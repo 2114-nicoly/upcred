@@ -36,7 +36,19 @@ type AdminOpt = { id: string; nome: string };
 const INCOME_TYPES = new Set(["pagamento", "recebimento_multa", "entrada_manual"]);
 const OUT_TYPES = new Set(["emprestimo_novo", "renovacao", "renegociacao", "saida", "saida_manual", "despesa"]);
 
-export default function DailyReportPage() {
+type DailyReportPageProps = {
+  /** Quando definido, a página roda em modo "embutido": filtros próprios ocultos e escopo controlado pelo pai. */
+  embeddedWorkerId?: string | null;
+  embeddedStart?: string;
+  embeddedEnd?: string;
+};
+
+export default function DailyReportPage({
+  embeddedWorkerId,
+  embeddedStart,
+  embeddedEnd,
+}: DailyReportPageProps = {}) {
+  const embedded = embeddedWorkerId !== undefined;
   const { workerId: myWorkerId, adminId: myAdminId, isAdmin, isSuperAdmin } = useAuth();
   const [searchParams] = useSearchParams();
 
@@ -44,14 +56,23 @@ export default function DailyReportPage() {
   const initialDate = searchParams.get("date") || today;
   type Preset = "hoje" | "ontem" | "semana" | "mes" | "custom";
   const [preset, setPreset] = useState<Preset>(initialDate === today ? "hoje" : "custom");
-  const [startDate, setStartDate] = useState<string>(initialDate);
-  const [endDate, setEndDate] = useState<string>(initialDate);
+  const [startDate, setStartDate] = useState<string>(embeddedStart || initialDate);
+  const [endDate, setEndDate] = useState<string>(embeddedEnd || initialDate);
   // Usado pelo PDF/cabeçalho (dia de referência = fim do período)
   const date = endDate;
   const [selectedAdminId, setSelectedAdminId] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(
-    isSuperAdmin || isAdmin ? searchParams.get("worker") : myWorkerId
+    embedded ? (embeddedWorkerId ?? null) : (isSuperAdmin || isAdmin ? searchParams.get("worker") : myWorkerId)
   );
+
+  // Sincroniza escopo quando embutido (filtros do pai)
+  useEffect(() => {
+    if (!embedded) return;
+    setSelectedWorkerId(embeddedWorkerId ?? null);
+    if (embeddedStart) setStartDate(embeddedStart);
+    if (embeddedEnd) setEndDate(embeddedEnd);
+  }, [embedded, embeddedWorkerId, embeddedStart, embeddedEnd]);
+
 
   const applyPreset = (p: Preset) => {
     setPreset(p);
