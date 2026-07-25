@@ -418,7 +418,106 @@ export default function ReportsPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Detalhamento por dia */}
+          {startDate !== endDate && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Detalhamento por dia</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {dayRows.length === 0 ? (
+                  <ReportEmptyState message="Nenhuma movimentação no período." />
+                ) : (
+                  <div className="divide-y">
+                    {dayRows.map((d) => {
+                      const isOpen = !!expanded[d.date];
+                      return (
+                        <div key={d.date}>
+                          <button
+                            type="button"
+                            onClick={() => setExpanded((p) => ({ ...p, [d.date]: !p[d.date] }))}
+                            className="w-full text-left p-3 flex items-center gap-2 hover:bg-muted/40 active:bg-muted/60 transition-colors"
+                          >
+                            {isOpen
+                              ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                              : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">
+                                {format(parseISO(d.date + "T12:00:00"), "dd/MM/yyyy (EEEE)", { locale: ptBR })}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {d.openCount} aberto(s) · {d.closedCount} fechado(s)
+                              </p>
+                            </div>
+                            <span className="text-xs text-success shrink-0">{formatCurrency(d.totals.recebido)}</span>
+                          </button>
+
+                          {isOpen && (
+                            <div className="px-3 pb-3 space-y-3">
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground rounded-md bg-muted/40 p-2">
+                                <span>Caixa inicial: <b className="text-foreground">{formatCurrency(d.totals.caixaInicial)}</b></span>
+                                <span>Caixa final: <b className="text-foreground">{formatCurrency(d.totals.caixaFinal)}</b></span>
+                                <span>Recebido: <b className="text-success">{formatCurrency(d.totals.recebido)}</b></span>
+                                <span>Emprestado: <b className="text-foreground">{formatCurrency(d.totals.emprestado)}</b></span>
+                                <span>Despesas: <b className="text-destructive">{formatCurrency(d.totals.despesas)}</b></span>
+                                <span>
+                                  Diferença: <b className={d.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
+                                    {formatCurrency(d.totals.diferenca)}
+                                  </b>
+                                </span>
+                                <span>Caixas abertos: <b className="text-foreground">{d.openCount}</b></span>
+                                <span>Caixas fechados: <b className="text-foreground">{d.closedCount}</b></span>
+                              </div>
+
+                              {d.perWorker.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground">Nenhum trabalhador com movimentação.</p>
+                              ) : (
+                                <div className="divide-y rounded-md border">
+                                  {d.perWorker.map((r) => (
+                                    <button
+                                      key={r.worker.id}
+                                      type="button"
+                                      onClick={() => openWorkerOnDay(r.worker.id, d.date)}
+                                      className="w-full text-left p-2.5 flex items-center gap-2 hover:bg-muted/40 active:bg-muted/60 transition-colors"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <p className="text-sm font-medium truncate">{r.worker.nome}</p>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
+                                            r.isOpen ? "text-success border-success/40" :
+                                            r.statusLabel === "Fechado" ? "text-muted-foreground" : "text-destructive border-destructive/40"
+                                          }`}>{r.statusLabel}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                                          <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
+                                          <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
+                                          <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
+                                          <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
+                                          <span>
+                                            Diferença: <b className={r.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
+                                              {formatCurrency(r.totals.diferenca)}
+                                            </b>
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </>
+
       )}
     </div>
   );
