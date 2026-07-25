@@ -619,14 +619,16 @@ export default function DailyReportPage({
         );
         (doc as any).lastAutoTable = { finalY: y + 6 };
         if (d.closingObs) writeText(`Obs. fechamento: ${d.closingObs}`, 8);
-        if (d.events.length === 0) writeText("Sem movimentações neste dia.", 8);
-        else writeGroups(d.groups);
+        if (d.events.length === 0 && d.pendentes.length === 0) writeText("Sem movimentações neste dia.", 8);
+        else writeRecordGroups(d.recordGroups, d.pendentes);
       });
+      writeRecordSection("Clientes atrasados (situação atual)", details.atrasados);
     } else {
       if (cashSummary?.closingObs) writeText(`Obs. fechamento: ${cashSummary.closingObs}`, 8);
       if (!isMultiDay && cashStatus !== "closed") writeText("Caixa ainda aberto — valores do dia podem mudar.", 8);
-      writeGroups(groups);
+      writeRecordGroups(recordGroups, details.pendentesByDate[endDate] || [], details.atrasados);
     }
+
 
     // ===== 4. Totais finais =====
     writeBlockTitle("4. Totais Finais");
