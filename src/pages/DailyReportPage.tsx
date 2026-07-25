@@ -369,6 +369,9 @@ export default function DailyReportPage({
           date: d,
           events: dayEvents,
           groups: buildGroups(dayEvents),
+          recordGroups: buildRecordGroups(dayEvents, details.recordFor),
+          pendentes: details.pendentesByDate[d] || [],
+
           status: closed ? "closed" : dc ? "open" : null,
           reopened,
           opening,
