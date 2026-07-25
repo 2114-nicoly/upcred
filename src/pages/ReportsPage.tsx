@@ -318,7 +318,7 @@ export default function ReportsPage() {
             <Select value={selectedWorker} onValueChange={setSelectedWorker}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">Todos os trabalhadores</SelectItem>
                 {workers.map((w) => (
                   <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>
                 ))}
@@ -330,12 +330,23 @@ export default function ReportsPage() {
             <Button size="sm" variant="outline" onClick={load} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
-            <Button size="sm" onClick={exportPDF} disabled={loading}>
-              <FileDown className="h-4 w-4 mr-1" /> Baixar PDF
-            </Button>
+            {selectedWorker === "all" && (
+              <Button size="sm" onClick={exportPDF} disabled={loading}>
+                <FileDown className="h-4 w-4 mr-1" /> Baixar PDF
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {selectedWorker !== "all" ? (
+        <DailyReportPage
+          embeddedWorkerId={selectedWorker}
+          embeddedStart={startDate}
+          embeddedEnd={endDate}
+        />
+      ) : loading ? (
+
 
       {loading ? (
         <p className="p-4 text-center text-muted-foreground">Carregando...</p>
