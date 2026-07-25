@@ -122,72 +122,61 @@ export default function ReportsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const filterWorker = <T extends { worker_id: string | null }>(rows: T[]): T[] =>
-    selectedWorker === "all" ? rows : rows.filter((r) => r.worker_id === selectedWorker);
+  const activeIds = useMemo(() => new Set(workers.map((w) => w.id)), [workers]);
 
-  const scopedCash = useMemo(() => filterWorker(cashRows), [cashRows, selectedWorker]);
-  const scopedEvents = useMemo(() => filterWorker(events), [events, selectedWorker]);
+  // Escopo: apenas trabalhadores ativos vinculados ao administrador
+  const scopedCash = useMemo(
+    () => cashRows.filter((c) => c.worker_id && activeIds.has(c.worker_id)),
+    [cashRows, activeIds],
+  );
+  const scopedEvents = useMemo(
+    () => events.filter((e) => e.worker_id && activeIds.has(e.worker_id)),
+    [events, activeIds],
+  );
 
-  // Summary totals
-  const summary = useMemo(() => {
+  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
-      scopedEvents.filter((e) => types.includes(e.event_type))
-        .reduce((s, e) => s + Number(e[field] || 0), 0);
+      evs.filter((e) => types.includes(e.event_type)).reduce((s, e) => s + Number(e[field] || 0), 0);
 
-    const caixaInicial = scopedCash.reduce((s, c) => s + Number(c.opening_balance || 0), 0);
-    const caixaFinalPrevisto = scopedCash.reduce((s, c) => s + Number(c.expected_closing_balance || 0), 0);
-    const caixaFinalContado = scopedCash.reduce((s, c) => s + Number(c.counted_closing_balance || 0), 0);
-    const diferenca = scopedCash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
+    const caixaInicial = cash.reduce((s, c) => s + Number(c.opening_balance || 0), 0);
+    const caixaFinal = cash.reduce(
+      (s, c) => s + Number(c.counted_closing_balance ?? c.expected_closing_balance ?? 0),
+      0,
+    );
+    const diferenca = cash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
 
-    const recebido = sumEv(["pagamento", "recebimento_multa"], "amount_in");
-    const emprestado = sumEv(["emprestimo_novo", "renovacao"], "amount_out");
-    const entradasManuais = sumEv(["entrada_manual"], "amount_in");
-    const saidasManuais = sumEv(["saida_manual", "saida", "despesa"], "amount_out");
+    const recebido = sumEv(["pagamento"], "amount_in");
+    const multas = sumEv(["recebimento_multa"], "amount_in");
+    const emprestado = sumEv(["emprestimo_novo", "renovacao", "renegociacao"], "amount_out");
+    const entradas = sumEv(["entrada_manual"], "amount_in");
+    const saidas = sumEv(["saida_manual", "saida"], "amount_out");
+    const despesas = sumEv(["despesa"], "amount_out");
+    const estornoEvs = evs.filter((e) => e.event_type.startsWith("estorno"));
+    const estornos = estornoEvs.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
 
-    return { caixaInicial, caixaFinalPrevisto, caixaFinalContado, diferenca, recebido, emprestado, entradasManuais, saidasManuais };
-  }, [scopedCash, scopedEvents]);
+    return {
+      caixaInicial, caixaFinal, diferenca, recebido, multas, emprestado,
+      entradas, saidas, despesas, estornos, estornosCount: estornoEvs.length,
+    };
+  };
 
-  // Per-worker table
+  // Resumo consolidado da equipe
+  const summary = useMemo(() => sumTotals(scopedCash, scopedEvents), [scopedCash, scopedEvents]);
+
+  // Comparativo por trabalhador ativo
   const workerRows = useMemo(() => {
-    const list = selectedWorker === "all" ? workers : workers.filter((w) => w.id === selectedWorker);
-    return list.map((w) => {
-      const wCash = cashRows.filter((c) => c.worker_id === w.id);
-      const wEvents = events.filter((e) => e.worker_id === w.id);
+    return workers.map((w) => {
+      const wCash = scopedCash.filter((c) => c.worker_id === w.id);
+      const wEvents = scopedEvents.filter((e) => e.worker_id === w.id);
 
-      // status: last row in range for the worker
       const latest = wCash.slice().sort((a, b) => (a.cash_date < b.cash_date ? 1 : -1))[0];
       let statusLabel: "Aberto" | "Fechado" | "Não aberto" = "Não aberto";
       if (latest) statusLabel = latest.status === "closed" ? "Fechado" : "Aberto";
 
-      const opening = wCash.reduce((s, c) => s + Number(c.opening_balance || 0), 0);
-      const expected = wCash.reduce((s, c) => s + Number(c.expected_closing_balance || 0), 0);
-      const counted = wCash.reduce((s, c) => s + Number(c.counted_closing_balance || 0), 0);
-      const diff = wCash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
-
-      const recebimentos = wEvents.filter((e) => e.event_type === "pagamento" || e.event_type === "recebimento_multa")
-        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
-      const novos = wEvents.filter((e) => e.event_type === "emprestimo_novo")
-        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
-      const renov = wEvents.filter((e) => e.event_type === "renovacao")
-        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
-      const pagamentos = wEvents.filter((e) => e.event_type === "pagamento")
-        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
-      const naoPagos = wEvents.filter((e) => e.event_type === "nao_pagou").length;
-      const entMan = wEvents.filter((e) => e.event_type === "entrada_manual")
-        .reduce((s, e) => s + Number(e.amount_in || 0), 0);
-      const saiMan = wEvents.filter((e) => e.event_type === "saida_manual" || e.event_type === "saida" || e.event_type === "despesa")
-        .reduce((s, e) => s + Number(e.amount_out || 0), 0);
-      const canc = wEvents.filter((e) => e.event_type === "cancelamento").length;
-
-      return {
-        worker: w,
-        statusLabel,
-        opening, expected, counted, diff,
-        totals: { recebimentos, novos, renov, pagamentos, naoPagos, entMan, saiMan, canc },
-        movements: wEvents.slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),
-      };
+      return { worker: w, statusLabel, totals: sumTotals(wCash, wEvents) };
     });
-  }, [workers, cashRows, events, selectedWorker]);
+  }, [workers, scopedCash, scopedEvents]);
+
 
   const toggleExpanded = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
