@@ -787,10 +787,6 @@ export default function DailyReportPage() {
 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs">Data</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
             {isSuperAdmin && (
               <div>
                 <Label className="text-xs">Administrador</Label>
@@ -821,10 +817,16 @@ export default function DailyReportPage() {
         </CardContent>
       </Card>
 
-      {/* Indicadores */}
+      {/* Indicadores — resumo do período selecionado */}
+      {isMultiDay && (
+        <p className="text-xs font-semibold text-muted-foreground uppercase">Resumo total do período</p>
+      )}
       <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Caixa inicial" value={formatCurrency(cashSummary?.opening ?? 0)} />
-        <StatCard label={cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)"} value={formatCurrency(finalCash)} />
+        <StatCard label={isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial"} value={formatCurrency(periodOpening)} />
+        <StatCard
+          label={isMultiDay ? "Caixa final (último dia)" : (cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)")}
+          value={formatCurrency(periodFinal)}
+        />
         <StatCard label="Total recebido" value={formatCurrency(totals.payments)} tone="positive" />
         <StatCard label="Total emprestado" value={formatCurrency(totals.loans + totals.renewals)} tone="negative" />
         <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
@@ -834,13 +836,17 @@ export default function DailyReportPage() {
         <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
         <StatCard
           label="Diferença de caixa"
-          value={formatCurrency(cashSummary?.diff ?? 0)}
-          tone={cashSummary?.diff == null || cashSummary.diff === 0 ? undefined : cashSummary.diff > 0 ? "positive" : "negative"}
-          sub={cashSummary?.counted == null ? "aguardando fechamento" : undefined}
+          value={formatCurrency(periodDiffValue)}
+          tone={periodDiffValue === 0 ? undefined : periodDiffValue > 0 ? "positive" : "negative"}
+          sub={isMultiDay ? "soma dos dias fechados" : (cashSummary?.counted == null ? "aguardando fechamento" : undefined)}
         />
       </div>
 
-      {cashSummary?.closingObs && (
+      {!isMultiDay && cashStatus !== "closed" && (
+        <p className="text-xs text-muted-foreground">Caixa ainda aberto — valores do dia podem mudar.</p>
+      )}
+
+      {!isMultiDay && cashSummary?.closingObs && (
         <Card>
           <CardContent className="p-3 text-xs">
             <p className="text-muted-foreground mb-1">Observação do fechamento</p>
@@ -860,9 +866,19 @@ export default function DailyReportPage() {
         </Button>
       </div>
 
-      {/* Registros por tipo */}
+      {/* Registros */}
       {loading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : isMultiDay ? (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Registros por dia</p>
+          {days.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-8">Nenhuma movimentação no período.</p>
+          )}
+          {days.map((d) => (
+            <DaySection key={d.date} day={d} clientNames={clientNames} />
+          ))}
+        </div>
       ) : (
         <div className="space-y-2">
           <EventSection title="Pagamentos" events={groups.pagamentos} clientNames={clientNames} />
@@ -877,6 +893,94 @@ export default function DailyReportPage() {
     </div>
   );
 }
+
+type DayGroups = ReturnType<typeof buildGroups>;
+
+function buildGroups(list: DailyEvent[]) {
+  const active = (t: string | string[]) =>
+    list.filter((e) => (Array.isArray(t) ? t.includes(e.event_type) : e.event_type === t) && !e.reversed_at);
+  return {
+    pagamentos: active(["pagamento", "recebimento_multa"]),
+    naoPagamentos: active("nao_pagou"),
+    novosEmprestimos: active("emprestimo_novo"),
+    renovacoes: active(["renovacao", "renegociacao"]),
+    movimentacoes: active(["entrada_manual", "saida_manual", "saida"]),
+    despesas: active("despesa"),
+    estornos: list.filter((e) => !!e.reversed_at),
+  };
+}
+
+function DaySection({
+  day,
+  clientNames,
+}: {
+  day: {
+    date: string; events: DailyEvent[]; groups: DayGroups; status: string | null; reopened: boolean;
+    opening: number; finalCash: number; diff: number | null; received: number; out: number; closingObs: string | null;
+  };
+  clientNames: Record<string, string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = format(new Date(day.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
+  const statusLabel = day.status === "closed" ? (day.reopened ? "Reaberto e fechado" : "Fechado") : day.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
+
+  return (
+    <Card>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="w-full">
+          <div className="flex items-center justify-between gap-2 p-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+              <div className="min-w-0 text-left">
+                <p className="text-sm font-medium capitalize truncate">{label}</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {statusLabel} · {day.events.length} registro(s)
+                </p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-semibold text-success tabular-nums">{formatCurrency(day.received)}</p>
+              <p className="text-[10px] text-muted-foreground tabular-nums">Caixa final {formatCurrency(day.finalCash)}</p>
+            </div>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t p-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <StatCard label="Caixa inicial" value={formatCurrency(day.opening)} />
+              <StatCard
+                label={day.status === "closed" ? "Caixa final (fechado)" : "Caixa final (previsto)"}
+                value={formatCurrency(day.finalCash)}
+                sub={day.status !== "closed" ? "Caixa ainda aberto" : undefined}
+              />
+              {day.diff != null && (
+                <StatCard
+                  label="Diferença de caixa"
+                  value={formatCurrency(day.diff)}
+                  tone={day.diff === 0 ? undefined : day.diff > 0 ? "positive" : "negative"}
+                />
+              )}
+              {day.reopened && <StatCard label="Status" value="Reaberto" />}
+            </div>
+            {day.closingObs && (
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">Obs. fechamento: {day.closingObs}</p>
+            )}
+            <div className="space-y-2">
+              <EventSection title="Pagamentos" events={day.groups.pagamentos} clientNames={clientNames} />
+              <EventSection title="Não pagamentos" events={day.groups.naoPagamentos} clientNames={clientNames} />
+              <EventSection title="Novos empréstimos" events={day.groups.novosEmprestimos} clientNames={clientNames} />
+              <EventSection title="Renovações e renegociações" events={day.groups.renovacoes} clientNames={clientNames} />
+              <EventSection title="Entradas e saídas" events={day.groups.movimentacoes} clientNames={clientNames} />
+              <EventSection title="Despesas" events={day.groups.despesas} clientNames={clientNames} />
+              <EventSection title="Estornos" events={day.groups.estornos} clientNames={clientNames} />
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
 
 function StatCard({ label, value, tone, sub }: { label: string; value: string; tone?: "positive" | "negative"; sub?: string }) {
   return (
