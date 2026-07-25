@@ -616,8 +616,7 @@ export default function DailyReportPage({
     setGeneratingPdf(true);
     try {
       const { doc, filename } = buildPdf();
-      doc.save(filename);
-      toast.success("PDF gerado");
+      downloadReportPdf(doc, filename);
     } catch (err: any) {
       console.error("[DailyReport PDF] erro:", err);
       toast.error("Não foi possível gerar o PDF: " + (err?.message || "erro desconhecido"));
@@ -631,16 +630,7 @@ export default function DailyReportPage({
     setGeneratingPdf(true);
     try {
       const { doc, filename } = buildPdf();
-      const blob = doc.output("blob");
-      const file = new File([blob], filename, { type: "application/pdf" });
-      const nav: any = navigator;
-      if (nav.canShare && nav.canShare({ files: [file] })) {
-        await nav.share({ files: [file], title: filename, text: `Relatório UpCredit — ${workerName || "trabalhador"} — ${periodLabel}` });
-      } else {
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-        toast.message("Compartilhamento direto indisponível — abri o PDF para você salvar/enviar.");
-      }
+      await shareReportPdf(doc, filename, `Relatório UpCredit — ${workerName || "trabalhador"} — ${periodLabel}`);
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         console.error("[DailyReport share] erro:", err);
@@ -650,6 +640,7 @@ export default function DailyReportPage({
       setGeneratingPdf(false);
     }
   };
+
 
   const finalCash = cashSummary?.counted != null
     ? cashSummary.counted
