@@ -252,7 +252,28 @@ export default function DailyReportPage() {
     };
   }, [events]);
 
+  // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
+  const groups = useMemo(() => {
+    const active = (t: string | string[]) =>
+      events.filter((e) => (Array.isArray(t) ? t.includes(e.event_type) : e.event_type === t) && !e.reversed_at);
+    return {
+      pagamentos: active(["pagamento", "recebimento_multa"]),
+      naoPagamentos: active("nao_pagou"),
+      novosEmprestimos: active("emprestimo_novo"),
+      renovacoes: active(["renovacao", "renegociacao"]),
+      movimentacoes: active(["entrada_manual", "saida_manual", "saida"]),
+      despesas: active("despesa"),
+      estornos: events.filter((e) => !!e.reversed_at),
+    };
+  }, [events]);
+
+  const estornosTotal = useMemo(
+    () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
+    [groups.estornos]
+  );
+
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);
+
 
   const buildPdf = (): { doc: jsPDF; filename: string } => {
     const doc = new jsPDF();
