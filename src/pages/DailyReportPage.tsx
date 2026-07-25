@@ -237,6 +237,23 @@ export default function DailyReportPage({
           cbRow = data;
         }
         setCurrentAvailableCash(cbRow ? Number(cbRow.available_cash || 0) : null);
+
+        // Detalhamento (somente leitura) — pagamentos, empréstimos, renovações,
+        // renegociações, atrasos e clientes pendentes de registro.
+        try {
+          const det = await fetchReportDetails({
+            events: eventList,
+            startDate,
+            endDate,
+            workerId: selectedWorkerId,
+            adminId: selectedWorkerId ? null : (isSuperAdmin ? selectedAdminId : myAdminId),
+          });
+          setDetails(det);
+        } catch (detErr) {
+          console.warn("[DailyReport] detalhamento indisponível", detErr);
+          setDetails(emptyReportDetails());
+        }
+
       } catch (err: any) {
         console.error(err);
         toast.error("Erro ao carregar relatório");
