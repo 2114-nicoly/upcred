@@ -110,8 +110,10 @@ export default function DailyReportPage({
   } | null>(null);
   const [cashRows, setCashRows] = useState<any[]>([]);
   const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
+  const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
 
 
   // Load admins (super_admin only)
