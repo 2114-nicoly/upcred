@@ -152,7 +152,7 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     const s = get(l.worker_id ?? null);
     if (!s) return;
     const isActive =
-      activeLoanStatuses.includes(String(l.status)) &&
+      (activeLoanStatuses as readonly string[]).includes(String(l.status)) &&
       Number(l.remaining_balance || 0) > 0.01;
     if (isActive) {
       s.emprestimosAtivos += 1;
