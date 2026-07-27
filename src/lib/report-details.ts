@@ -446,6 +446,14 @@ export async function fetchReportDetails(opts: {
   const atrasados: ReportRecord[] = [];
   const pendentesByWorker: Record<string, number> = {};
   const atrasadosByWorker: Record<string, number> = {};
+  type OverdueGroup = {
+    clientId: string; workerId: string | null; adminId: string | null;
+    clientName: string; workerName: string;
+    insts: { i: any; l: any; due: string; diasAtraso: number }[];
+    loanIds: Set<string>;
+  };
+  const overdueGroups: Record<string, OverdueGroup> = {};
+
 
   openInsts.forEach((i) => {
     const l = i.loans;
