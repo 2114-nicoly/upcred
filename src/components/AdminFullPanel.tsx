@@ -413,7 +413,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Clientes" value={String(total.clientesAtivos)} />
             <Stat label="Empr.Ativos" value={String(total.emprestimosAtivos)} />
-            <Stat label="Atrasados" value={String(total.atrasados)} cls="text-destructive" />
+            <Stat label="Clientes atrasados" value={String(total.atrasados)} cls="text-destructive" />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Não pagos" value={String(total.naoPagosCount)} />

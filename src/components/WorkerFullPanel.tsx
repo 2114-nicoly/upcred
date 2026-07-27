@@ -173,7 +173,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
               <div className="grid grid-cols-3 gap-2">
                 <Stat label="Clientes" value={String(stats.clientesAtivos)} />
                 <Stat label="Empr.Ativos" value={String(stats.emprestimosAtivos)} />
-                <Stat label="Atrasados" value={String(stats.atrasados)} cls="text-destructive" />
+                <Stat label="Clientes atrasados" value={String(stats.atrasados)} cls="text-destructive" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <Stat label="Não pagos" value={String(stats.naoPagosCount)} />

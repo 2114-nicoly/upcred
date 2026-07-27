@@ -156,11 +156,13 @@ export async function fetchReportDetails(opts: {
   // ---- Parcelas em aberto no escopo (pendentes e atrasados)
   const collectible = INSTALLMENT_COLLECTIBLE_STATUSES as readonly string[];
   let openQ: any = supabase.from("installments")
-    .select("id, loan_id, number, amount, due_date, status, paid_amount, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date)")
+    .select("id, loan_id, number, amount, due_date, status, paid_amount, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date, clients!inner(archived_at))")
     .in("status", collectible as string[])
     .lte("due_date", referenceDate)
     .in("loans.status", ["open", "overdue"])
+    .is("loans.clients.archived_at", null)
     .limit(2000);
+
   if (opts.workerId) openQ = openQ.eq("loans.worker_id", opts.workerId);
   else if (opts.workerIds && opts.workerIds.length) openQ = openQ.in("loans.worker_id", opts.workerIds);
   else if (opts.adminId) openQ = openQ.eq("loans.admin_id", opts.adminId);
@@ -444,6 +446,14 @@ export async function fetchReportDetails(opts: {
   const atrasados: ReportRecord[] = [];
   const pendentesByWorker: Record<string, number> = {};
   const atrasadosByWorker: Record<string, number> = {};
+  type OverdueGroup = {
+    clientId: string; workerId: string | null; adminId: string | null;
+    clientName: string; workerName: string;
+    insts: { i: any; l: any; due: string; diasAtraso: number }[];
+    loanIds: Set<string>;
+  };
+  const overdueGroups: Record<string, OverdueGroup> = {};
+
 
   openInsts.forEach((i) => {
     const l = i.loans;
@@ -496,35 +506,98 @@ export async function fetchReportDetails(opts: {
     }
 
     if (diasAtraso > 0) {
-      const details = [...base];
-      push(details, "Valor pendente", money(i.amount));
-      push(details, "Deveria ter pago em", dt(due));
-      push(details, "Dias em atraso", `${diasAtraso} dia${diasAtraso === 1 ? "" : "s"} em atraso`);
-      push(details, "Último pagamento registrado", dtHour(st.lastPaid?.paid_at));
-      push(details, "Próxima parcela prevista", dt(st.next?.due_date));
-      push(details, "Situação do empréstimo", LOAN_STATUS_LABEL[l.status] || l.status);
-      atrasados.push({
-        id: `atr-${i.id}`,
-        kind: "atrasado",
-        createdAt: null,
-        time: "—",
-        clientName,
-        workerName,
-        title: `${diasAtraso} dia${diasAtraso === 1 ? "" : "s"} em atraso`,
-        summary: `${totalI ? `Parcela ${i.number} de ${totalI}` : `Parcela ${i.number}`} vencida em ${dt(due)} · ${money(i.amount)} · saldo ${money(l.remaining_balance)}`,
-        amountIn: 0,
-        amountOut: 0,
-        reversed: false,
-        details,
+      const key = `${l.client_id}|${l.worker_id || "-"}`;
+      const g = (overdueGroups[key] ||= {
+        clientId: l.client_id, workerId: l.worker_id || null, adminId: l.admin_id || null,
+        clientName, workerName, insts: [], loanIds: new Set<string>(),
       });
-      if (l.worker_id) atrasadosByWorker[l.worker_id] = (atrasadosByWorker[l.worker_id] || 0) + 1;
+      g.insts.push({ i, l, due, diasAtraso });
+      g.loanIds.add(String(i.loan_id));
     }
+  });
+
+  // ---- Um único registro por CLIENTE atrasado (nunca por parcela)
+  Object.values(overdueGroups).forEach((g) => {
+    const oldest = g.insts.slice().sort((a, b) => a.due.localeCompare(b.due))[0];
+    const diasAtraso = oldest.diasAtraso;
+    const valorVencido = g.insts.reduce(
+      (s, x) => s + Math.max(0, Number(x.i.amount || 0) - Number(x.i.paid_amount || 0)), 0,
+    );
+    const loanIds = Array.from(g.loanIds);
+    const saldoDevedor = loanIds.reduce((s, id) => {
+      const li = g.insts.find((x) => String(x.i.loan_id) === id);
+      return s + Number(li?.l?.remaining_balance || 0);
+    }, 0);
+    let totalParcelas = 0, pagas = 0, restantes = 0;
+    let lastPaid: Inst | null = null;
+    let next: Inst | null = null;
+    loanIds.forEach((id) => {
+      const st = instStats(id);
+      const li = g.insts.find((x) => String(x.i.loan_id) === id);
+      totalParcelas += Number(li?.l?.installment_count || st.active.length || 0);
+      pagas += st.paid.length;
+      restantes += st.pending.length;
+      if (st.lastPaid && (!lastPaid || String(st.lastPaid.paid_at) > String(lastPaid.paid_at))) lastPaid = st.lastPaid;
+      if (st.next && (!next || st.next.due_date < next.due_date)) next = st.next;
+    });
+    const lp: Inst | null = lastPaid;
+    const nx: Inst | null = next;
+
+    const details: DetailLine[] = [];
+    push(details, "Cliente", g.clientName);
+    push(details, "Trabalhador responsável", g.workerName);
+    push(details, "Parcelas vencidas", g.insts.length);
+    push(details, "Total de parcelas", totalParcelas || null);
+    push(details, "Parcelas pagas", pagas);
+    push(details, "Parcelas restantes", restantes);
+    push(details, "Valor total vencido", money(valorVencido));
+    push(details, "Saldo devedor total", money(saldoDevedor));
+    push(details, "Vencimento mais antigo", dt(oldest.due));
+    push(details, "Dias em atraso", `${diasAtraso} dia${diasAtraso === 1 ? "" : "s"} em atraso`);
+    if (loanIds.length > 1) push(details, "Empréstimos atrasados", loanIds.length);
+    push(details, "Último pagamento", lp?.paid_at ? dtHour(lp.paid_at) : "Nenhum pagamento registrado");
+    if (lp) {
+      push(details, "Última parcela paga", `Parcela ${lp.number}`);
+      push(details, "Valor da última parcela paga", money(lp.paid_amount ?? lp.amount));
+    }
+    push(details, "Próxima parcela prevista", nx ? dt(nx.due_date) : null);
+
+    g.insts
+      .slice()
+      .sort((a, b) => a.due.localeCompare(b.due))
+      .forEach((x, idx) => {
+        const pago = Number(x.i.paid_amount || 0);
+        const pend = Math.max(0, Number(x.i.amount || 0) - pago);
+        const emp = loanIds.length > 1 ? ` · Empréstimo ${loanIds.indexOf(String(x.i.loan_id)) + 1}` : "";
+        push(
+          details,
+          `Parcela vencida ${idx + 1}`,
+          `Nº ${x.i.number}${emp} · venc. ${dt(x.due)} · ${x.diasAtraso} dia${x.diasAtraso === 1 ? "" : "s"} · ${money(x.i.amount)}${pago > 0 ? ` · pago ${money(pago)}` : ""} · pendente ${money(pend)}`,
+        );
+      });
+
+    atrasados.push({
+      id: `atr-${g.clientId}-${g.workerId || "-"}`,
+      kind: "atrasado",
+      createdAt: null,
+      time: "—",
+      clientName: g.clientName,
+      workerName: g.workerName,
+      title: `${diasAtraso} dia${diasAtraso === 1 ? "" : "s"} em atraso`,
+      summary: `${g.insts.length} parcela${g.insts.length === 1 ? "" : "s"} vencida${g.insts.length === 1 ? "" : "s"}${loanIds.length > 1 ? ` · ${loanIds.length} empréstimos atrasados` : ""} · atraso mais antigo de ${diasAtraso} dia${diasAtraso === 1 ? "" : "s"} · ${money(valorVencido)} vencidos · ${lp?.paid_at ? `última parcela paga em ${dt(lp.paid_at)}` : "nenhum pagamento registrado"}`,
+      amountIn: 0,
+      amountOut: 0,
+      reversed: false,
+      details,
+    });
+    if (g.workerId) atrasadosByWorker[g.workerId] = (atrasadosByWorker[g.workerId] || 0) + 1;
   });
 
   atrasados.sort((a, b) => b.title.localeCompare(a.title, "pt-BR", { numeric: true }));
 
   return { recordFor, pendentesByDate, atrasados, pendentesByWorker, atrasadosByWorker };
 }
+
 
 function loanStatusLabel(loan: any, nextDue: string | undefined, referenceDate: string): string | null {
   if (!loan) return null;
