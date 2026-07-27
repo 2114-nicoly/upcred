@@ -131,6 +131,8 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
   });
 
   // Active loans snapshot: active worker+client, open/overdue, remaining_balance > 0.01
+  // "atrasados" conta CLIENTES únicos em atraso (nunca parcelas nem empréstimos repetidos).
+  const overdueClientsByWorker = new Map<string, Set<string>>();
   ((loansRes.data as any[]) || []).forEach((l) => {
     const s = get(l.worker_id ?? null);
     if (!s) return;
@@ -139,9 +141,18 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
       Number(l.remaining_balance || 0) > 0.01;
     if (isActive) {
       s.emprestimosAtivos += 1;
-      if (l.status === "overdue") s.atrasados += 1;
+      if (l.status === "overdue" && l.client_id) {
+        const set = overdueClientsByWorker.get(l.worker_id) || new Set<string>();
+        set.add(l.client_id);
+        overdueClientsByWorker.set(l.worker_id, set);
+      }
     }
   });
+  overdueClientsByWorker.forEach((set, workerId) => {
+    const s = map.get(workerId);
+    if (s) s.atrasados = set.size;
+  });
+
 
   ((clientsRes.data as any[]) || []).forEach((c) => {
     const s = get(c.worker_id ?? null);
