@@ -101,7 +101,9 @@ export async function fetchReportDetails(opts: {
   referenceDate?: string;
 }): Promise<ReportDetailsData> {
   const { events, startDate, endDate } = opts;
-  const referenceDate = opts.referenceDate || endDate;
+  const today = format(new Date(), "yyyy-MM-dd");
+  const requestedReferenceDate = opts.referenceDate || endDate;
+  const referenceDate = requestedReferenceDate > today ? today : requestedReferenceDate;
 
   const loanIds = Array.from(new Set(events.map((e) => e.loan_id).filter(Boolean) as string[]));
 

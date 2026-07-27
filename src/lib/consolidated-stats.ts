@@ -70,6 +70,8 @@ const empty = (id: string | null, name: string): WorkerStats => ({
 export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[]> {
   const collectibleStatuses = [...INSTALLMENT_COLLECTIBLE_STATUSES];
   const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
+  const today = format(new Date(), "yyyy-MM-dd");
+  const overdueReferenceDate = range.endDate > today ? today : range.endDate;
 
   // 1) Operational workers only (active + not archived)
   const workersRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: true });
@@ -103,7 +105,7 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     supabase
       .from("installments")
       .select("id, amount, paid_amount, due_date, status, is_penalty, loans!inner(id, worker_id, client_id, status, remaining_balance, clients!inner(archived_at))")
-      .lt("due_date", range.endDate)
+      .lt("due_date", overdueReferenceDate)
       .eq("is_penalty", false)
       .in("status", collectibleStatuses)
       .in("loans.status", activeLoanStatuses)
