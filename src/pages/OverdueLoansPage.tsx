@@ -46,6 +46,7 @@ type InstallmentWithLoan = {
 
 type LoanGroup = {
   loanId: string;
+  clientId: string;
   clientName: string;
   paymentType: string;
   totalAmount: number;
@@ -58,13 +59,29 @@ type LoanGroup = {
   penaltyPaid: number;
 };
 
+/** Agrupamento de apresentação: um card por CLIENTE (client_id + worker_id). */
+type ClientGroup = {
+  key: string;
+  clientId: string;
+  clientName: string;
+  workerId: string | null;
+  adminId: string | null;
+  loans: LoanGroup[];
+  installmentCount: number;
+  totalOverdue: number;
+  overdueDays: number;
+  penaltyTotal: number;
+  penaltyPaid: number;
+};
+
 export default function OverdueLoansPage() {
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
-  const [groups, setGroups] = useState<LoanGroup[]>([]);
+  const [groups, setGroups] = useState<ClientGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedLoan, setExpandedLoan] = useState<string | null>(null);
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
