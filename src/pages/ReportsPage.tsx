@@ -279,12 +279,13 @@ export default function ReportsPage() {
       return {
         admin: a,
         workersCount: aWorkers.length,
+        overdueClients: aWorkers.reduce((sum, w) => sum + (details.atrasadosByWorker[w.id] || 0), 0),
         statusLabel,
         hasOpen: openCount > 0,
         totals: sumTotals(aCash, aEvents),
       };
     });
-  }, [globalMode, admins, workers, scopedCash, scopedEvents]);
+  }, [globalMode, admins, workers, scopedCash, scopedEvents, details]);
 
 
 
@@ -674,6 +675,7 @@ export default function ReportsPage() {
                             <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
                             <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
                             <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
+                            <span>Clientes atrasados: <b className="text-destructive">{r.overdueClients}</b></span>
                             <span>
                               Diferença: <b className={r.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
                                 {formatCurrency(r.totals.diferenca)}

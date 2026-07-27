@@ -12,6 +12,7 @@ import { formatCurrency, getStatusColor, getStatusLabel, calculateOverdueDays } 
 import { registerPayment, registerPenaltyPayment } from "@/lib/payment-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
+import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
 import { ArrowLeft, ChevronDown, Plus, AlertTriangle, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -94,12 +95,14 @@ export default function OverdueLoansPage() {
 
   const fetchData = async () => {
     try {
+      const collectibleStatuses = [...INSTALLMENT_COLLECTIBLE_STATUSES];
+      const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
       let q = supabase
         .from("installments")
         .select("*, loans!inner(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, status, clients(id, name))")
         .lt("due_date", today)
-        .not("status", "in", "(paid,cancelled,renegotiated)")
-        .not("loans.status", "in", "(paid,cancelled,renegotiated)")
+        .in("status", collectibleStatuses)
+        .in("loans.status", activeLoanStatuses)
         .gt("loans.remaining_balance", 0.01)
         .eq("is_penalty", false);
       // Worker scope: explicit filter on top of RLS for double protection
@@ -124,6 +127,8 @@ export default function OverdueLoansPage() {
 
       const grouped: Record<string, LoanGroup> = {};
       for (const inst of insts) {
+        const instRemaining = Math.max(Number(inst.amount) - Number(inst.paid_amount), 0);
+        if (instRemaining <= 0.01) continue;
         if (!grouped[inst.loan_id]) {
           const oldestDueDate = inst.due_date;
           const pm = penaltyMap[inst.loan_id] || { total: 0, paid: 0 };
@@ -143,7 +148,7 @@ export default function OverdueLoansPage() {
           };
         }
         grouped[inst.loan_id].installments.push(inst);
-        grouped[inst.loan_id].totalOverdue += Number(inst.amount) - Number(inst.paid_amount);
+        grouped[inst.loan_id].totalOverdue += instRemaining;
       }
 
       // Um card por CLIENTE (client_id + worker_id), nunca por parcela/empréstimo
@@ -199,7 +204,7 @@ export default function OverdueLoansPage() {
 
     const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (payAmount && (parcValue === null || isNaN(parcValue) || parcValue <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
     try {

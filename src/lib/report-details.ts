@@ -3,7 +3,7 @@ import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCurrency, getPaymentTypeLabel } from "@/lib/loan-utils";
 import { DailyEvent, getEventTypeLabel } from "@/lib/daily-events";
-import { INSTALLMENT_COLLECTIBLE_STATUSES } from "@/lib/status-constants";
+import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
 
 /**
  * Camada de DETALHAMENTO dos relatórios (somente leitura).
@@ -101,7 +101,9 @@ export async function fetchReportDetails(opts: {
   referenceDate?: string;
 }): Promise<ReportDetailsData> {
   const { events, startDate, endDate } = opts;
-  const referenceDate = opts.referenceDate || endDate;
+  const today = format(new Date(), "yyyy-MM-dd");
+  const requestedReferenceDate = opts.referenceDate || endDate;
+  const referenceDate = requestedReferenceDate > today ? today : requestedReferenceDate;
 
   const loanIds = Array.from(new Set(events.map((e) => e.loan_id).filter(Boolean) as string[]));
 
@@ -155,11 +157,12 @@ export async function fetchReportDetails(opts: {
 
   // ---- Parcelas em aberto no escopo (pendentes e atrasados)
   const collectible = INSTALLMENT_COLLECTIBLE_STATUSES as readonly string[];
+  const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
   let openQ: any = supabase.from("installments")
-    .select("id, loan_id, number, amount, due_date, status, paid_amount, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date, clients!inner(archived_at))")
+    .select("id, loan_id, number, amount, due_date, status, paid_amount, is_penalty, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date, clients!inner(archived_at))")
     .in("status", collectible as string[])
     .lte("due_date", referenceDate)
-    .in("loans.status", ["open", "overdue"])
+    .in("loans.status", activeLoanStatuses)
     .is("loans.clients.archived_at", null)
     .limit(2000);
 
@@ -458,6 +461,7 @@ export async function fetchReportDetails(opts: {
   openInsts.forEach((i) => {
     const l = i.loans;
     if (!l) return;
+    const pendingAmount = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
     const st = instStats(i.loan_id);
     const totalI = Number(l.installment_count || st.active.length || 0) || null;
     const clientName = cName(l.client_id);
@@ -506,7 +510,9 @@ export async function fetchReportDetails(opts: {
     }
 
     if (diasAtraso > 0) {
-      const key = `${l.client_id}|${l.worker_id || "-"}`;
+      if (i.is_penalty || pendingAmount <= 0.01 || Number(l.remaining_balance || 0) <= 0.01) return;
+      if (!l.client_id) return;
+      const key = `${l.worker_id || "-"}|${l.client_id}`;
       const g = (overdueGroups[key] ||= {
         clientId: l.client_id, workerId: l.worker_id || null, adminId: l.admin_id || null,
         clientName, workerName, insts: [], loanIds: new Set<string>(),

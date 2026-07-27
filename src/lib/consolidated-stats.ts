@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
 
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
@@ -48,7 +49,7 @@ export type WorkerStats = {
   clientesAtivos: number;
   emprestimosAtivos: number;
   atrasados: number;
-  /** IDs de clientes atrasados (para não duplicar ao consolidar). */
+  /** Chaves worker_id+client_id de clientes atrasados (para não duplicar ao consolidar). */
   atrasadosClientIds: string[];
 };
 
@@ -67,20 +68,25 @@ const empty = (id: string | null, name: string): WorkerStats => ({
  * - Reads loans/clients counts for snapshot indicators
  */
 export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[]> {
+  const collectibleStatuses = [...INSTALLMENT_COLLECTIBLE_STATUSES];
+  const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
+  const today = format(new Date(), "yyyy-MM-dd");
+  const overdueReferenceDate = range.endDate > today ? today : range.endDate;
+
   // 1) Operational workers only (active + not archived)
   const workersRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: true });
   const allWorkers = (workersRes.data as { id: string; nome: string; active: boolean; archived_at: string | null }[]) || [];
   const operational = allWorkers.filter((w) => w.active && !w.archived_at);
   const operationalIds = new Set(operational.map((w) => w.id));
 
-  const [insRes, evRes, loansRes, clientsRes] = await Promise.all([
+  const [insRes, evRes, loansRes, clientsRes, overdueInstRes] = await Promise.all([
     supabase
       .from("installments")
       .select("amount, paid_amount, due_date, status, is_penalty, loans!inner(worker_id, client_id, clients!inner(archived_at))")
       .gte("due_date", range.startDate)
       .lte("due_date", range.endDate)
       .eq("is_penalty", false)
-      .in("status", ["pending", "partial", "overdue"])
+      .in("status", collectibleStatuses)
       .is("loans.clients.archived_at", null),
     supabase
       .from("daily_events" as any)
@@ -96,6 +102,16 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
       .from("clients")
       .select("id, worker_id")
       .is("archived_at", null),
+    supabase
+      .from("installments")
+      .select("id, amount, paid_amount, due_date, status, is_penalty, loans!inner(id, worker_id, client_id, status, remaining_balance, clients!inner(archived_at))")
+      .lt("due_date", overdueReferenceDate)
+      .eq("is_penalty", false)
+      .in("status", collectibleStatuses)
+      .in("loans.status", activeLoanStatuses)
+      .gt("loans.remaining_balance", 0.01)
+      .is("loans.clients.archived_at", null)
+      .limit(5000),
   ]);
 
   const map = new Map<string, WorkerStats>();
@@ -132,23 +148,33 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     }
   });
 
-  // Active loans snapshot: active worker+client, open/overdue, remaining_balance > 0.01
-  // "atrasados" conta CLIENTES únicos em atraso (nunca parcelas nem empréstimos repetidos).
-  const overdueClientsByWorker = new Map<string, Set<string>>();
+  // Active loans snapshot: active worker+client, active status, remaining_balance > 0.01.
   ((loansRes.data as any[]) || []).forEach((l) => {
     const s = get(l.worker_id ?? null);
     if (!s) return;
     const isActive =
-      (l.status === "open" || l.status === "overdue") &&
+      (activeLoanStatuses as readonly string[]).includes(String(l.status)) &&
       Number(l.remaining_balance || 0) > 0.01;
     if (isActive) {
       s.emprestimosAtivos += 1;
-      if (l.status === "overdue" && l.client_id) {
-        const set = overdueClientsByWorker.get(l.worker_id) || new Set<string>();
-        set.add(l.client_id);
-        overdueClientsByWorker.set(l.worker_id, set);
-      }
     }
+  });
+
+  // "Clientes atrasados" conta worker_id+client_id único com pelo menos uma parcela vencida,
+  // regular, pendente/parcial/overdue e com saldo pendente. Nunca usa loans.status sozinho.
+  const overdueClientsByWorker = new Map<string, Set<string>>();
+  ((overdueInstRes.data as any[]) || []).forEach((i) => {
+    const loan = i.loans;
+    const workerId = loan?.worker_id ?? null;
+    const clientId = loan?.client_id ?? null;
+    const s = get(workerId);
+    if (!s || !workerId || !clientId) return;
+    const pending = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
+    if (pending <= 0.01) return;
+    const key = `${workerId}|${clientId}`;
+    const set = overdueClientsByWorker.get(workerId) || new Set<string>();
+    set.add(key);
+    overdueClientsByWorker.set(workerId, set);
   });
   overdueClientsByWorker.forEach((set, workerId) => {
     const s = map.get(workerId);
@@ -175,9 +201,9 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
 
 export function consolidate(stats: WorkerStats[]): WorkerStats {
   const total = empty(null, "Consolidado");
-  const overdueClients = new Set<string>();
+  const overdueClientKeys = new Set<string>();
   for (const s of stats) {
-    s.atrasadosClientIds.forEach((id) => overdueClients.add(id));
+    s.atrasadosClientIds.forEach((id) => overdueClientKeys.add(id));
     total.previsto += s.previsto;
     total.recebido += s.recebido;
     total.emprestado += s.emprestado;
@@ -189,8 +215,8 @@ export function consolidate(stats: WorkerStats[]): WorkerStats {
     total.clientesAtivos += s.clientesAtivos;
     total.emprestimosAtivos += s.emprestimosAtivos;
   }
-  total.atrasadosClientIds = Array.from(overdueClients);
-  total.atrasados = overdueClients.size;
+  total.atrasadosClientIds = Array.from(overdueClientKeys);
+  total.atrasados = overdueClientKeys.size;
   total.totalSaidas = total.emprestado + total.retirada;
   total.faltaReceber = Math.max(0, total.previsto - total.recebido);
   total.percentual = total.previsto > 0 ? (total.recebido / total.previsto) * 100 : 0;
