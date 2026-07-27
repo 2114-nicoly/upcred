@@ -156,11 +156,13 @@ export async function fetchReportDetails(opts: {
   // ---- Parcelas em aberto no escopo (pendentes e atrasados)
   const collectible = INSTALLMENT_COLLECTIBLE_STATUSES as readonly string[];
   let openQ: any = supabase.from("installments")
-    .select("id, loan_id, number, amount, due_date, status, paid_amount, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date)")
+    .select("id, loan_id, number, amount, due_date, status, paid_amount, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date, clients!inner(archived_at))")
     .in("status", collectible as string[])
     .lte("due_date", referenceDate)
     .in("loans.status", ["open", "overdue"])
+    .is("loans.clients.archived_at", null)
     .limit(2000);
+
   if (opts.workerId) openQ = openQ.eq("loans.worker_id", opts.workerId);
   else if (opts.workerIds && opts.workerIds.length) openQ = openQ.in("loans.worker_id", opts.workerIds);
   else if (opts.adminId) openQ = openQ.eq("loans.admin_id", opts.adminId);
