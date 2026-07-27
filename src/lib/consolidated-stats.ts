@@ -48,6 +48,8 @@ export type WorkerStats = {
   clientesAtivos: number;
   emprestimosAtivos: number;
   atrasados: number;
+  /** IDs de clientes atrasados (para não duplicar ao consolidar). */
+  atrasadosClientIds: string[];
 };
 
 const empty = (id: string | null, name: string): WorkerStats => ({
@@ -55,7 +57,7 @@ const empty = (id: string | null, name: string): WorkerStats => ({
   previsto: 0, recebido: 0, faltaReceber: 0, percentual: 0,
   emprestado: 0, retirada: 0, aporte: 0, totalSaidas: 0, saldoLiquido: 0,
   naoPagosCount: 0, renovacoes: 0, emprestimosNovos: 0,
-  clientesAtivos: 0, emprestimosAtivos: 0, atrasados: 0,
+  clientesAtivos: 0, emprestimosAtivos: 0, atrasados: 0, atrasadosClientIds: [],
 });
 
 /**
@@ -150,7 +152,7 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
   });
   overdueClientsByWorker.forEach((set, workerId) => {
     const s = map.get(workerId);
-    if (s) s.atrasados = set.size;
+    if (s) { s.atrasados = set.size; s.atrasadosClientIds = Array.from(set); }
   });
 
 
@@ -173,7 +175,9 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
 
 export function consolidate(stats: WorkerStats[]): WorkerStats {
   const total = empty(null, "Consolidado");
+  const overdueClients = new Set<string>();
   for (const s of stats) {
+    s.atrasadosClientIds.forEach((id) => overdueClients.add(id));
     total.previsto += s.previsto;
     total.recebido += s.recebido;
     total.emprestado += s.emprestado;
@@ -184,8 +188,9 @@ export function consolidate(stats: WorkerStats[]): WorkerStats {
     total.emprestimosNovos += s.emprestimosNovos;
     total.clientesAtivos += s.clientesAtivos;
     total.emprestimosAtivos += s.emprestimosAtivos;
-    total.atrasados += s.atrasados;
   }
+  total.atrasadosClientIds = Array.from(overdueClients);
+  total.atrasados = overdueClients.size;
   total.totalSaidas = total.emprestado + total.retirada;
   total.faltaReceber = Math.max(0, total.previsto - total.recebido);
   total.percentual = total.previsto > 0 ? (total.recebido / total.previsto) * 100 : 0;
