@@ -162,9 +162,7 @@ export async function fetchReportDetails(opts: {
     .select("id, loan_id, number, amount, due_date, status, paid_amount, is_penalty, loans!inner(id, client_id, worker_id, admin_id, status, remaining_balance, installment_count, payment_type, total_amount, first_due_date, clients!inner(archived_at))")
     .in("status", collectible as string[])
     .lte("due_date", referenceDate)
-    .eq("is_penalty", false)
     .in("loans.status", activeLoanStatuses)
-    .gt("loans.remaining_balance", 0.01)
     .is("loans.clients.archived_at", null)
     .limit(2000);
 
@@ -464,7 +462,6 @@ export async function fetchReportDetails(opts: {
     const l = i.loans;
     if (!l) return;
     const pendingAmount = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
-    if (pendingAmount <= 0.01) return;
     const st = instStats(i.loan_id);
     const totalI = Number(l.installment_count || st.active.length || 0) || null;
     const clientName = cName(l.client_id);
@@ -476,7 +473,6 @@ export async function fetchReportDetails(opts: {
     const base: DetailLine[] = [];
     push(base, "Cliente", clientName);
     push(base, "Valor esperado da parcela", money(i.amount));
-    push(base, "Valor pendente da parcela", money(pendingAmount));
     push(base, "Data prevista para cobrança", dt(due));
     push(base, "Parcela", totalI ? `Parcela ${i.number} de ${totalI}` : `Parcela ${i.number}`);
     push(base, "Total de parcelas", totalI);
@@ -514,6 +510,7 @@ export async function fetchReportDetails(opts: {
     }
 
     if (diasAtraso > 0) {
+      if (i.is_penalty || pendingAmount <= 0.01 || Number(l.remaining_balance || 0) <= 0.01) return;
       if (!l.client_id) return;
       const key = `${l.worker_id || "-"}|${l.client_id}`;
       const g = (overdueGroups[key] ||= {

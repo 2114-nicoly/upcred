@@ -127,7 +127,6 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     const s = get(i.loans?.worker_id ?? null);
     if (!s) return;
     const remaining = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
-    if (remaining <= 0.01) return;
     s.previsto += remaining;
   });
 
