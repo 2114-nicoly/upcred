@@ -165,7 +165,7 @@ function OverviewTab() {
           <div className="grid grid-cols-4 gap-2">
             <MiniStat label="Clientes" value={stats.clientesAtivos} />
             <MiniStat label="Empr. ativos" value={stats.emprestimosAtivos} />
-            <MiniStat label="Atrasados" value={stats.atrasados} valueClass="text-destructive" />
+            <MiniStat label="Clientes atrasados" value={stats.atrasados} valueClass="text-destructive" />
             <MiniStat label="Trab. ativos" value={activeWorkers} />
           </div>
         </>
@@ -540,7 +540,7 @@ function WorkersTab() {
                     <div className="grid grid-cols-4 gap-1 text-[10px] border-t pt-2">
                       <div><div className="text-muted-foreground">Clientes</div><div className="font-bold">{s.clientesAtivos}</div></div>
                       <div><div className="text-muted-foreground">Empr.At</div><div className="font-bold">{s.emprestimosAtivos}</div></div>
-                      <div><div className="text-muted-foreground">Atrasados</div><div className="font-bold text-destructive">{s.atrasados}</div></div>
+                      <div><div className="text-muted-foreground">Clientes atrasados</div><div className="font-bold text-destructive">{s.atrasados}</div></div>
                       <div><div className="text-muted-foreground">N.Pagos hoje</div><div className="font-bold text-destructive">{s.naoPagosCount}</div></div>
                       <div className="col-span-2"><div className="text-muted-foreground">Previsto hoje</div><div className="font-bold">{formatCurrency(s.previsto)}</div></div>
                       <div className="col-span-2"><div className="text-muted-foreground">Recebido hoje</div><div className="font-bold text-success">{formatCurrency(s.recebido)}</div></div>

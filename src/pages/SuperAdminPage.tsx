@@ -154,7 +154,7 @@ function DashboardTab() {
           <div className="grid grid-cols-3 gap-2">
             <DMini label="Clientes" value={stats.clientesAtivos} />
             <DMini label="Empr.Ativos" value={stats.emprestimosAtivos} />
-            <DMini label="Atrasados" value={stats.atrasados} cls="text-destructive" />
+            <DMini label="Clientes atrasados" value={stats.atrasados} cls="text-destructive" />
           </div>
         </>
       )}
