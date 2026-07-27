@@ -129,6 +129,7 @@ export default function OverdueLoansPage() {
           const pm = penaltyMap[inst.loan_id] || { total: 0, paid: 0 };
           grouped[inst.loan_id] = {
             loanId: inst.loan_id,
+            clientId: inst.loans.client_id,
             clientName: (inst.loans?.clients?.name ?? "Cliente removido"),
             paymentType: inst.loans.payment_type,
             totalAmount: Number(inst.loans.total_amount),
@@ -145,7 +146,33 @@ export default function OverdueLoansPage() {
         grouped[inst.loan_id].totalOverdue += Number(inst.amount) - Number(inst.paid_amount);
       }
 
-      setGroups(Object.values(grouped).sort((a, b) => b.overdueDays - a.overdueDays));
+      // Um card por CLIENTE (client_id + worker_id), nunca por parcela/empréstimo
+      const byClient: Record<string, ClientGroup> = {};
+      for (const lg of Object.values(grouped)) {
+        const key = `${lg.clientId}|${lg.workerId ?? "-"}`;
+        const cg = (byClient[key] ||= {
+          key,
+          clientId: lg.clientId,
+          clientName: lg.clientName,
+          workerId: lg.workerId,
+          adminId: lg.adminId,
+          loans: [],
+          installmentCount: 0,
+          totalOverdue: 0,
+          overdueDays: 0,
+          penaltyTotal: 0,
+          penaltyPaid: 0,
+        });
+        cg.loans.push(lg);
+        cg.installmentCount += lg.installments.length;
+        cg.totalOverdue += lg.totalOverdue;
+        cg.overdueDays = Math.max(cg.overdueDays, lg.overdueDays);
+        cg.penaltyTotal += lg.penaltyTotal;
+        cg.penaltyPaid += lg.penaltyPaid;
+      }
+
+      setGroups(Object.values(byClient).sort((a, b) => b.overdueDays - a.overdueDays));
+
     } catch (err) {
       console.error("Error in OverdueLoansPage fetchData:", err);
       toast.error("Erro ao carregar parcelas atrasadas");
