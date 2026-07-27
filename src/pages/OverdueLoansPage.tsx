@@ -193,7 +193,7 @@ export default function OverdueLoansPage() {
       return;
     }
 
-    const allInsts = groups.flatMap(g => g.installments);
+    const allInsts = groups.flatMap((g) => g.loans.flatMap((l) => l.installments));
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
 
@@ -346,51 +346,59 @@ export default function OverdueLoansPage() {
       ) : displayed.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center p-8">
-            <p className="text-lg font-semibold">Nenhuma parcela atrasada! 🎉</p>
+            <p className="text-lg font-semibold">Nenhum cliente atrasado! 🎉</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {displayed.map((group) => (
+          {displayed.map((client) => (
             <Collapsible
-              key={group.loanId}
-              open={expandedLoan === group.loanId}
-              onOpenChange={(o) => setExpandedLoan(o ? group.loanId : null)}
+              key={client.key}
+              open={expandedClient === client.key}
+              onOpenChange={(o) => setExpandedClient(o ? client.key : null)}
             >
               <CollapsibleTrigger asChild>
                 <Card className="cursor-pointer border-destructive/30 hover:border-destructive/60 transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold">{group.clientName}</p>
+                        <p className="font-semibold">{client.clientName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {group.installments.length} parcela{group.installments.length > 1 ? "s" : ""} atrasada{group.installments.length > 1 ? "s" : ""}
+                          {client.installmentCount} parcela{client.installmentCount > 1 ? "s" : ""} vencida{client.installmentCount > 1 ? "s" : ""}
+                          {client.loans.length > 1 && <> · {client.loans.length} empréstimos atrasados</>}
                         </p>
                         <p className="text-sm font-medium text-destructive">
-                          {group.overdueDays} dia{group.overdueDays !== 1 ? "s" : ""} de atraso
+                          {client.overdueDays} dia{client.overdueDays !== 1 ? "s" : ""} em atraso
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Total: {formatCurrency(group.totalOverdue)}
+                          Total: {formatCurrency(client.totalOverdue)}
                         </p>
-                        {group.penaltyTotal > 0 && (
+                        {client.penaltyTotal > 0 && (
                           <p className="text-xs text-destructive">
-                            Multa: {formatCurrency(group.penaltyTotal)}
-                            {group.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(group.penaltyPaid)})</span>}
+                            Multa: {formatCurrency(client.penaltyTotal)}
+                            {client.penaltyPaid > 0 && <span className="text-success"> (pago: {formatCurrency(client.penaltyPaid)})</span>}
                           </p>
                         )}
                         {isAdmin && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            Trab.: {workerLabel(group.workerId)}
-                            {isSuperAdmin && <> · Adm.: {adminLabel(group.adminId)}</>}
+                            Trab.: {workerLabel(client.workerId)}
+                            {isSuperAdmin && <> · Adm.: {adminLabel(client.adminId)}</>}
                           </p>
                         )}
                       </div>
-                      <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${expandedLoan === group.loanId ? "rotate-180" : ""}`} />
+                      <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${expandedClient === client.key ? "rotate-180" : ""}`} />
                     </div>
                   </CardContent>
                 </Card>
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 space-y-2 pl-2">
+              <CollapsibleContent className="mt-2 space-y-3 pl-2">
+                {client.loans.map((group) => (
+                  <div key={group.loanId} className="space-y-2">
+                    {client.loans.length > 1 && (
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase">
+                        Empréstimo · {group.installments.length} parcela{group.installments.length > 1 ? "s" : ""} vencida{group.installments.length > 1 ? "s" : ""} · {formatCurrency(group.totalOverdue)}
+                      </p>
+                    )}
                 {group.installments.map((inst) => {
                   const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
                   const days = calculateOverdueDays(inst.due_date, group.paymentType);
@@ -481,14 +489,16 @@ export default function OverdueLoansPage() {
                     </Card>
                   );
                 })}
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="w-full text-primary"
-                  onClick={() => navigate(`/loans/${group.loanId}`)}
-                >
-                  Ver empréstimo completo →
-                </Button>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="w-full text-primary"
+                      onClick={() => navigate(`/loans/${group.loanId}`)}
+                    >
+                      Ver empréstimo completo →
+                    </Button>
+                  </div>
+                ))}
               </CollapsibleContent>
             </Collapsible>
           ))}
