@@ -19,6 +19,8 @@ import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight,
 
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
