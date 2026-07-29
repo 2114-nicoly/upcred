@@ -123,7 +123,15 @@ Deno.serve(async (req) => {
     }
 
     if (kind === "worker") {
+      // Criação direta de trabalhador é exclusiva do SuperAdministrador.
+      // Administradores devem enviar uma solicitação (worker_creation_requests).
+      if (!isSuper) {
+        return json(403, {
+          error: "A criação direta de trabalhadores foi desativada. Envie uma solicitação para o SuperAdministrador.",
+        });
+      }
       if (!isAdmin) return json(403, { error: "Apenas admin pode criar trabalhadores" });
+
 
       // determina parent_admin_id
       let parentAdminId: string | null = body.parent_admin_id ?? null;
