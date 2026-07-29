@@ -13,6 +13,7 @@ import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-re
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 
@@ -37,6 +38,7 @@ function getDayLabel(dateStr: string): string {
 }
 
 export default function PaymentHistoryPage() {
+  const { effectiveWorkerId, effectiveAdminId } = useEffectiveScope();
   const confirm = useConfirm();
   const [paymentsByDay, setPaymentsByDay] = useState<Record<string, PaymentMovement[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
@@ -48,17 +50,21 @@ export default function PaymentHistoryPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: movements, error } = await supabase
+      let mq: any = supabase
         .from("cash_movements")
         .select("id, type, amount, cash_date, observation, created_at, loan_id, client_id, daily_event_id")
         .in("type", ["recebimento_normal", "recebimento_multa"])
-        .is("reversed_at", null)
+        .is("reversed_at", null);
+      // Escopo efetivo (trabalhador visualizado tem prioridade sobre a sessão).
+      if (effectiveWorkerId) mq = mq.eq("worker_id", effectiveWorkerId);
+      else if (effectiveAdminId) mq = mq.eq("admin_id", effectiveAdminId);
+      const { data: movements, error } = await mq
         .order("cash_date", { ascending: false })
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      const clientIds = [...new Set((movements || []).map((m: any) => m.client_id).filter(Boolean))];
+      const clientIds = [...new Set(((movements as any[]) || []).map((m: any) => m.client_id).filter(Boolean))] as string[];
       const clientMap = new Map<string, string>();
       if (clientIds.length > 0) {
         const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);

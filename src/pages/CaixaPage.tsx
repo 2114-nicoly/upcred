@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
@@ -47,6 +48,10 @@ export default function CaixaPage() {
   const confirm = useConfirm();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers } = useWorkerFilter();
+  // Escopo efetivo: quando um trabalhador está selecionado, TODAS as consultas
+  // desta tela usam o worker_id dele (nunca o usuário autenticado).
+  const { effectiveWorkerId, effectiveAdminId, viewingAsWorker, readOnly } = useEffectiveScope();
+  const scopeArg = useMemo(() => ({ workerId: effectiveWorkerId, adminId: effectiveAdminId }), [effectiveWorkerId, effectiveAdminId]);
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
   const [balance, setBalance] = useState<CashBalance | null>(null);
@@ -111,9 +116,9 @@ export default function CaixaPage() {
     setLoading(true);
     try {
       const [bal, dayEvents, dcRes] = await Promise.all([
-        getCashBalance(),
-        getDailyEvents(selectedDate),
-        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
+        getCashBalance(scopeArg),
+        getDailyEvents(selectedDate, { workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope(scopeArg)).maybeSingle(),
       ]);
       setBalance(bal);
       const dc = (dcRes?.data as any) || null;
@@ -142,7 +147,7 @@ export default function CaixaPage() {
       let versionId: string | null = null;
       if (status === "closed") {
         try {
-          const allVersions = await listDailyCashSnapshotVersions(selectedDate);
+          const allVersions = await listDailyCashSnapshotVersions(selectedDate, scopeArg);
           setVersions(allVersions);
           const latest = allVersions[0];
           if (latest) {
@@ -179,8 +184,8 @@ export default function CaixaPage() {
       try {
         setSummaryLoading(true);
         const summary = await getDailyCollectionSummary(selectedDate, {
-          workerId: selectedWorkerId || null,
-          adminId: selectedAdminId || null,
+          workerId: effectiveWorkerId,
+          adminId: effectiveAdminId,
         });
         setCollectionSummary(summary);
       } catch {
@@ -190,7 +195,7 @@ export default function CaixaPage() {
       }
       setLoading(false);
     }
-  }, [selectedDate, selectedAdminId, selectedWorkerId]);
+  }, [selectedDate, effectiveWorkerId, effectiveAdminId, scopeArg]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -200,7 +205,7 @@ export default function CaixaPage() {
   const isClosed = cashState === "closed";
   const isNotStarted = cashState === "sem_caixa";
   // Block financial actions when closed OR not yet opened.
-  const cashLocked = isClosed || isNotStarted;
+  const cashLocked = isClosed || isNotStarted || readOnly;
   const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
@@ -266,6 +271,7 @@ export default function CaixaPage() {
 
   const handleManualMovement = async () => {
     if (!manualType || submitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações financeiras estão bloqueadas."); return; }
     if (manualType === "ajuste_manual" && !isAdmin && !isSuperAdmin) { setManualType(null); return; }
     const amount = parseFloat(manualAmount);
     if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
@@ -293,7 +299,7 @@ export default function CaixaPage() {
       await assertCashOpen(selectedDate);
 
       if (manualType === "ajuste_manual") {
-        const current = await getCashBalance();
+        const current = await getCashBalance(scopeArg);
         if (!current) { toast.error("Erro ao obter saldo"); return; }
         const diff = amount - Number(current.available_cash);
         await updateCashBalance({ available_cash: diff });
@@ -347,6 +353,7 @@ export default function CaixaPage() {
 
   const handleExpense = async () => {
     if (submitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações financeiras estão bloqueadas."); return; }
     const amount = parseFloat(expenseAmount);
     if (!isFinite(amount) || amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
     if (!expenseCategory) { toast.error("Selecione uma categoria"); return; }
@@ -631,7 +638,7 @@ export default function CaixaPage() {
     setVersionsOpen(true);
     setVersionsLoading(true);
     try {
-      const list = await listDailyCashSnapshotVersions(selectedDate);
+      const list = await listDailyCashSnapshotVersions(selectedDate, scopeArg);
       setVersions(list);
       const latestId = list[0]?.id ?? null;
       setSelectedVersionId((prev) => prev ?? latestId);
@@ -762,7 +769,18 @@ export default function CaixaPage() {
         </Badge>
       </div>
 
-      {isNotStarted && (
+      {viewingAsWorker && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="p-2.5">
+            <p className="text-[11px] text-warning font-medium">
+              Modo visualização: você está vendo o caixa deste trabalhador. Ações financeiras
+              (abrir, fechar, reabrir, entradas, saídas, despesas, ajustes e estornos) estão bloqueadas.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {isNotStarted && !readOnly && (
         <OpenCashBanner cashDate={selectedDate} onOpened={fetchData} />
       )}
 
@@ -975,14 +993,16 @@ export default function CaixaPage() {
       {/* Reopen / Versions actions (Close button moved to bottom of page) */}
       {!isNotStarted && isClosed && (
         <div className="grid grid-cols-2 gap-2">
-          <Button
-            onClick={() => setReopenOpen(true)}
-            disabled={submitting}
-            variant="outline"
-            className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-          >
-            <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
-          </Button>
+          {!readOnly && (
+            <Button
+              onClick={() => setReopenOpen(true)}
+              disabled={submitting}
+              variant="outline"
+              className="text-xs h-9 col-span-2 border-warning/40 text-warning"
+            >
+              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
+            </Button>
+          )}
           <Button
             onClick={openVersionsDialog}
             variant="ghost"
@@ -1104,7 +1124,7 @@ export default function CaixaPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(Number(ev.amount_in))}</span>
-                    {!workerIsClosed && (
+                    {!workerIsClosed && !readOnly && (
                       <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
                         <Undo2 className="h-3.5 w-3.5 text-destructive" />
                       </button>
@@ -1134,7 +1154,7 @@ export default function CaixaPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0 h-3.5">Não Pagou</Badge>
-                    {!workerIsClosed && (
+                    {!workerIsClosed && !readOnly && (
                       <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
                         <Undo2 className="h-3.5 w-3.5 text-destructive" />
                       </button>
@@ -1300,7 +1320,7 @@ export default function CaixaPage() {
                     <span className={`text-sm font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : "text-destructive"}`}>
                       {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : `-${formatCurrency(Number(ev.amount_out))}`}
                     </span>
-                    {!workerIsClosed && (
+                    {!workerIsClosed && !readOnly && (
                       <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Desfazer">
                         <Undo2 className="h-3.5 w-3.5 text-destructive" />
                       </button>
@@ -1336,7 +1356,7 @@ export default function CaixaPage() {
                       <span className={`text-xs font-bold tabular-nums ${Number(ev.amount_in) > 0 ? "text-success" : Number(ev.amount_out) > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                         {Number(ev.amount_in) > 0 ? `+${formatCurrency(Number(ev.amount_in))}` : Number(ev.amount_out) > 0 ? `-${formatCurrency(Number(ev.amount_out))}` : "—"}
                       </span>
-                      {!workerIsClosed && (
+                      {!workerIsClosed && !readOnly && (
                         <button onClick={() => handleUndoEvent(ev)} className="p-0.5 rounded hover:bg-destructive/10" title="Desfazer">
                           <Undo2 className="h-3 w-3 text-destructive" />
                         </button>
@@ -1387,7 +1407,7 @@ export default function CaixaPage() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-destructive tabular-nums">-{formatCurrency(Number(ev.amount_out))}</span>
-                      {!workerIsClosed && (
+                      {!workerIsClosed && !readOnly && (
                         <button onClick={() => handleUndoEvent(ev)} className="p-1 rounded hover:bg-destructive/10" title="Estornar despesa">
                           <Undo2 className="h-3 w-3 text-destructive" />
                         </button>
@@ -1431,7 +1451,7 @@ export default function CaixaPage() {
       </div>
 
       {/* Final action: Close cash day */}
-      {!isNotStarted && !isClosed && (
+      {!isNotStarted && !isClosed && !readOnly && (
         <div className="pt-8 pb-2">
           <Button
             onClick={openCloseDialog}

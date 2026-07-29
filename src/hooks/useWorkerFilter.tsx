@@ -24,6 +24,10 @@ type Ctx = {
   setSelectedWorkerId: (id: string | null) => void;
   selectedAdminId: string | null; // só super_admin usa
   setSelectedAdminId: (id: string | null) => void;
+  /** Atualização ATÔMICA do escopo (evita que setSelectedAdminId apague o trabalhador). */
+  setScope: (scope: { workerId: string | null; adminId?: string | null }) => void;
+  /** parent_admin_id do trabalhador selecionado (resolvido no banco quando necessário). */
+  selectedWorkerAdminId: string | null;
   workers: WorkerOption[]; // já filtrados pelo admin selecionado (se super_admin)
   admins: AdminOption[];
   loading: boolean;
@@ -40,6 +44,8 @@ const WorkerFilterContext = createContext<Ctx>({
   setSelectedWorkerId: () => {},
   selectedAdminId: null,
   setSelectedAdminId: () => {},
+  setScope: () => {},
+  selectedWorkerAdminId: null,
   workers: [],
   admins: [],
   loading: false,
@@ -76,6 +82,19 @@ export function WorkerFilterProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_WORKER);
   }, []);
 
+  /** Escopo atômico: define trabalhador (e a empresa dele) de uma só vez. */
+  const setScope = useCallback((scope: { workerId: string | null; adminId?: string | null }) => {
+    const { workerId, adminId } = scope;
+    if (adminId !== undefined) {
+      setSelectedAdminIdState(adminId);
+      if (adminId) localStorage.setItem(STORAGE_ADMIN, adminId);
+      else localStorage.removeItem(STORAGE_ADMIN);
+    }
+    setSelectedWorkerIdState(workerId);
+    if (workerId) localStorage.setItem(STORAGE_WORKER, workerId);
+    else localStorage.removeItem(STORAGE_WORKER);
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!isAdmin) {
       setWorkers([]); setAdmins([]); return;
@@ -103,6 +122,31 @@ export function WorkerFilterProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // parent_admin_id do trabalhador selecionado — resolvido pela lista e,
+  // se necessário (lista ainda carregando), diretamente no banco.
+  const [resolvedWorkerAdminId, setResolvedWorkerAdminId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancel = false;
+    if (!selectedWorkerId) { setResolvedWorkerAdminId(null); return; }
+    const fromList = workers.find((w) => w.id === selectedWorkerId)?.parent_admin_id ?? null;
+    if (fromList) { setResolvedWorkerAdminId(fromList); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("workers").select("parent_admin_id").eq("id", selectedWorkerId).maybeSingle();
+      if (!cancel) setResolvedWorkerAdminId((data as any)?.parent_admin_id ?? null);
+    })();
+    return () => { cancel = true; };
+  }, [selectedWorkerId, workers]);
+
+  // Segurança: nunca manter selecionado um trabalhador de outra empresa.
+  useEffect(() => {
+    if (!selectedWorkerId || !selectedAdminId || !resolvedWorkerAdminId) return;
+    if (resolvedWorkerAdminId !== selectedAdminId) {
+      setSelectedWorkerIdState(null);
+      localStorage.removeItem(STORAGE_WORKER);
+    }
+  }, [selectedWorkerId, selectedAdminId, resolvedWorkerAdminId]);
+
   const selectedWorkerName = selectedWorkerId
     ? workers.find((w) => w.id === selectedWorkerId)?.nome ?? null
     : null;
@@ -115,6 +159,7 @@ export function WorkerFilterProvider({ children }: { children: ReactNode }) {
       value={{
         selectedWorkerId, setSelectedWorkerId,
         selectedAdminId, setSelectedAdminId,
+        setScope, selectedWorkerAdminId: resolvedWorkerAdminId,
         workers, admins, loading,
         selectedWorkerName, selectedAdminName,
         refresh,

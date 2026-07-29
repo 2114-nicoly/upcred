@@ -31,6 +31,7 @@ import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 
 
 import EmptyState from "@/components/EmptyState";
@@ -278,7 +279,21 @@ function composeNotPaidObservation(reason: string, obs: string): string {
 export default function DailyCashPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const { isAdmin, isSuperAdmin, workerId: authWorkerId, adminId: authAdminId } = useAuth();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  // Escopo efetivo: quando um trabalhador é visualizado por admin/super admin,
+  // TODAS as consultas desta tela usam o worker_id dele.
+  const { effectiveWorkerId, effectiveAdminId, viewingAsWorker, readOnly } = useEffectiveScope();
+  const scopeArg = useMemo(
+    () => ({ workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+    [effectiveWorkerId, effectiveAdminId],
+  );
+  /** Aplica worker_id/admin_id efetivos em qualquer query desta tela. */
+  const scopeRows = useCallback((q: any) => {
+    let out = q;
+    if (effectiveWorkerId) out = out.eq("worker_id", effectiveWorkerId);
+    else if (effectiveAdminId) out = out.eq("admin_id", effectiveAdminId);
+    return out;
+  }, [effectiveWorkerId, effectiveAdminId]);
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
@@ -368,9 +383,12 @@ export default function DailyCashPage() {
   };
 
   const isNotStarted = dailyCashStatus === "sem_caixa";
-  const isClosed = dailyCashStatus === "closed" || isNotStarted;
+  // readOnly = admin/super admin visualizando um trabalhador: nada pode ser registrado.
+  const isClosed = dailyCashStatus === "closed" || isNotStarted || readOnly;
   const isReallyClosed = dailyCashStatus === "closed";
-  const actionsBlockedTitle = isNotStarted
+  const actionsBlockedTitle = readOnly
+    ? "Modo visualização: ações bloqueadas"
+    : isNotStarted
     ? "Abra o caixa para registrar"
     : isReallyClosed
     ? "Caixa fechado: somente visualização"
@@ -433,18 +451,18 @@ export default function DailyCashPage() {
         { data: newLoanData },
         { data: paidMovementsData },
       ] = await Promise.all([
-        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
-        getDailyEvents(selectedDate),
-        getDailyEvents(selectedDate, { includeReversed: true }),
-        supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate),
-        supabase.from("loans")
-          .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
-          .eq("loan_date", selectedDate) as unknown as QueryResult<NewLoanInfo>,
-        supabase.from("cash_movements")
+        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope(scopeArg)).maybeSingle(),
+        getDailyEvents(selectedDate, { workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+        getDailyEvents(selectedDate, { includeReversed: true, workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+        scopeRows(supabase.from("not_paid_marks").select("*").eq("mark_date", selectedDate)),
+        scopeRows(supabase.from("loans")
+          .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, worker_id, clients:client_id(id, name)")
+          .eq("loan_date", selectedDate)) as unknown as QueryResult<NewLoanInfo>,
+        scopeRows(supabase.from("cash_movements")
           .select("id, loan_id, amount, created_at")
           .eq("cash_date", selectedDate)
           .eq("type", "recebimento_normal")
-          .is("reversed_at", null) as unknown as QueryResult<CashMovementPaymentRow>,
+          .is("reversed_at", null)) as unknown as QueryResult<CashMovementPaymentRow>,
       ]);
 
       if (isStale()) return;
@@ -458,7 +476,7 @@ export default function DailyCashPage() {
       // Dados vivos (empréstimos, parcelas, movimentações) NÃO são mais lidos.
       if (status === "closed") {
         try {
-          const snap = await loadDailyCashSnapshot(selectedDate);
+          const snap = await loadDailyCashSnapshot(selectedDate, scopeArg);
           if (!isStale() && snap) {
             setOpeningBalance(Number(snap.totals.opening_balance) || 0);
             setManualInToday(Number(snap.totals.manual_in) || 0);
@@ -490,7 +508,7 @@ export default function DailyCashPage() {
         setOpeningBalance(Number(dcAny.opening_balance) || 0);
       } else {
         try {
-          const scope = await getCurrentDailyCashScope();
+          const scope = await getCurrentDailyCashScope(scopeArg);
           const { data: prior } = await applyDailyCashScope(
             supabase.from("daily_cash")
               .select("expected_closing_balance, cash_date")
@@ -550,10 +568,10 @@ export default function DailyCashPage() {
       const paidLoanIdArr = [...paidLoanIds];
       const paidGroupsList: PaidGroup[] = [];
       if (paidLoanIdArr.length > 0) {
-        const { data: paidLoansData } = await supabase
+        const { data: paidLoansData } = await scopeRows(supabase
           .from("loans")
           .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-          .in("id", paidLoanIdArr) as unknown as { data: PaidLoanRow[] | null };
+          .in("id", paidLoanIdArr)) as unknown as { data: PaidLoanRow[] | null };
 
         for (const loan of (paidLoansData || [])) {
           const client = loan.clients;
@@ -617,12 +635,12 @@ export default function DailyCashPage() {
         }
 
         // Get installment IDs for undo capability
-        const { data: cmData } = await supabase.from("cash_movements")
+        const { data: cmData } = await scopeRows(supabase.from("cash_movements")
           .select("installment_id, loan_id")
           .eq("type", "recebimento_normal")
           .eq("cash_date", selectedDate)
           .in("loan_id", paidLoanIdArr)
-          .is("reversed_at", null);
+          .is("reversed_at", null));
         const instByLoan = new Map<string, string[]>();
         for (const cm of (cmData || [])) {
           if (cm.installment_id && cm.loan_id) {
@@ -638,12 +656,12 @@ export default function DailyCashPage() {
       setPaidGroups(paidGroupsList);
 
       // Penalty payments total today (recebimento_multa)
-      const { data: penPayData } = await (supabase
+      const { data: penPayData } = await (scopeRows(supabase
         .from("cash_movements")
         .select("amount")
         .eq("type", "recebimento_multa")
         .eq("cash_date", selectedDate)
-        .is("reversed_at", null) as unknown as QueryResult<PenaltyMovementRow>);
+        .is("reversed_at", null)) as unknown as QueryResult<PenaltyMovementRow>);
       if (isStale()) return;
       setTotalPenaltyPaidToday((penPayData || []).reduce((s, m) => s + Number(m.amount), 0));
 
@@ -681,7 +699,21 @@ export default function DailyCashPage() {
         return;
       }
 
-      let routeInstallments = ((routeRows || []) as RouteInstallmentRow[]).map(mapRouteInstallment);
+      // get_route_installments não recebe escopo: filtrar pelo worker_id REAL
+      // do empréstimo ANTES de exibir/contabilizar qualquer coisa.
+      let scopedRouteRows = (routeRows || []) as RouteInstallmentRow[];
+      if (effectiveWorkerId && scopedRouteRows.length > 0) {
+        const loanIds = [...new Set(scopedRouteRows.map((r: any) => r.loan_id))];
+        const { data: scopeLoans } = await supabase
+          .from("loans").select("id, worker_id, admin_id").in("id", loanIds);
+        const allowed = new Set(((scopeLoans as any[]) || []).filter((l: any) => {
+          if (effectiveWorkerId && l.worker_id !== effectiveWorkerId) return false;
+          if (effectiveAdminId && l.admin_id && l.admin_id !== effectiveAdminId) return false;
+          return true;
+        }).map((l: any) => l.id));
+        scopedRouteRows = scopedRouteRows.filter((r: any) => allowed.has(r.loan_id));
+      }
+      let routeInstallments = scopedRouteRows.map(mapRouteInstallment);
       if (isSunday(selectedDate)) {
         routeInstallments = routeInstallments.filter((i) => getInstLoan(i)?.payment_type !== "daily");
       }
@@ -722,13 +754,13 @@ export default function DailyCashPage() {
       }
 
       // Pending penalties (unpaid) for loans the user has scope on
-      const { data: penData } = await supabase
+      const { data: penData } = await scopeRows(supabase
         .from("penalties")
         .select("id, amount, loan_id, created_at, loans:loan_id(client_id, status, remaining_balance, clients:client_id(id, name))")
         .eq("paid", false)
         .lte("created_at", selectedDate + "T23:59:59")
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(100));
       if (!isStale()) {
         setPendingPenalties(((penData as any[]) || [])
           .filter((p) => isLoanActive(p.loans || {}))
@@ -755,8 +787,8 @@ export default function DailyCashPage() {
         try {
           setSummaryLoading(true);
           const s = await getDailyCollectionSummary(selectedDate, {
-            workerId: authWorkerId || null,
-            adminId: authAdminId || null,
+            workerId: effectiveWorkerId,
+            adminId: effectiveAdminId,
           });
           if (!isStale()) setDailySummary(s);
         } catch {
@@ -768,7 +800,7 @@ export default function DailyCashPage() {
         if (silent) setIsRefreshing(false);
       }
     }
-  }, [selectedDate, authWorkerId, authAdminId]);
+  }, [selectedDate, effectiveWorkerId, effectiveAdminId, scopeArg, scopeRows]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -819,8 +851,9 @@ export default function DailyCashPage() {
   }, [selectedDate, fetchData]);
 
   // === Payment handler: wait for server confirmation (no premature optimistic UI) ===
-  const handlePay = async (id: string) => {
+  const handlePay= async (id: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const inst = pendingInstallments.find(i => i.id === id);
@@ -878,8 +911,9 @@ export default function DailyCashPage() {
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
   };
 
-  const handleNotPaid = async (id: string) => {
+  const handleNotPaid= async (id: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const inst = pendingInstallments.find(i => i.id === id);
@@ -928,8 +962,9 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleBatchNotPaid = async () => {
+  const handleBatchNotPaid= async () => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const selectedInsts = pendingInstallments
@@ -1022,8 +1057,9 @@ export default function DailyCashPage() {
     });
   };
 
-  const handleUndoNotPaid = async (markId: string) => {
+  const handleUndoNotPaid= async (markId: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     const mark = notPaidMarks.find(m => m.id === markId);
     const ok = await confirm({
@@ -1062,8 +1098,9 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleUndoPayment = async (loanId: string, movementId: string) => {
+  const handleUndoPayment= async (loanId: string, movementId: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
     const group = paidGroups.find(g => g.loanId === loanId);
@@ -1137,8 +1174,9 @@ export default function DailyCashPage() {
 
 
 
-  const handleQuitarEmprestimo = async (instId: string) => {
+  const handleQuitarEmprestimo= async (instId: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const inst = pendingInstallments.find(i => i.id === instId);
@@ -1515,6 +1553,15 @@ export default function DailyCashPage() {
 
   return (
     <div className="mx-auto max-w-lg p-3 pb-36">
+      {viewingAsWorker && (
+        <div className="mb-3 rounded-md border border-warning/40 bg-warning/5 p-2">
+          <p className="text-[11px] font-medium text-warning">
+            Modo visualização: você está vendo a rota deste trabalhador. Nenhum pagamento,
+            marcação ou estorno pode ser registrado aqui.
+          </p>
+        </div>
+      )}
+
       {/* Date navigation */}
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
@@ -1699,7 +1746,7 @@ export default function DailyCashPage() {
           )}
 
           {/* PRÓXIMAS COBRANÇAS (Mensais / Data Fixa) */}
-          <UpcomingRemindersSection workerId={authWorkerId || null} adminId={authAdminId || null} />
+          <UpcomingRemindersSection workerId={effectiveWorkerId} adminId={effectiveAdminId} />
 
           {/* MULTAS PENDENTES */}
           {pendingPenalties.length > 0 && (

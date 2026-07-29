@@ -44,7 +44,7 @@ type EventRow = {
 export default function WorkerFullPanel({ workerId }: { workerId: string }) {
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
-  const { setSelectedWorkerId } = useWorkerFilter();
+  const { setScope } = useWorkerFilter();
 
   const [worker, setWorker] = useState<Worker | null>(null);
   const [admin, setAdmin] = useState<AdminLite | null>(null);
@@ -93,10 +93,11 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
   function viewAsWorker(target: string = "/") {
     if (!worker) return;
     const ok = window.confirm(
-      `Você passará a registrar ações em nome de ${worker.nome}.\n\nQualquer pagamento, empréstimo ou movimento será atribuído a este trabalhador. Continuar?`
+      `Você verá as telas exatamente como ${worker.nome} as vê.\n\nModo somente leitura: ações financeiras (abrir/fechar caixa, entradas, saídas, despesas, estornos) ficam bloqueadas. Continuar?`
     );
     if (!ok) return;
-    setSelectedWorkerId(worker.id);
+    // Atualização ATÔMICA: trabalhador + empresa responsável no mesmo passo.
+    setScope({ workerId: worker.id, adminId: worker.parent_admin_id ?? undefined });
     navigate(target);
   }
 
@@ -131,7 +132,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
               )}
             </div>
             <Button size="sm" onClick={() => viewAsWorker("/")}>
-              <Eye className="h-4 w-4 mr-1" /> Atuar como
+              <Eye className="h-4 w-4 mr-1" /> Visualizar como
             </Button>
           </div>
         </CardContent>

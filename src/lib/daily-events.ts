@@ -145,17 +145,19 @@ export async function createDailyEvent(event: {
  */
 export async function getDailyEvents(
   cashDate: string,
-  opts: { includeReversed?: boolean } = {}
+  opts: { includeReversed?: boolean; workerId?: string | null; adminId?: string | null } = {}
 ): Promise<DailyEvent[]> {
-  const workerId = await getCurrentWorkerId();
+  const workerId = opts.workerId ?? (await getCurrentWorkerId());
   let q: any = supabase.from("daily_events" as any)
     .select("*")
     .eq("cash_date", cashDate);
   if (workerId) q = q.eq("worker_id", workerId);
+  else if (opts.adminId) q = q.eq("admin_id", opts.adminId);
   if (!opts.includeReversed) q = q.is("reversed_at", null);
   const { data } = await q.order("created_at", { ascending: false });
   return (data as unknown as DailyEvent[]) || [];
 }
+
 
 /**
  * @deprecated Use `reverseDailyEvent`. Kept for legacy callers — does NOT delete; marks as reversed.
@@ -315,17 +317,23 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   await markDailyEventReversed(event.id);
 }
 
-export async function getDailyEventsByType(cashDate: string, eventType: string): Promise<DailyEvent[]> {
-  const workerId = await getCurrentWorkerId();
+export async function getDailyEventsByType(
+  cashDate: string,
+  eventType: string,
+  scope: { workerId?: string | null; adminId?: string | null } = {}
+): Promise<DailyEvent[]> {
+  const workerId = scope.workerId ?? (await getCurrentWorkerId());
   let q: any = supabase.from("daily_events" as any)
     .select("*")
     .eq("cash_date", cashDate)
     .eq("event_type", eventType)
     .is("reversed_at", null);
   if (workerId) q = q.eq("worker_id", workerId);
+  else if (scope.adminId) q = q.eq("admin_id", scope.adminId);
   const { data } = await q.order("created_at", { ascending: false });
   return (data as unknown as DailyEvent[]) || [];
 }
+
 
 export function getEventTypeLabel(type: string): string {
   switch (type) {

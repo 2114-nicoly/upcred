@@ -22,6 +22,7 @@ import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 
 function getDayLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -39,6 +40,7 @@ type GroupedDay = {
 };
 
 export default function CashHistoryPage() {
+  const { effectiveWorkerId, effectiveAdminId } = useEffectiveScope();
   const navigate = useNavigate();
   const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,8 @@ export default function CashHistoryPage() {
       .order("created_at", { ascending: false })
       .limit(500);
 
+    if (effectiveWorkerId) query = query.eq("worker_id", effectiveWorkerId);
+    else if (effectiveAdminId) query = query.eq("admin_id", effectiveAdminId);
     if (filterType !== "all") query = query.eq("type", filterType);
     if (filterClient && filterClient !== "all") query = query.eq("client_id", filterClient);
 
@@ -76,7 +80,7 @@ export default function CashHistoryPage() {
     supabase.from("clients").select("id, name").order("name").then(({ data }) => setClients(data || []));
   }, []);
 
-  useEffect(() => { fetchData(); }, [filterType, filterClient]);
+  useEffect(() => { fetchData(); }, [filterType, filterClient, effectiveWorkerId, effectiveAdminId]);
 
   const groupedDays: GroupedDay[] = (() => {
     const grouped: Record<string, MovementWithClient[]> = {};
