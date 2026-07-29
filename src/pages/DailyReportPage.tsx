@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/loan-utils";
 import { getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
 import { computeDailyTotals } from "@/lib/daily-totals";
+import { computeCoreTotals, fetchWorkerAvailableCash } from "@/lib/finance-totals";
 import { useAuth } from "@/hooks/useAuth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Download, FileText, Loader2, Share2 } from "lucide-react";
@@ -227,16 +228,18 @@ export default function DailyReportPage({
           setCashSummary(null);
         }
 
-        // Current available cash (dynamic — does NOT overwrite historical opening/closing snapshots)
-        let cbRow: any = null;
+        // Caixa disponível atual — SEMPRE cash_balance.available_cash (fonte única).
         if (selectedWorkerId) {
-          const { data } = await supabase.from("cash_balance").select("available_cash").eq("worker_id", selectedWorkerId).maybeSingle();
-          cbRow = data;
+          setCurrentAvailableCash(await fetchWorkerAvailableCash(selectedWorkerId));
         } else if (isSuperAdmin && selectedAdminId) {
-          const { data } = await supabase.from("cash_balance").select("available_cash").eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
-          cbRow = data;
+          const { data, error: cbErr } = await supabase
+            .from("cash_balance").select("available_cash")
+            .eq("admin_id", selectedAdminId).is("worker_id", null).maybeSingle();
+          if (cbErr) throw cbErr;
+          setCurrentAvailableCash(data ? Number(data.available_cash || 0) : 0);
+        } else {
+          setCurrentAvailableCash(null);
         }
-        setCurrentAvailableCash(cbRow ? Number(cbRow.available_cash || 0) : null);
 
         // Detalhamento (somente leitura) — pagamentos, empréstimos, renovações,
         // renegociações, atrasos e clientes pendentes de registro.
@@ -316,13 +319,17 @@ export default function DailyReportPage({
 
   const totals = useMemo(() => {
     const t = computeDailyTotals(events as any, 0);
+    // Fonte única compartilhada para recebido e emprestado.
+    const core = computeCoreTotals(events as any);
     return {
       totalIn: t.entradas,
       totalOut: t.saidas,
-      payments: t.pagamentos,
+      payments: core.recebidoPrincipal,
+      penalties: core.multasRecebidas,
+      receivedTotal: core.recebidoTotal,
+      lent: core.emprestado,
       loans: t.emprestimosLiberados,
       renewals: t.renovacoes + t.renegociacoes,
-      penalties: t.multas,
       manualIn: t.entradasManuais,
       manualOut: t.saidasManuais,
       expenses: t.despesas,
@@ -559,12 +566,16 @@ export default function DailyReportPage({
             : cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)",
           formatCurrency(periodFinal),
         ],
-        ["Total recebido", formatCurrency(totals.payments)],
-        ["Total emprestado", formatCurrency(totals.loans + totals.renewals)],
+        ...(currentAvailableCash != null
+          ? [["Caixa disponível atual", formatCurrency(currentAvailableCash)] as string[]]
+          : []),
+        ["Recebido principal", formatCurrency(totals.payments)],
+        ["Multas recebidas", formatCurrency(totals.penalties)],
+        ["Total recebido (com multas)", formatCurrency(totals.receivedTotal)],
+        ["Total emprestado", formatCurrency(totals.lent)],
         ["Entradas", formatCurrency(totals.manualIn)],
         ["Saídas", formatCurrency(totals.manualOut)],
         ["Despesas", formatCurrency(totals.expenses)],
-        ["Multas", formatCurrency(totals.penalties)],
         ["Estornos", `${formatCurrency(estornosTotal)} (${groups.estornos.length})`],
         ["Diferença de caixa", formatCurrency(periodDiffValue)],
       ],
@@ -637,10 +648,17 @@ export default function DailyReportPage({
       null,
       ["Total", "Valor"],
       [
+        ["Recebido principal no período", formatCurrency(totals.payments)],
+        ["Multas recebidas no período", formatCurrency(totals.penalties)],
+        ["Total recebido (com multas)", formatCurrency(totals.receivedTotal)],
+        ["Emprestado no período", formatCurrency(totals.lent)],
         ["Entradas do período", formatCurrency(totals.totalIn)],
         ["Saídas do período", formatCurrency(totals.totalOut)],
         ["Saldo do período (entradas - saídas)", formatCurrency(totals.balance)],
         ["Caixa final do período", formatCurrency(periodFinal)],
+        ...(currentAvailableCash != null
+          ? [["Caixa disponível atual", formatCurrency(currentAvailableCash)] as string[]]
+          : []),
       ],
       { rightCols: [1] }
     );
@@ -804,17 +822,21 @@ export default function DailyReportPage({
         <p className="text-xs font-semibold text-muted-foreground uppercase">Resumo total do período</p>
       )}
       <div className="grid grid-cols-2 gap-2">
+        {currentAvailableCash != null && (
+          <StatCard label="Caixa disponível atual" value={formatCurrency(currentAvailableCash)} />
+        )}
         <StatCard label={isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial"} value={formatCurrency(periodOpening)} />
         <StatCard
           label={isMultiDay ? "Caixa final (último dia)" : (cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)")}
           value={formatCurrency(periodFinal)}
         />
-        <StatCard label="Total recebido" value={formatCurrency(totals.payments)} tone="positive" />
-        <StatCard label="Total emprestado" value={formatCurrency(totals.loans + totals.renewals)} tone="negative" />
+        <StatCard label="Recebido principal" value={formatCurrency(totals.payments)} tone="positive" />
+        <StatCard label="Multas recebidas" value={formatCurrency(totals.penalties)} tone="positive" />
+        <StatCard label="Total recebido (com multas)" value={formatCurrency(totals.receivedTotal)} tone="positive" />
+        <StatCard label="Total emprestado" value={formatCurrency(totals.lent)} tone="negative" />
         <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
         <StatCard label="Saídas" value={formatCurrency(totals.manualOut)} tone="negative" />
         <StatCard label="Despesas" value={formatCurrency(totals.expenses)} tone="negative" />
-        <StatCard label="Multas" value={formatCurrency(totals.penalties)} tone="positive" />
         <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
         <StatCard
           label="Diferença de caixa"

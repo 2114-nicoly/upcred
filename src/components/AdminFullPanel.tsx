@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
+import { computeCoreTotals } from "@/lib/finance-totals";
 import { formatCurrency } from "@/lib/loan-utils";
 import { isLoanActive } from "@/lib/status-constants";
 import {
@@ -30,6 +31,8 @@ type WorkerToday = {
   cashStatus: "open" | "closed" | "not_opened";
   availableCash: number;
   receivedToday: number;
+  receivedPrincipalToday: number;
+  penaltiesToday: number;
   lentToday: number;
   lastClosingDifference: number | null;
   lastActivity: string | null;
@@ -102,7 +105,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     ]);
     const map: Record<string, WorkerToday> = {};
     for (const w of wList) {
-      map[w.id] = { cashStatus: "not_opened", availableCash: 0, receivedToday: 0, lentToday: 0, lastClosingDifference: null, lastActivity: null };
+      map[w.id] = { cashStatus: "not_opened", availableCash: 0, receivedToday: 0, receivedPrincipalToday: 0, penaltiesToday: 0, lentToday: 0, lastClosingDifference: null, lastActivity: null };
     }
     for (const dc of (dcRes.data as any[]) || []) {
       const wid = dc.worker_id; if (!wid || !map[wid]) continue;
@@ -112,11 +115,18 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       const wid = cb.worker_id; if (!wid || !map[wid]) continue;
       map[wid].availableCash = Number(cb.available_cash || 0);
     }
+    // Fonte única: recebido (principal + multas) e emprestado real por trabalhador.
+    const evByWorker: Record<string, any[]> = {};
     for (const e of (evTodayRes.data as any[]) || []) {
-      const wid = e.worker_id; if (!wid || !map[wid] || e.reversed_at) continue;
-      const ain = Number(e.amount_in || 0); const aout = Number(e.amount_out || 0);
-      if (e.event_type === "pagamento" || e.event_type === "recebimento_multa") map[wid].receivedToday += ain;
-      if (e.event_type === "emprestimo_novo" || e.event_type === "renovacao" || e.event_type === "renegociacao") map[wid].lentToday += aout;
+      const wid = e.worker_id; if (!wid || !map[wid]) continue;
+      (evByWorker[wid] ||= []).push(e);
+    }
+    for (const [wid, evs] of Object.entries(evByWorker)) {
+      const core = computeCoreTotals(evs as any);
+      map[wid].receivedPrincipalToday = core.recebidoPrincipal;
+      map[wid].penaltiesToday = core.multasRecebidas;
+      map[wid].receivedToday = core.recebidoTotal;
+      map[wid].lentToday = core.emprestado;
     }
     const seenClose = new Set<string>();
     for (const c of (lastCloseRes.data as any[]) || []) {
@@ -511,7 +521,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                           {!isArchived && <Badge variant={cashVariant} className="text-[9px]">Caixa: {cashLabel}</Badge>}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
-                          Login {w.login_codigo} · Recebido hoje {formatCurrency(wt?.receivedToday ?? 0)} · Emprestado hoje {formatCurrency(wt?.lentToday ?? 0)}
+                          Login {w.login_codigo} · Recebido hoje {formatCurrency(wt?.receivedPrincipalToday ?? 0)} · Multas {formatCurrency(wt?.penaltiesToday ?? 0)} · Emprestado hoje {formatCurrency(wt?.lentToday ?? 0)}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
                           Caixa Disponível: <span className="font-semibold">{formatCurrency(wt?.availableCash ?? 0)}</span>

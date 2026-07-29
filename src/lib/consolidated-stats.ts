@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAvailableCashByWorker } from "@/lib/finance-totals";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
 
 import {
@@ -36,6 +37,9 @@ export type WorkerStats = {
   worker_name: string;
   previsto: number;
   recebido: number;
+  recebidoPrincipal: number;
+  multasRecebidas: number;
+  availableCash: number;
   faltaReceber: number;
   percentual: number;
   emprestado: number;
@@ -55,7 +59,7 @@ export type WorkerStats = {
 
 const empty = (id: string | null, name: string): WorkerStats => ({
   worker_id: id, worker_name: name,
-  previsto: 0, recebido: 0, faltaReceber: 0, percentual: 0,
+  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, availableCash: 0, faltaReceber: 0, percentual: 0,
   emprestado: 0, retirada: 0, aporte: 0, totalSaidas: 0, saldoLiquido: 0,
   naoPagosCount: 0, renovacoes: 0, emprestimosNovos: 0,
   clientesAtivos: 0, emprestimosAtivos: 0, atrasados: 0, atrasadosClientIds: [],
@@ -137,10 +141,13 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     const inV = Number(e.amount_in || 0);
     const outV = Number(e.amount_out || 0);
     switch (e.event_type) {
-      case "pagamento": s.recebido += inV; break;
-      case "recebimento_multa": s.recebido += inV; break;
+      // Recebido/emprestado seguem a fonte única (ver src/lib/finance-totals.ts):
+      // pagamento = principal, recebimento_multa = multas, saída real = emprestado.
+      case "pagamento": s.recebidoPrincipal += inV; s.recebido += inV; break;
+      case "recebimento_multa": s.multasRecebidas += inV; s.recebido += inV; break;
       case "emprestimo_novo": s.emprestado += outV; s.emprestimosNovos += 1; break;
       case "renovacao": s.emprestado += outV; s.renovacoes += 1; break;
+      case "renegociacao": s.emprestado += outV; break;
       case "saida":
       case "saida_manual": s.retirada += outV; break;
       case "entrada_manual": s.aporte += inV; break;
@@ -188,6 +195,15 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     s.clientesAtivos += 1;
   });
 
+  // Caixa disponível atual — exclusivamente cash_balance.available_cash.
+  try {
+    const cashMap = await fetchAvailableCashByWorker(Array.from(operationalIds));
+    map.forEach((s, id) => { s.availableCash = cashMap[id] ?? 0; });
+  } catch (err) {
+    console.error("[consolidated-stats] falha ao carregar caixa disponível", err);
+    throw err;
+  }
+
   // Derived
   for (const s of map.values()) {
     s.totalSaidas = s.emprestado + s.retirada;
@@ -206,6 +222,9 @@ export function consolidate(stats: WorkerStats[]): WorkerStats {
     s.atrasadosClientIds.forEach((id) => overdueClientKeys.add(id));
     total.previsto += s.previsto;
     total.recebido += s.recebido;
+    total.recebidoPrincipal += s.recebidoPrincipal;
+    total.multasRecebidas += s.multasRecebidas;
+    total.availableCash += s.availableCash;
     total.emprestado += s.emprestado;
     total.retirada += s.retirada;
     total.aporte += s.aporte;
