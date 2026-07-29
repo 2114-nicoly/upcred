@@ -301,12 +301,20 @@ function WorkersTab() {
   }
 
   // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
+  // Acesso/mensalidade é apenas leitura (gerenciado pelo SuperAdministrador).
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} });
+
   async function load() {
     setLoading(true);
-    const { data: w } = await supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived });
+    const [{ data: w }, maps] = await Promise.all([
+      supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
+      loadAccessMaps().catch(() => ({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} } as AccessMaps)),
+    ]);
     setWorkers((w as any) || []);
+    setAccessMaps(maps);
     setLoading(false);
   }
+
 
   useEffect(() => { load(); }, [showArchived]);
 
