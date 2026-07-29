@@ -19,7 +19,6 @@ import { isLoanActive } from "@/lib/status-constants";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats, consolidate,
 } from "@/lib/consolidated-stats";
-import { getDailyCollectionSummary } from "@/lib/daily-totals";
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
@@ -75,7 +74,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const [mode, setMode] = useState<PeriodMode>("day");
   const [tab, setTab] = useState("resumo");
   const [loading, setLoading] = useState(true);
-  const [daySummary, setDaySummary] = useState<{ previsto: number; recebido: number; falta: number; hasError: boolean } | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [workerToday, setWorkerToday] = useState<Record<string, WorkerToday>>({});
   const [reopenReqs, setReopenReqs] = useState<ReopenReq[]>([]);
   const [reopenBusy, setReopenBusy] = useState<string | null>(null);
@@ -145,6 +144,8 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
   async function load(signal?: { cancel: boolean }) {
     setLoading(true);
+    setLoadError(false);
+    try {
     const [{ data: admins }, { data: ws }] = await Promise.all([
       supabase.rpc("super_admin_list_admins" as any),
       supabase.rpc("list_workers_by_admin" as any, { p_admin_id: adminId, p_include_archived: true }),
@@ -155,33 +156,25 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     setAdmin(ad);
     setWorkers(wList);
 
-    const wIds = wList.map((w) => w.id);
-    const [allStats, cs, ls, evs, summary] = await Promise.all([
+    const [allStats, cs, ls, evs] = await Promise.all([
       loadWorkersStats(range, { adminId }),
       supabase.from("clients").select("id, name, phone, client_code, worker_id").eq("admin_id", adminId).is("archived_at", null).order("name"),
       supabase.from("loans").select("id, status, amount, total_amount, remaining_balance, loan_date, worker_id, clients(name)").eq("admin_id", adminId).order("loan_date", { ascending: false }).limit(300),
       supabase.from("daily_events" as any).select("id, cash_date, event_type, worker_id, amount_in, amount_out, observation, clients(name)").eq("admin_id", adminId).gte("cash_date", range.startDate).lte("cash_date", range.endDate).order("cash_date", { ascending: false }).limit(300),
-      mode === "day" ? getDailyCollectionSummary(range.startDate, { adminId }) : Promise.resolve(null),
     ]);
     if (signal?.cancel) return;
 
-    const wSet = new Set(wIds);
-    setStats(allStats.filter((s) => s.worker_id && wSet.has(s.worker_id)));
+    // Fonte única: as estatísticas já vêm escopadas pela empresa (admin).
+    setStats(allStats);
     setClients((cs.data as ClientRow[]) || []);
     setLoans((ls.data as any) || []);
     setEvents((evs.data as any) || []);
-    if (summary) {
-      setDaySummary({
-        previsto: summary.expectedToReceiveToday,
-        recebido: summary.receivedToday,
-        falta: summary.pendingToReceiveToday,
-        hasError: summary.hasError,
-      });
-    } else {
-      setDaySummary(null);
-    }
     await Promise.all([loadWorkerToday(wList), loadReopenRequests()]);
-    setLoading(false);
+    } catch (err) {
+      console.error("[AdminFullPanel] falha ao carregar dados da empresa", err);
+      if (!signal?.cancel) setLoadError(true);
+    }
+    if (!signal?.cancel) setLoading(false);
   }
 
   useEffect(() => {
