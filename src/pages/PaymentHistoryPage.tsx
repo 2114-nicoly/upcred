@@ -48,11 +48,15 @@ export default function PaymentHistoryPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: movements, error } = await supabase
+      let mq: any = supabase
         .from("cash_movements")
         .select("id, type, amount, cash_date, observation, created_at, loan_id, client_id, daily_event_id")
         .in("type", ["recebimento_normal", "recebimento_multa"])
-        .is("reversed_at", null)
+        .is("reversed_at", null);
+      // Escopo efetivo (trabalhador visualizado tem prioridade sobre a sessão).
+      if (effectiveWorkerId) mq = mq.eq("worker_id", effectiveWorkerId);
+      else if (effectiveAdminId) mq = mq.eq("admin_id", effectiveAdminId);
+      const { data: movements, error } = await mq
         .order("cash_date", { ascending: false })
         .order("created_at", { ascending: false });
 

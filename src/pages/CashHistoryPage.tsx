@@ -64,6 +64,8 @@ export default function CashHistoryPage() {
       .order("created_at", { ascending: false })
       .limit(500);
 
+    if (effectiveWorkerId) query = query.eq("worker_id", effectiveWorkerId);
+    else if (effectiveAdminId) query = query.eq("admin_id", effectiveAdminId);
     if (filterType !== "all") query = query.eq("type", filterType);
     if (filterClient && filterClient !== "all") query = query.eq("client_id", filterClient);
 
@@ -76,7 +78,7 @@ export default function CashHistoryPage() {
     supabase.from("clients").select("id, name").order("name").then(({ data }) => setClients(data || []));
   }, []);
 
-  useEffect(() => { fetchData(); }, [filterType, filterClient]);
+  useEffect(() => { fetchData(); }, [filterType, filterClient, effectiveWorkerId, effectiveAdminId]);
 
   const groupedDays: GroupedDay[] = (() => {
     const grouped: Record<string, MovementWithClient[]> = {};
