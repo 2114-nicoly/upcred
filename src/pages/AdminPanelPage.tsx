@@ -567,6 +567,11 @@ function WorkersTab() {
                       </Button>
                     )}
                   </div>
+                  <WorkerAccessSummary
+                    license={accessMaps.licenseByWorker[w.id]}
+                    lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
+                  />
+
                 </CardContent>
               </Card>
             );
