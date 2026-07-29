@@ -1553,6 +1553,15 @@ export default function DailyCashPage() {
 
   return (
     <div className="mx-auto max-w-lg p-3 pb-36">
+      {viewingAsWorker && (
+        <div className="mb-3 rounded-md border border-warning/40 bg-warning/5 p-2">
+          <p className="text-[11px] font-medium text-warning">
+            Modo visualização: você está vendo a rota deste trabalhador. Nenhum pagamento,
+            marcação ou estorno pode ser registrado aqui.
+          </p>
+        </div>
+      )}
+
       {/* Date navigation */}
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
