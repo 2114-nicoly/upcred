@@ -31,7 +31,7 @@ export default function AccessManagementTab() {
   const [enforcement, setEnforcement] = useState(false);
   const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
-  const [maps, setMaps] = useState<AccessMaps>({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} });
+  const [maps, setMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<AccessStatus | "all">("all");
 

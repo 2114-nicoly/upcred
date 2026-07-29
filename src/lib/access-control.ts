@@ -39,6 +39,7 @@ export type WorkerAccessPeriod = {
   months_granted: number | null;
   payment_method: string | null;
   notes: string | null;
+  granted_by: string | null;
   created_at: string;
 };
 
@@ -182,6 +183,14 @@ export async function fetchGrantorNames(ids: (string | null | undefined)[]): Pro
   }
   return out;
 }
+
+export const EMPTY_ACCESS_MAPS: AccessMaps = {
+  licenseByWorker: {},
+  lastPeriodByWorker: {},
+  periodsByWorker: {},
+  allPeriods: [],
+  controlByAdmin: {},
+};
 
 export type AccessMaps = {
   licenseByWorker: Record<string, WorkerAccessLicense>;
