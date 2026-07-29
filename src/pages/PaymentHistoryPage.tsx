@@ -13,6 +13,7 @@ import { CalendarCheck, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-re
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 
@@ -37,6 +38,7 @@ function getDayLabel(dateStr: string): string {
 }
 
 export default function PaymentHistoryPage() {
+  const { effectiveWorkerId, effectiveAdminId } = useEffectiveScope();
   const confirm = useConfirm();
   const [paymentsByDay, setPaymentsByDay] = useState<Record<string, PaymentMovement[]>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);

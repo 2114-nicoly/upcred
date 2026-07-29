@@ -22,6 +22,7 @@ import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 
 function getDayLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -39,6 +40,7 @@ type GroupedDay = {
 };
 
 export default function CashHistoryPage() {
+  const { effectiveWorkerId, effectiveAdminId } = useEffectiveScope();
   const navigate = useNavigate();
   const [movements, setMovements] = useState<MovementWithClient[]>([]);
   const [loading, setLoading] = useState(true);
