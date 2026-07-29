@@ -62,12 +62,19 @@ export default function WorkerRequestsAdminSection({ onChanged }: { onChanged?: 
   return (
     <Card>
       <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-sm font-semibold">Solicitações de trabalhadores</p>
-          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Solicitar novo trabalhador
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" className="h-8 px-2"
+              onClick={() => { load(); onChanged?.(); }} aria-label="Atualizar solicitações">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Solicitar novo trabalhador
+            </Button>
+          </div>
         </div>
+
 
         {loading ? (
           <div className="flex h-16 items-center justify-center"><Loader2 className="h-4 w-4 animate-spin" /></div>
