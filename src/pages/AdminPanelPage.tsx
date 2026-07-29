@@ -30,6 +30,9 @@ import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } 
 import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
+import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import { AccessMaps, loadAccessMaps } from "@/lib/access-control";
+
 
 
 type Worker = {
