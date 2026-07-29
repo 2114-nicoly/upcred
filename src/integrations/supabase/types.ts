@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_control_settings: {
+        Row: {
+          enforcement_enabled: boolean
+          id: string
+          singleton: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enforcement_enabled?: boolean
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enforcement_enabled?: boolean
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       admins: {
         Row: {
           active: boolean
@@ -449,6 +473,47 @@ export type Database = {
             columns: ["worker_id"]
             isOneToOne: false
             referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_access_controls: {
+        Row: {
+          admin_id: string
+          created_at: string
+          id: string
+          manual_status: string
+          pause_reason: string | null
+          paused_at: string | null
+          paused_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          id?: string
+          manual_status?: string
+          pause_reason?: string | null
+          paused_at?: string | null
+          paused_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          id?: string
+          manual_status?: string
+          pause_reason?: string | null
+          paused_at?: string | null
+          paused_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_access_controls_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: true
+            referencedRelation: "admins"
             referencedColumns: ["id"]
           },
         ]
@@ -1465,6 +1530,126 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      worker_access_licenses: {
+        Row: {
+          access_end: string | null
+          access_start: string | null
+          admin_id: string | null
+          created_at: string
+          id: string
+          manual_status: string
+          monthly_price: number | null
+          pause_reason: string | null
+          paused_at: string | null
+          paused_by: string | null
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          access_end?: string | null
+          access_start?: string | null
+          admin_id?: string | null
+          created_at?: string
+          id?: string
+          manual_status?: string
+          monthly_price?: number | null
+          pause_reason?: string | null
+          paused_at?: string | null
+          paused_by?: string | null
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          access_end?: string | null
+          access_start?: string | null
+          admin_id?: string | null
+          created_at?: string
+          id?: string
+          manual_status?: string
+          monthly_price?: number | null
+          pause_reason?: string | null
+          paused_at?: string | null
+          paused_by?: string | null
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_access_licenses_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "worker_access_licenses_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: true
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      worker_access_periods: {
+        Row: {
+          admin_id: string | null
+          amount_paid: number | null
+          created_at: string
+          granted_by: string | null
+          id: string
+          months_granted: number | null
+          notes: string | null
+          paid_at: string | null
+          payment_method: string | null
+          period_end: string | null
+          period_start: string | null
+          worker_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          amount_paid?: number | null
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          months_granted?: number | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          worker_id: string
+        }
+        Update: {
+          admin_id?: string | null
+          amount_paid?: number | null
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          months_granted?: number | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_access_periods_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "worker_access_periods_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       worker_credentials_log: {
         Row: {
