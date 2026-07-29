@@ -60,13 +60,21 @@ export async function resolveScope(input: {
 }
 
 /**
- * Returns the daily_cash scope (worker_id/admin_id) for the current user.
- * Used to scope the per-day cash close row so multiple workers can close the
- * same day independently.
+ * Escopo explícito passado pelas telas (modo "visualizar como trabalhador").
+ * Quando `workerId` é informado, ele tem PRIORIDADE sobre o usuário autenticado.
  */
-export async function getCurrentDailyCashScope(): Promise<{ worker_id: string | null; admin_id: string | null }> {
+export type ExplicitScope = { workerId?: string | null; adminId?: string | null } | null | undefined;
+
+/**
+ * Returns the daily_cash scope (worker_id/admin_id).
+ * Se um escopo explícito for informado, ele prevalece sobre o usuário autenticado.
+ */
+export async function getCurrentDailyCashScope(scope?: ExplicitScope): Promise<{ worker_id: string | null; admin_id: string | null }> {
+  if (scope?.workerId) return { worker_id: scope.workerId, admin_id: scope.adminId ?? null };
+  if (scope?.adminId) return { worker_id: null, admin_id: scope.adminId };
   return await resolveScope({ required: false });
 }
+
 
 /**
  * Apply the daily_cash scope filter to a supabase query builder.
