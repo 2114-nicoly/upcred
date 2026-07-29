@@ -35,6 +35,7 @@ import AuditPage from "@/pages/AuditPage";
 import AccountPage from "@/pages/AccountPage";
 import DailyReportPage from "@/pages/DailyReportPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { ConfirmProvider } from "@/hooks/useConfirm";
 import { Loader2 } from "lucide-react";
 
@@ -54,12 +55,17 @@ function WrappedRoute({ element }: { element: React.ReactNode }) {
   return <PageErrorBoundary key={k}>{element}</PageErrorBoundary>;
 }
 
-/** Trabalhador-only: admin/super_admin é redirecionado para seu dashboard. */
+/**
+ * Trabalhador-only: admin/super_admin é redirecionado para seu dashboard,
+ * EXCETO quando estiver visualizando um trabalhador específico (escopo efetivo).
+ */
 function WorkerOnlyRoute({ children }: { children: React.ReactNode }) {
   const { isAdmin, isSuperAdmin, loading } = useAuth();
+  const { viewingAsWorker } = useEffectiveScope();
   if (loading) {
     return (<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>);
   }
+  if (viewingAsWorker) return <>{children}</>;
   if (isSuperAdmin) return <Navigate to="/super-admin" replace />;
   if (isAdmin) return <Navigate to="/admin" replace />;
   return <>{children}</>;
