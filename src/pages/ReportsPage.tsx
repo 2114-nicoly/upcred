@@ -139,65 +139,84 @@ export default function ReportsPage() {
     [mode, customStart, customEnd],
   );
 
+  // Empresa (admin) do escopo atual. Admin comum = escopo natural (própria empresa).
+  const scopeAdminId = isSuperAdmin && selectedAdmin !== "all" ? selectedAdmin : null;
+
   const load = useCallback(async () => {
     setLoading(true);
-    const wRes = await supabase.rpc("admin_list_workers" as any, { p_include_archived: false });
-    setAllWorkers(((wRes.data as WorkerRow[]) || []).filter((w) => w.active && !w.archived_at));
+    setLoadError(false);
+    try {
+      if (isSuperAdmin) {
+        const aRes = await supabase.rpc("super_admin_list_admins" as any);
+        if (aRes.error) throw aRes.error;
+        setAdmins(((aRes.data as AdminRow[]) || []).filter((a) => a.active));
+      } else {
+        setAdmins([]);
+      }
 
-    if (isSuperAdmin) {
-      const aRes = await supabase.rpc("super_admin_list_admins" as any);
-      setAdmins(((aRes.data as AdminRow[]) || []).filter((a) => a.active));
-    } else {
-      setAdmins([]);
+      // Trabalhadores do escopo — consulta já escopada (nunca global + filtro depois).
+      const scopeWorkers = await loadScopeWorkers(scopeAdminId);
+      const ids = scopeWorkers.map((w) => w.id);
+      setAllWorkers(scopeWorkers.map((w) => ({
+        id: w.id, nome: w.nome, active: w.active,
+        archived_at: w.archived_at, parent_admin_id: w.parent_admin_id,
+      })));
+
+      if (ids.length === 0) {
+        setStats([]); setCashRows([]); setEvents([]); setClients({});
+        setLoading(false);
+        return;
+      }
+
+      // Fonte única de todos os indicadores (trabalhador, equipe, empresa).
+      const [statsList, cashRes, evRes, clRes] = await Promise.all([
+        loadWorkersStats({ startDate, endDate, label }, { adminId: scopeAdminId, workers: scopeWorkers }),
+        supabase
+          .from("daily_cash")
+          .select("id, cash_date, worker_id, status, opening_balance, expected_closing_balance, counted_closing_balance, closing_difference")
+          .gte("cash_date", startDate)
+          .lte("cash_date", endDate)
+          .in("worker_id", ids),
+        supabase
+          .from("daily_events" as any)
+          .select("id, cash_date, event_type, amount_in, amount_out, client_id, loan_id, worker_id, observation, created_at")
+          .gte("cash_date", startDate)
+          .lte("cash_date", endDate)
+          .in("worker_id", ids)
+          .is("reversed_at", null)
+          .order("created_at", { ascending: true }),
+        supabase.from("clients").select("id, name").in("worker_id", ids),
+      ]);
+      if (cashRes.error) throw cashRes.error;
+      if (evRes.error) throw evRes.error;
+      if (clRes.error) throw clRes.error;
+
+      setStats(statsList);
+      setCashRows((cashRes.data as DailyCashRow[]) || []);
+      setEvents((evRes.data as unknown as DailyEventRow[]) || []);
+      const cmap: Record<string, string> = {};
+      ((clRes.data as { id: string; name: string }[]) || []).forEach((c) => { cmap[c.id] = c.name; });
+      setClients(cmap);
+    } catch (err) {
+      console.error("[Reports] falha ao carregar dados do escopo", err);
+      setLoadError(true);
+      setStats([]); setCashRows([]); setEvents([]);
+      toast.error("Não foi possível carregar os dados do relatório.");
+    } finally {
+      setLoading(false);
     }
-
-    const [cashRes, evRes, clRes] = await Promise.all([
-      supabase
-        .from("daily_cash")
-        .select("id, cash_date, worker_id, status, opening_balance, expected_closing_balance, counted_closing_balance, closing_difference")
-        .gte("cash_date", startDate)
-        .lte("cash_date", endDate),
-      supabase
-        .from("daily_events" as any)
-        .select("id, cash_date, event_type, amount_in, amount_out, client_id, loan_id, worker_id, observation, created_at")
-        .gte("cash_date", startDate)
-        .lte("cash_date", endDate)
-        .is("reversed_at", null)
-        .order("created_at", { ascending: true }),
-      supabase.from("clients").select("id, name"),
-    ]);
-    setCashRows((cashRes.data as DailyCashRow[]) || []);
-    setEvents((evRes.data as unknown as DailyEventRow[]) || []);
-    const cmap: Record<string, string> = {};
-    ((clRes.data as { id: string; name: string }[]) || []).forEach((c) => { cmap[c.id] = c.name; });
-    setClients(cmap);
-    setLoading(false);
-  }, [startDate, endDate, isSuperAdmin]);
+  }, [startDate, endDate, label, isSuperAdmin, scopeAdminId]);
 
   useEffect(() => { load(); }, [load]);
 
   /** Visão global do sistema: SuperAdmin com "Todas as empresas". */
   const globalMode = isSuperAdmin && selectedAdmin === "all";
 
-  // Trabalhadores visíveis conforme a empresa selecionada.
-  const workers = useMemo(
-    () => (isSuperAdmin && selectedAdmin !== "all"
-      ? allWorkers.filter((w) => w.parent_admin_id === selectedAdmin)
-      : allWorkers),
-    [allWorkers, isSuperAdmin, selectedAdmin],
-  );
-
+  const workers = allWorkers;
   const activeIds = useMemo(() => new Set(workers.map((w) => w.id)), [workers]);
 
-  // Escopo: apenas trabalhadores ativos vinculados ao administrador
-  const scopedCash = useMemo(
-    () => cashRows.filter((c) => c.worker_id && activeIds.has(c.worker_id)),
-    [cashRows, activeIds],
-  );
-  const scopedEvents = useMemo(
-    () => events.filter((e) => e.worker_id && activeIds.has(e.worker_id)),
-    [events, activeIds],
-  );
+  const scopedCash = cashRows;
+  const scopedEvents = events;
 
   // Detalhamento (somente leitura): clientes pendentes de registro e atrasados por trabalhador.
   const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
@@ -212,111 +231,105 @@ export default function ReportsPage() {
       workerIds: ids,
     })
       .then((d) => { if (alive) setDetails(d); })
-      .catch(() => { if (alive) setDetails(emptyReportDetails()); });
-    return () => { alive = false; };
-  }, [scopedEvents, activeIds, startDate, endDate]);
-
-  // Caixa disponível atual (cash_balance.available_cash) dos trabalhadores ativos.
-  const [availableCash, setAvailableCash] = useState<AvailableCashMap>({});
-  useEffect(() => {
-    let alive = true;
-    const ids = Array.from(activeIds);
-    if (!ids.length) { setAvailableCash({}); return; }
-    fetchAvailableCashByWorker(ids)
-      .then((m) => { if (alive) setAvailableCash(m); })
       .catch((err) => {
-        console.error("[Reports] falha ao carregar caixa disponível", err);
-        toast.error("Não foi possível carregar o caixa disponível dos trabalhadores.");
+        console.error("[Reports] falha ao carregar detalhamento", err);
+        if (alive) { setDetails(emptyReportDetails()); setLoadError(true); }
       });
     return () => { alive = false; };
-  }, [activeIds]);
+  }, [scopedEvents, activeIds, startDate, endDate]);
 
   const pendentesTotal = useMemo(
     () => Object.values(details.pendentesByDate).reduce((s, l: ReportRecord[]) => s + l.length, 0),
     [details],
   );
 
+  /** Adapta a estrutura única de WorkerStats para os rótulos usados na tela/PDF. */
+  const toTotals = (s: WorkerStats) => ({
+    caixaInicial: s.caixaInicial,
+    caixaFinal: s.caixaFinal,
+    diferenca: s.diferenca,
+    recebido: s.recebidoPrincipal,
+    multas: s.multasRecebidas,
+    recebidoTotal: s.recebido,
+    emprestado: s.emprestado,
+    entradas: s.aporte,
+    saidas: s.retirada,
+    despesas: s.despesas,
+    estornos: s.estornos,
+    estornosCount: s.estornosCount,
+    caixaDisponivel: s.availableCash,
+    previsto: s.previsto,
+    faltaReceber: s.faltaReceber,
+    saldoNaRua: s.saldoNaRua,
+    clientesAtivos: s.clientesAtivos,
+    emprestimosAtivos: s.emprestimosAtivos,
+    atrasados: s.atrasados,
+  });
 
-
-
-
-  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[], workerIdsForCash: string[] = []) => {
+  // Detalhe por dia (mesma fórmula da fonte única, aplicada a um único dia).
+  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
       evs.filter((e) => types.includes(e.event_type)).reduce((s, e) => s + Number(e[field] || 0), 0);
-
-    const caixaInicial = cash.reduce((s, c) => s + Number(c.opening_balance || 0), 0);
-    const caixaFinal = cash.reduce(
-      (s, c) => s + Number(c.counted_closing_balance ?? c.expected_closing_balance ?? 0),
-      0,
-    );
-    const diferenca = cash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
-
-    // Fonte única compartilhada: recebido (principal/multas) e emprestado real.
     const core = computeCoreTotals(evs as any);
-    const recebido = core.recebidoPrincipal;
-    const multas = core.multasRecebidas;
-    const recebidoTotal = core.recebidoTotal;
-    const emprestado = core.emprestado;
-    const entradas = sumEv(["entrada_manual"], "amount_in");
-    const saidas = sumEv(["saida_manual", "saida"], "amount_out");
-    const despesas = sumEv(["despesa"], "amount_out");
     const estornoEvs = evs.filter((e) => e.event_type.startsWith("estorno"));
-    const estornos = estornoEvs.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
-    // Caixa disponível = SOMENTE cash_balance.available_cash dos trabalhadores ativos.
-    const caixaDisponivel = sumAvailableCash(availableCash, workerIdsForCash);
-
     return {
-      caixaInicial, caixaFinal, diferenca, recebido, multas, recebidoTotal, emprestado,
-      entradas, saidas, despesas, estornos, estornosCount: estornoEvs.length,
-      caixaDisponivel,
+      caixaInicial: cash.reduce((s, c) => s + Number(c.opening_balance || 0), 0),
+      caixaFinal: cash.reduce((s, c) => s + Number(c.counted_closing_balance ?? c.expected_closing_balance ?? 0), 0),
+      diferenca: cash.reduce((s, c) => s + Number(c.closing_difference || 0), 0),
+      recebido: core.recebidoPrincipal,
+      multas: core.multasRecebidas,
+      recebidoTotal: core.recebidoTotal,
+      emprestado: core.emprestado,
+      entradas: sumEv(["entrada_manual"], "amount_in"),
+      saidas: sumEv(["saida_manual", "saida"], "amount_out"),
+      despesas: sumEv(["despesa"], "amount_out"),
+      estornos: estornoEvs.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
+      estornosCount: estornoEvs.length,
+      caixaDisponivel: 0,
     };
   };
 
-  // Resumo consolidado da equipe
-  const summary = useMemo(
-    () => sumTotals(scopedCash, scopedEvents, workers.map((w) => w.id)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scopedCash, scopedEvents, workers, availableCash],
-  );
+  // Resumo consolidado da equipe = SOMA dos valores já calculados por trabalhador.
+  const summary = useMemo(() => toTotals(consolidate(stats)), [stats]);
 
-  // Comparativo por trabalhador ativo
+  // Comparativo por trabalhador ativo — exatamente os mesmos valores da linha da equipe.
   const workerRows = useMemo(() => {
-    return workers.map((w) => {
-      const wCash = scopedCash.filter((c) => c.worker_id === w.id);
-      const wEvents = scopedEvents.filter((e) => e.worker_id === w.id);
-
+    return stats.map((s) => {
+      const wCash = scopedCash.filter((c) => c.worker_id === s.worker_id);
       const latest = wCash.slice().sort((a, b) => (a.cash_date < b.cash_date ? 1 : -1))[0];
       let statusLabel: "Aberto" | "Fechado" | "Não aberto" = "Não aberto";
       if (latest) statusLabel = latest.status === "closed" ? "Fechado" : "Aberto";
-
-      return { worker: w, statusLabel, totals: sumTotals(wCash, wEvents, [w.id]) };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workers, scopedCash, scopedEvents, availableCash]);
-
-  // Comparativo por empresa (SuperAdmin — "Todas as empresas")
-  const companyRows = useMemo(() => {
-    if (!globalMode) return [];
-    return admins.map((a) => {
-      const aWorkers = workers.filter((w) => w.parent_admin_id === a.id);
-      const ids = new Set(aWorkers.map((w) => w.id));
-      const aCash = scopedCash.filter((c) => c.worker_id && ids.has(c.worker_id));
-      const aEvents = scopedEvents.filter((e) => e.worker_id && ids.has(e.worker_id));
-      const openCount = aCash.filter((c) => c.status !== "closed").length;
-      const statusLabel = aCash.length === 0
-        ? "Sem caixa no período"
-        : openCount > 0 ? `${openCount} caixa(s) aberto(s)` : "Todos fechados";
       return {
-        admin: a,
-        workersCount: aWorkers.length,
-        overdueClients: aWorkers.reduce((sum, w) => sum + (details.atrasadosByWorker[w.id] || 0), 0),
+        worker: { id: s.worker_id as string, nome: s.worker_name } as WorkerRow,
         statusLabel,
-        hasOpen: openCount > 0,
-        totals: sumTotals(aCash, aEvents, aWorkers.map((w) => w.id)),
+        totals: toTotals(s),
       };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalMode, admins, workers, scopedCash, scopedEvents, details, availableCash]);
+  }, [stats, scopedCash]);
+
+  // Comparativo por empresa: consolida primeiro cada empresa a partir dos seus
+  // trabalhadores e só depois soma — sem recontar registros.
+  const companyRows = useMemo(() => {
+    if (!globalMode) return [];
+    const names: Record<string, string> = {};
+    admins.forEach((a) => { names[a.id] = a.nome; });
+    return groupByCompany(stats, names).map((c) => {
+      const ids = new Set(c.workers.map((w) => w.worker_id as string));
+      const aCash = scopedCash.filter((x) => x.worker_id && ids.has(x.worker_id));
+      const openCount = aCash.filter((x) => x.status !== "closed").length;
+      return {
+        admin: { id: c.admin_id, nome: c.admin_name, active: true } as AdminRow,
+        workersCount: c.workers.length,
+        overdueClients: c.totals.atrasados,
+        statusLabel: aCash.length === 0
+          ? "Sem caixa no período"
+          : openCount > 0 ? `${openCount} caixa(s) aberto(s)` : "Todos fechados",
+        hasOpen: openCount > 0,
+        totals: toTotals(c.totals),
+      };
+    });
+  }, [globalMode, admins, stats, scopedCash]);
+
 
 
 
