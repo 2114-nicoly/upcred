@@ -203,21 +203,27 @@ export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChang
                 {r.status === "rejected" && r.rejection_reason && (
                   <p className="text-[11px] text-destructive">Motivo: {r.rejection_reason}</p>
                 )}
+                {r.status === "approved" && r.created_worker_id && (
+                  <p className="text-[10px] text-muted-foreground">Trabalhador criado.</p>
+                )}
                 {(r.status === "pending" || r.status === "processing") && (
                   <div className="flex gap-2 pt-1">
                     <Button
                       size="sm"
                       className="h-7 text-[11px]"
-                      onClick={() => toast({ title: "A aprovação e a criação do acesso serão implementadas na próxima etapa." })}
+                      disabled={r.status === "processing" || approving}
+                      onClick={() => openApprove(r)}
                     >
                       Aprovar
                     </Button>
                     <Button size="sm" variant="destructive" className="h-7 text-[11px]"
+                      disabled={r.status === "processing"}
                       onClick={() => { setRejectTarget(r); setReason(""); }}>
                       Negar
                     </Button>
                   </div>
                 )}
+
               </div>
             ))}
           </div>
