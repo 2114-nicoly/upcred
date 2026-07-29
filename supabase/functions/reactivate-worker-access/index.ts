@@ -71,32 +71,34 @@ Deno.serve(async (req) => {
       companyName = comp?.nome ?? null;
     }
 
-    await admin.rpc("log_audit", {
-      p_action: "reativar_licenca_trabalhador",
-      p_entity: "worker",
-      p_entity_id: workerId,
-      p_old: {
-        manual_status: "paused",
-        pause_reason: license.pause_reason,
-        paused_at: license.paused_at,
-        paused_by: license.paused_by,
-      },
-      p_new: {
-        worker_id: workerId,
-        worker_name: worker.nome,
-        admin_id: adminId,
-        company_name: companyName,
-        license_id: license.id,
-        manual_status: "active",
-        access_start: license.access_start,
-        access_end: license.access_end,
-        monthly_price: license.monthly_price,
-        performed_by: callerId,
-        timestamp: new Date().toISOString(),
-      },
-      p_obs: "Licença reativada manualmente",
-      p_worker_id: workerId,
-    }).catch(() => {});
+    try {
+      await admin.rpc("log_audit", {
+        p_action: "reativar_licenca_trabalhador",
+        p_entity: "worker",
+        p_entity_id: workerId,
+        p_old: {
+          manual_status: "paused",
+          pause_reason: license.pause_reason,
+          paused_at: license.paused_at,
+          paused_by: license.paused_by,
+        },
+        p_new: {
+          worker_id: workerId,
+          worker_name: worker.nome,
+          admin_id: adminId,
+          company_name: companyName,
+          license_id: license.id,
+          manual_status: "active",
+          access_start: license.access_start,
+          access_end: license.access_end,
+          monthly_price: license.monthly_price,
+          performed_by: callerId,
+          timestamp: new Date().toISOString(),
+        },
+        p_obs: "Licença reativada manualmente",
+        p_worker_id: workerId,
+      });
+    } catch { /* auditoria não bloqueia a operação */ }
 
     return json(200, { ok: true, worker_id: workerId, license_id: license.id, manual_status: "active", access_end: license.access_end });
   } catch (e: any) {
