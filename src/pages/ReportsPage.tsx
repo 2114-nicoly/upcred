@@ -413,7 +413,7 @@ export default function ReportsPage() {
       ["Estornos", formatCurrency(summary.estornos)],
       ["Diferença total de caixa", formatCurrency(summary.diferenca)],
       ["Clientes pendentes de registro", String(pendentesTotal)],
-      ["Clientes atrasados", String(details.atrasados.length)],
+      ["Clientes atrasados", String(summary.atrasados)],
     ], { rightCols: [1] });
 
     pdf.blockTitle("Comparação dos trabalhadores");
@@ -434,7 +434,7 @@ export default function ReportsPage() {
         formatCurrency(r.totals.despesas),
         formatCurrency(r.totals.diferenca),
         String(details.pendentesByWorker[r.worker.id] || 0),
-        String(details.atrasadosByWorker[r.worker.id] || 0),
+        String(r.totals.atrasados),
       ]),
       { rightCols: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
     );
@@ -648,6 +648,12 @@ export default function ReportsPage() {
           embeddedStart={startDate}
           embeddedEnd={endDate}
         />
+      ) : loadError ? (
+        <Card className="border-destructive">
+          <CardContent className="p-4 text-sm text-destructive">
+            Não foi possível carregar os dados deste relatório. Os valores não podem ser exibidos como confirmados.
+          </CardContent>
+        </Card>
       ) : loading ? (
         <p className="p-4 text-center text-muted-foreground">Carregando...</p>
 
@@ -689,11 +695,16 @@ export default function ReportsPage() {
                 value={String(pendentesTotal)}
                 tone={pendentesTotal > 0 ? "warning" : "neutral"}
               />
+              <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Previsto no período" value={formatCurrency(summary.previsto)} />
+              <ReportKpiCard icon={<AlertTriangle className="h-4 w-4 text-warning" />} label="Falta receber" value={formatCurrency(summary.faltaReceber)} tone={summary.faltaReceber > 0 ? "warning" : "neutral"} />
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Saldo emprestado na rua" value={formatCurrency(summary.saldoNaRua)} />
+              <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Clientes ativos" value={String(summary.clientesAtivos)} />
+              <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Empréstimos ativos" value={String(summary.emprestimosAtivos)} />
               <ReportKpiCard
                 icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
                 label="Clientes atrasados"
-                value={String(details.atrasados.length)}
-                tone={details.atrasados.length > 0 ? "negative" : "neutral"}
+                value={String(summary.atrasados)}
+                tone={summary.atrasados > 0 ? "negative" : "neutral"}
               />
             </ReportKpiGrid>
 
@@ -791,7 +802,7 @@ export default function ReportsPage() {
                             </b>
                           </span>
                           <span>Pendentes: <b className="text-warning">{details.pendentesByWorker[r.worker.id] || 0}</b></span>
-                          <span>Atrasados: <b className="text-destructive">{details.atrasadosByWorker[r.worker.id] || 0}</b></span>
+                          <span>Atrasados: <b className="text-destructive">{r.totals.atrasados}</b></span>
                         </div>
 
                       </div>
