@@ -26,6 +26,7 @@ export type WorkerAccessLicense = {
   manual_status: ManualStatus;
   pause_reason: string | null;
   paused_at: string | null;
+  paused_by: string | null;
 };
 
 export type WorkerAccessPeriod = {
