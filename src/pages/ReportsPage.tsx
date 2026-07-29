@@ -32,10 +32,11 @@ import {
   type ReportDetailsData, type ReportRecord,
 } from "@/lib/report-details";
 import { RecordSection } from "@/components/reports/RecordSection";
+import { computeCoreTotals } from "@/lib/finance-totals";
 import {
-  computeCoreTotals, fetchAvailableCashByWorker, sumAvailableCash,
-  type AvailableCashMap,
-} from "@/lib/finance-totals";
+  loadScopeWorkers, loadWorkersStats, consolidate, groupByCompany,
+  type WorkerStats,
+} from "@/lib/consolidated-stats";
 
 
 
@@ -108,7 +109,9 @@ export default function ReportsPage() {
   const [cashRows, setCashRows] = useState<DailyCashRow[]>([]);
   const [events, setEvents] = useState<DailyEventRow[]>([]);
   const [clients, setClients] = useState<Record<string, string>>({});
+  const [stats, setStats] = useState<WorkerStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [adminName, setAdminName] = useState<string>("");
