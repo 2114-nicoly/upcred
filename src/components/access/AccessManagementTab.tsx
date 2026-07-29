@@ -95,7 +95,7 @@ export default function AccessManagementTab() {
 
   return (
     <div className="space-y-3">
-      <WorkerRequestsSuperAdminSection />
+      <WorkerRequestsSuperAdminSection onChanged={() => void reload()} />
 
       {!enforcement && (
         <Badge variant="outline" className="text-[10px]">Bloqueio automático desativado</Badge>
