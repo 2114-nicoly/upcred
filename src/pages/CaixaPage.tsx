@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
@@ -47,6 +48,10 @@ export default function CaixaPage() {
   const confirm = useConfirm();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers } = useWorkerFilter();
+  // Escopo efetivo: quando um trabalhador está selecionado, TODAS as consultas
+  // desta tela usam o worker_id dele (nunca o usuário autenticado).
+  const { effectiveWorkerId, effectiveAdminId, viewingAsWorker, readOnly } = useEffectiveScope();
+  const scopeArg = { workerId: effectiveWorkerId, adminId: effectiveAdminId };
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
   const [balance, setBalance] = useState<CashBalance | null>(null);
@@ -111,9 +116,9 @@ export default function CaixaPage() {
     setLoading(true);
     try {
       const [bal, dayEvents, dcRes] = await Promise.all([
-        getCashBalance(),
-        getDailyEvents(selectedDate),
-        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope()).maybeSingle(),
+        getCashBalance(scopeArg),
+        getDailyEvents(selectedDate, { workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+        applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope(scopeArg)).maybeSingle(),
       ]);
       setBalance(bal);
       const dc = (dcRes?.data as any) || null;
@@ -142,7 +147,7 @@ export default function CaixaPage() {
       let versionId: string | null = null;
       if (status === "closed") {
         try {
-          const allVersions = await listDailyCashSnapshotVersions(selectedDate);
+          const allVersions = await listDailyCashSnapshotVersions(selectedDate, scopeArg);
           setVersions(allVersions);
           const latest = allVersions[0];
           if (latest) {
@@ -179,8 +184,8 @@ export default function CaixaPage() {
       try {
         setSummaryLoading(true);
         const summary = await getDailyCollectionSummary(selectedDate, {
-          workerId: selectedWorkerId || null,
-          adminId: selectedAdminId || null,
+          workerId: effectiveWorkerId,
+          adminId: effectiveAdminId,
         });
         setCollectionSummary(summary);
       } catch {
@@ -190,7 +195,7 @@ export default function CaixaPage() {
       }
       setLoading(false);
     }
-  }, [selectedDate, selectedAdminId, selectedWorkerId]);
+  }, [selectedDate, effectiveWorkerId, effectiveAdminId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -200,7 +205,7 @@ export default function CaixaPage() {
   const isClosed = cashState === "closed";
   const isNotStarted = cashState === "sem_caixa";
   // Block financial actions when closed OR not yet opened.
-  const cashLocked = isClosed || isNotStarted;
+  const cashLocked = isClosed || isNotStarted || readOnly;
   const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
@@ -266,6 +271,7 @@ export default function CaixaPage() {
 
   const handleManualMovement = async () => {
     if (!manualType || submitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações financeiras estão bloqueadas."); return; }
     if (manualType === "ajuste_manual" && !isAdmin && !isSuperAdmin) { setManualType(null); return; }
     const amount = parseFloat(manualAmount);
     if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
@@ -293,7 +299,7 @@ export default function CaixaPage() {
       await assertCashOpen(selectedDate);
 
       if (manualType === "ajuste_manual") {
-        const current = await getCashBalance();
+        const current = await getCashBalance(scopeArg);
         if (!current) { toast.error("Erro ao obter saldo"); return; }
         const diff = amount - Number(current.available_cash);
         await updateCashBalance({ available_cash: diff });
@@ -347,6 +353,7 @@ export default function CaixaPage() {
 
   const handleExpense = async () => {
     if (submitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações financeiras estão bloqueadas."); return; }
     const amount = parseFloat(expenseAmount);
     if (!isFinite(amount) || amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
     if (!expenseCategory) { toast.error("Selecione uma categoria"); return; }
@@ -631,7 +638,7 @@ export default function CaixaPage() {
     setVersionsOpen(true);
     setVersionsLoading(true);
     try {
-      const list = await listDailyCashSnapshotVersions(selectedDate);
+      const list = await listDailyCashSnapshotVersions(selectedDate, scopeArg);
       setVersions(list);
       const latestId = list[0]?.id ?? null;
       setSelectedVersionId((prev) => prev ?? latestId);
