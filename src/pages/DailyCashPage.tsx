@@ -383,9 +383,12 @@ export default function DailyCashPage() {
   };
 
   const isNotStarted = dailyCashStatus === "sem_caixa";
-  const isClosed = dailyCashStatus === "closed" || isNotStarted;
+  // readOnly = admin/super admin visualizando um trabalhador: nada pode ser registrado.
+  const isClosed = dailyCashStatus === "closed" || isNotStarted || readOnly;
   const isReallyClosed = dailyCashStatus === "closed";
-  const actionsBlockedTitle = isNotStarted
+  const actionsBlockedTitle = readOnly
+    ? "Modo visualização: ações bloqueadas"
+    : isNotStarted
     ? "Abra o caixa para registrar"
     : isReallyClosed
     ? "Caixa fechado: somente visualização"
@@ -848,8 +851,9 @@ export default function DailyCashPage() {
   }, [selectedDate, fetchData]);
 
   // === Payment handler: wait for server confirmation (no premature optimistic UI) ===
-  const handlePay = async (id: string) => {
+  const handlePay= async (id: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const inst = pendingInstallments.find(i => i.id === id);
@@ -907,8 +911,9 @@ export default function DailyCashPage() {
     setPayAmount(""); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
   };
 
-  const handleNotPaid = async (id: string) => {
+  const handleNotPaid= async (id: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const inst = pendingInstallments.find(i => i.id === id);
@@ -957,8 +962,9 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleBatchNotPaid = async () => {
+  const handleBatchNotPaid= async () => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const selectedInsts = pendingInstallments
@@ -1051,8 +1057,9 @@ export default function DailyCashPage() {
     });
   };
 
-  const handleUndoNotPaid = async (markId: string) => {
+  const handleUndoNotPaid= async (markId: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     const mark = notPaidMarks.find(m => m.id === markId);
     const ok = await confirm({
@@ -1091,8 +1098,9 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleUndoPayment = async (loanId: string, movementId: string) => {
+  const handleUndoPayment= async (loanId: string, movementId: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
     const group = paidGroups.find(g => g.loanId === loanId);
@@ -1166,8 +1174,9 @@ export default function DailyCashPage() {
 
 
 
-  const handleQuitarEmprestimo = async (instId: string) => {
+  const handleQuitarEmprestimo= async (instId: string) => {
     if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const inst = pendingInstallments.find(i => i.id === instId);
