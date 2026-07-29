@@ -516,7 +516,10 @@ function WorkersTab() {
               Mostrar arquivados
             </label>
           )}
-          <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+          {isSuperAdmin && (
+            <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+          )}
+
         </div>
       </div>
 
