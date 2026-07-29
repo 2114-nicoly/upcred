@@ -317,17 +317,23 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   await markDailyEventReversed(event.id);
 }
 
-export async function getDailyEventsByType(cashDate: string, eventType: string): Promise<DailyEvent[]> {
-  const workerId = await getCurrentWorkerId();
+export async function getDailyEventsByType(
+  cashDate: string,
+  eventType: string,
+  scope: { workerId?: string | null; adminId?: string | null } = {}
+): Promise<DailyEvent[]> {
+  const workerId = scope.workerId ?? (await getCurrentWorkerId());
   let q: any = supabase.from("daily_events" as any)
     .select("*")
     .eq("cash_date", cashDate)
     .eq("event_type", eventType)
     .is("reversed_at", null);
   if (workerId) q = q.eq("worker_id", workerId);
+  else if (scope.adminId) q = q.eq("admin_id", scope.adminId);
   const { data } = await q.order("created_at", { ascending: false });
   return (data as unknown as DailyEvent[]) || [];
 }
+
 
 export function getEventTypeLabel(type: string): string {
   switch (type) {
