@@ -246,6 +246,69 @@ export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChang
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!approveTarget} onOpenChange={(v) => { if (!v && !approving) setApproveTarget(null); }}>
+        <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aprovar solicitação</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Trabalhador</Label>
+                <Input value={approveTarget?.worker_name ?? ""} readOnly className="h-8 text-xs bg-muted/40" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Empresa</Label>
+                <Input value={approveTarget ? adminName(approveTarget.admin_id) : ""} readOnly className="h-8 text-xs bg-muted/40" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Valor mensal</Label>
+                <Input value={monthlyPrice} onChange={(e) => setMonthlyPrice(e.target.value)} inputMode="decimal" className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Valor pago</Label>
+                <Input value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} inputMode="decimal" className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label className="text-[11px]">Forma de pagamento</Label>
+                <Input value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="h-8 text-xs" placeholder="Pix, dinheiro, transferência..." />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Data inicial</Label>
+                <Input type="date" value={accessStart} onChange={(e) => setAccessStart(e.target.value)} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Meses</Label>
+                <Input type="number" min={1} value={months} disabled={customEnd}
+                  onChange={(e) => setMonths(e.target.value)} className="h-8 text-xs" />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-[11px] cursor-pointer select-none">
+              <Switch checked={customEnd} onCheckedChange={setCustomEnd} />
+              Definir data final personalizada
+            </label>
+            {customEnd && (
+              <Input type="date" value={accessEnd} onChange={(e) => setAccessEnd(e.target.value)} className="h-8 text-xs" />
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Período liberado: {accessStart || "—"} até {computedEnd || "—"}
+            </p>
+
+            <div className="space-y-1">
+              <Label className="text-[11px]">Observação</Label>
+              <Textarea value={approveNotes} onChange={(e) => setApproveNotes(e.target.value)} rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={confirmApprove} disabled={approving}>
+              {approving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />} Aprovar e criar acesso
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <CredentialsDialog creds={creds} onClose={() => setCreds(null)} />
     </Card>
   );
 }
+
