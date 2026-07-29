@@ -92,9 +92,12 @@ export default function AccessManagementTab() {
 
   return (
     <div className="space-y-3">
+      <WorkerRequestsSuperAdminSection />
+
       {!enforcement && (
         <Badge variant="outline" className="text-[10px]">Bloqueio automático desativado</Badge>
       )}
+
 
       <Card>
         <CardContent className="p-3 grid grid-cols-2 gap-2 text-[11px]">
