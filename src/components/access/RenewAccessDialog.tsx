@@ -3,14 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
+import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import {
-  WorkerAccessLicense, formatAccessDate, getAccessStatus,
+  WorkerAccessLicense, WorkerAccessPeriod, formatAccessDate, formatDateTime,
+  formatMoney, getAccessStatus,
 } from "@/lib/access-control";
 
 /** YYYY-MM-DD local de hoje. */
@@ -18,21 +21,34 @@ function todayLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+function fmt(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function nextDay(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
-  const n = new Date(y, m - 1, d + 1);
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  return fmt(new Date(y, m - 1, d + 1));
+}
+/** Fim previsto: início + meses − 1 dia (mesma convenção da renovação). */
+function addMonthsEnd(startStr: string, months: number): string {
+  const [y, m, d] = startStr.split("-").map(Number);
+  const end = new Date(y, m - 1 + months, d);
+  end.setDate(end.getDate() - 1);
+  return fmt(end);
 }
 
 type Props = {
   workerId: string;
   workerName: string;
+  companyName?: string | null;
   license?: WorkerAccessLicense | null;
+  lastPeriod?: WorkerAccessPeriod | null;
   onDone?: () => void;
 };
 
 /** Renovação de mensalidade — exclusiva do SuperAdministrador. */
-export default function RenewAccessDialog({ workerId, workerName, license, onDone }: Props) {
+export default function RenewAccessDialog({
+  workerId, workerName, companyName, license, lastPeriod, onDone,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [monthlyPrice, setMonthlyPrice] = useState<string>(String(license?.monthly_price ?? ""));
@@ -40,6 +56,7 @@ export default function RenewAccessDialog({ workerId, workerName, license, onDon
   const [months, setMonths] = useState<string>("1");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
+  const [custom, setCustom] = useState(false);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
@@ -47,19 +64,28 @@ export default function RenewAccessDialog({ workerId, workerName, license, onDon
   const currentEnd = license?.access_end ? String(license.access_end).slice(0, 10) : null;
   const stillValid = !!currentEnd && currentEnd >= todayLocal();
 
+  const monthsNum = Number(months);
   const previewStart = useMemo(() => {
+    if (custom && !stillValid && customStart) return customStart;
     if (stillValid && currentEnd) return nextDay(currentEnd);
-    return customStart || todayLocal();
-  }, [stillValid, currentEnd, customStart]);
+    return todayLocal();
+  }, [custom, stillValid, currentEnd, customStart]);
+
+  const previewEnd = useMemo(() => {
+    if (custom && customEnd) return customEnd;
+    if (!Number.isFinite(monthsNum) || monthsNum <= 0) return null;
+    return addMonthsEnd(previewStart, monthsNum);
+  }, [custom, customEnd, monthsNum, previewStart]);
 
   async function submit() {
     if (saving) return; // trava clique duplo
     const price = Number(monthlyPrice.replace(",", "."));
     const paid = Number(amountPaid.replace(",", "."));
-    const m = Number(months);
+    const m = monthsNum;
     if (!Number.isFinite(price) || price < 0) return toast.error("Valor mensal inválido");
     if (!Number.isFinite(paid) || paid < 0) return toast.error("Valor pago inválido");
-    if (!customEnd && (!Number.isFinite(m) || m <= 0)) return toast.error("Informe a quantidade de meses");
+    const endOverride = custom ? customEnd : "";
+    if (!endOverride && (!Number.isFinite(m) || m <= 0)) return toast.error("Informe a quantidade de meses");
 
     setSaving(true);
     try {
@@ -70,14 +96,14 @@ export default function RenewAccessDialog({ workerId, workerName, license, onDon
           amount_paid: paid,
           months_granted: m,
           payment_method: paymentMethod.trim() || null,
-          custom_start_date: !stillValid && customStart ? customStart : null,
-          custom_end_date: customEnd || null,
+          custom_start_date: custom && !stillValid && customStart ? customStart : null,
+          custom_end_date: endOverride || null,
           notes: notes.trim() || null,
         },
       });
       const err = (data as any)?.error;
       if (error || err) throw new Error(err || error?.message || "Falha ao renovar");
-      toast.success(`Licença renovada até ${formatAccessDate((data as any).period_end)}`);
+      toast.success(`Acesso renovado até ${formatAccessDate((data as any).period_end)}`);
       setOpen(false);
       setNotes("");
       onDone?.();
@@ -91,22 +117,30 @@ export default function RenewAccessDialog({ workerId, workerName, license, onDon
   return (
     <>
       <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => setOpen(true)}>
-        <CalendarPlus className="h-3.5 w-3.5 mr-1" /> Renovar mensalidade
+        <CalendarPlus className="h-3.5 w-3.5 mr-1" /> Renovar acesso
       </Button>
 
       <Dialog open={open} onOpenChange={(o) => !saving && setOpen(o)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Renovar mensalidade</DialogTitle>
-            <DialogDescription>{workerName}</DialogDescription>
+            <DialogTitle className="text-base">Renovar acesso</DialogTitle>
+            <DialogDescription className="text-xs">
+              {workerName}{companyName ? ` · ${companyName}` : ""}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="rounded-md border p-2 text-[11px] space-y-0.5">
+              <p className="flex items-center gap-1">Situação atual: <AccessStatusBadge status={status} /></p>
               <p>Acesso atual até: <span className="font-medium">{formatAccessDate(currentEnd)}</span></p>
+              <p>Valor mensal atual: <span className="font-medium">{formatMoney(license?.monthly_price)}</span></p>
               <p>
-                Novo período inicia em: <span className="font-medium">{formatAccessDate(previewStart)}</span>
-                {stillValid && " (renovação antecipada — dias já pagos são mantidos)"}
+                Último pagamento:{" "}
+                <span className="font-medium">
+                  {lastPeriod
+                    ? `${formatMoney(lastPeriod.amount_paid)} · ${formatDateTime(lastPeriod.paid_at ?? lastPeriod.created_at)}`
+                    : "Nenhum registrado"}
+                </span>
               </p>
             </div>
 
@@ -127,21 +161,42 @@ export default function RenewAccessDialog({ workerId, workerName, license, onDon
                 <Label className="text-xs">Forma de pagamento</Label>
                 <Input value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} placeholder="Pix, dinheiro…" />
               </div>
-              {!stillValid && (
-                <div>
-                  <Label className="text-xs">Início personalizado</Label>
-                  <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                </div>
-              )}
-              <div>
-                <Label className="text-xs">Fim personalizado</Label>
-                <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-              </div>
             </div>
+
+            <div className="flex items-center justify-between rounded-md border p-2">
+              <Label className="text-xs">Período personalizado</Label>
+              <Switch checked={custom} onCheckedChange={setCustom} />
+            </div>
+
+            {custom && (
+              <div className="grid grid-cols-2 gap-2">
+                {!stillValid && (
+                  <div>
+                    <Label className="text-xs">Data inicial</Label>
+                    <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                  </div>
+                )}
+                <div>
+                  <Label className="text-xs">Data final</Label>
+                  <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                </div>
+              </div>
+            )}
 
             <div>
               <Label className="text-xs">Observação</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+
+            <div className="rounded-md border bg-muted/30 p-2 text-[11px] space-y-0.5">
+              <p className="font-medium">Prévia</p>
+              <p>Início do novo período: <span className="font-medium">{formatAccessDate(previewStart)}</span></p>
+              <p>Final do novo período: <span className="font-medium">{previewEnd ? formatAccessDate(previewEnd) : "—"}</span></p>
+              <p>Quantidade de meses: <span className="font-medium">{Number.isFinite(monthsNum) && monthsNum > 0 ? monthsNum : "—"}</span></p>
+              <p>Valor pago: <span className="font-medium">{formatMoney(Number(amountPaid.replace(",", ".")) || 0)}</span></p>
+              {stillValid && (
+                <p className="text-muted-foreground">O novo período será acrescentado após o vencimento atual.</p>
+              )}
             </div>
 
             <p className="text-[10px] text-muted-foreground">
