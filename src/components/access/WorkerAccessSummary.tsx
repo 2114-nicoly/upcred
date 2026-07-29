@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import {
+  fetchGrantorNames,
   WorkerAccessLicense,
   WorkerAccessPeriod,
   getAccessStatus,
@@ -22,6 +24,13 @@ type Props = {
 export default function WorkerAccessSummary({ license, lastPeriod, title = "Acesso e mensalidade" }: Props) {
   const status = getAccessStatus(license);
   const days = daysRemaining(license);
+  const pausedBy = license?.paused_by ?? null;
+  const [pausedByName, setPausedByName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pausedBy) { setPausedByName(null); return; }
+    void fetchGrantorNames([pausedBy]).then((m) => setPausedByName(m[pausedBy] ?? null));
+  }, [pausedBy]);
 
   return (
     <div className="rounded-md border bg-muted/30 p-2 space-y-1">
@@ -56,6 +65,18 @@ export default function WorkerAccessSummary({ license, lastPeriod, title = "Aces
           </>
         )}
         {!lastPeriod && <span className="col-span-2">Último pagamento: Não configurado</span>}
+        {license?.manual_status === "paused" && (
+          <>
+            <span className="col-span-2">
+              Motivo da pausa: <span className="font-medium text-foreground">{license.pause_reason || "—"}</span>
+            </span>
+            <span className="col-span-2">
+              Pausado em <span className="font-medium text-foreground">{formatDateTime(license.paused_at)}</span>
+              {" · por "}
+              <span className="font-medium text-foreground">{pausedByName || "—"}</span>
+            </span>
+          </>
+        )}
       </div>
     </div>
   );
