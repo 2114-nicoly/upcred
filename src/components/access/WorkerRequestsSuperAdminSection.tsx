@@ -3,20 +3,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2, Inbox } from "lucide-react";
 import {
   WorkerCreationRequest, WorkerRequestStatus, formatDateTime, requestStatusLabel, requestStatusVariant,
+  todayLocalISO, addMonthsLocal,
 } from "@/lib/worker-requests";
 
 type AdminRow = { id: string; nome: string };
 
 /** Bloco "Solicitações de trabalhadores" no topo da aba Acessos do SuperAdministrador. */
-export default function WorkerRequestsSuperAdminSection() {
+export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChanged?: () => void }) {
   const { user } = useAuth();
   const [rows, setRows] = useState<WorkerCreationRequest[]>([]);
   const [admins, setAdmins] = useState<AdminRow[]>([]);
@@ -26,6 +31,77 @@ export default function WorkerRequestsSuperAdminSection() {
   const [rejectTarget, setRejectTarget] = useState<WorkerCreationRequest | null>(null);
   const [reason, setReason] = useState("");
   const [working, setWorking] = useState(false);
+
+  // Aprovação
+  const [approveTarget, setApproveTarget] = useState<WorkerCreationRequest | null>(null);
+  const [monthlyPrice, setMonthlyPrice] = useState("0");
+  const [amountPaid, setAmountPaid] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [accessStart, setAccessStart] = useState(todayLocalISO());
+  const [months, setMonths] = useState("1");
+  const [customEnd, setCustomEnd] = useState(false);
+  const [accessEnd, setAccessEnd] = useState("");
+  const [approveNotes, setApproveNotes] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [creds, setCreds] = useState<GeneratedCreds | null>(null);
+
+  function openApprove(r: WorkerCreationRequest) {
+    setApproveTarget(r);
+    setMonthlyPrice("0"); setAmountPaid("0"); setPaymentMethod("");
+    setAccessStart(todayLocalISO()); setMonths("1");
+    setCustomEnd(false); setAccessEnd(""); setApproveNotes("");
+  }
+
+  const computedEnd = customEnd
+    ? accessEnd
+    : (accessStart && Number(months) > 0 ? addMonthsLocal(accessStart, Number(months)) : "");
+
+  async function confirmApprove() {
+    if (!approveTarget || approving) return;
+    const mp = Number(monthlyPrice.replace(",", "."));
+    const ap = Number(amountPaid.replace(",", "."));
+    const mo = Number(months);
+    if (!Number.isFinite(mp) || mp < 0) { toast({ title: "Valor mensal inválido", variant: "destructive" }); return; }
+    if (!Number.isFinite(ap) || ap < 0) { toast({ title: "Valor pago inválido", variant: "destructive" }); return; }
+    if (!accessStart) { toast({ title: "Informe a data inicial", variant: "destructive" }); return; }
+    if (!customEnd && (!Number.isFinite(mo) || mo <= 0)) {
+      toast({ title: "Quantidade de meses deve ser maior que zero", variant: "destructive" }); return;
+    }
+    if (customEnd && !accessEnd) { toast({ title: "Informe a data final", variant: "destructive" }); return; }
+    if (computedEnd && computedEnd < accessStart) {
+      toast({ title: "A data final não pode ser anterior à inicial", variant: "destructive" }); return;
+    }
+
+    setApproving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("approve-worker-request", {
+        body: {
+          request_id: approveTarget.id,
+          monthly_price: mp,
+          amount_paid: ap,
+          payment_method: paymentMethod.trim() || null,
+          access_start: accessStart,
+          access_end: customEnd ? accessEnd : null,
+          months_granted: customEnd ? null : mo,
+          notes: approveNotes.trim() || null,
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha ao aprovar solicitação");
+
+      setApproveTarget(null);
+      setCreds({ nome: data.nome, role: "trabalhador", login: data.login, password: data.password, created_at: data.created_at });
+      toast({ title: "Solicitação aprovada", description: "Trabalhador, licença e primeiro período criados." });
+      load();
+      onChanged?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao aprovar", description: err.message, variant: "destructive" });
+      load();
+    } finally {
+      setApproving(false);
+    }
+  }
+
 
   async function load() {
     setLoading(true);
