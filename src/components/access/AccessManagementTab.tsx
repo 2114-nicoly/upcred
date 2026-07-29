@@ -33,25 +33,26 @@ export default function AccessManagementTab() {
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<AccessStatus | "all">("all");
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const [enf, adminsRes, workersRes, m] = await Promise.all([
-          fetchEnforcementEnabled(),
-          supabase.rpc("super_admin_list_admins" as any),
-          supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null, p_include_archived: false }),
-          loadAccessMaps(),
-        ]);
-        setEnforcement(enf);
-        setAdmins(((adminsRes.data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome })));
-        setWorkers(((workersRes.data as any[]) ?? []).map((w) => ({ id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id ?? null })));
-        setMaps(m);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const [enf, adminsRes, workersRes, m] = await Promise.all([
+        fetchEnforcementEnabled(),
+        supabase.rpc("super_admin_list_admins" as any),
+        supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null, p_include_archived: false }),
+        loadAccessMaps(),
+      ]);
+      setEnforcement(enf);
+      setAdmins(((adminsRes.data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome })));
+      setWorkers(((workersRes.data as any[]) ?? []).map((w) => ({ id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id ?? null })));
+      setMaps(m);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void reload(); }, []);
+
 
   const statusOf = (workerId: string) => getAccessStatus(maps.licenseByWorker[workerId]);
 
