@@ -185,7 +185,8 @@ Deno.serve(async (req) => {
     }
 
     // ---------- auditoria (nunca senha/credenciais) ----------
-    await admin.rpc("log_audit", {
+    try {
+      await admin.rpc("log_audit", {
       p_action: "renovar_licenca_trabalhador",
       p_entity: "worker",
       p_entity_id: workerId,
@@ -215,7 +216,8 @@ Deno.serve(async (req) => {
       },
       p_obs: notes ?? (stillValid ? "Renovação antecipada de licença" : "Renovação de licença"),
       p_worker_id: workerId,
-    }).catch(() => {});
+      });
+    } catch { /* auditoria não bloqueia a renovação */ }
 
     return json(200, {
       ok: true,

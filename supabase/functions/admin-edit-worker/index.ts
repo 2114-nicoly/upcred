@@ -105,9 +105,11 @@ Deno.serve(async (req) => {
       });
       if (authErr) return json(400, { error: `Falha ao atualizar credencial: ${authErr.message}` });
     } else if (updates.nome && worker.auth_user_id) {
-      await admin.auth.admin.updateUserById(worker.auth_user_id, {
-        user_metadata: { display_name: updates.nome },
-      }).catch(() => {});
+      try {
+        await admin.auth.admin.updateUserById(worker.auth_user_id, {
+          user_metadata: { display_name: updates.nome },
+        });
+      } catch { /* auditoria não bloqueia a operação */ }
     }
 
     const { error: updErr } = await admin.from("workers").update(updates).eq("id", workerId);
@@ -131,20 +133,22 @@ Deno.serve(async (req) => {
       status: (updates.active ?? worker.active) ? "ativo" : "inativo",
     };
 
-    await admin.rpc("log_audit", {
-      p_action: "editar_trabalhador",
-      p_entity: "worker",
-      p_entity_id: workerId,
-      p_old: before,
-      p_new: {
-        before, after, changed,
-        performed_by: callerId,
-        performed_by_name: performedByName,
-        timestamp: new Date().toISOString(),
-      },
-      p_obs: "Trabalhador editado",
-      p_worker_id: workerId,
-    }).catch(() => {});
+    try {
+      await admin.rpc("log_audit", {
+        p_action: "editar_trabalhador",
+        p_entity: "worker",
+        p_entity_id: workerId,
+        p_old: before,
+        p_new: {
+          before, after, changed,
+          performed_by: callerId,
+          performed_by_name: performedByName,
+          timestamp: new Date().toISOString(),
+        },
+        p_obs: "Trabalhador editado",
+        p_worker_id: workerId,
+      });
+    } catch { /* auditoria não bloqueia a operação */ }
 
     return json(200, { ok: true, changed });
   } catch (e: any) {

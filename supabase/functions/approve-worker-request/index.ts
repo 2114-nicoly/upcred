@@ -214,12 +214,14 @@ Deno.serve(async (req) => {
       period_id: createdPeriodId,
       timestamp: new Date().toISOString(),
     };
-    await admin.rpc("log_audit", {
-      p_action: "aprovar_solicitacao_trabalhador", p_entity: "worker", p_entity_id: createdWorkerId,
-      p_old: { status: "pending" }, p_new: auditPayload,
-      p_obs: "Solicitação aprovada: trabalhador, licença e primeiro período criados",
-      p_worker_id: createdWorkerId,
-    }).catch(() => {});
+    try {
+      await admin.rpc("log_audit", {
+        p_action: "aprovar_solicitacao_trabalhador", p_entity: "worker", p_entity_id: createdWorkerId,
+        p_old: { status: "pending" }, p_new: auditPayload,
+        p_obs: "Solicitação aprovada: trabalhador, licença e primeiro período criados",
+        p_worker_id: createdWorkerId,
+      });
+    } catch { /* auditoria não bloqueia a operação */ }
 
     return json(200, {
       ok: true,
