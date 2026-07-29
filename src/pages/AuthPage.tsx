@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { ACCESS_BLOCK_STORAGE_KEY } from "@/hooks/useAuth";
 
 export default function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+
+  // Mensagem de bloqueio de licença definida ao encerrar a sessão.
+  useEffect(() => {
+    try {
+      const reason = sessionStorage.getItem(ACCESS_BLOCK_STORAGE_KEY);
+      if (reason) {
+        sessionStorage.removeItem(ACCESS_BLOCK_STORAGE_KEY);
+        toast.error(reason);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");

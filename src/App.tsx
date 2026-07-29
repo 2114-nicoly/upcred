@@ -99,9 +99,9 @@ function LegacyDailyReportRoute() {
 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, accessChecking } = useAuth();
   const location = useLocation();
-  if (loading) {
+  if (loading || (session && accessChecking)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
