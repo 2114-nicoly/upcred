@@ -39,6 +39,7 @@ export type WorkerAccessPeriod = {
   months_granted: number | null;
   payment_method: string | null;
   notes: string | null;
+  granted_by: string | null;
   created_at: string;
 };
 
@@ -159,14 +160,43 @@ export async function fetchWorkerLicenses(): Promise<WorkerAccessLicense[]> {
 export async function fetchWorkerPeriods(): Promise<WorkerAccessPeriod[]> {
   const { data } = await supabase
     .from("worker_access_periods")
-    .select("id, worker_id, admin_id, period_start, period_end, amount_paid, paid_at, months_granted, payment_method, notes, created_at")
+    .select("id, worker_id, admin_id, period_start, period_end, amount_paid, paid_at, months_granted, payment_method, notes, granted_by, created_at")
     .order("created_at", { ascending: false });
   return ((data as any[]) ?? []) as WorkerAccessPeriod[];
 }
 
+/** Nome de quem liberou o período (perfil), quando disponível. */
+export async function fetchGrantorNames(ids: (string | null | undefined)[]): Promise<Record<string, string>> {
+  const unique = Array.from(new Set(ids.filter(Boolean) as string[]));
+  if (unique.length === 0) return {};
+  const out: Record<string, string> = {};
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("user_id, display_name, email")
+      .in("user_id", unique);
+    ((data as any[]) ?? []).forEach((p) => {
+      out[p.user_id] = p.display_name || p.email || "—";
+    });
+  } catch {
+    /* somente exibição */
+  }
+  return out;
+}
+
+export const EMPTY_ACCESS_MAPS: AccessMaps = {
+  licenseByWorker: {},
+  lastPeriodByWorker: {},
+  periodsByWorker: {},
+  allPeriods: [],
+  controlByAdmin: {},
+};
+
 export type AccessMaps = {
   licenseByWorker: Record<string, WorkerAccessLicense>;
   lastPeriodByWorker: Record<string, WorkerAccessPeriod>;
+  periodsByWorker: Record<string, WorkerAccessPeriod[]>;
+  allPeriods: WorkerAccessPeriod[];
   controlByAdmin: Record<string, CompanyAccessControl>;
 };
 
@@ -186,12 +216,17 @@ export async function loadAccessMaps(): Promise<AccessMaps> {
 
   // periods já vem ordenado do mais recente para o mais antigo
   const lastPeriodByWorker: Record<string, WorkerAccessPeriod> = {};
-  periods.forEach((p) => { if (!lastPeriodByWorker[p.worker_id]) lastPeriodByWorker[p.worker_id] = p; });
+  const periodsByWorker: Record<string, WorkerAccessPeriod[]> = {};
+  periods.forEach((p) => {
+    if (!lastPeriodByWorker[p.worker_id]) lastPeriodByWorker[p.worker_id] = p;
+    (periodsByWorker[p.worker_id] ||= []).push(p);
+  });
 
   const controlByAdmin: Record<string, CompanyAccessControl> = {};
   controls.forEach((c) => { controlByAdmin[c.admin_id] = c; });
 
-  return { licenseByWorker, lastPeriodByWorker, controlByAdmin };
+  return { licenseByWorker, lastPeriodByWorker, periodsByWorker, allPeriods: periods, controlByAdmin };
+
 }
 
 export function companyStatusLabel(control?: CompanyAccessControl | null): string {

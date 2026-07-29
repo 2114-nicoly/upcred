@@ -9,11 +9,14 @@ import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
 import RenewAccessDialog from "@/components/access/RenewAccessDialog";
+import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 
 
 import {
   AccessMaps,
   AccessStatus,
+  EMPTY_ACCESS_MAPS,
+  daysRemaining,
   ACCESS_STATUS_FILTERS,
   companyStatusLabel,
   fetchEnforcementEnabled,
@@ -31,9 +34,10 @@ export default function AccessManagementTab() {
   const [enforcement, setEnforcement] = useState(false);
   const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
-  const [maps, setMaps] = useState<AccessMaps>({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} });
+  const [maps, setMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<AccessStatus | "all">("all");
+  const [paymentRange, setPaymentRange] = useState<"month" | "30d" | "year" | "all">("month");
 
   const reload = async () => {
     setLoading(true);
@@ -68,21 +72,43 @@ export default function AccessManagementTab() {
     [workers, companyFilter, statusFilter, maps],
   );
 
+  const paymentsTotal = useMemo(() => {
+    const now = new Date();
+    let from: Date | null = null;
+    if (paymentRange === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (paymentRange === "30d") from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    else if (paymentRange === "year") from = new Date(now.getFullYear(), 0, 1);
+
+    const scopedIds = new Set(
+      workers.filter((w) => companyFilter === "all" || w.parent_admin_id === companyFilter).map((w) => w.id),
+    );
+    return maps.allPeriods.reduce((acc, p) => {
+      if (!scopedIds.has(p.worker_id)) return acc;
+      const when = new Date(p.paid_at ?? p.created_at);
+      if (from && (isNaN(when.getTime()) || when < from)) return acc;
+      return acc + Number(p.amount_paid ?? 0);
+    }, 0);
+  }, [maps, workers, companyFilter, paymentRange]);
+
   const totals = useMemo(() => {
     const scoped = workers.filter((w) => companyFilter === "all" || w.parent_admin_id === companyFilter);
-    let configured = 0, unconfigured = 0, active = 0, expired = 0, paused = 0, monthly = 0;
+    let configured = 0, unconfigured = 0, active = 0, expiringSoon = 0, expired = 0, paused = 0, monthly = 0;
     scoped.forEach((w) => {
       const lic = maps.licenseByWorker[w.id];
       if (lic) { configured++; monthly += Number(lic.monthly_price ?? 0); } else unconfigured++;
       const s = statusOf(w.id);
       if (s === "active" || s === "expiring") active++;
+      if (s === "expiring") {
+        const d = daysRemaining(lic);
+        if (d != null && d >= 0 && d <= 7) expiringSoon++;
+      }
       if (s === "expired") expired++;
       if (s === "paused") paused++;
     });
     return {
       companies: companyFilter === "all" ? admins.length : 1,
       workers: scoped.length,
-      configured, unconfigured, active, expired, paused, monthly,
+      configured, unconfigured, active, expiringSoon, expired, paused, monthly,
     };
   }, [workers, admins, companyFilter, maps]);
 
@@ -111,9 +137,25 @@ export default function AccessManagementTab() {
           <Metric label="Licenças configuradas" value={String(totals.configured)} />
           <Metric label="Não configuradas" value={String(totals.unconfigured)} />
           <Metric label="Ativos" value={String(totals.active)} />
+          <Metric label="Vencendo em até 7 dias" value={String(totals.expiringSoon)} />
           <Metric label="Expirados" value={String(totals.expired)} />
           <Metric label="Pausados" value={String(totals.paused)} />
           <Metric label="Valor mensal configurado" value={formatMoney(totals.monthly)} />
+          <Metric label="Pagamentos no período" value={formatMoney(paymentsTotal)} />
+          <div className="col-span-2">
+            <Select value={paymentRange} onValueChange={(v) => setPaymentRange(v as typeof paymentRange)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="month">Pagamentos: este mês</SelectItem>
+                <SelectItem value="30d">Pagamentos: últimos 30 dias</SelectItem>
+                <SelectItem value="year">Pagamentos: este ano</SelectItem>
+                <SelectItem value="all">Pagamentos: todo o período</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[9px] text-muted-foreground">
+              Mensalidades do sistema — não entram no caixa dos trabalhadores nem nos relatórios operacionais.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -179,12 +221,21 @@ export default function AccessManagementTab() {
                           lastPeriod={maps.lastPeriodByWorker[w.id]}
                           title="Licença"
                         />
-                        <RenewAccessDialog
-                          workerId={w.id}
-                          workerName={w.nome}
-                          license={maps.licenseByWorker[w.id]}
-                          onDone={() => void reload()}
-                        />
+                        <div className="flex flex-wrap items-center gap-1">
+                          <RenewAccessDialog
+                            workerId={w.id}
+                            workerName={w.nome}
+                            companyName={a.nome}
+                            license={maps.licenseByWorker[w.id]}
+                            lastPeriod={maps.lastPeriodByWorker[w.id]}
+                            onDone={() => void reload()}
+                          />
+                          <AccessHistoryDialog
+                            workerName={w.nome}
+                            companyName={a.nome}
+                            periods={maps.periodsByWorker[w.id] ?? []}
+                          />
+                        </div>
                       </div>
                     ))
 

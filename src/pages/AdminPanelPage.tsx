@@ -31,9 +31,10 @@ import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import WorkerRequestsAdminSection from "@/components/access/WorkerRequestsAdminSection";
 
-import { AccessMaps, loadAccessMaps } from "@/lib/access-control";
+import { AccessMaps, EMPTY_ACCESS_MAPS, loadAccessMaps } from "@/lib/access-control";
 
 
 
@@ -304,13 +305,13 @@ function WorkersTab() {
 
   // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
   // Acesso/mensalidade é apenas leitura (gerenciado pelo SuperAdministrador).
-  const [accessMaps, setAccessMaps] = useState<AccessMaps>({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} });
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
 
   async function load() {
     setLoading(true);
     const [{ data: w }, maps] = await Promise.all([
       supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
-      loadAccessMaps().catch(() => ({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} } as AccessMaps)),
+      loadAccessMaps().catch(() => (EMPTY_ACCESS_MAPS as AccessMaps)),
     ]);
     setWorkers((w as any) || []);
     setAccessMaps(maps);
@@ -587,6 +588,12 @@ function WorkersTab() {
                     license={accessMaps.licenseByWorker[w.id]}
                     lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
                   />
+                  <div className="flex justify-end">
+                    <AccessHistoryDialog
+                      workerName={w.nome}
+                      periods={accessMaps.periodsByWorker[w.id] ?? []}
+                    />
+                  </div>
 
                 </CardContent>
               </Card>
