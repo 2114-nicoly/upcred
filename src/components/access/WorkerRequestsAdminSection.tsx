@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, RefreshCw } from "lucide-react";
 import { WorkerCreationRequest, requestStatusLabel, requestStatusVariant, formatDateTime } from "@/lib/worker-requests";
 
 /** Seção "Solicitações de trabalhadores" na aba Equipe do Administrador. */
-export default function WorkerRequestsAdminSection() {
+export default function WorkerRequestsAdminSection({ onChanged }: { onChanged?: () => void }) {
+
   const { user, adminId } = useAuth();
   const [rows, setRows] = useState<WorkerCreationRequest[]>([]);
   const [loading, setLoading] = useState(true);
