@@ -30,6 +30,9 @@ import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } 
 import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
+import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import { AccessMaps, loadAccessMaps } from "@/lib/access-control";
+
 
 
 type Worker = {
@@ -298,12 +301,20 @@ function WorkersTab() {
   }
 
   // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
+  // Acesso/mensalidade é apenas leitura (gerenciado pelo SuperAdministrador).
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} });
+
   async function load() {
     setLoading(true);
-    const { data: w } = await supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived });
+    const [{ data: w }, maps] = await Promise.all([
+      supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
+      loadAccessMaps().catch(() => ({ licenseByWorker: {}, lastPeriodByWorker: {}, controlByAdmin: {} } as AccessMaps)),
+    ]);
     setWorkers((w as any) || []);
+    setAccessMaps(maps);
     setLoading(false);
   }
+
 
   useEffect(() => { load(); }, [showArchived]);
 
@@ -486,8 +497,12 @@ function WorkersTab() {
 
   return (
     <div className="space-y-3">
+      <p className="text-[11px] text-muted-foreground">
+        As liberações e mensalidades são gerenciadas pelo SuperAdministrador.
+      </p>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-muted-foreground">{workers.length} trabalhador(es)</p>
+
         <div className="flex items-center gap-2">
           {isSuperAdmin && (
             <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
@@ -556,6 +571,11 @@ function WorkersTab() {
                       </Button>
                     )}
                   </div>
+                  <WorkerAccessSummary
+                    license={accessMaps.licenseByWorker[w.id]}
+                    lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
+                  />
+
                 </CardContent>
               </Card>
             );
