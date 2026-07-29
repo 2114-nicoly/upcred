@@ -42,7 +42,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
-import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
+import {
+  PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
+  loadScopeWorkers, groupByCompany, type ScopeWorker,
+} from "@/lib/consolidated-stats";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
