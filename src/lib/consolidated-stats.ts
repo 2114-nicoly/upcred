@@ -286,12 +286,14 @@ export function consolidate(stats: WorkerStats[]): WorkerStats {
     total.emprestimosNovos += s.emprestimosNovos;
     total.clientesAtivos += s.clientesAtivos;
     total.emprestimosAtivos += s.emprestimosAtivos;
+    total.faltaReceber += s.faltaReceber;
   }
   total.atrasadosClientIds = Array.from(overdueClientKeys);
   total.atrasados = overdueClientKeys.size;
   total.totalSaidas = total.emprestado + total.retirada;
-  total.faltaReceber = Math.max(0, total.previsto - total.recebido);
-  total.percentual = total.previsto > 0 ? (total.recebido / total.previsto) * 100 : 0;
+  total.faltaReceber = Math.max(0, total.faltaReceber);
+  total.percentual = total.previsto > 0 ? ((total.previsto - total.faltaReceber) / total.previsto) * 100 : 0;
+
   total.saldoLiquido = total.recebido + total.aporte - total.emprestado - total.retirada;
   return total;
 }
