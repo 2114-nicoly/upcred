@@ -36,3 +36,22 @@ export function formatDateTime(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
+
+/** YYYY-MM-DD de hoje, em data local. */
+export function todayLocalISO(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Soma meses de calendário a uma data local YYYY-MM-DD. */
+export function addMonthsLocal(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const base = new Date(y, m - 1 + months, 1);
+  const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+  const mm = String(base.getMonth() + 1).padStart(2, "0");
+  const dd = String(Math.min(d, lastDay)).padStart(2, "0");
+  return `${base.getFullYear()}-${mm}-${dd}`;
+}
+
