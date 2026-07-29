@@ -244,8 +244,6 @@ function WorkersTab() {
   const { isSuperAdmin } = useAuth();
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   // resetRequests removed: handled by PasswordRecoveryBell in header
-  const [stats, setStats] = useState<Record<string, WorkerStats>>({});
-  const [availableCash, setAvailableCash] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
@@ -299,32 +297,11 @@ function WorkersTab() {
     }
   }
 
+  // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
   async function load() {
     setLoading(true);
-    const today = new Date().toISOString().slice(0, 10);
-    const range = getPeriodRange("day", today, today);
-    const [{ data: w }, statsList] = await Promise.all([
-      supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
-      loadWorkersStats(range),
-    ]);
-    const wList = (w as any) || [];
-    setWorkers(wList);
-    const map: Record<string, WorkerStats> = {};
-    statsList.forEach((s) => { if (s.worker_id) map[s.worker_id] = s; });
-    setStats(map);
-
-    // Current available cash per active worker (dynamic — not historical)
-    const activeIds = wList.filter((x: any) => !x.archived_at).map((x: any) => x.id);
-    if (activeIds.length > 0) {
-      try {
-        setAvailableCash(await fetchAvailableCashByWorker(activeIds));
-      } catch (err) {
-        console.error("[AdminPanel] falha ao carregar caixa disponível", err);
-        toast({ title: "Não foi possível carregar o caixa disponível dos trabalhadores.", variant: "destructive" });
-      }
-    } else {
-      setAvailableCash({});
-    }
+    const { data: w } = await supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived });
+    setWorkers((w as any) || []);
     setLoading(false);
   }
 
