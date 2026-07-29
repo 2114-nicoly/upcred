@@ -31,6 +31,8 @@ import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import WorkerRequestsAdminSection from "@/components/access/WorkerRequestsAdminSection";
+
 import { AccessMaps, loadAccessMaps } from "@/lib/access-control";
 
 

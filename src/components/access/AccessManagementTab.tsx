@@ -7,6 +7,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Loader2, ChevronDown, Building2 } from "lucide-react";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
+
 import {
   AccessMaps,
   AccessStatus,
