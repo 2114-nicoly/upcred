@@ -400,26 +400,29 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-3 mt-3">
-          {daySummary?.hasError && (
+          {loadError && (
             <div className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-[11px] text-destructive">
-              <AlertTriangle className="h-3.5 w-3.5" /> Falha ao carregar totais do dia. Os valores podem estar incompletos.
+              <AlertTriangle className="h-3.5 w-3.5" /> Não foi possível carregar os dados da equipe. Os valores exibidos não são confiáveis.
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <Stat label="Previsto" value={formatCurrency(daySummary ? daySummary.previsto : total.previsto)} />
-            <Stat label="Recebido" value={formatCurrency(daySummary ? daySummary.recebido : total.recebido)} cls="text-success" />
-            <Stat label="Falta Receber" value={formatCurrency(daySummary ? daySummary.falta : total.faltaReceber)} cls="text-destructive" />
+            <Stat label="Previsto" value={formatCurrency(total.previsto)} />
+            <Stat label="Recebido" value={formatCurrency(total.recebido)} cls="text-success" />
+            <Stat label="Falta Receber" value={formatCurrency(total.faltaReceber)} cls="text-destructive" />
             <Stat label="%" value={`${total.percentual.toFixed(0)}%`} />
             <Stat label="Emprestado" value={formatCurrency(total.emprestado)} />
             <Stat label="Retirado" value={formatCurrency(total.retirada)} cls="text-destructive" />
             <Stat label="Aporte" value={formatCurrency(total.aporte)} cls="text-success" />
             <Stat label="Saldo" value={formatCurrency(total.saldoLiquido)} cls={total.saldoLiquido >= 0 ? "text-success" : "text-destructive"} />
           </div>
-          {mode === "day" && (
-            <p className="text-[10px] text-muted-foreground -mt-1">
-              Previsto/Recebido/Falta seguem a mesma fórmula da Rota e do Caixa (getDailyCollectionSummary).
-            </p>
-          )}
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Caixa disponível" value={formatCurrency(total.availableCash)} />
+            <Stat label="Na rua" value={formatCurrency(total.saldoNaRua)} />
+            <Stat label="Despesas" value={formatCurrency(total.despesas)} cls="text-destructive" />
+          </div>
+          <p className="text-[10px] text-muted-foreground -mt-1">
+            Todos os totais são a soma dos trabalhadores ativos desta empresa (fonte única).
+          </p>
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Clientes" value={String(total.clientesAtivos)} />
             <Stat label="Empr.Ativos" value={String(total.emprestimosAtivos)} />
@@ -430,6 +433,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <Stat label="Renovações" value={String(total.renovacoes)} />
             <Stat label="Novos" value={String(total.emprestimosNovos)} />
           </div>
+
 
           {reopenReqs.length > 0 && (
             <Card className="border-warning">
