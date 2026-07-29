@@ -497,8 +497,12 @@ function WorkersTab() {
 
   return (
     <div className="space-y-3">
+      <p className="text-[11px] text-muted-foreground">
+        As liberações e mensalidades são gerenciadas pelo SuperAdministrador.
+      </p>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-muted-foreground">{workers.length} trabalhador(es)</p>
+
         <div className="flex items-center gap-2">
           {isSuperAdmin && (
             <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
