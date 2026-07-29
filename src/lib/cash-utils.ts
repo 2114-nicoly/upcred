@@ -124,18 +124,22 @@ export type CashBalance = {
 };
 
 /**
- * Returns the cash_balance row for the current user.
- * - Worker: their own row (worker_id = current worker)
- * - Admin / super_admin: the admin/global row (worker_id IS NULL)
+ * Returns the cash_balance row.
+ * - Escopo explícito (`{ workerId }`): SEMPRE a linha daquele trabalhador.
+ * - Worker logado: sua própria linha (worker_id = current worker)
+ * - Admin / super_admin sem escopo: linha admin/global (worker_id IS NULL)
  */
-export async function getCashBalance(): Promise<CashBalance | null> {
-  const workerId = await getCurrentWorkerId();
+export async function getCashBalance(scope?: ExplicitScope): Promise<CashBalance | null> {
+  const explicitWorker = scope?.workerId ?? null;
+  const workerId = explicitWorker ?? (await getCurrentWorkerId());
   let q = supabase.from("cash_balance").select("*");
   if (workerId) q = q.eq("worker_id", workerId);
+  else if (scope?.adminId) q = q.is("worker_id", null).eq("admin_id", scope.adminId);
   else q = q.is("worker_id", null);
   const { data } = await q.limit(1).maybeSingle();
   return data as unknown as CashBalance;
 }
+
 
 export async function updateCashBalance(changes: {
   available_cash?: number;
