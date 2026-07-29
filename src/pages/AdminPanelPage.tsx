@@ -503,7 +503,7 @@ function WorkersTab() {
         As liberações e mensalidades são gerenciadas pelo SuperAdministrador.
       </p>
 
-      <WorkerRequestsAdminSection />
+      <WorkerRequestsAdminSection onChanged={load} />
 
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -516,7 +516,10 @@ function WorkersTab() {
               Mostrar arquivados
             </label>
           )}
-          <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+          {isSuperAdmin && (
+            <Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+          )}
+
         </div>
       </div>
 
@@ -527,12 +530,15 @@ function WorkersTab() {
           <EmptyState
             icon={Inbox}
             message="Nenhum trabalhador cadastrado"
-            description="Cadastre um trabalhador para começar."
-            actionLabel="Cadastrar trabalhador"
-            onAction={() => setOpenCreate(true)}
+            description={isSuperAdmin
+              ? "Cadastre um trabalhador para começar."
+              : "Use “Solicitar novo trabalhador” para pedir a criação ao SuperAdministrador."}
+            actionLabel={isSuperAdmin ? "Cadastrar trabalhador" : undefined}
+            onAction={isSuperAdmin ? () => setOpenCreate(true) : undefined}
             compact
           />
         ) : (
+
           workers.map((w) => {
             return (
               <Card key={w.id}>

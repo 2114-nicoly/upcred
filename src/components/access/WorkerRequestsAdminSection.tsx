@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, RefreshCw } from "lucide-react";
 import { WorkerCreationRequest, requestStatusLabel, requestStatusVariant, formatDateTime } from "@/lib/worker-requests";
 
 /** Seção "Solicitações de trabalhadores" na aba Equipe do Administrador. */
-export default function WorkerRequestsAdminSection() {
+export default function WorkerRequestsAdminSection({ onChanged }: { onChanged?: () => void }) {
+
   const { user, adminId } = useAuth();
   const [rows, setRows] = useState<WorkerCreationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,12 +62,19 @@ export default function WorkerRequestsAdminSection() {
   return (
     <Card>
       <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-sm font-semibold">Solicitações de trabalhadores</p>
-          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-1" /> Solicitar novo trabalhador
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" className="h-8 px-2"
+              onClick={() => { load(); onChanged?.(); }} aria-label="Atualizar solicitações">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Solicitar novo trabalhador
+            </Button>
+          </div>
         </div>
+
 
         {loading ? (
           <div className="flex h-16 items-center justify-center"><Loader2 className="h-4 w-4 animate-spin" /></div>
