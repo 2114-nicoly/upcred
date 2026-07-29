@@ -52,6 +52,7 @@ import {
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
+import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 
 type AdminRow = {
   id: string;
@@ -425,12 +426,9 @@ function AdminsTab() {
                   <Switch checked={a.active} onCheckedChange={() => toggleActive(a)} />
                 </div>
 
-                <div className="grid grid-cols-4 gap-1 text-center">
-                  <MiniStat label="Trab" value={s?.workers_count ?? 0} />
-                  <MiniStat label="Empr" value={s?.active_loans ?? 0} />
-                  <MiniStat label="Receb." value={formatCurrency(s?.total_received ?? 0)} small />
-                  <MiniStat label="Empr.$" value={formatCurrency(s?.total_lent ?? 0)} small />
-                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Trabalhadores: <b className="text-foreground">{s?.workers_count ?? 0}</b> · Visão financeira no Dashboard
+                </p>
 
                 <div className="grid grid-cols-3 gap-1.5">
                   <Button size="sm" variant="default" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
