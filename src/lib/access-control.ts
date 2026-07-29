@@ -236,3 +236,78 @@ export function companyStatusLabel(control?: CompanyAccessControl | null): strin
   if (!control) return "Não configurado";
   return control.manual_status === "paused" ? "Pausado" : "Ativo";
 }
+
+/* ---------------- verificação central de acesso ---------------- */
+
+export type AccessCheck = {
+  allowed: boolean;
+  reason: string | null;
+  status: AccessStatus | null;
+  workerId: string | null;
+  accessEnd: string | null;
+  enforcementEnabled: boolean;
+};
+
+/** Mensagens exibidas ao trabalhador bloqueado (sem detalhes internos). */
+export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
+  paused: "Seu acesso está pausado. Entre em contato com a empresa responsável.",
+  expired: "Seu período de acesso expirou. Entre em contato com a empresa responsável.",
+  unconfigured: "Seu acesso ainda não foi liberado.",
+  scheduled: "Seu acesso ainda não iniciou.",
+};
+
+/**
+ * Verificação central de acesso individual do trabalhador.
+ * Administrador e SuperAdministrador continuam sempre permitidos nesta etapa.
+ * Quando enforcement_enabled = false nada é bloqueado — o status é apenas informativo.
+ */
+export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
+  const enforcementEnabled = await fetchEnforcementEnabled();
+  const base: AccessCheck = {
+    allowed: true,
+    reason: null,
+    status: null,
+    workerId: null,
+    accessEnd: null,
+    enforcementEnabled,
+  };
+  if (!userId) return base;
+
+  try {
+    const [{ data: roles }, { data: workerRow }] = await Promise.all([
+      supabase.from("user_roles").select("role").eq("user_id", userId),
+      supabase.from("workers").select("id").eq("auth_user_id", userId).maybeSingle(),
+    ]);
+    const roleNames = ((roles as any[]) ?? []).map((r) => r.role as string);
+    if (roleNames.includes("super_admin") || roleNames.includes("admin")) return base;
+
+    const workerId = ((workerRow as any)?.id as string | undefined) ?? null;
+    if (!workerId) return base; // sem vínculo de trabalhador — nada a verificar nesta etapa
+
+    const { data: licRow } = await supabase
+      .from("worker_access_licenses")
+      .select("id, worker_id, admin_id, monthly_price, access_start, access_end, manual_status, pause_reason, paused_at, paused_by")
+      .eq("worker_id", workerId)
+      .maybeSingle();
+    const license = (licRow as any as WorkerAccessLicense | null) ?? null;
+    const status = license ? getAccessStatus(license) : "unconfigured";
+    const accessEnd = license?.access_end ?? null;
+
+    if (!enforcementEnabled) {
+      return { ...base, status, workerId, accessEnd };
+    }
+
+    const allowed = status === "active" || status === "expiring";
+    return {
+      allowed,
+      reason: allowed ? null : (ACCESS_BLOCK_MESSAGE[status] ?? ACCESS_BLOCK_MESSAGE.unconfigured),
+      status,
+      workerId,
+      accessEnd,
+      enforcementEnabled,
+    };
+  } catch {
+    // Falha de rede/consulta nunca bloqueia o usuário nesta etapa.
+    return base;
+  }
+}
