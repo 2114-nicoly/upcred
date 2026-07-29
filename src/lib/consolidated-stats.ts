@@ -192,17 +192,25 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     }
   });
 
-  // Active loans snapshot: active worker+client, active status, remaining_balance > 0.01.
+  // Empréstimos ativos: cada loan_id apenas uma vez, status aberto/atrasado e saldo pendente.
+  const activeLoanIdsByWorker = new Map<string, Set<string>>();
   ((loansRes.data as any[]) || []).forEach((l) => {
-    const s = get(l.worker_id ?? null);
-    if (!s) return;
+    const workerId = l.worker_id ?? null;
+    const s = get(workerId);
+    if (!s || !workerId || !l.id) return;
     const isActive =
       (activeLoanStatuses as readonly string[]).includes(String(l.status)) &&
       Number(l.remaining_balance || 0) > 0.01;
-    if (isActive) {
-      s.emprestimosAtivos += 1;
-    }
+    if (!isActive) return;
+    const set = activeLoanIdsByWorker.get(workerId) || new Set<string>();
+    set.add(String(l.id));
+    activeLoanIdsByWorker.set(workerId, set);
   });
+  activeLoanIdsByWorker.forEach((set, workerId) => {
+    const s = map.get(workerId);
+    if (s) s.emprestimosAtivos = set.size;
+  });
+
 
   // "Clientes atrasados" conta worker_id+client_id único com pelo menos uma parcela vencida,
   // regular, pendente/parcial/overdue e com saldo pendente. Nunca usa loans.status sozinho.
