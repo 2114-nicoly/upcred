@@ -233,22 +233,21 @@ function DashboardTab() {
         <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 mb-3">
+          <h2 className="text-sm font-semibold mb-2">Situação atual</h2>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa disponível" value={formatCurrency(stats.availableCash)} />
+            <DKpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="Emprestado na rua" value={formatCurrency(stats.saldoNaRua)} />
+            <DMini label="Clientes atrasados" value={stats.atrasados} cls="text-destructive" />
+            <DMini label="Clientes ativos" value={stats.clientesAtivos} />
+          </div>
+
+          <h2 className="text-sm font-semibold mb-2">Movimentação do período</h2>
+          <div className="grid grid-cols-2 gap-2">
             <DKpi icon={<Target className="h-4 w-4 text-primary" />} label="Previsto" value={formatCurrency(stats.previsto)} />
             <DKpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} cls="text-success" />
             <DKpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Falta receber" value={formatCurrency(stats.faltaReceber)} cls="text-destructive" />
-            <DKpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="% Recebido" value={`${stats.percentual.toFixed(1)}%`} />
-            <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado" value={formatCurrency(stats.emprestado)} />
-            <DKpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Retirado" value={formatCurrency(stats.retirada)} cls="text-destructive" />
-            <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Aporte" value={formatCurrency(stats.aporte)} cls="text-success" />
-            <DKpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Despesas" value={formatCurrency(stats.despesas)} cls="text-destructive" />
-            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa disponível" value={formatCurrency(stats.availableCash)} />
-            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Na rua" value={formatCurrency(stats.saldoNaRua)} />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <DMini label="Clientes" value={stats.clientesAtivos} />
-            <DMini label="Empr.Ativos" value={stats.emprestimosAtivos} />
-            <DMini label="Clientes atrasados" value={stats.atrasados} cls="text-destructive" />
+            <DKpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Valor atrasado" value={formatCurrency(stats.valorAtrasado)} cls="text-destructive" />
+            <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado no período" value={formatCurrency(stats.emprestado)} />
           </div>
 
           {selectedAdmin === "all" && companies.length > 0 && (

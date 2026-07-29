@@ -19,6 +19,8 @@ import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight,
 
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkerFilter } from "@/hooks/useWorkerFilter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
   PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
@@ -106,12 +108,14 @@ function CaixaTab() {
 
 /* ============= OVERVIEW TAB ============= */
 function OverviewTab() {
+  const { workers } = useWorkerFilter();
   const [mode, setMode] = useState<PeriodMode>("day");
   const [customStart, setCustomStart] = useState(new Date().toISOString().slice(0, 10));
   const [customEnd, setCustomEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedWorker, setSelectedWorker] = useState<string>("all");
   const [stats, setStats] = useState<WorkerStats | null>(null);
-  const [activeWorkers, setActiveWorkers] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const range = useMemo(() => getPeriodRange(mode, customStart, customEnd), [mode, customStart, customEnd]);
 
@@ -119,27 +123,34 @@ function OverviewTab() {
     let cancel = false;
     async function load() {
       setLoading(true);
-      const [list, { count }] = await Promise.all([
-        loadWorkersStats(range),
-        supabase.from("workers").select("id", { count: "exact", head: true }).eq("active", true),
-      ]);
-      if (cancel) return;
-      setStats(consolidate(list));
-      setActiveWorkers(count || 0);
-      setLoading(false);
+      setError(false);
+      try {
+        // Fonte única compartilhada com o SuperAdministrador.
+        const list = await loadWorkersStats(range, {
+          workerIds: selectedWorker === "all" ? undefined : [selectedWorker],
+        });
+        if (cancel) return;
+        setStats(consolidate(list));
+      } catch (err) {
+        console.error("[AdminPanel] falha ao carregar indicadores", err);
+        if (!cancel) { setStats(null); setError(true); }
+      } finally {
+        if (!cancel) setLoading(false);
+      }
     }
     load();
     return () => { cancel = true; };
-  }, [range]);
+  }, [range, selectedWorker]);
 
   return (
     <div>
       <Tabs value={mode} onValueChange={(v) => setMode(v as PeriodMode)} className="mb-3">
-        <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="day" className="text-xs">Dia</TabsTrigger>
-          <TabsTrigger value="week" className="text-xs">Semana</TabsTrigger>
-          <TabsTrigger value="month" className="text-xs">Mês</TabsTrigger>
-          <TabsTrigger value="custom" className="text-xs">Período</TabsTrigger>
+        <TabsList className="grid grid-cols-5 w-full">
+          <TabsTrigger value="day" className="text-[10px]">Hoje</TabsTrigger>
+          <TabsTrigger value="yesterday" className="text-[10px]">Ontem</TabsTrigger>
+          <TabsTrigger value="week" className="text-[10px]">Semana</TabsTrigger>
+          <TabsTrigger value="month" className="text-[10px]">Mês</TabsTrigger>
+          <TabsTrigger value="custom" className="text-[10px]">Período</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -150,24 +161,44 @@ function OverviewTab() {
         </CardContent></Card>
       )}
 
-      <p className="text-xs text-muted-foreground mb-2">{range.label} · Visão consolidada</p>
+      <Card className="mb-3"><CardContent className="p-2">
+        <Label className="text-[10px]">Visão</Label>
+        <Select value={selectedWorker} onValueChange={setSelectedWorker}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Equipe inteira</SelectItem>
+            {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </CardContent></Card>
 
-      {loading || !stats ? (
+      <p className="text-xs text-muted-foreground mb-2">
+        {range.label} · {selectedWorker === "all" ? "Equipe inteira" : (workers.find((w) => w.id === selectedWorker)?.nome || "Trabalhador")}
+      </p>
+
+      {error ? (
+        <Card><CardContent className="p-4 text-sm text-destructive">
+          Não foi possível carregar os indicadores. Tente novamente.
+        </CardContent></Card>
+      ) : loading || !stats ? (
         <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 mb-3">
+          <h2 className="text-sm font-semibold mb-2">Situação atual</h2>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <Kpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa disponível" value={formatCurrency(stats.availableCash)} />
+            <Kpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="Emprestado na rua" value={formatCurrency(stats.saldoNaRua)} />
+            <MiniStat label="Clientes atrasados" value={stats.atrasados} valueClass="text-destructive" />
+            <MiniStat label="Clientes ativos" value={stats.clientesAtivos} />
+          </div>
+
+          <h2 className="text-sm font-semibold mb-2">Movimentação do período</h2>
+          <div className="grid grid-cols-2 gap-2">
             <Kpi icon={<Target className="h-4 w-4 text-primary" />} label="Previsto" value={formatCurrency(stats.previsto)} />
             <Kpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} valueClass="text-success" />
             <Kpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Falta receber" value={formatCurrency(stats.faltaReceber)} valueClass="text-destructive" />
-            <Kpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="% Recebido" value={`${stats.percentual.toFixed(1)}%`} />
-          </div>
-
-          <div className="grid grid-cols-4 gap-2">
-            <MiniStat label="Clientes" value={stats.clientesAtivos} />
-            <MiniStat label="Empr. ativos" value={stats.emprestimosAtivos} />
-            <MiniStat label="Clientes atrasados" value={stats.atrasados} valueClass="text-destructive" />
-            <MiniStat label="Trab. ativos" value={activeWorkers} />
+            <Kpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Valor atrasado" value={formatCurrency(stats.valorAtrasado)} valueClass="text-destructive" />
+            <Kpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="Emprestado no período" value={formatCurrency(stats.emprestado)} />
           </div>
         </>
       )}

@@ -50,6 +50,8 @@ export type WorkerStats = {
   recebidoPrincipal: number;
   multasRecebidas: number;
   faltaReceber: number;
+  /** Saldo pendente de parcelas do período cujo vencimento já chegou. */
+  valorAtrasado: number;
   percentual: number;
   emprestado: number;
   retirada: number;
@@ -80,7 +82,7 @@ export type WorkerStats = {
 
 const empty = (id: string | null, name: string, adminId: string | null = null): WorkerStats => ({
   worker_id: id, worker_name: name, admin_id: adminId,
-  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, faltaReceber: 0, percentual: 0,
+  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, faltaReceber: 0, valorAtrasado: 0, percentual: 0,
   emprestado: 0, retirada: 0, aporte: 0, despesas: 0, estornos: 0, estornosCount: 0,
   totalSaidas: 0, saldoLiquido: 0,
   naoPagosCount: 0, renovacoes: 0, emprestimosNovos: 0,
@@ -240,7 +242,20 @@ export async function loadWorkersStats(
     const amount = Number(i.amount || 0);
     const paid = Number(i.paid_amount || 0);
     s.previsto += amount;
-    s.faltaReceber += Math.max(amount - paid, 0);
+    const pending = Math.max(amount - paid, 0);
+    s.faltaReceber += pending;
+    // Valor atrasado: parcela do período já vencida (limite = hoje ou fim do período),
+    // cobrável, não totalmente paga e de empréstimo ativo.
+    const dueDate = String(i.due_date || "");
+    const loanStatus = String(i.loans?.status ?? "");
+    if (
+      pending > 0.001 &&
+      dueDate && dueDate <= overdueReferenceDate &&
+      (collectibleStatuses as readonly string[]).includes(String(i.status)) &&
+      (activeLoanStatuses as readonly string[]).includes(loanStatus)
+    ) {
+      s.valorAtrasado += pending;
+    }
   });
 
   // Cash flow from daily_events (non-reversed, active workers only)
@@ -384,6 +399,7 @@ export function consolidate(
     total.clientesAtivos += s.clientesAtivos;
     total.emprestimosAtivos += s.emprestimosAtivos;
     total.faltaReceber += s.faltaReceber;
+    total.valorAtrasado += s.valorAtrasado;
   }
   total.atrasadosClientIds = Array.from(overdueClientKeys);
   total.atrasados = overdueClientKeys.size;
