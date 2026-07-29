@@ -42,7 +42,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { generateLoginCodigo, generateTempPassword } from "@/lib/worker-utils";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
-import { PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats } from "@/lib/consolidated-stats";
+import {
+  PeriodMode, getPeriodRange, loadWorkersStats, consolidate, WorkerStats,
+  loadScopeWorkers, groupByCompany, type ScopeWorker,
+} from "@/lib/consolidated-stats";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -103,28 +109,79 @@ function DashboardTab() {
   const [mode, setMode] = useState<PeriodMode>("day");
   const [customStart, setCustomStart] = useState(new Date().toISOString().slice(0, 10));
   const [customEnd, setCustomEnd] = useState(new Date().toISOString().slice(0, 10));
-  const [stats, setStats] = useState<WorkerStats | null>(null);
+  const [admins, setAdmins] = useState<AdminRow[]>([]);
+  const [selectedAdmin, setSelectedAdmin] = useState<string>("all");
+  const [selectedWorker, setSelectedWorker] = useState<string>("all");
+  const [workers, setWorkers] = useState<ScopeWorker[]>([]);
+  const [rows, setRows] = useState<WorkerStats[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const range = useMemo(() => getPeriodRange(mode, customStart, customEnd), [mode, customStart, customEnd]);
+
+  // Empresas ativas (para o filtro de escopo).
+  useEffect(() => {
+    supabase.rpc("super_admin_list_admins" as any).then(({ data, error: err }) => {
+      if (err) { console.error("[SuperAdmin] falha ao listar empresas", err); return; }
+      setAdmins(((data as AdminRow[]) || []).filter((a) => a.active));
+    });
+  }, []);
+
+  // Trabalhadores APENAS da empresa selecionada (consulta já escopada).
+  useEffect(() => {
+    let cancel = false;
+    loadScopeWorkers(selectedAdmin === "all" ? null : selectedAdmin)
+      .then((list) => { if (!cancel) setWorkers(list); })
+      .catch((err) => { console.error("[SuperAdmin] falha ao listar trabalhadores", err); if (!cancel) setWorkers([]); });
+    return () => { cancel = true; };
+  }, [selectedAdmin]);
 
   useEffect(() => {
     let cancel = false;
     (async () => {
       setLoading(true);
-      const list = await loadWorkersStats(range);
-      if (cancel) return;
-      setStats(consolidate(list));
-      setLoading(false);
+      setError(false);
+      try {
+        // Mesma função compartilhada usada pelo Administrador.
+        const list = await loadWorkersStats(range, {
+          adminId: selectedAdmin === "all" ? null : selectedAdmin,
+          workerIds: selectedWorker === "all" ? undefined : [selectedWorker],
+        });
+        if (cancel) return;
+        setRows(list);
+      } catch (err) {
+        console.error("[SuperAdmin] falha ao carregar estatísticas", err);
+        if (!cancel) { setRows(null); setError(true); }
+      } finally {
+        if (!cancel) setLoading(false);
+      }
     })();
     return () => { cancel = true; };
-  }, [range]);
+  }, [range, selectedAdmin, selectedWorker]);
+
+  const adminNames = useMemo(() => {
+    const m: Record<string, string> = {};
+    admins.forEach((a) => { m[a.id] = a.nome; });
+    return m;
+  }, [admins]);
+
+  // "Todas as empresas": consolida cada empresa a partir dos seus trabalhadores
+  // e só então soma as empresas — sem recontar nenhum registro.
+  const companies = useMemo(
+    () => (rows ? groupByCompany(rows, adminNames) : []),
+    [rows, adminNames],
+  );
+  const stats = useMemo(
+    () => (rows ? consolidate(companies.map((c) => c.totals)) : null),
+    [rows, companies],
+  );
 
   return (
     <div>
       <Tabs value={mode} onValueChange={(v) => setMode(v as PeriodMode)} className="mb-3">
-        <TabsList className="grid grid-cols-4 w-full">
-          <TabsTrigger value="day" className="text-xs">Dia</TabsTrigger>
+        <TabsList className="grid grid-cols-5 w-full">
+          <TabsTrigger value="day" className="text-xs">Hoje</TabsTrigger>
+          <TabsTrigger value="yesterday" className="text-xs">Ontem</TabsTrigger>
           <TabsTrigger value="week" className="text-xs">Semana</TabsTrigger>
           <TabsTrigger value="month" className="text-xs">Mês</TabsTrigger>
           <TabsTrigger value="custom" className="text-xs">Período</TabsTrigger>
@@ -136,8 +193,43 @@ function DashboardTab() {
           <div><Label className="text-[10px]">Fim</Label><Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="h-8 text-xs" /></div>
         </CardContent></Card>
       )}
-      <p className="text-xs text-muted-foreground mb-2">{range.label} · Sistema inteiro</p>
-      {loading || !stats ? (
+
+      {/* Escopo: empresa e trabalhador da empresa selecionada */}
+      <Card className="mb-3"><CardContent className="p-2 grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-[10px]">Empresa</Label>
+          <Select
+            value={selectedAdmin}
+            onValueChange={(v) => { setSelectedAdmin(v); setSelectedWorker("all"); }}
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as empresas</SelectItem>
+              {admins.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-[10px]">Trabalhador</Label>
+          <Select value={selectedWorker} onValueChange={setSelectedWorker}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Equipe inteira</SelectItem>
+              {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent></Card>
+
+      <p className="text-xs text-muted-foreground mb-2">
+        {range.label} · {selectedAdmin === "all" ? "Todas as empresas" : (adminNames[selectedAdmin] || "Empresa")}
+        {selectedWorker !== "all" && ` · ${workers.find((w) => w.id === selectedWorker)?.nome || "Trabalhador"}`}
+      </p>
+      {error ? (
+        <Card><CardContent className="p-4 text-sm text-destructive">
+          Não foi possível carregar os dados deste escopo. Tente atualizar novamente.
+        </CardContent></Card>
+      ) : loading || !stats ? (
         <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
       ) : (
         <>
@@ -149,18 +241,42 @@ function DashboardTab() {
             <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Emprestado" value={formatCurrency(stats.emprestado)} />
             <DKpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Retirado" value={formatCurrency(stats.retirada)} cls="text-destructive" />
             <DKpi icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Aporte" value={formatCurrency(stats.aporte)} cls="text-success" />
-            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Saldo líquido" value={formatCurrency(stats.saldoLiquido)} cls={stats.saldoLiquido >= 0 ? "text-success" : "text-destructive"} />
+            <DKpi icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Despesas" value={formatCurrency(stats.despesas)} cls="text-destructive" />
+            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa disponível" value={formatCurrency(stats.availableCash)} />
+            <DKpi icon={<Wallet className="h-4 w-4 text-primary" />} label="Na rua" value={formatCurrency(stats.saldoNaRua)} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <DMini label="Clientes" value={stats.clientesAtivos} />
             <DMini label="Empr.Ativos" value={stats.emprestimosAtivos} />
             <DMini label="Clientes atrasados" value={stats.atrasados} cls="text-destructive" />
           </div>
+
+          {selectedAdmin === "all" && companies.length > 0 && (
+            <Card className="mt-3"><CardContent className="p-0 divide-y">
+              {companies.map((c) => (
+                <button
+                  key={c.admin_id}
+                  type="button"
+                  onClick={() => { setSelectedAdmin(c.admin_id); setSelectedWorker("all"); }}
+                  className="w-full text-left p-3 hover:bg-muted/40"
+                >
+                  <p className="text-sm font-medium">{c.admin_name}</p>
+                  <div className="grid grid-cols-2 gap-x-3 text-[11px] text-muted-foreground mt-1">
+                    <span>Trabalhadores: <b className="text-foreground">{c.workers.length}</b></span>
+                    <span>Recebido: <b className="text-success">{formatCurrency(c.totals.recebido)}</b></span>
+                    <span>Emprestado: <b className="text-foreground">{formatCurrency(c.totals.emprestado)}</b></span>
+                    <span>Caixa: <b className="text-foreground">{formatCurrency(c.totals.availableCash)}</b></span>
+                  </div>
+                </button>
+              ))}
+            </CardContent></Card>
+          )}
         </>
       )}
     </div>
   );
 }
+
 function DKpi({ icon, label, value, cls }: { icon: React.ReactNode; label: string; value: string; cls?: string }) {
   return (<Card><CardContent className="p-2.5">
     <div className="flex items-center gap-1.5 mb-0.5">{icon}<p className="text-[11px] text-muted-foreground">{label}</p></div>
