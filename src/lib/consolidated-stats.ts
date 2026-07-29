@@ -244,13 +244,13 @@ export async function loadWorkersStats(
     s.previsto += amount;
     const pending = Math.max(amount - paid, 0);
     s.faltaReceber += pending;
-    // Valor atrasado: parcela do período já vencida (limite = hoje ou fim do período),
-    // cobrável, não totalmente paga e de empréstimo ativo.
+    // Valor atrasado: parcela do período com vencimento ANTERIOR à data de referência
+    // (hoje ou fim do período). Parcela que vence na data de referência NÃO é atrasada.
     const dueDate = String(i.due_date || "");
     const loanStatus = String(i.loans?.status ?? "");
     if (
-      pending > 0.001 &&
-      dueDate && dueDate <= overdueReferenceDate &&
+      pending > 0.01 &&
+      dueDate && dueDate < overdueReferenceDate &&
       (collectibleStatuses as readonly string[]).includes(String(i.status)) &&
       (activeLoanStatuses as readonly string[]).includes(loanStatus)
     ) {
