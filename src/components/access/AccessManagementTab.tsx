@@ -7,6 +7,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Loader2, ChevronDown, Building2 } from "lucide-react";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
+
 import {
   AccessMaps,
   AccessStatus,
@@ -92,9 +94,12 @@ export default function AccessManagementTab() {
 
   return (
     <div className="space-y-3">
+      <WorkerRequestsSuperAdminSection />
+
       {!enforcement && (
         <Badge variant="outline" className="text-[10px]">Bloqueio automático desativado</Badge>
       )}
+
 
       <Card>
         <CardContent className="p-3 grid grid-cols-2 gap-2 text-[11px]">

@@ -1651,6 +1651,62 @@ export type Database = {
           },
         ]
       }
+      worker_creation_requests: {
+        Row: {
+          admin_id: string
+          created_at: string
+          created_worker_id: string | null
+          id: string
+          notes: string | null
+          rejection_reason: string | null
+          requested_at: string
+          requested_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          worker_name: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          created_worker_id?: string | null
+          id?: string
+          notes?: string | null
+          rejection_reason?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          worker_name: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          created_worker_id?: string | null
+          id?: string
+          notes?: string | null
+          rejection_reason?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          worker_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_creation_requests_created_worker_id_fkey"
+            columns: ["created_worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       worker_credentials_log: {
         Row: {
           admin_id: string | null
