@@ -29,6 +29,7 @@ import {
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
+import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 
 
 type Worker = {
@@ -113,6 +114,7 @@ function OverviewTab() {
   const [customStart, setCustomStart] = useState(new Date().toISOString().slice(0, 10));
   const [customEnd, setCustomEnd] = useState(new Date().toISOString().slice(0, 10));
   const [selectedWorker, setSelectedWorker] = useState<string>("all");
+  const [rows, setRows] = useState<WorkerStats[] | null>(null);
   const [stats, setStats] = useState<WorkerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -130,10 +132,11 @@ function OverviewTab() {
           workerIds: selectedWorker === "all" ? undefined : [selectedWorker],
         });
         if (cancel) return;
+        setRows(list);
         setStats(consolidate(list));
       } catch (err) {
         console.error("[AdminPanel] falha ao carregar indicadores", err);
-        if (!cancel) { setStats(null); setError(true); }
+        if (!cancel) { setRows(null); setStats(null); setError(true); }
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -192,7 +195,8 @@ function OverviewTab() {
             <MiniStat label="Clientes ativos" value={stats.clientesAtivos} />
           </div>
 
-          <h2 className="text-sm font-semibold mb-2">Movimentação do período</h2>
+          <h2 className="text-sm font-semibold">No período selecionado</h2>
+          <p className="text-[11px] text-muted-foreground mb-2">Movimentação do período · {range.label}</p>
           <div className="grid grid-cols-2 gap-2">
             <Kpi icon={<Target className="h-4 w-4 text-primary" />} label="Previsto" value={formatCurrency(stats.previsto)} />
             <Kpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} valueClass="text-success" />
@@ -200,6 +204,12 @@ function OverviewTab() {
             <Kpi icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Valor atrasado" value={formatCurrency(stats.valorAtrasado)} valueClass="text-destructive" />
             <Kpi icon={<TrendingUp className="h-4 w-4 text-primary" />} label="Emprestado no período" value={formatCurrency(stats.emprestado)} />
           </div>
+
+          {selectedWorker === "all" && rows && rows.length > 0 && (
+            <WorkerSummaryList stats={rows} onSelect={(id) => setSelectedWorker(id)} />
+          )}
+
+          <FinancialDetails stats={stats} />
         </>
       )}
     </div>
@@ -234,8 +244,6 @@ function WorkersTab() {
   const { isSuperAdmin } = useAuth();
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   // resetRequests removed: handled by PasswordRecoveryBell in header
-  const [stats, setStats] = useState<Record<string, WorkerStats>>({});
-  const [availableCash, setAvailableCash] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
@@ -289,32 +297,11 @@ function WorkersTab() {
     }
   }
 
+  // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
   async function load() {
     setLoading(true);
-    const today = new Date().toISOString().slice(0, 10);
-    const range = getPeriodRange("day", today, today);
-    const [{ data: w }, statsList] = await Promise.all([
-      supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived }),
-      loadWorkersStats(range),
-    ]);
-    const wList = (w as any) || [];
-    setWorkers(wList);
-    const map: Record<string, WorkerStats> = {};
-    statsList.forEach((s) => { if (s.worker_id) map[s.worker_id] = s; });
-    setStats(map);
-
-    // Current available cash per active worker (dynamic — not historical)
-    const activeIds = wList.filter((x: any) => !x.archived_at).map((x: any) => x.id);
-    if (activeIds.length > 0) {
-      try {
-        setAvailableCash(await fetchAvailableCashByWorker(activeIds));
-      } catch (err) {
-        console.error("[AdminPanel] falha ao carregar caixa disponível", err);
-        toast({ title: "Não foi possível carregar o caixa disponível dos trabalhadores.", variant: "destructive" });
-      }
-    } else {
-      setAvailableCash({});
-    }
+    const { data: w } = await supabase.rpc("admin_list_workers" as any, { p_include_archived: showArchived });
+    setWorkers((w as any) || []);
     setLoading(false);
   }
 
@@ -526,7 +513,6 @@ function WorkersTab() {
           />
         ) : (
           workers.map((w) => {
-            const s = stats[w.id];
             return (
               <Card key={w.id}>
                 <CardContent className="p-3">
@@ -570,22 +556,6 @@ function WorkersTab() {
                       </Button>
                     )}
                   </div>
-                  {s && (
-                    <div className="grid grid-cols-4 gap-1 text-[10px] border-t pt-2">
-                      <div><div className="text-muted-foreground">Clientes</div><div className="font-bold">{s.clientesAtivos}</div></div>
-                      <div><div className="text-muted-foreground">Empr.At</div><div className="font-bold">{s.emprestimosAtivos}</div></div>
-                      <div><div className="text-muted-foreground">Clientes atrasados</div><div className="font-bold text-destructive">{s.atrasados}</div></div>
-                      <div><div className="text-muted-foreground">N.Pagos hoje</div><div className="font-bold text-destructive">{s.naoPagosCount}</div></div>
-                      <div className="col-span-2"><div className="text-muted-foreground">Previsto hoje</div><div className="font-bold">{formatCurrency(s.previsto)}</div></div>
-                      <div className="col-span-2"><div className="text-muted-foreground">Recebido hoje</div><div className="font-bold text-success">{formatCurrency(s.recebido)}</div></div>
-                    </div>
-                  )}
-                  {!w.archived_at && availableCash[w.id] != null && (
-                    <div className="mt-2 pt-2 border-t flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground">Caixa disponível atual</span>
-                      <span className="font-bold">{formatCurrency(availableCash[w.id])}</span>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             );

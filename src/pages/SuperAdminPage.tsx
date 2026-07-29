@@ -52,6 +52,7 @@ import {
 import { TrendingUp, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Wallet, Target } from "lucide-react";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { useConfirm } from "@/hooks/useConfirm";
+import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 
 type AdminRow = {
   id: string;
@@ -241,7 +242,8 @@ function DashboardTab() {
             <DMini label="Clientes ativos" value={stats.clientesAtivos} />
           </div>
 
-          <h2 className="text-sm font-semibold mb-2">Movimentação do período</h2>
+          <h2 className="text-sm font-semibold">No período selecionado</h2>
+          <p className="text-[11px] text-muted-foreground mb-2">Movimentação do período · {range.label}</p>
           <div className="grid grid-cols-2 gap-2">
             <DKpi icon={<Target className="h-4 w-4 text-primary" />} label="Previsto" value={formatCurrency(stats.previsto)} />
             <DKpi icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido" value={formatCurrency(stats.recebido)} cls="text-success" />
@@ -251,25 +253,37 @@ function DashboardTab() {
           </div>
 
           {selectedAdmin === "all" && companies.length > 0 && (
-            <Card className="mt-3"><CardContent className="p-0 divide-y">
-              {companies.map((c) => (
-                <button
-                  key={c.admin_id}
-                  type="button"
-                  onClick={() => { setSelectedAdmin(c.admin_id); setSelectedWorker("all"); }}
-                  className="w-full text-left p-3 hover:bg-muted/40"
-                >
-                  <p className="text-sm font-medium">{c.admin_name}</p>
-                  <div className="grid grid-cols-2 gap-x-3 text-[11px] text-muted-foreground mt-1">
-                    <span>Trabalhadores: <b className="text-foreground">{c.workers.length}</b></span>
-                    <span>Recebido: <b className="text-success">{formatCurrency(c.totals.recebido)}</b></span>
-                    <span>Emprestado: <b className="text-foreground">{formatCurrency(c.totals.emprestado)}</b></span>
-                    <span>Caixa: <b className="text-foreground">{formatCurrency(c.totals.availableCash)}</b></span>
-                  </div>
-                </button>
-              ))}
-            </CardContent></Card>
+            <div className="mt-4">
+              <h2 className="text-sm font-semibold mb-2">Resumo das empresas</h2>
+              <Card><CardContent className="p-0 divide-y">
+                {companies.map((c) => (
+                  <button
+                    key={c.admin_id}
+                    type="button"
+                    onClick={() => { setSelectedAdmin(c.admin_id); setSelectedWorker("all"); }}
+                    className="w-full text-left p-3 hover:bg-muted/40"
+                  >
+                    <p className="text-sm font-medium">{c.admin_name}</p>
+                    <div className="grid grid-cols-2 gap-x-3 text-[11px] text-muted-foreground mt-1">
+                      <span>Trabalhadores ativos: <b className="text-foreground">{c.workers.length}</b></span>
+                      <span>Caixa disponível: <b className="text-foreground">{formatCurrency(c.totals.availableCash)}</b></span>
+                      <span>Na rua: <b className="text-foreground">{formatCurrency(c.totals.saldoNaRua)}</b></span>
+                      <span>Recebido: <b className="text-success">{formatCurrency(c.totals.recebido)}</b></span>
+                      <span>Valor atrasado: <b className="text-destructive">{formatCurrency(c.totals.valorAtrasado)}</b></span>
+                      <span>Clientes atrasados: <b className="text-destructive">{c.totals.atrasados}</b></span>
+                    </div>
+                  </button>
+                ))}
+              </CardContent></Card>
+            </div>
           )}
+
+          {selectedAdmin !== "all" && selectedWorker === "all" && rows && rows.length > 0 && (
+            <WorkerSummaryList stats={rows} onSelect={(id) => setSelectedWorker(id)} />
+          )}
+
+          <FinancialDetails stats={stats} />
+
         </>
       )}
     </div>
@@ -412,12 +426,9 @@ function AdminsTab() {
                   <Switch checked={a.active} onCheckedChange={() => toggleActive(a)} />
                 </div>
 
-                <div className="grid grid-cols-4 gap-1 text-center">
-                  <MiniStat label="Trab" value={s?.workers_count ?? 0} />
-                  <MiniStat label="Empr" value={s?.active_loans ?? 0} />
-                  <MiniStat label="Receb." value={formatCurrency(s?.total_received ?? 0)} small />
-                  <MiniStat label="Empr.$" value={formatCurrency(s?.total_lent ?? 0)} small />
-                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Trabalhadores: <b className="text-foreground">{s?.workers_count ?? 0}</b> · Visão financeira no Dashboard
+                </p>
 
                 <div className="grid grid-cols-3 gap-1.5">
                   <Button size="sm" variant="default" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
