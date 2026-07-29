@@ -232,12 +232,19 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     const s = map.get(workerId);
     if (s) { s.atrasados = set.size; s.atrasadosClientIds = Array.from(set); }
   });
-
-
+  // Clientes ativos: cada client_id apenas uma vez, por trabalhador responsável.
+  const clientIdsByWorker = new Map<string, Set<string>>();
   ((clientsRes.data as any[]) || []).forEach((c) => {
-    const s = get(c.worker_id ?? null);
-    if (!s) return;
-    s.clientesAtivos += 1;
+    const workerId = c.worker_id ?? null;
+    const s = get(workerId);
+    if (!s || !workerId || !c.id) return;
+    const set = clientIdsByWorker.get(workerId) || new Set<string>();
+    set.add(String(c.id));
+    clientIdsByWorker.set(workerId, set);
+  });
+  clientIdsByWorker.forEach((set, workerId) => {
+    const s = map.get(workerId);
+    if (s) s.clientesAtivos = set.size;
   });
 
   // Caixa disponível atual — exclusivamente cash_balance.available_cash.
@@ -249,13 +256,14 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     throw err;
   }
 
-  // Derived
+  // Derived — falta receber já vem das parcelas do período (não é previsto - recebido).
   for (const s of map.values()) {
     s.totalSaidas = s.emprestado + s.retirada;
-    s.faltaReceber = Math.max(0, s.previsto - s.recebido);
-    s.percentual = s.previsto > 0 ? (s.recebido / s.previsto) * 100 : 0;
+    s.faltaReceber = Math.max(0, s.faltaReceber);
+    s.percentual = s.previsto > 0 ? ((s.previsto - s.faltaReceber) / s.previsto) * 100 : 0;
     s.saldoLiquido = s.recebido + s.aporte - s.emprestado - s.retirada;
   }
+
 
   return Array.from(map.values());
 }
