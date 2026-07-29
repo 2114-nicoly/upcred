@@ -31,9 +31,10 @@ import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import WorkerRequestsAdminSection from "@/components/access/WorkerRequestsAdminSection";
 
-import { AccessMaps, loadAccessMaps } from "@/lib/access-control";
+import { AccessMaps, EMPTY_ACCESS_MAPS, loadAccessMaps } from "@/lib/access-control";
 
 
 
@@ -587,6 +588,12 @@ function WorkersTab() {
                     license={accessMaps.licenseByWorker[w.id]}
                     lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
                   />
+                  <div className="flex justify-end">
+                    <AccessHistoryDialog
+                      workerName={w.nome}
+                      periods={accessMaps.periodsByWorker[w.id] ?? []}
+                    />
+                  </div>
 
                 </CardContent>
               </Card>
