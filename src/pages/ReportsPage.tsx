@@ -32,6 +32,10 @@ import {
   type ReportDetailsData, type ReportRecord,
 } from "@/lib/report-details";
 import { RecordSection } from "@/components/reports/RecordSection";
+import {
+  computeCoreTotals, fetchAvailableCashByWorker, sumAvailableCash,
+  type AvailableCashMap,
+} from "@/lib/finance-totals";
 
 
 
@@ -212,6 +216,21 @@ export default function ReportsPage() {
     return () => { alive = false; };
   }, [scopedEvents, activeIds, startDate, endDate]);
 
+  // Caixa disponível atual (cash_balance.available_cash) dos trabalhadores ativos.
+  const [availableCash, setAvailableCash] = useState<AvailableCashMap>({});
+  useEffect(() => {
+    let alive = true;
+    const ids = Array.from(activeIds);
+    if (!ids.length) { setAvailableCash({}); return; }
+    fetchAvailableCashByWorker(ids)
+      .then((m) => { if (alive) setAvailableCash(m); })
+      .catch((err) => {
+        console.error("[Reports] falha ao carregar caixa disponível", err);
+        toast.error("Não foi possível carregar o caixa disponível dos trabalhadores.");
+      });
+    return () => { alive = false; };
+  }, [activeIds]);
+
   const pendentesTotal = useMemo(
     () => Object.values(details.pendentesByDate).reduce((s, l: ReportRecord[]) => s + l.length, 0),
     [details],
@@ -221,7 +240,7 @@ export default function ReportsPage() {
 
 
 
-  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
+  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[], workerIdsForCash: string[] = []) => {
     const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
       evs.filter((e) => types.includes(e.event_type)).reduce((s, e) => s + Number(e[field] || 0), 0);
 
@@ -232,23 +251,33 @@ export default function ReportsPage() {
     );
     const diferenca = cash.reduce((s, c) => s + Number(c.closing_difference || 0), 0);
 
-    const recebido = sumEv(["pagamento"], "amount_in");
-    const multas = sumEv(["recebimento_multa"], "amount_in");
-    const emprestado = sumEv(["emprestimo_novo", "renovacao", "renegociacao"], "amount_out");
+    // Fonte única compartilhada: recebido (principal/multas) e emprestado real.
+    const core = computeCoreTotals(evs as any);
+    const recebido = core.recebidoPrincipal;
+    const multas = core.multasRecebidas;
+    const recebidoTotal = core.recebidoTotal;
+    const emprestado = core.emprestado;
     const entradas = sumEv(["entrada_manual"], "amount_in");
     const saidas = sumEv(["saida_manual", "saida"], "amount_out");
     const despesas = sumEv(["despesa"], "amount_out");
     const estornoEvs = evs.filter((e) => e.event_type.startsWith("estorno"));
     const estornos = estornoEvs.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0);
+    // Caixa disponível = SOMENTE cash_balance.available_cash dos trabalhadores ativos.
+    const caixaDisponivel = sumAvailableCash(availableCash, workerIdsForCash);
 
     return {
-      caixaInicial, caixaFinal, diferenca, recebido, multas, emprestado,
+      caixaInicial, caixaFinal, diferenca, recebido, multas, recebidoTotal, emprestado,
       entradas, saidas, despesas, estornos, estornosCount: estornoEvs.length,
+      caixaDisponivel,
     };
   };
 
   // Resumo consolidado da equipe
-  const summary = useMemo(() => sumTotals(scopedCash, scopedEvents), [scopedCash, scopedEvents]);
+  const summary = useMemo(
+    () => sumTotals(scopedCash, scopedEvents, workers.map((w) => w.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scopedCash, scopedEvents, workers, availableCash],
+  );
 
   // Comparativo por trabalhador ativo
   const workerRows = useMemo(() => {
@@ -260,9 +289,10 @@ export default function ReportsPage() {
       let statusLabel: "Aberto" | "Fechado" | "Não aberto" = "Não aberto";
       if (latest) statusLabel = latest.status === "closed" ? "Fechado" : "Aberto";
 
-      return { worker: w, statusLabel, totals: sumTotals(wCash, wEvents) };
+      return { worker: w, statusLabel, totals: sumTotals(wCash, wEvents, [w.id]) };
     });
-  }, [workers, scopedCash, scopedEvents]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workers, scopedCash, scopedEvents, availableCash]);
 
   // Comparativo por empresa (SuperAdmin — "Todas as empresas")
   const companyRows = useMemo(() => {
@@ -282,10 +312,11 @@ export default function ReportsPage() {
         overdueClients: aWorkers.reduce((sum, w) => sum + (details.atrasadosByWorker[w.id] || 0), 0),
         statusLabel,
         hasOpen: openCount > 0,
-        totals: sumTotals(aCash, aEvents),
+        totals: sumTotals(aCash, aEvents, aWorkers.map((w) => w.id)),
       };
     });
-  }, [globalMode, admins, workers, scopedCash, scopedEvents, details]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalMode, admins, workers, scopedCash, scopedEvents, details, availableCash]);
 
 
 
@@ -353,14 +384,16 @@ export default function ReportsPage() {
       pdf.text("Nenhuma movimentação registrada no período selecionado.");
     }
     pdf.table(null, ["Indicador", "Valor"], [
+      ["Caixa disponível da equipe", formatCurrency(summary.caixaDisponivel)],
       ["Caixa inicial da equipe", formatCurrency(summary.caixaInicial)],
       ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
-      ["Total recebido", formatCurrency(summary.recebido)],
+      ["Recebido principal", formatCurrency(summary.recebido)],
+      ["Multas recebidas", formatCurrency(summary.multas)],
+      ["Total recebido (com multas)", formatCurrency(summary.recebidoTotal)],
       ["Total emprestado", formatCurrency(summary.emprestado)],
       ["Entradas", formatCurrency(summary.entradas)],
       ["Saídas", formatCurrency(summary.saidas)],
       ["Despesas", formatCurrency(summary.despesas)],
-      ["Multas", formatCurrency(summary.multas)],
       ["Estornos", formatCurrency(summary.estornos)],
       ["Diferença total de caixa", formatCurrency(summary.diferenca)],
       ["Clientes pendentes de registro", String(pendentesTotal)],
@@ -373,19 +406,21 @@ export default function ReportsPage() {
     }
     pdf.table(
       null,
-      ["Trabalhador", "Status", "Cx. inicial", "Cx. final", "Recebido", "Emprestado", "Despesas", "Diferença", "Pend.", "Atras."],
+      ["Trabalhador", "Status", "Cx. disponível", "Cx. inicial", "Cx. final", "Recebido", "Multas", "Emprestado", "Despesas", "Diferença", "Pend.", "Atras."],
       workerRows.map((r) => [
         r.worker.nome, r.statusLabel,
+        formatCurrency(r.totals.caixaDisponivel),
         formatCurrency(r.totals.caixaInicial),
         formatCurrency(r.totals.caixaFinal),
         formatCurrency(r.totals.recebido),
+        formatCurrency(r.totals.multas),
         formatCurrency(r.totals.emprestado),
         formatCurrency(r.totals.despesas),
         formatCurrency(r.totals.diferenca),
         String(details.pendentesByWorker[r.worker.id] || 0),
         String(details.atrasadosByWorker[r.worker.id] || 0),
       ]),
-      { rightCols: [2, 3, 4, 5, 6, 7, 8, 9] },
+      { rightCols: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
     );
 
     // Detalhamento completo de clientes atrasados (situação atual da carteira)
@@ -438,9 +473,12 @@ export default function ReportsPage() {
 
     pdf.blockTitle("Totais finais");
     pdf.table(null, ["Total", "Valor"], [
-      ["Recebido no período", formatCurrency(summary.recebido)],
+      ["Recebido principal no período", formatCurrency(summary.recebido)],
+      ["Multas recebidas no período", formatCurrency(summary.multas)],
+      ["Total recebido (com multas)", formatCurrency(summary.recebidoTotal)],
       ["Emprestado no período", formatCurrency(summary.emprestado)],
       ["Despesas no período", formatCurrency(summary.despesas)],
+      ["Caixa disponível da equipe", formatCurrency(summary.caixaDisponivel)],
       ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
       ["Diferença total de caixa", formatCurrency(summary.diferenca)],
     ], { rightCols: [1] });
@@ -611,15 +649,17 @@ export default function ReportsPage() {
                   <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Trabalhadores ativos" value={String(workers.length)} />
                 </>
               )}
+              <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa disponível consolidado" : "Caixa disponível da equipe"} value={formatCurrency(summary.caixaDisponivel)} />
               <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa inicial consolidado" : "Caixa inicial da equipe"} value={formatCurrency(summary.caixaInicial)} />
 
               <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label={globalMode ? "Caixa final consolidado" : "Caixa final da equipe"} value={formatCurrency(summary.caixaFinal)} />
-              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebido)} tone="positive" />
+              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido principal" value={formatCurrency(summary.recebido)} tone="positive" />
+              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Multas recebidas" value={formatCurrency(summary.multas)} tone="positive" />
+              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido (com multas)" value={formatCurrency(summary.recebidoTotal)} tone="positive" />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
               <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas" value={formatCurrency(summary.entradas)} tone="positive" />
               <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas" value={formatCurrency(summary.saidas)} tone="negative" />
               <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Despesas" value={formatCurrency(summary.despesas)} tone="negative" />
-              <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Multas" value={formatCurrency(summary.multas)} tone="positive" />
               <ReportKpiCard icon={<RefreshCw className="h-4 w-4 text-muted-foreground" />} label="Estornos" value={formatCurrency(summary.estornos)} />
               <ReportKpiCard
                 icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
@@ -670,9 +710,11 @@ export default function ReportsPage() {
                           </div>
                           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
                             <span>Trabalhadores: <b className="text-foreground">{r.workersCount}</b></span>
+                            <span>Cx. disponível: <b className="text-foreground">{formatCurrency(r.totals.caixaDisponivel)}</b></span>
                             <span>Cx. inicial: <b className="text-foreground">{formatCurrency(r.totals.caixaInicial)}</b></span>
                             <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
                             <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
+                            <span>Multas: <b className="text-success">{formatCurrency(r.totals.multas)}</b></span>
                             <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
                             <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
                             <span>Clientes atrasados: <b className="text-destructive">{r.overdueClients}</b></span>
@@ -720,9 +762,11 @@ export default function ReportsPage() {
                           }`}>{r.statusLabel}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
+                          <span>Cx. disponível: <b className="text-foreground">{formatCurrency(r.totals.caixaDisponivel)}</b></span>
                           <span>Cx. inicial: <b className="text-foreground">{formatCurrency(r.totals.caixaInicial)}</b></span>
                           <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
                           <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
+                          <span>Multas: <b className="text-success">{formatCurrency(r.totals.multas)}</b></span>
                           <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
                           <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
                           <span>

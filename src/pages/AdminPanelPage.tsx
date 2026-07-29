@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchAvailableCashByWorker } from "@/lib/finance-totals";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -274,10 +275,12 @@ function WorkersTab() {
     // Current available cash per active worker (dynamic — not historical)
     const activeIds = wList.filter((x: any) => !x.archived_at).map((x: any) => x.id);
     if (activeIds.length > 0) {
-      const { data: cb } = await supabase.from("cash_balance").select("worker_id, available_cash").in("worker_id", activeIds);
-      const cbMap: Record<string, number> = {};
-      (cb || []).forEach((r: any) => { if (r.worker_id) cbMap[r.worker_id] = Number(r.available_cash || 0); });
-      setAvailableCash(cbMap);
+      try {
+        setAvailableCash(await fetchAvailableCashByWorker(activeIds));
+      } catch (err) {
+        console.error("[AdminPanel] falha ao carregar caixa disponível", err);
+        toast({ title: "Não foi possível carregar o caixa disponível dos trabalhadores.", variant: "destructive" });
+      }
     } else {
       setAvailableCash({});
     }
