@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
+import { getCurrentDailyCashScope, applyDailyCashScope, type ExplicitScope } from "@/lib/cash-utils";
 import { getDailyEvents, DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
 
@@ -433,8 +433,8 @@ export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCash
  * Load the LATEST snapshot version for a given closed day, if any. Returns
  * null when no snapshot exists (e.g. day closed before this feature shipped).
  */
-export async function loadDailyCashSnapshot(cashDate: string): Promise<DailyCashSnapshotPayload | null> {
-  const scope = await getCurrentDailyCashScope();
+export async function loadDailyCashSnapshot(cashDate: string, explicit?: ExplicitScope): Promise<DailyCashSnapshotPayload | null> {
+  const scope = await getCurrentDailyCashScope(explicit);
   let q: any = supabase.from("daily_cash_snapshots" as any)
     .select("payload, version")
     .eq("cash_date", cashDate);
@@ -452,8 +452,8 @@ export async function loadDailyCashSnapshot(cashDate: string): Promise<DailyCash
 /**
  * List all snapshot versions for a given closed day (ordered newest → oldest).
  */
-export async function listDailyCashSnapshotVersions(cashDate: string): Promise<DailyCashSnapshotVersion[]> {
-  const scope = await getCurrentDailyCashScope();
+export async function listDailyCashSnapshotVersions(cashDate: string, explicit?: ExplicitScope): Promise<DailyCashSnapshotVersion[]> {
+  const scope = await getCurrentDailyCashScope(explicit);
   let q: any = supabase.from("daily_cash_snapshots" as any)
     .select("id, daily_cash_id, version, closed_at, closed_by, reopen_reason, payload, created_at")
     .eq("cash_date", cashDate);
