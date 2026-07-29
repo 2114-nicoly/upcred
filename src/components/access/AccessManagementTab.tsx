@@ -177,8 +177,15 @@ export default function AccessManagementTab() {
                           lastPeriod={maps.lastPeriodByWorker[w.id]}
                           title="Licença"
                         />
+                        <RenewAccessDialog
+                          workerId={w.id}
+                          workerName={w.nome}
+                          license={maps.licenseByWorker[w.id]}
+                          onDone={() => void reload()}
+                        />
                       </div>
                     ))
+
                   )}
                 </CardContent>
               </CollapsibleContent>
