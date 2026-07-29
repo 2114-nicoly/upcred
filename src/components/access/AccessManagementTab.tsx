@@ -8,6 +8,8 @@ import { Loader2, ChevronDown, Building2 } from "lucide-react";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
+import RenewAccessDialog from "@/components/access/RenewAccessDialog";
+
 
 import {
   AccessMaps,
@@ -177,8 +179,15 @@ export default function AccessManagementTab() {
                           lastPeriod={maps.lastPeriodByWorker[w.id]}
                           title="Licença"
                         />
+                        <RenewAccessDialog
+                          workerId={w.id}
+                          workerName={w.nome}
+                          license={maps.licenseByWorker[w.id]}
+                          onDone={() => void reload()}
+                        />
                       </div>
                     ))
+
                   )}
                 </CardContent>
               </CollapsibleContent>
