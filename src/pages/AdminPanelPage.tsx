@@ -503,7 +503,7 @@ function WorkersTab() {
         As liberações e mensalidades são gerenciadas pelo SuperAdministrador.
       </p>
 
-      <WorkerRequestsAdminSection />
+      <WorkerRequestsAdminSection onChanged={load} />
 
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
