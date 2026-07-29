@@ -10,6 +10,7 @@ import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
 import RenewAccessDialog from "@/components/access/RenewAccessDialog";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
+import PauseAccessDialog from "@/components/access/PauseAccessDialog";
 
 
 import {
@@ -228,6 +229,13 @@ export default function AccessManagementTab() {
                             companyName={a.nome}
                             license={maps.licenseByWorker[w.id]}
                             lastPeriod={maps.lastPeriodByWorker[w.id]}
+                            onDone={() => void reload()}
+                          />
+                          <PauseAccessDialog
+                            workerId={w.id}
+                            workerName={w.nome}
+                            companyName={a.nome}
+                            license={maps.licenseByWorker[w.id]}
                             onDone={() => void reload()}
                           />
                           <AccessHistoryDialog
