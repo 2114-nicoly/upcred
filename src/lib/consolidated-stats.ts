@@ -159,13 +159,17 @@ export async function loadWorkersStats(range: PeriodRange): Promise<WorkerStats[
     return map.get(id) || null;
   };
 
-  // Previsto from installments (regular, pending/partial/overdue, active worker+client)
+  // Previsto do período = valor original das parcelas com vencimento no período.
+  // Falta receber = saldo pendente dessas mesmas parcelas (nunca negativo).
   ((insRes.data as any[]) || []).forEach((i) => {
     const s = get(i.loans?.worker_id ?? null);
     if (!s) return;
-    const remaining = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
-    s.previsto += remaining;
+    const amount = Number(i.amount || 0);
+    const paid = Number(i.paid_amount || 0);
+    s.previsto += amount;
+    s.faltaReceber += Math.max(amount - paid, 0);
   });
+
 
   // Cash flow from daily_events (non-reversed, active workers only)
   ((evRes.data as any[]) || []).forEach((e) => {
