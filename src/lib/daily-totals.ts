@@ -214,7 +214,7 @@ export async function getDailyCollectionSummary(
   // 3) Saldo inicial do dia (para conferência do caixa)
   let opening = 0;
   try {
-    const scope = await getCurrentDailyCashScope();
+    const scope = await getCurrentDailyCashScope({ workerId, adminId });
     const { data: dc } = await applyDailyCashScope(
       supabase.from("daily_cash").select("opening_balance, status").eq("cash_date", cashDate),
       scope
