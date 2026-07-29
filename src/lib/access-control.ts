@@ -118,10 +118,12 @@ export function getAccessStatus(license?: WorkerAccessLicense | null): AccessSta
   const end = parseLocalDate(license.access_end);
   if (!start && !end) return "unconfigured";
   const today = todayLocal();
+  // Prioridade: pausado > expirado > agendado > vence em breve > ativo.
+  // access_end é o último dia válido (não vence durante o próprio dia).
+  const days = end ? Math.round((end.getTime() - today.getTime()) / 86400000) : null;
+  if (days != null && days < 0) return "expired";
   if (start && start.getTime() > today.getTime()) return "scheduled";
-  if (!end) return "active";
-  const days = Math.round((end.getTime() - today.getTime()) / 86400000);
-  if (days < 0) return "expired";
+  if (days == null) return "active";
   if (days <= 7) return "expiring";
   return "active";
 }
@@ -153,7 +155,7 @@ export async function fetchCompanyControls(): Promise<CompanyAccessControl[]> {
 export async function fetchWorkerLicenses(): Promise<WorkerAccessLicense[]> {
   const { data } = await supabase
     .from("worker_access_licenses")
-    .select("id, worker_id, admin_id, monthly_price, access_start, access_end, manual_status, pause_reason, paused_at");
+    .select("id, worker_id, admin_id, monthly_price, access_start, access_end, manual_status, pause_reason, paused_at, paused_by");
   return ((data as any[]) ?? []) as WorkerAccessLicense[];
 }
 
