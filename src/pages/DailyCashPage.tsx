@@ -31,6 +31,7 @@ import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 
 
 import EmptyState from "@/components/EmptyState";
@@ -282,6 +283,17 @@ export default function DailyCashPage() {
   // Escopo efetivo: quando um trabalhador é visualizado por admin/super admin,
   // TODAS as consultas desta tela usam o worker_id dele.
   const { effectiveWorkerId, effectiveAdminId, viewingAsWorker, readOnly } = useEffectiveScope();
+  const scopeArg = useMemo(
+    () => ({ workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+    [effectiveWorkerId, effectiveAdminId],
+  );
+  /** Aplica worker_id/admin_id efetivos em qualquer query desta tela. */
+  const scopeRows = useCallback((q: any) => {
+    let out = q;
+    if (effectiveWorkerId) out = out.eq("worker_id", effectiveWorkerId);
+    else if (effectiveAdminId) out = out.eq("admin_id", effectiveAdminId);
+    return out;
+  }, [effectiveWorkerId, effectiveAdminId]);
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
