@@ -64,7 +64,7 @@ export default function PaymentHistoryPage() {
 
       if (error) throw error;
 
-      const clientIds = [...new Set((movements || []).map((m: any) => m.client_id).filter(Boolean))];
+      const clientIds = [...new Set(((movements as any[]) || []).map((m: any) => m.client_id).filter(Boolean))] as string[];
       const clientMap = new Map<string, string>();
       if (clientIds.length > 0) {
         const { data: clients } = await supabase.from("clients").select("id, name").in("id", clientIds);
