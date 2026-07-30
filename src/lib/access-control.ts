@@ -131,20 +131,49 @@ export function getAccessStatus(license?: WorkerAccessLicense | null): AccessSta
 
 /* ---------------- consultas ---------------- */
 
-/** enforcement_enabled — sempre false quando não puder ser carregado. */
-export async function fetchEnforcementEnabled(): Promise<boolean> {
+/** Estado do bloqueio automático; `error` quando não foi possível confirmar. */
+export type EnforcementState = { enabled: boolean; error: boolean };
+
+export async function fetchEnforcementState(): Promise<EnforcementState> {
   try {
     const { data, error } = await supabase
       .from("access_control_settings")
       .select("enforcement_enabled")
       .limit(1)
       .maybeSingle();
-    if (error || !data) return false;
-    return !!data.enforcement_enabled;
-  } catch {
-    return false;
+    if (error) {
+      console.error("Falha ao consultar enforcement_enabled:", error);
+      return { enabled: false, error: true };
+    }
+    if (!data) return { enabled: false, error: true };
+    return { enabled: !!data.enforcement_enabled, error: false };
+  } catch (e) {
+    console.error("Falha ao consultar enforcement_enabled:", e);
+    return { enabled: false, error: true };
   }
 }
+
+/** enforcement_enabled — sempre false quando não puder ser carregado. */
+export async function fetchEnforcementEnabled(): Promise<boolean> {
+  return (await fetchEnforcementState()).enabled;
+}
+
+/** Liga/desliga o bloqueio automático (somente SuperAdministrador via RLS). */
+export async function setEnforcementEnabled(enabled: boolean, userId?: string | null): Promise<void> {
+  const { data, error: selErr } = await supabase
+    .from("access_control_settings")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (!data?.id) throw new Error("Configuração de acesso não encontrada.");
+  const { error } = await supabase
+    .from("access_control_settings")
+    .update({ enforcement_enabled: enabled, updated_at: new Date().toISOString(), updated_by: userId ?? null })
+    .eq("id", data.id);
+  if (error) throw error;
+}
+
 
 export async function fetchCompanyControls(): Promise<CompanyAccessControl[]> {
   const { data } = await supabase
