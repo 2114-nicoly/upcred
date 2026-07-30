@@ -327,10 +327,13 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
       return { ...base, status, workerId, accessEnd };
     }
 
-    const allowed = status === "active" || status === "expiring";
+    // Bloqueia apenas pausado, expirado ou ainda não iniciado.
+    // Trabalhador sem licença (unconfigured) continua acessando por compatibilidade.
+    const blocked = status === "paused" || status === "expired" || status === "scheduled";
     return {
-      allowed,
-      reason: allowed ? null : (ACCESS_BLOCK_MESSAGE[status] ?? ACCESS_BLOCK_MESSAGE.unconfigured),
+      allowed: !blocked,
+      reason: blocked ? (ACCESS_BLOCK_MESSAGE[status] ?? null) : null,
+
       status,
       workerId,
       accessEnd,
