@@ -282,7 +282,8 @@ export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
   paused: "Seu acesso está pausado. Entre em contato com a empresa responsável.",
   expired: "Seu período de acesso expirou. Entre em contato com a empresa responsável.",
   unconfigured: "Seu acesso ainda não foi liberado.",
-  scheduled: "Seu acesso ainda não iniciou.",
+  scheduled: "Seu período de acesso ainda não começou.",
+
 };
 
 /**
