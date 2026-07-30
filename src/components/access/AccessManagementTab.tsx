@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { useConfirm } from "@/hooks/useConfirm";
+import { useAuth } from "@/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Loader2, ChevronDown, Building2 } from "lucide-react";
@@ -20,11 +24,13 @@ import {
   daysRemaining,
   ACCESS_STATUS_FILTERS,
   companyStatusLabel,
-  fetchEnforcementEnabled,
+  fetchEnforcementState,
+  setEnforcementEnabled,
   formatMoney,
   getAccessStatus,
   loadAccessMaps,
 } from "@/lib/access-control";
+
 
 type AdminRow = { id: string; nome: string };
 type WorkerRow = { id: string; nome: string; parent_admin_id: string | null };
