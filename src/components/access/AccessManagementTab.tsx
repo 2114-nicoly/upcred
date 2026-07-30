@@ -31,8 +31,12 @@ type WorkerRow = { id: string; nome: string; parent_admin_id: string | null };
 
 /** Aba "Acessos" — visão global, somente leitura nesta etapa. */
 export default function AccessManagementTab() {
+  const confirm = useConfirm();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [enforcement, setEnforcement] = useState(false);
+  const [enforcementError, setEnforcementError] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   const [maps, setMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
@@ -44,12 +48,13 @@ export default function AccessManagementTab() {
     setLoading(true);
     try {
       const [enf, adminsRes, workersRes, m] = await Promise.all([
-        fetchEnforcementEnabled(),
+        fetchEnforcementState(),
         supabase.rpc("super_admin_list_admins" as any),
         supabase.rpc("list_workers_by_admin" as any, { p_admin_id: null, p_include_archived: false }),
         loadAccessMaps(),
       ]);
-      setEnforcement(enf);
+      setEnforcement(enf.enabled);
+      setEnforcementError(enf.error);
       setAdmins(((adminsRes.data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome })));
       setWorkers(((workersRes.data as any[]) ?? []).map((w) => ({ id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id ?? null })));
       setMaps(m);
@@ -59,6 +64,55 @@ export default function AccessManagementTab() {
   };
 
   useEffect(() => { void reload(); }, []);
+
+  const toggleEnforcement = async () => {
+    const next = !enforcement;
+    if (next) {
+      let paused = 0, expired = 0, scheduled = 0;
+      workers.forEach((w) => {
+        const s = getAccessStatus(maps.licenseByWorker[w.id]);
+        if (s === "paused") paused++;
+        else if (s === "expired") expired++;
+        else if (s === "scheduled") scheduled++;
+      });
+      const ok = await confirm({
+        title: "Ativar bloqueio de acesso?",
+        description:
+          "Nenhum usuário ou dado será excluído. Apenas o acesso dos trabalhadores indicados será bloqueado.",
+        affected: [
+          { label: "Trabalhadores pausados", value: String(paused) },
+          { label: "Trabalhadores expirados", value: String(expired) },
+          { label: "Acesso ainda não iniciado", value: String(scheduled) },
+          { label: "Total que perderá o acesso", value: String(paused + expired + scheduled) },
+        ],
+        confirmText: "Ativar bloqueio",
+        destructive: true,
+      });
+      if (!ok) return;
+    } else {
+      const ok = await confirm({
+        title: "Desativar bloqueio de acesso?",
+        description:
+          "O bloqueio será suspenso, mas os status, vencimentos, pausas e históricos continuarão registrados.",
+        confirmText: "Desativar bloqueio",
+      });
+      if (!ok) return;
+    }
+
+    setSaving(true);
+    try {
+      await setEnforcementEnabled(next, user?.id ?? null);
+      setEnforcement(next);
+      setEnforcementError(false);
+      toast.success(next ? "Bloqueio ativado." : "Bloqueio desativado.");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message ?? "Não foi possível alterar o bloqueio.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
 
 
   const statusOf = (workerId: string) => getAccessStatus(maps.licenseByWorker[workerId]);
