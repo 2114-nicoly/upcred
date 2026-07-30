@@ -126,9 +126,36 @@ export default function AccessManagementTab() {
     <div className="space-y-3">
       <WorkerRequestsSuperAdminSection onChanged={() => void reload()} />
 
-      <Badge variant="outline" className="text-[10px]">
-        {enforcement ? "Bloqueio automático ativado" : "Bloqueio automático desativado"}
-      </Badge>
+      <Card>
+        <CardContent className="p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-medium">Controle automático de acesso</p>
+              <p className="text-[10px] text-muted-foreground">
+                {enforcementError
+                  ? "Não foi possível confirmar o estado do bloqueio."
+                  : enforcement
+                    ? "Bloqueio ativado — trabalhadores pausados, expirados ou ainda não iniciados não conseguem entrar."
+                    : "Bloqueio desativado — nenhum trabalhador é impedido de entrar por mensalidade."}
+              </p>
+            </div>
+            <Badge variant={enforcementError ? "outline" : enforcement ? "destructive" : "secondary"} className="text-[10px] shrink-0">
+              {enforcementError ? "Estado desconhecido" : enforcement ? "Bloqueio ativado" : "Bloqueio desativado"}
+            </Badge>
+          </div>
+          <Button
+            size="sm"
+            variant={enforcement ? "outline" : "default"}
+            className="h-8 w-full text-xs"
+            disabled={saving || enforcementError}
+            onClick={() => void toggleEnforcement()}
+          >
+            {saving && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+            {enforcement ? "Desativar bloqueio" : "Ativar bloqueio"}
+          </Button>
+        </CardContent>
+      </Card>
+
 
 
       <Card>
