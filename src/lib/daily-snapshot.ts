@@ -652,6 +652,11 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     not_paid_marks: enrichedNp,
     new_loans: newLoans,
     expense_breakdown: expenseBreakdown,
+    pending_installments: pendingInstallments,
+    overdue_clients: overdueClients,
+    portfolio_state: portfolioState,
+    scope_names: scopeNames,
+
   };
 }
 
