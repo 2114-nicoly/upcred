@@ -261,9 +261,11 @@ export default function DailyCashPage() {
   /** Aplica worker_id/admin_id efetivos em qualquer query desta tela. */
   const scopeRows = useCallback((q: any) => {
     let out = q;
+    // Escopo: aplicar AMBOS quando disponíveis (nunca worker OU admin).
     if (effectiveWorkerId) out = out.eq("worker_id", effectiveWorkerId);
-    else if (effectiveAdminId) out = out.eq("admin_id", effectiveAdminId);
+    if (effectiveAdminId) out = out.eq("admin_id", effectiveAdminId);
     return out;
+
   }, [effectiveWorkerId, effectiveAdminId]);
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
