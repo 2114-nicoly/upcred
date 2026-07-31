@@ -811,6 +811,18 @@ export default function DailyReportPage({
         <p className="text-xs text-muted-foreground">Caixa ainda aberto — valores do dia podem mudar.</p>
       )}
 
+      {frozen.warnings.length > 0 && (
+        <Card className="border-warning/50">
+          <CardContent className="p-3 text-xs space-y-1">
+            <p className="font-medium text-warning">Registro histórico incompleto</p>
+            {frozen.warnings.map((w) => (
+              <p key={w} className="text-muted-foreground">{w}</p>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+
       {!isMultiDay && cashSummary?.closingObs && (
         <Card>
           <CardContent className="p-3 text-xs">
