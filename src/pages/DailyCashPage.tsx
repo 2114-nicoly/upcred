@@ -38,7 +38,7 @@ import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { getDailyCollectionSummary } from "@/lib/daily-totals";
+import { getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
 import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
 
@@ -343,7 +343,7 @@ export default function DailyCashPage() {
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
-  const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
+  const [dailySummary, setDailySummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   // O resumo é carregado dentro de fetchData (atualização atômica após qualquer ação).
 

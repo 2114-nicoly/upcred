@@ -37,7 +37,7 @@ import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { computeDailyTotals, getDailyCollectionSummary } from "@/lib/daily-totals";
+import { computeDailyTotals, getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
 import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
@@ -63,7 +63,7 @@ export default function CaixaPage() {
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [snapshot, setSnapshot] = useState<DailyCashSnapshotPayload | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
+  const [collectionSummary, setCollectionSummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
   const receivedToday = collectionSummary.receivedToday;
