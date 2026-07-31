@@ -254,23 +254,33 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     paidMovesRes,
     penaltyMovesRes,
   ] = await Promise.all([
-    getDailyEvents(cashDate),
-    getDailyEvents(cashDate, { includeReversed: true }),
-    supabase.from("not_paid_marks").select("*").eq("mark_date", cashDate),
-    supabase.from("loans")
-      .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
-      .eq("loan_date", cashDate),
-    supabase.from("cash_movements")
-      .select("id, loan_id, installment_id, amount, created_at")
-      .eq("cash_date", cashDate)
-      .eq("type", "recebimento_normal")
-      .is("reversed_at", null),
-    supabase.from("cash_movements")
-      .select("amount")
-      .eq("cash_date", cashDate)
-      .eq("type", "recebimento_multa")
-      .is("reversed_at", null),
+    fetchScopedEvents(cashDate, scope, false),
+    fetchScopedEvents(cashDate, scope, true),
+    applyStrictScope(supabase.from("not_paid_marks").select("*").eq("mark_date", cashDate), scope),
+    applyStrictScope(
+      supabase.from("loans")
+        .select("id, worker_id, admin_id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
+        .eq("loan_date", cashDate),
+      scope,
+    ),
+    applyStrictScope(
+      supabase.from("cash_movements")
+        .select("id, worker_id, admin_id, loan_id, installment_id, amount, created_at")
+        .eq("cash_date", cashDate)
+        .eq("type", "recebimento_normal")
+        .is("reversed_at", null),
+      scope,
+    ),
+    applyStrictScope(
+      supabase.from("cash_movements")
+        .select("amount, worker_id, admin_id")
+        .eq("cash_date", cashDate)
+        .eq("type", "recebimento_multa")
+        .is("reversed_at", null),
+      scope,
+    ),
   ]);
+
 
   const events = (liveEvents || []) as DailyEvent[];
   const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(e => e.reversed_at != null);
