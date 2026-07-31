@@ -397,13 +397,14 @@ export function consolidate(
     total.clientesAtivos += s.clientesAtivos;
     total.emprestimosAtivos += s.emprestimosAtivos;
     total.faltaReceber += s.faltaReceber;
+    total.recebidoDoPrevisto += s.recebidoDoPrevisto;
     total.valorAtrasado += s.valorAtrasado;
   }
   total.atrasadosClientIds = Array.from(overdueClientKeys);
   total.atrasados = overdueClientKeys.size;
   total.totalSaidas = total.emprestado + total.retirada + total.despesas;
   total.faltaReceber = Math.max(0, total.faltaReceber);
-  total.percentual = total.previsto > 0 ? ((total.previsto - total.faltaReceber) / total.previsto) * 100 : 0;
+  total.percentual = total.previsto > 0 ? (total.recebidoDoPrevisto / total.previsto) * 100 : 0;
   total.saldoLiquido = total.recebido + total.aporte - total.emprestado - total.retirada - total.despesas;
   return total;
 }
