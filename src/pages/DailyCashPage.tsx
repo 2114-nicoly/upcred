@@ -525,123 +525,35 @@ export default function DailyCashPage() {
       setReversedEvents((allEventsIncReversed || []).filter((e) => e.reversed_at !== null));
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
-      // Build sets of loan IDs that already have payment or nao_pagou events today
-      const paidEventsByLoan = new Map<string, number>();
+      // Loans com pagamento/não pagou hoje (anti-reaparecimento na lista de pendentes)
       const paidLoanIds = new Set<string>();
       const npLoanIds = new Set<string>();
       const npInstIds = new Set<string>();
 
       for (const ev of allEvents) {
-        if (ev.event_type === "pagamento" && ev.loan_id) {
-          paidLoanIds.add(ev.loan_id);
-          paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
-        }
+        if (ev.event_type === "pagamento" && ev.loan_id) paidLoanIds.add(ev.loan_id);
       }
-      const paidMovementsByLoan = new Map<string, CashMovementPaymentRow[]>();
       for (const mov of (paidMovementsData || []) as CashMovementPaymentRow[]) {
-        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, [...(paidMovementsByLoan.get(mov.loan_id) || []), mov]);
-      }
-      for (const [loanId, movements] of paidMovementsByLoan) {
-        const total = movements.reduce((sum, mov) => sum + Number(mov.amount), 0);
-        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
-        paidLoanIds.add(loanId);
+        if (mov.loan_id) paidLoanIds.add(mov.loan_id);
       }
       for (const m of npMarks) {
         npLoanIds.add(m.loan_id);
         npInstIds.add(m.installment_id);
       }
 
-      // Build paid groups from daily_events (source of truth for display)
-      // We need loan info for display - fetch loans that have payments today
-      const paidLoanIdArr = [...paidLoanIds];
-      const paidGroupsList: PaidGroup[] = [];
-      if (paidLoanIdArr.length > 0) {
-        const { data: paidLoansData } = await scopeRows(supabase
-          .from("loans")
-          .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-          .in("id", paidLoanIdArr)) as unknown as { data: PaidLoanRow[] | null };
-
-        for (const loan of (paidLoansData || [])) {
-          const client = loan.clients;
-          const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          );
-          const totalAmount = Number(loan.total_amount);
-          const instCount = Number(loan.installment_count);
-          const instAmount = instCount > 0 ? totalAmount / instCount : 0;
-          const currentRemaining = Number(loan.remaining_balance);
-          const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
-
-          const baseStatic = {
-            clientName: client?.name || "Cliente",
-            clientId: loan.client_id,
-            loanId: loan.id,
-            accumulatedPaid,
-            remainingBalance: currentRemaining,
-            instAmount,
-            installmentIds: [] as string[],
-            totalAmount,
-            installmentCount: instCount,
-          };
-
-          const buildProgress = (totalPaid: number, remainingAfter: number): Partial<PaidGroup> => {
-            const remainingBefore = Math.min(totalAmount, remainingAfter + totalPaid);
-            const paidBefore = Math.max(0, totalAmount - remainingBefore);
-            const paidAfter = Math.max(0, totalAmount - remainingAfter);
-            return {
-              paidBefore, paidAfter, remainingBefore, remainingAfter,
-              progressBeforeFormatted: formatProgress(paidBefore, instAmount, instCount),
-              progressAfterFormatted: formatProgress(paidAfter, instAmount, instCount),
-              progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
-            };
-          };
-
-          if (movements.length > 0) {
-            // Walk forward: remainingBefore for first mov = currentRemaining + sum(all movements today)
-            const totalToday = movements.reduce((s, m) => s + Number(m.amount), 0);
-            let runningRemaining = Math.min(totalAmount, currentRemaining + totalToday);
-            for (const mov of movements) {
-              const amt = Number(mov.amount);
-              const after = Math.max(0, runningRemaining - amt);
-              paidGroupsList.push({
-                ...baseStatic,
-                movementId: mov.id,
-                totalPaid: amt,
-                ...buildProgress(amt, after),
-              } as PaidGroup);
-              runningRemaining = after;
-            }
-          } else {
-            const totalPaid = paidEventsByLoan.get(loan.id) || 0;
-            paidGroupsList.push({
-              ...baseStatic,
-              movementId: "",
-              totalPaid,
-              ...buildProgress(totalPaid, currentRemaining),
-            } as PaidGroup);
-          }
-        }
-
-        // Get installment IDs for undo capability
-        const { data: cmData } = await scopeRows(supabase.from("cash_movements")
-          .select("installment_id, loan_id")
-          .eq("type", "recebimento_normal")
-          .eq("cash_date", selectedDate)
-          .in("loan_id", paidLoanIdArr)
-          .is("reversed_at", null));
-        const instByLoan = new Map<string, string[]>();
-        for (const cm of (cmData || [])) {
-          if (cm.installment_id && cm.loan_id) {
-            if (!instByLoan.has(cm.loan_id)) instByLoan.set(cm.loan_id, []);
-            instByLoan.get(cm.loan_id)!.push(cm.installment_id);
-          }
-        }
-        for (const g of paidGroupsList) {
-          g.installmentIds = instByLoan.get(g.loanId) || [];
-        }
-      }
+      // Cards de pagamento: SOMENTE histórico congelado dos daily_events.
+      // Nada de saldo/parcelas atuais — pagamentos antigos nunca mudam.
+      const paidGroupsList = buildPaidGroupsFromFrozenEvents(
+        allEvents as unknown as FrozenPaymentEvent[],
+        {
+          cashDate: selectedDate,
+          scope: { workerId: effectiveWorkerId, adminId: effectiveAdminId },
+          legacyMovements: (paidMovementsData || []) as unknown as LegacyPaymentMovement[],
+        },
+      );
       if (isStale()) return;
       setPaidGroups(paidGroupsList);
+
 
       // Penalty payments total today (recebimento_multa)
       const { data: penPayData } = await (scopeRows(supabase
