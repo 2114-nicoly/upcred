@@ -31,6 +31,7 @@ import { getEventTypeLabel, getEventTypeColor } from "@/lib/daily-events";
 type Worker = {
   id: string; nome: string; login_codigo: string; active: boolean;
   created_at: string; notas: string | null; parent_admin_id: string | null;
+  archived_at?: string | null;
 };
 type AdminLite = { id: string; nome: string; active: boolean };
 type ClientRow = { id: string; name: string; phone: string | null; client_code: number | null };
