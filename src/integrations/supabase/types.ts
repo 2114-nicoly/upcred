@@ -1916,6 +1916,14 @@ export type Database = {
         Returns: string
       }
       _daily_cash_is_empty: { Args: { p_cash_id: string }; Returns: boolean }
+      _fmt_inst_fraction: {
+        Args: { p_inst_amount: number; p_paid: number }
+        Returns: string
+      }
+      _fmt_progress: {
+        Args: { p_count: number; p_inst_amount: number; p_paid: number }
+        Returns: string
+      }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_cleanup_empty_daily_cash: {
         Args: {
@@ -2161,6 +2169,18 @@ export type Database = {
           p_cash_date: string
           p_category: string
           p_description: string
+        }
+        Returns: Json
+      }
+      register_payment_tx: {
+        Args: {
+          p_amount: number
+          p_cash_date: string
+          p_client_id: string
+          p_installment_id?: string
+          p_loan_id: string
+          p_observation?: string
+          p_origin?: string
         }
         Returns: Json
       }

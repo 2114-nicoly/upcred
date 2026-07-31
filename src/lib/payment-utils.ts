@@ -10,7 +10,7 @@ import {
   LOAN_STATUS,
   isLoanActive,
 } from "@/lib/status-constants";
-import { loanProgressAt } from "@/lib/progress-utils";
+
 import {
   assertReversible,
   assertCashDateOpenForReversal,
@@ -103,35 +103,18 @@ export async function recalculateInstallments(loanId: string, paidAtDate?: strin
   }
 }
 
-/** Snapshot of non-penalty installments used for before/after capture. */
-async function captureInstallmentState(loanId: string) {
-  const { data } = await supabase
-    .from("installments")
-    .select("id, number, amount, paid_amount, status")
-    .eq("loan_id", loanId)
-    .eq("is_penalty", false)
-    .order("number");
-  const map = new Map<string, { id: string; number: number; amount: number; paid_amount: number; status: string }>();
-  for (const i of ((data as any[]) || [])) {
-    map.set(i.id, {
-      id: i.id,
-      number: Number(i.number),
-      amount: Number(i.amount),
-      paid_amount: Number(i.paid_amount || 0),
-      status: String(i.status),
-    });
-  }
-  return map;
-}
 
 
 /**
  * Register a regular payment against a loan.
- * 1. Calls apply_loan_payment RPC (remaining_balance -= amount)
- * 2. Updates installment records (informational)
- * 3. Updates cash balance (interest/principal split)
- * 4. Creates cash movement
- * 5. Creates daily event
+ *
+ * FONTE ÚNICA: toda a operação (empréstimo, parcelas, caixa, movimento,
+ * evento diário e metadata imutável) acontece dentro da RPC transacional
+ * `register_payment_tx`. Se qualquer etapa — inclusive a gravação do
+ * metadata — falhar, NADA é gravado (rollback total no banco).
+ *
+ * O cliente NÃO repete nenhuma dessas alterações.
+ * `cash_date` é o dia financeiro escolhido; `created_at` é o horário real.
  */
 export async function registerPayment(params: {
   loanId: string;
@@ -144,165 +127,42 @@ export async function registerPayment(params: {
   /** Starting installment number for overflow */
   startInstNumber?: number;
 }) {
-  const { loanId, amount, clientId, clientName, cashDate, origin, installmentId } = params;
+  const { loanId, amount, clientId, cashDate, origin, installmentId } = params;
   if (amount <= 0) return { applied: 0, newBalance: 0 };
 
-  const { data: loanData } = await supabase
-    .from("loans")
-    .select("amount, total_amount, remaining_balance, status, installment_count, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
-    .eq("id", loanId)
-    .single();
-
-  if (!loanData) throw new Error("Empréstimo não encontrado");
-  if (!isLoanActive(loanData)) throw new Error("Empréstimo inativo não pode receber pagamento.");
-
-  const applied = Math.min(amount, Math.max(0, Number(loanData.remaining_balance)));
-  if (applied <= 0.01) return { applied: 0, newBalance: Number(loanData.remaining_balance) };
-
-  // === Captura ANTES (empréstimo + parcelas) ===
-  const progressBefore = loanProgressAt(loanData as any, Number(loanData.remaining_balance));
-  const instBefore = await captureInstallmentState(loanId);
-
-  // 1. Atomic RPC: update remaining_balance
-  const { data: newBalance, error: rpcError } = await supabase.rpc("apply_loan_payment", {
+  const { data, error } = await supabase.rpc("register_payment_tx" as any, {
     p_loan_id: loanId,
-    p_amount: applied,
-  });
-  if (rpcError) throw rpcError;
+    p_amount: amount,
+    p_client_id: clientId,
+    p_cash_date: cashDate,
+    p_origin: origin,
+    p_installment_id: installmentId || null,
+  } as any);
+  if (error) throw error;
 
-  const loanInterest = Number(loanData.total_amount) - Number(loanData.amount);
-  const totalPaidBefore = Math.max(0, Number(loanData.total_amount) - Number(loanData.remaining_balance));
-  const interestRemaining = Math.max(0, loanInterest - totalPaidBefore);
-  const toInterest = Math.min(applied, interestRemaining);
-  const toPrincipal = applied - toInterest;
+  const result = (data ?? {}) as any;
+  const applied = Number(result.applied ?? 0);
+  const balanceAfter = Number(result.new_balance ?? 0);
+  const metadata = (result.metadata ?? {}) as any;
+  const movementId = (result.movement_id ?? null) as string | null;
+  const eventId = (result.event_id ?? null) as string | null;
+  const balanceBefore = Number(metadata.remaining_balance_before ?? balanceAfter + applied);
+  const clientName = String(metadata.client_name ?? params.clientName ?? "");
 
-  let movement: any = null;
-  let event: any = null;
-  try {
-    movement = await createCashMovement({
-      type: "recebimento_normal",
-      amount: applied,
-      client_id: clientId,
-      loan_id: loanId,
-      installment_id: installmentId || null,
-      observation: `Pagamento - ${clientName}`,
-      cash_date: cashDate,
-    }) as any;
-    event = await createDailyEvent({
-      cash_date: cashDate,
-      event_type: "pagamento",
-      client_id: clientId,
-      loan_id: loanId,
-      installment_id: installmentId || null,
-      amount_in: applied,
-      observation: `Pagamento - ${clientName}`,
-      origin,
-      cash_movement_id: movement?.id || null,
-    } as any) as any;
-    if (!movement?.id || !event?.id) throw new Error("Pagamento sem movimentação/evento financeiro vinculado.");
-    await linkCashMovementToDailyEvent(movement.id, event.id);
-    await updateCashBalance({
-      available_cash: applied,
-      interest_receivable: -toInterest,
-      money_lent: -toPrincipal,
-    });
-  } catch (err) {
-    if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
-    if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
-    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: applied });
-    await recalculateInstallments(loanId, cashDate);
-    throw err;
-  }
-
-  // Recalculate installment distribution based on remaining_balance
-  await recalculateInstallments(loanId, cashDate);
-  await recalculateCashBalanceFromLedger();
-
-  const balanceBefore = Number(loanData.remaining_balance);
-  const balanceAfter = Number(newBalance);
-
-  // === Captura DEPOIS + gravação imutável no metadata do evento ===
-  try {
-    const progressAfter = loanProgressAt(loanData as any, balanceAfter);
-    const instAfter = await captureInstallmentState(loanId);
-    const affected: any[] = [];
-    for (const [id, after] of instAfter) {
-      const before = instBefore.get(id);
-      const paidBeforeAmt = before ? before.paid_amount : 0;
-      const delta = after.paid_amount - paidBeforeAmt;
-      if (Math.abs(delta) < 0.005 && (before?.status ?? null) === after.status) continue;
-      affected.push({
-        installment_id: id,
-        number: after.number,
-        amount: after.amount,
-        paid_amount_before: paidBeforeAmt,
-        paid_amount_after: after.paid_amount,
-        status_before: before?.status ?? null,
-        status_after: after.status,
-        amount_applied: Number(delta.toFixed(2)),
-      });
-    }
-    affected.sort((a, b) => a.number - b.number);
-
-    // Nomes/escopo congelados no momento exato da ação.
-    const evWorkerId = (event as any)?.worker_id ?? null;
-    const evAdminId = (event as any)?.admin_id ?? null;
-    let frozenWorkerName: string | null = null;
-    if (evWorkerId) {
-      const { data: w } = await supabase
-        .from("workers").select("nome").eq("id", evWorkerId).maybeSingle();
-      frozenWorkerName = (w as any)?.nome ?? null;
-    }
-
-    const metadata = {
-      payment_amount: applied,
-      cash_date: cashDate,
-      recorded_at: new Date().toISOString(),
-      client_id: clientId,
-      client_name: clientName,
-      worker_id: evWorkerId,
-      admin_id: evAdminId,
-      worker_name: frozenWorkerName,
-      remaining_balance_before: balanceBefore,
-      remaining_balance_after: balanceAfter,
-      installment_progress_before: progressBefore.formatted,
-      installment_progress_after: progressAfter.formatted,
-      paid_installments_before: progressBefore.paid_installments,
-      paid_installments_after: progressAfter.paid_installments,
-      installments_advanced: Math.max(0, progressAfter.paid_installments - progressBefore.paid_installments),
-      total_installments: progressAfter.total_installments,
-      installment_amount: progressAfter.installment_amount,
-      progress_units_before: progressBefore.progress_units,
-      progress_units_after: progressAfter.progress_units,
-      is_imported_ongoing: !!(loanData as any).is_imported_ongoing,
-      initial_remaining_balance: (loanData as any).initial_remaining_balance ?? null,
-      amount_already_paid: (loanData as any).amount_already_paid ?? null,
-      affected_installments: affected,
-    };
-
-    await supabase
-      .from("daily_events" as any)
-      .update({ metadata } as any)
-      .eq("id", event.id);
-  } catch (err) {
-    console.warn("[registerPayment] progress metadata capture failed", err);
-  }
-
-
-  // Standard payment audit — always includes ids + snapshot for traceability.
+  // Auditoria (log complementar; o histórico imutável já está no daily_event).
   await logAction(
     "pagamento",
     "payment",
-    movement?.id ?? null,
+    movementId,
     { remaining_balance: balanceBefore },
     {
       loan_id: loanId,
       client_id: clientId,
       client_name: clientName,
       installment_id: installmentId || null,
-      payment_id: movement?.id ?? null,
-      cash_movement_id: movement?.id ?? null,
-      daily_event_id: event?.id ?? null,
+      payment_id: movementId,
+      cash_movement_id: movementId,
+      daily_event_id: eventId,
       amount: applied,
       cash_date: cashDate,
       remaining_balance: balanceAfter,
@@ -311,50 +171,43 @@ export async function registerPayment(params: {
     `Pagamento ${formatCurrency(applied)} - ${clientName}`,
   );
 
-  // Detect partial payment against the referenced installment (if any) and
-  // emit a dedicated audit line so partial receipts are first-class events.
+  // Pagamento parcial na parcela referenciada: linha de auditoria dedicada,
+  // lida do metadata congelado (sem reconsultar o estado atual).
   if (installmentId) {
-    try {
-      const { data: inst } = await supabase
-        .from("installments")
-        .select("number, amount, paid_amount, status")
-        .eq("id", installmentId)
-        .maybeSingle();
-      if (inst && inst.status !== "paid") {
-        const instAmount = Number(inst.amount);
-        const instPaid = Number(inst.paid_amount);
-        const instRemaining = Math.max(0, instAmount - instPaid);
-        await logAction(
-          "pagamento_parcial",
-          "installment",
-          installmentId,
-          { remaining_balance: balanceBefore, installment_paid_before: instPaid - applied },
-          {
-            loan_id: loanId,
-            client_id: clientId,
-            client_name: clientName,
-            installment_id: installmentId,
-            installment_number: (inst as any).number,
-            installment_amount: instAmount,
-            amount_paid: applied,
-            installment_remaining: instRemaining,
-            payment_id: movement?.id ?? null,
-            cash_movement_id: movement?.id ?? null,
-            daily_event_id: event?.id ?? null,
-            remaining_balance_before: balanceBefore,
-            remaining_balance_after: balanceAfter,
-            cash_date: cashDate,
-            timestamp: new Date().toISOString(),
-          },
-          `Pagamento parcial parcela #${(inst as any).number} - ${clientName} (${formatCurrency(applied)}/${formatCurrency(instAmount)})`,
-        );
-      }
-    } catch (err) {
-      console.warn("[registerPayment] pagamento_parcial audit failed", err);
+    const affected = (metadata.affected_installments ?? []) as any[];
+    const target = affected.find((i) => i.installment_id === installmentId);
+    if (target && target.status_after !== "paid") {
+      await logAction(
+        "pagamento_parcial",
+        "installment",
+        installmentId,
+        {
+          remaining_balance: balanceBefore,
+          installment_paid_before: Number(target.paid_amount_before ?? 0),
+        },
+        {
+          loan_id: loanId,
+          client_id: clientId,
+          client_name: clientName,
+          installment_id: installmentId,
+          installment_number: target.number,
+          installment_amount: Number(target.amount ?? 0),
+          amount_paid: Number(target.amount_applied ?? applied),
+          installment_remaining: Math.max(0, Number(target.amount ?? 0) - Number(target.paid_amount_after ?? 0)),
+          payment_id: movementId,
+          cash_movement_id: movementId,
+          daily_event_id: eventId,
+          remaining_balance_before: balanceBefore,
+          remaining_balance_after: balanceAfter,
+          cash_date: cashDate,
+          timestamp: new Date().toISOString(),
+        },
+        `Pagamento parcial parcela #${target.number} - ${clientName} (${formatCurrency(Number(target.amount_applied ?? applied))}/${formatCurrency(Number(target.amount ?? 0))})`,
+      );
     }
   }
 
-  return { applied, newBalance: Number(newBalance) };
+  return { applied, newBalance: balanceAfter };
 }
 
 /**
