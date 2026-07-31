@@ -232,6 +232,21 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
     event.event_type === "ajuste_manual" ||
     event.event_type === "despesa"
   ) {
+    const {
+      assertReversible,
+      assertCashDateOpenForReversal,
+      linkReversal,
+      linkEventReversal,
+    } = await import("@/lib/reversal");
+
+    if ((event as any).reversed_at) {
+      throw new Error("Este lançamento já foi estornado.");
+    }
+    await assertCashDateOpenForReversal(event.cash_date, {
+      workerId: (event as any).worker_id ?? null,
+      adminId: (event as any).admin_id ?? null,
+    });
+
     // Locate the original cash_movement (prefer linked id; else match by type+date)
     let movementId = event.cash_movement_id || null;
     let originalAmount = Number(event.amount_in) - Number(event.amount_out);
@@ -250,13 +265,9 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
         originalAmount = Number(original.amount);
       }
     } else {
-      const { data: orig } = await supabase
-        .from("cash_movements").select("amount").eq("id", movementId).maybeSingle();
-      if (orig) originalAmount = Number((orig as any).amount);
+      const { movement } = await assertReversible(movementId);
+      originalAmount = Number((movement as any).amount);
     }
-
-    if (movementId) await markCashMovementReversed(movementId);
-    await markDailyEventReversed(event.id);
 
     // Counter movement and event (negative amount, opposite in/out)
     const reasonSuffix = reason ? ` — Motivo: ${reason}` : "";
@@ -265,6 +276,8 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
       amount: -originalAmount,
       observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
       cash_date: event.cash_date,
+      reverses_movement_id: movementId,
+      reversal_reason: reason ?? null,
     }) as any;
     const reversalEvent = await createDailyEvent({
       cash_date: event.cash_date,
@@ -274,10 +287,37 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
       observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
       origin: "estorno",
       cash_movement_id: reversalMovement?.id || null,
+      metadata: {
+        reverses_movement_id: movementId,
+        reverses_event_id: event.id,
+        original_amount: originalAmount,
+        reversal_amount: -originalAmount,
+        net_effect: 0,
+        reversal_reason: reason ?? null,
+        original_metadata: (event as any).metadata ?? null,
+      },
     } as any) as any;
     if (reversalMovement?.id && reversalEvent?.id) {
       await linkCashMovementToDailyEvent(reversalMovement.id, reversalEvent.id);
+      await supabase
+        .from("daily_events" as any)
+        .update({ reverses_event_id: event.id, reversal_reason: reason ?? null } as any)
+        .eq("id", reversalEvent.id);
     }
+
+    if (movementId) {
+      await linkReversal({
+        originalMovementId: movementId,
+        reversalMovementId: reversalMovement?.id ?? null,
+        reason,
+      });
+    }
+    await linkEventReversal({
+      originalEventId: event.id,
+      reversalEventId: reversalEvent?.id ?? null,
+      reason,
+    });
+
 
     // Structured audit metadata for the reversal
     try {

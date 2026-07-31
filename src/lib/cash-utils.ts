@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUserId, getCurrentWorkerId } from "@/lib/auth-utils";
+import { sumLedgerMovements } from "@/lib/reversal";
+
 
 /**
  * Resolve worker_id/admin_id for a financial movement or daily event.
@@ -165,6 +167,9 @@ export async function createCashMovement(movement: {
   observation?: string | null;
   cash_date?: string | null;
   daily_event_id?: string | null;
+  /** Preenchido apenas em movimentações de estorno (contrapartida). */
+  reverses_movement_id?: string | null;
+  reversal_reason?: string | null;
 }) {
   const userId = await getCurrentUserId();
   const { worker_id, admin_id } = await resolveScope({
@@ -181,6 +186,8 @@ export async function createCashMovement(movement: {
     observation: movement.observation || null,
     cash_date: movement.cash_date || new Date().toISOString().slice(0, 10),
     daily_event_id: movement.daily_event_id || null,
+    reverses_movement_id: movement.reverses_movement_id || null,
+    reversal_reason: movement.reversal_reason || null,
     user_id: userId,
     worker_id,
     admin_id,
@@ -188,6 +195,7 @@ export async function createCashMovement(movement: {
   if (error) throw error;
   return data;
 }
+
 
 export async function linkCashMovementToDailyEvent(movementId: string, eventId: string) {
   const { error } = await supabase.from("cash_movements").update({ daily_event_id: eventId } as any).eq("id", movementId);
@@ -243,7 +251,9 @@ export async function deleteCashMovement(id: string) {
 export async function recalculateCashBalanceFromLedger() {
   const workerId = await getCurrentWorkerId();
 
-  let movQ = supabase.from("cash_movements").select("amount, worker_id, reversed_at");
+  let movQ = supabase
+    .from("cash_movements")
+    .select("id, amount, worker_id, reversed_at, reverses_movement_id, reversal_movement_id");
   let loanQ = supabase.from("loans").select("amount, total_amount, remaining_balance, status, worker_id");
   let instQ = supabase
     .from("installments")
@@ -259,15 +269,22 @@ export async function recalculateCashBalanceFromLedger() {
     movQ, loanQ, instQ,
   ]);
 
-  let available_cash = 0;
   let money_lent = 0;
   let interest_receivable = 0;
   let penalty_receivable = 0;
 
-  for (const m of (movements || []) as any[]) {
-    if (m.reversed_at) continue;
-    available_cash += Number(m.amount);
+  // REGRA ÚNICA: soma original + contrapartida (efeito líquido zero).
+  // Estornos legados (marcados sem contrapartida) são ignorados e sinalizados.
+  const { total: available_cash, legacyReversedWithoutCounter } = sumLedgerMovements(
+    (movements || []) as any[],
+  );
+  if (legacyReversedWithoutCounter.length > 0) {
+    console.warn(
+      "[cash-utils] movimentações estornadas sem contrapartida (padrão antigo):",
+      legacyReversedWithoutCounter,
+    );
   }
+
 
   for (const loan of (loans || []) as any[]) {
     // Skip inactive loans (cancelled/renegotiated) — they no longer represent receivables.
