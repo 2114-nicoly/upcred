@@ -19,6 +19,11 @@ import { isLoanActive } from "@/lib/status-constants";
 import { PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
+import AccessStatusBadge from "@/components/access/AccessStatusBadge";
+import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import {
+  AccessMaps, EMPTY_ACCESS_MAPS, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
+} from "@/lib/access-control";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { getEventTypeLabel, getEventTypeColor } from "@/lib/daily-events";
@@ -26,6 +31,7 @@ import { getEventTypeLabel, getEventTypeColor } from "@/lib/daily-events";
 type Worker = {
   id: string; nome: string; login_codigo: string; active: boolean;
   created_at: string; notas: string | null; parent_admin_id: string | null;
+  archived_at?: string | null;
 };
 type AdminLite = { id: string; nome: string; active: boolean };
 type ClientRow = { id: string; name: string; phone: string | null; client_code: number | null };
@@ -55,6 +61,8 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tab, setTab] = useState("resumo");
   const [loading, setLoading] = useState(true);
+  // Acesso/mensalidade: exibição padronizada (gestão fica na aba "Acessos").
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
 
@@ -72,6 +80,10 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
       if (cancel) return;
       const wRow = w as Worker | null;
       setWorker(wRow);
+      loadAccessMaps()
+        .then((m) => { if (!cancel) setAccessMaps(m); })
+        .catch(() => { /* exibição não deve quebrar o painel */ });
+
       setStats(statsList.find((s) => s.worker_id === workerId) ?? null);
       setClients((cs as ClientRow[]) || []);
       setLoans((ls as any) || []);
@@ -116,10 +128,15 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-bold truncate">{worker.nome}</h1>
-                {worker.active
-                  ? <Badge className="text-[10px]">Ativo</Badge>
-                  : <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
+                <AccessStatusBadge
+                  status={getEffectiveAccessStatus(
+                    accessMaps.licenseByWorker[worker.id],
+                    isCompanyPaused(worker.parent_admin_id ? accessMaps.controlByAdmin[worker.parent_admin_id] : null),
+                  )}
+                />
+                {worker.archived_at && <Badge variant="secondary" className="text-[10px]">Arquivado</Badge>}
               </div>
+
               <p className="text-xs text-muted-foreground">
                 Login <span className="font-mono">{worker.login_codigo}</span> · Criado {format(new Date(worker.created_at), "dd/MM/yyyy")}
               </p>
@@ -186,6 +203,12 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Sem dados no período.</CardContent></Card>
           )}
 
+          <WorkerAccessSummary
+            license={accessMaps.licenseByWorker[worker.id]}
+            lastPeriod={accessMaps.lastPeriodByWorker[worker.id]}
+            companyPaused={isCompanyPaused(worker.parent_admin_id ? accessMaps.controlByAdmin[worker.parent_admin_id] : null)}
+          />
+
           <AccessSection
             targetKind="worker"
             targetId={worker.id}
@@ -193,6 +216,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             nome={worker.nome}
             active={worker.active}
           />
+
 
           <RecentCashesSection workerId={worker.id} />
 

@@ -25,7 +25,7 @@ import AccessSection from "@/components/AccessSection";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import {
-  AccessMaps, EMPTY_ACCESS_MAPS, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
+  AccessMaps, EMPTY_ACCESS_MAPS, companyStatusLabel, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
 } from "@/lib/access-control";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
@@ -335,9 +335,13 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-bold truncate">{admin.nome}</h1>
-                {admin.active
-                  ? <Badge className="text-[10px]">Ativo</Badge>
-                  : <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
+                <Badge
+                  variant={companyPaused ? "destructive" : "outline"}
+                  className="text-[10px]"
+                >
+                  {companyStatusLabel(accessMaps.controlByAdmin[adminId])}
+                </Badge>
+
               </div>
               <p className="text-xs text-muted-foreground">
                 {admin.email_real}
@@ -346,7 +350,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
               </p>
               <p className="text-xs mt-1 flex items-center gap-1 text-muted-foreground">
                 <Users className="h-3 w-3" />
-                {workers.length} trabalhadores · {workers.filter((w) => w.active).length} ativos
+                {workers.length} trabalhadores · {workers.filter((w) => !w.archived_at).length} na operação
               </p>
             </div>
             <Button size="sm" onClick={() => viewAsAdmin("/admin")}>
