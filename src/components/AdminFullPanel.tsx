@@ -81,6 +81,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [workerToday, setWorkerToday] = useState<Record<string, WorkerToday>>({});
+  // Acesso/mensalidade: somente leitura aqui (gerenciado na aba "Acessos").
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
+  const companyPaused = isCompanyPaused(accessMaps.controlByAdmin[adminId]);
   const [reopenReqs, setReopenReqs] = useState<ReopenReq[]>([]);
   const [reopenBusy, setReopenBusy] = useState<string | null>(null);
 
