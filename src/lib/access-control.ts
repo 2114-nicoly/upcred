@@ -14,6 +14,7 @@ export type CompanyAccessControl = {
   manual_status: ManualStatus;
   pause_reason: string | null;
   paused_at: string | null;
+  paused_by: string | null;
 };
 
 export type WorkerAccessLicense = {
@@ -178,7 +179,7 @@ export async function setEnforcementEnabled(enabled: boolean, userId?: string | 
 export async function fetchCompanyControls(): Promise<CompanyAccessControl[]> {
   const { data } = await supabase
     .from("company_access_controls")
-    .select("id, admin_id, manual_status, pause_reason, paused_at");
+    .select("id, admin_id, manual_status, pause_reason, paused_at, paused_by");
   return ((data as any[]) ?? []) as CompanyAccessControl[];
 }
 

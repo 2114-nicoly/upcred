@@ -15,6 +15,7 @@ import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsS
 import RenewAccessDialog from "@/components/access/RenewAccessDialog";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import PauseAccessDialog from "@/components/access/PauseAccessDialog";
+import PauseCompanyDialog from "@/components/access/PauseCompanyDialog";
 
 
 import {
@@ -24,6 +25,9 @@ import {
   daysRemaining,
   ACCESS_STATUS_FILTERS,
   companyStatusLabel,
+  isCompanyPaused,
+  formatDateTime,
+  fetchGrantorNames,
   fetchEnforcementState,
   setEnforcementEnabled,
   formatMoney,
@@ -48,6 +52,7 @@ export default function AccessManagementTab() {
   const [maps, setMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<AccessStatus | "all">("all");
+  const [pauserNames, setPauserNames] = useState<Record<string, string>>({});
   const [paymentRange, setPaymentRange] = useState<"month" | "30d" | "year" | "all">("month");
 
   const reload = async () => {
@@ -64,6 +69,7 @@ export default function AccessManagementTab() {
       setAdmins(((adminsRes.data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome })));
       setWorkers(((workersRes.data as any[]) ?? []).map((w) => ({ id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id ?? null })));
       setMaps(m);
+      setPauserNames(await fetchGrantorNames(Object.values(m.controlByAdmin).map((c) => c.paused_by)));
     } finally {
       setLoading(false);
     }
