@@ -22,6 +22,11 @@ import {
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
+import AccessStatusBadge from "@/components/access/AccessStatusBadge";
+import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import {
+  AccessMaps, EMPTY_ACCESS_MAPS, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
+} from "@/lib/access-control";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
