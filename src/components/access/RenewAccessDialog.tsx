@@ -57,22 +57,28 @@ export default function RenewAccessDialog({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
   const [custom, setCustom] = useState(false);
-  const [customStart, setCustomStart] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
   const status = getAccessStatus(license ?? null);
   const currentEnd = license?.access_end ? String(license.access_end).slice(0, 10) : null;
   const stillValid = !!currentEnd && currentEnd >= todayLocal();
 
+  /** Sugestão inicial: dia seguinte ao vencimento (licença válida) ou hoje. */
+  const suggestedStart = stillValid && currentEnd ? nextDay(currentEnd) : todayLocal();
+
+  // Preenche a sugestão apenas ao abrir; depois o SuperAdmin controla o campo.
+  function handleOpenChange(o: boolean) {
+    if (saving) return;
+    if (o) setStartDate(suggestedStart);
+    setOpen(o);
+  }
+
   const monthsNum = Number(months);
-  const previewStart = useMemo(() => {
-    if (custom && !stillValid && customStart) return customStart;
-    if (stillValid && currentEnd) return nextDay(currentEnd);
-    return todayLocal();
-  }, [custom, stillValid, currentEnd, customStart]);
+  const previewStart = startDate || suggestedStart;
 
   const previewEnd = useMemo(() => {
-    if (custom && customEnd) return customEnd;
+    if (custom) return customEnd || null;
     if (!Number.isFinite(monthsNum) || monthsNum <= 0) return null;
     return addMonthsEnd(previewStart, monthsNum);
   }, [custom, customEnd, monthsNum, previewStart]);
@@ -84,8 +90,17 @@ export default function RenewAccessDialog({
     const m = monthsNum;
     if (!Number.isFinite(price) || price < 0) return toast.error("Valor mensal inválido");
     if (!Number.isFinite(paid) || paid < 0) return toast.error("Valor pago inválido");
+    if (!startDate) return toast.error("Informe a data inicial do novo período");
     const endOverride = custom ? customEnd : "";
+    if (custom && !endOverride) return toast.error("Informe a data final do período personalizado");
+    if (endOverride && endOverride < startDate) {
+      return toast.error("A data final não pode ser anterior à data inicial");
+    }
     if (!endOverride && (!Number.isFinite(m) || m <= 0)) return toast.error("Informe a quantidade de meses");
+    const finalEnd = endOverride || addMonthsEnd(startDate, m);
+    if (currentEnd && finalEnd < currentEnd) {
+      return toast.error("A renovação não pode encurtar o acesso já concedido");
+    }
 
     setSaving(true);
     try {
@@ -94,9 +109,9 @@ export default function RenewAccessDialog({
           worker_id: workerId,
           monthly_price: price,
           amount_paid: paid,
-          months_granted: m,
+          months_granted: custom ? null : m,
           payment_method: paymentMethod.trim() || null,
-          custom_start_date: custom && !stillValid && customStart ? customStart : null,
+          start_date: startDate,
           custom_end_date: endOverride || null,
           notes: notes.trim() || null,
         },
