@@ -214,43 +214,9 @@ const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => (
   },
 });
 
-// Paid group for display
-type PaidGroup = {
-  movementId: string;
-  clientName: string;
-  clientId: string;
-  loanId: string;
-  totalPaid: number;
-  accumulatedPaid: number;
-  remainingBalance: number;
-  instAmount: number;
-  installmentIds: string[];
-  // Progress tracking (before/after payment)
-  totalAmount: number;
-  installmentCount: number;
-  paidBefore: number;
-  paidAfter: number;
-  remainingBefore: number;
-  remainingAfter: number;
-  progressBeforeFormatted: string;
-  progressAfterFormatted: string;
-  progressDeltaFormatted: string;
-};
+// Cards "Pagos do Dia": montados apenas a partir do histórico congelado
+// (src/lib/paid-groups.ts). Nunca do estado atual do empréstimo.
 
-function formatInstFraction(paid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0) return "0";
-  const frac = paid / instAmount;
-  const rounded = Math.round(frac * 10) / 10;
-  if (Math.abs(rounded - Math.round(rounded)) < 0.05) return Math.round(rounded).toString();
-  return rounded.toFixed(1).replace(".", ",");
-}
-function formatProgress(paid: number, instAmount: number, count: number): string {
-  return `${formatInstFraction(paid, instAmount)}/${count}`;
-}
-function formatDelta(deltaPaid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0 || deltaPaid <= 0) return "+0";
-  return `+${formatInstFraction(deltaPaid, instAmount)}`;
-}
 
 type PendingFilter = "all" | "overdue" | "today";
 
