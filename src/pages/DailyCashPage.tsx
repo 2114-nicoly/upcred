@@ -459,7 +459,7 @@ export default function DailyCashPage() {
             setNewLoans((snap.new_loans as any) || []);
             setRenewalEvents((snap.renewal_events as any) || []);
             setReversedEvents((snap.reversed_events as any) || []);
-            setPaidGroups((snap.paid_groups as any) || []);
+            setPaidGroups(normalizeSnapshotPaidGroups((snap.paid_groups as any) || []));
             setNotPaidMarks((snap.not_paid_marks as any) || []);
             setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
             // Pendentes congelados (snapshot v2). Snapshots v1 não têm a lista.
