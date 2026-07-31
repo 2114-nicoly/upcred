@@ -35,6 +35,8 @@ export type LegacyPaymentMovement = {
   cash_date?: string | null;
   worker_id?: string | null;
   admin_id?: string | null;
+  /** Quando preenchido, o movimento já pertence a um daily_event (não é legado). */
+  daily_event_id?: string | null;
 };
 
 export type PaidGroup = {
