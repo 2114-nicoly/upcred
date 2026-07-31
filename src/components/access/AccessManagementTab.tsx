@@ -13,6 +13,7 @@ import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
 import RenewAccessDialog from "@/components/access/RenewAccessDialog";
+import EditAccessPeriodDialog from "@/components/access/EditAccessPeriodDialog";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import PauseAccessDialog from "@/components/access/PauseAccessDialog";
 import PauseCompanyDialog from "@/components/access/PauseCompanyDialog";
@@ -366,6 +367,14 @@ export default function AccessManagementTab() {
                             lastPeriod={maps.lastPeriodByWorker[w.id]}
                             onDone={() => void reload()}
                           />
+                          <EditAccessPeriodDialog
+                            workerId={w.id}
+                            workerName={w.nome}
+                            companyName={a.nome}
+                            license={maps.licenseByWorker[w.id]}
+                            onDone={() => void reload()}
+                          />
+
                           <PauseAccessDialog
                             workerId={w.id}
                             workerName={w.nome}
