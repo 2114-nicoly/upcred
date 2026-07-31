@@ -135,6 +135,19 @@ export function getAccessStatus(license?: WorkerAccessLicense | null): AccessSta
   return "active";
 }
 
+/**
+ * Status EXIBIDO do trabalhador, com a prioridade oficial:
+ * Empresa pausada > Pausado > Expirado > Agendado > Vence em breve > Ativo > Não configurado.
+ * Nunca altera o status armazenado na licença individual.
+ */
+export function getEffectiveAccessStatus(
+  license?: WorkerAccessLicense | null,
+  companyPaused?: boolean | null,
+): AccessStatus {
+  if (companyPaused) return "company_paused";
+  return getAccessStatus(license);
+}
+
 /* ---------------- consultas ---------------- */
 
 /** Estado do bloqueio automático; `error` quando não foi possível confirmar. */
