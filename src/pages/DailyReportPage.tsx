@@ -113,7 +113,7 @@ export default function DailyReportPage({
     opening: number; expected: number; counted: number | null; diff: number | null;
     closingObs: string | null;
   } | null>(null);
-  const [cashRows, setCashRows] = useState<any[]>([]);
+  const [frozen, setFrozen] = useState<FrozenReportPeriod>(() => emptyFrozenPeriod());
   const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
   const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
   const [loading, setLoading] = useState(false);
