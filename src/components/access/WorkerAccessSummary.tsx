@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import {
+  ACCESS_STATUS_LABEL,
   fetchGrantorNames,
   WorkerAccessLicense,
   WorkerAccessPeriod,
