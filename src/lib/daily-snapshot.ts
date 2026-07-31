@@ -663,16 +663,13 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     }
     overdueClients = [...overdueByClient.values()].sort((a, b) => b.overdue_days - a.overdue_days);
 
-    // --- Situação da carteira ao final do dia
-    let availableCash = 0;
-    try {
-      const { getCashBalance } = await import("@/lib/cash-utils");
-      const cb = await getCashBalance({
-        workerId: scope.worker_id,
-        adminId: scope.admin_id,
-      } as any);
-      availableCash = Number((cb as any)?.available_cash || 0);
-    } catch { availableCash = 0; }
+    // --- Situação da carteira ao final do dia (obrigatória)
+    const { getCashBalance } = await import("@/lib/cash-utils");
+    const cb = await getCashBalance({
+      workerId: scope.worker_id,
+      adminId: scope.admin_id,
+    } as any);
+    const availableCash = Number((cb as any)?.available_cash || 0);
 
     portfolioState = {
       available_cash: availableCash,
@@ -685,8 +682,10 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     };
   } catch (err) {
     if (err instanceof Error && err.message === OUT_OF_SCOPE_MESSAGE) throw err;
-    console.warn("[daily-snapshot] v2 sections failed", err);
+    console.error("[daily-snapshot] falha ao congelar seções obrigatórias", err);
+    throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
   }
+
 
   // ===== Validação final de isolamento (nada fora do escopo) =====
   assertAllInScope(events, scope, "daily_events");
