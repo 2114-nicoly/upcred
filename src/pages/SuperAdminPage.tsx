@@ -317,21 +317,26 @@ function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
   const [loading, setLoading] = useState(true);
   const [openCreate, setOpenCreate] = useState(false);
   const [creds, setCreds] = useState<GeneratedCreds | null>(null);
+  // Status oficial da empresa (pausa) — somente exibição aqui.
+  const [controlByAdmin, setControlByAdmin] = useState<Record<string, CompanyAccessControl>>({});
 
   async function load() {
     setLoading(true);
     const today = new Date().toISOString().slice(0, 10);
     const monthStart = new Date(); monthStart.setDate(1);
     const ms = monthStart.toISOString().slice(0, 10);
-    const [{ data: admins, error }, { data: stats }] = await Promise.all([
+    const [{ data: admins, error }, { data: stats }, maps] = await Promise.all([
       supabase.rpc("super_admin_list_admins" as any),
       supabase.rpc("super_admin_stats_by_admin" as any, { p_start: ms, p_end: today }),
+      loadAccessMaps().catch(() => EMPTY_ACCESS_MAPS),
     ]);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
     setList((admins as AdminRow[]) || []);
+    setControlByAdmin(maps.controlByAdmin);
     const map: Record<string, AdminStat> = {};
     ((stats as AdminStat[]) || []).forEach((s) => { map[s.admin_id] = s; });
     setStatsByAdmin(map);
+
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
