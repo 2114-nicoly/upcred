@@ -11,6 +11,13 @@ import {
   isLoanActive,
 } from "@/lib/status-constants";
 import { loanProgressAt } from "@/lib/progress-utils";
+import {
+  assertReversible,
+  assertCashDateOpenForReversal,
+  linkReversal,
+  linkEventReversal,
+} from "@/lib/reversal";
+
 
 
 /**
