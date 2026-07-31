@@ -369,21 +369,28 @@ export async function loadFrozenReportPeriod(scope: FrozenScope): Promise<Frozen
         pendentes = (snapPending || []).map((p) => pendingRecordFromSnapshot(p, date));
         atrasados = (snapOverdue || []).map((o) => overdueRecordFromSnapshot(o, date));
       } else {
-        // Snapshot v1: não congelou pendentes/atrasados.
+        // Snapshot v1: não congelou pendentes/atrasados. NUNCA completar com o
+        // estado atual — o histórico só mostra o que foi realmente gravado.
         incompleteSnapshot = true;
-        pendentes = details.pendentesByDate[date] || [];
-        warnings.push(`Dia ${dt(date)}: registro congelado antigo (v1) — pendentes e atrasados não foram salvos no fechamento.`);
+        pendentes = [];
+        atrasados = [];
+        warnings.push(`Dia ${dt(date)}: este fechamento antigo não possui histórico congelado completo — pendentes e atrasados: informação histórica indisponível.`);
       }
       portfolio = payload.portfolio_state || null;
     } else {
       events = dayLive;
       totals = totalsFromEvents(dayLive, cash);
-      pendentes = details.pendentesByDate[date] || [];
       if (closed) {
+        // Dia fechado sem snapshot: apenas os eventos históricos gravados.
         incompleteSnapshot = true;
-        warnings.push(`Dia ${dt(date)}: caixa fechado sem registro congelado — valores refletem os dados atuais.`);
+        pendentes = [];
+        atrasados = [];
+        warnings.push(`Dia ${dt(date)}: este fechamento antigo não possui histórico congelado completo — informação histórica indisponível para pendentes, atrasados e carteira.`);
+      } else {
+        pendentes = details.pendentesByDate[date] || [];
       }
     }
+
 
     days.push({
       date,
