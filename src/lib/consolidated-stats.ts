@@ -85,7 +85,7 @@ export type WorkerStats = {
 
 const empty = (id: string | null, name: string, adminId: string | null = null): WorkerStats => ({
   worker_id: id, worker_name: name, admin_id: adminId,
-  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, faltaReceber: 0, valorAtrasado: 0, percentual: 0,
+  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, faltaReceber: 0, recebidoDoPrevisto: 0, valorAtrasado: 0, percentual: 0,
   emprestado: 0, retirada: 0, aporte: 0, despesas: 0, estornos: 0, estornosCount: 0,
   totalSaidas: 0, saldoLiquido: 0,
   naoPagosCount: 0, renovacoes: 0, emprestimosNovos: 0,
