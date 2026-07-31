@@ -616,7 +616,7 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
   assertAllInScope(newLoans as any[], scope, "loans do dia");
   assertAllInScope(paidMovements as any[], scope, "cash_movements");
 
-  return {
+  const payload: DailyCashSnapshotPayload = {
 
     version: DAILY_SNAPSHOT_VERSION,
     cash_date: cashDate,
@@ -667,7 +667,55 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
     scope_names: scopeNames,
 
   };
+
+  assertSnapshotComplete(payload, { cashDate, scope, summaryHasError: !!dailySummary?.hasError });
+  return payload;
 }
+
+/** Snapshot obrigatório e completo — qualquer falha impede o fechamento. */
+function assertSnapshotComplete(
+  payload: DailyCashSnapshotPayload,
+  ctx: { cashDate: string; scope: SnapshotScope; summaryHasError: boolean },
+) {
+  const fail = (why: string) => {
+    console.error(`[daily-snapshot] snapshot incompleto: ${why}`, ctx.scope);
+    throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
+  };
+  if (payload.version !== 2) fail("versão inválida");
+  if (payload.cash_date !== ctx.cashDate) fail("data divergente");
+  if (payload.scope.worker_id !== ctx.scope.worker_id) fail("worker_id divergente");
+  if (payload.scope.admin_id !== ctx.scope.admin_id) fail("admin_id divergente");
+  if (!payload.daily_summary || ctx.summaryHasError) fail("resumo diário indisponível");
+  if (!payload.portfolio_state) fail("situação da carteira ausente");
+  if (!Number.isFinite(Number(payload.portfolio_state?.available_cash))) fail("caixa disponível inválido");
+  if (!payload.scope_names) fail("nomes do escopo ausentes");
+  if (ctx.scope.worker_id && !payload.scope_names.worker_name) fail("nome do trabalhador ausente");
+  for (const [k, v] of Object.entries(payload.totals)) {
+    if (!Number.isFinite(Number(v))) fail(`total inválido: ${k}`);
+  }
+  const arrays: Array<[string, any]> = [
+    ["events", payload.events],
+    ["reversed_events", payload.reversed_events],
+    ["paid_groups", payload.paid_groups],
+    ["not_paid_marks", payload.not_paid_marks],
+    ["new_loans", payload.new_loans],
+    ["pending_installments", payload.pending_installments],
+    ["overdue_clients", payload.overdue_clients],
+  ];
+  for (const [name, arr] of arrays) if (!Array.isArray(arr)) fail(`lista ausente: ${name}`);
+
+  assertAllInScope(payload.events as any[], ctx.scope, "daily_events");
+  assertAllInScope(payload.reversed_events as any[], ctx.scope, "daily_events (estornados)");
+  assertAllInScope(payload.not_paid_marks as any[], ctx.scope, "not_paid_marks");
+  assertAllInScope(payload.new_loans as any[], ctx.scope, "loans do dia");
+  for (const e of payload.events as any[]) {
+    if (e?.cash_date && e.cash_date !== ctx.cashDate) fail("evento de outra data");
+  }
+  for (const m of payload.not_paid_marks as any[]) {
+    if (m?.mark_date && m.mark_date !== ctx.cashDate) fail("marca de outra data");
+  }
+}
+
 
 /**
  * Save a new snapshot version for the given closed daily_cash. Each call
