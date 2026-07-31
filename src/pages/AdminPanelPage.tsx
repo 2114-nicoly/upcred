@@ -524,17 +524,12 @@ function WorkersTab() {
                     <button onClick={() => navigate(`/admin/worker/${w.id}`)} className="flex-1 text-left min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm truncate">{w.nome}</span>
-                        {w.archived_at ? (
+                        {w.archived_at && (
                           <Badge variant="outline" className="text-[10px]">Arquivado</Badge>
-                        ) : !w.active ? (
-                          <Badge variant="secondary" className="text-[10px]">Inativo</Badge>
-                        ) : null}
+                        )}
                       </div>
                       <div className="text-[11px] text-muted-foreground">Login <span className="font-mono">{w.login_codigo}</span></div>
                     </button>
-                    {!w.archived_at && (
-                      <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
-                    )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
                   </div>
                   <div className="flex flex-wrap gap-1 mb-2">
@@ -563,7 +558,9 @@ function WorkersTab() {
                   <WorkerAccessSummary
                     license={accessMaps.licenseByWorker[w.id]}
                     lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
+                    companyPaused={companyPaused}
                   />
+
                   <div className="flex justify-end">
                     <AccessHistoryDialog
                       workerName={w.nome}
