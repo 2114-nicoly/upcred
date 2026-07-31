@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2, Power,
+  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
