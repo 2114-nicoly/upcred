@@ -236,8 +236,10 @@ export async function fetchReportDetails(opts: {
     const st = instStats(e.loan_id);
     const meta = (e.metadata || {}) as any;
     const details: DetailLine[] = [];
-    const clientName = cName(e.client_id || loan?.client_id);
-    const workerName = wName(e.worker_id);
+    // Nomes congelados no metadata têm prioridade sobre os nomes atuais.
+    const clientName = (meta.client_name as string) || cName(e.client_id || loan?.client_id);
+    const workerName = (meta.worker_name as string) || wName(e.worker_id);
+
     const amountIn = Number(e.amount_in || 0);
     const amountOut = Number(e.amount_out || 0);
     let title = getEventTypeLabel(e.event_type);
