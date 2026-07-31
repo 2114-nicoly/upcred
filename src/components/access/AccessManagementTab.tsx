@@ -127,7 +127,12 @@ export default function AccessManagementTab() {
 
 
 
-  const statusOf = (workerId: string) => getAccessStatus(maps.licenseByWorker[workerId]);
+  /** Status exibido com a prioridade oficial (empresa pausada em primeiro). */
+  const statusOf = (workerId: string) => {
+    const w = workers.find((x) => x.id === workerId);
+    const control = w?.parent_admin_id ? maps.controlByAdmin[w.parent_admin_id] : null;
+    return getEffectiveAccessStatus(maps.licenseByWorker[workerId], isCompanyPaused(control));
+  };
 
   const visibleWorkers = useMemo(
     () =>
