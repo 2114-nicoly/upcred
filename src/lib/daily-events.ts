@@ -151,9 +151,11 @@ export async function getDailyEvents(
   let q: any = supabase.from("daily_events" as any)
     .select("*")
     .eq("cash_date", cashDate);
+  // Escopo: quando os dois existem, aplicar AMBOS (nunca worker OU admin).
   if (workerId) q = q.eq("worker_id", workerId);
-  else if (opts.adminId) q = q.eq("admin_id", opts.adminId);
+  if (opts.adminId) q = q.eq("admin_id", opts.adminId);
   if (!opts.includeReversed) q = q.is("reversed_at", null);
+
   const { data } = await q.order("created_at", { ascending: false });
   return (data as unknown as DailyEvent[]) || [];
 }
