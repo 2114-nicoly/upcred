@@ -434,7 +434,7 @@ export default function DailyCashPage() {
           .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, worker_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate)) as unknown as QueryResult<NewLoanInfo>,
         scopeRows(supabase.from("cash_movements")
-          .select("id, loan_id, amount, created_at")
+          .select("id, loan_id, client_id, amount, created_at, cash_date, worker_id, admin_id")
           .eq("cash_date", selectedDate)
           .eq("type", "recebimento_normal")
           .is("reversed_at", null)) as unknown as QueryResult<CashMovementPaymentRow>,
