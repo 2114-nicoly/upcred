@@ -462,9 +462,11 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
         <TabsContent value="trabalhadores" className="mt-3 space-y-2">
           <p className="text-[11px] text-muted-foreground">
             {workers.length} trabalhador(es) ·{" "}
-            {workers.filter((w) => w.active).length} ativos ·{" "}
-            {workers.filter((w) => !w.active && !w.archived_at).length} inativos ·{" "}
+            {workers.filter((w) => !w.archived_at).length} na operação ·{" "}
             {workers.filter((w) => w.archived_at).length} arquivados
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            Arquivar serve apenas para organizar a equipe. Pausa, vencimento e mensalidade ficam na aba “Acessos” do SuperAdministrador.
           </p>
           {workers.length === 0 ? (
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Nenhum trabalhador desta equipe.</CardContent></Card>
@@ -484,11 +486,8 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate flex items-center gap-1 flex-wrap">
                           {w.nome}
-                          {isArchived
-                            ? <Badge variant="outline" className="text-[9px]">Arquivado</Badge>
-                            : w.active
-                              ? <Badge className="text-[9px]">Ativo</Badge>
-                              : <Badge variant="secondary" className="text-[9px]">Inativo</Badge>}
+                          <AccessStatusBadge status={getEffectiveAccessStatus(accessMaps.licenseByWorker[w.id], companyPaused)} />
+                          {isArchived && <Badge variant="outline" className="text-[9px]">Arquivado</Badge>}
                           {!isArchived && <Badge variant={cashVariant} className="text-[9px]">Caixa: {cashLabel}</Badge>}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
@@ -505,13 +504,14 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
 
+                    <WorkerAccessSummary
+                      license={accessMaps.licenseByWorker[w.id]}
+                      lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
+                      companyPaused={companyPaused}
+                    />
+
                     <div className="flex flex-wrap gap-1">
                       {!isArchived && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleToggleActive(w, e)}>
-                          <Power className="h-3.5 w-3.5 mr-1" /> {w.active ? "Desativar" : "Ativar"}
-                        </Button>
-                      )}
-                      {!isArchived && !w.active && (
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleArchive(w, e)}>
                           <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
                         </Button>
@@ -528,6 +528,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       )}
 
                     </div>
+
                   </CardContent>
                 </Card>
               );
