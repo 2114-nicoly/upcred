@@ -14,6 +14,7 @@ export type CompanyAccessControl = {
   manual_status: ManualStatus;
   pause_reason: string | null;
   paused_at: string | null;
+  paused_by: string | null;
 };
 
 export type WorkerAccessLicense = {
@@ -178,7 +179,7 @@ export async function setEnforcementEnabled(enabled: boolean, userId?: string | 
 export async function fetchCompanyControls(): Promise<CompanyAccessControl[]> {
   const { data } = await supabase
     .from("company_access_controls")
-    .select("id, admin_id, manual_status, pause_reason, paused_at");
+    .select("id, admin_id, manual_status, pause_reason, paused_at, paused_by");
   return ((data as any[]) ?? []) as CompanyAccessControl[];
 }
 
@@ -262,8 +263,12 @@ export async function loadAccessMaps(): Promise<AccessMaps> {
 }
 
 export function companyStatusLabel(control?: CompanyAccessControl | null): string {
-  if (!control) return "Não configurado";
-  return control.manual_status === "paused" ? "Pausado" : "Ativo";
+  if (!control) return "Ativa";
+  return control.manual_status === "paused" ? "Pausada" : "Ativa";
+}
+
+export function isCompanyPaused(control?: CompanyAccessControl | null): boolean {
+  return control?.manual_status === "paused";
 }
 
 /* ---------------- verificação central de acesso ---------------- */
@@ -275,9 +280,11 @@ export type AccessCheck = {
   workerId: string | null;
   accessEnd: string | null;
   enforcementEnabled: boolean;
+  /** Empresa vinculada com acesso pausado (informativo mesmo sem bloqueio). */
+  companyPaused: boolean;
 };
 
-/** Mensagens exibidas ao trabalhador bloqueado (sem detalhes internos). */
+/** Mensagens exibidas ao usuário bloqueado (sem detalhes internos). */
 export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
   paused: "Seu acesso está pausado. Entre em contato com a empresa responsável.",
   expired: "Seu período de acesso expirou. Entre em contato com a empresa responsável.",
@@ -286,10 +293,36 @@ export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
 
 };
 
+export const COMPANY_PAUSED_MESSAGE =
+  "Esta empresa está com o acesso pausado. Entre em contato com o responsável pelo sistema.";
+
 /**
- * Verificação central de acesso individual do trabalhador.
- * Administrador e SuperAdministrador continuam sempre permitidos nesta etapa.
- * Quando enforcement_enabled = false nada é bloqueado — o status é apenas informativo.
+ * Situação da empresa do próprio usuário (RLS libera apenas a própria empresa).
+ * Falha de consulta nunca bloqueia: a empresa é considerada ativa.
+ */
+export async function fetchOwnCompanyPaused(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from("company_access_controls")
+      .select("manual_status")
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("Falha ao consultar situação da empresa:", error);
+      return false;
+    }
+    return (data as any)?.manual_status === "paused";
+  } catch (e) {
+    console.error("Falha ao consultar situação da empresa:", e);
+    return false;
+  }
+}
+
+/**
+ * Verificação central de acesso.
+ * SuperAdministrador sempre permitido. Administrador e trabalhador são bloqueados
+ * quando o bloqueio automático está ativado e a empresa está pausada; o trabalhador
+ * também depende da própria licença individual.
  */
 export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
   const enforcementEnabled = await fetchEnforcementEnabled();
@@ -300,6 +333,7 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
     workerId: null,
     accessEnd: null,
     enforcementEnabled,
+    companyPaused: false,
   };
   if (!userId) return base;
 
@@ -309,10 +343,25 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
       supabase.from("workers").select("id").eq("auth_user_id", userId).maybeSingle(),
     ]);
     const roleNames = ((roles as any[]) ?? []).map((r) => r.role as string);
-    if (roleNames.includes("super_admin") || roleNames.includes("admin")) return base;
+    if (roleNames.includes("super_admin")) return base;
+
+    // Empresa sem registro em company_access_controls é considerada ativa.
+    const companyPaused = await fetchOwnCompanyPaused();
+    const companyBlocked = enforcementEnabled && companyPaused;
+
+    if (roleNames.includes("admin")) {
+      return {
+        ...base,
+        companyPaused,
+        allowed: !companyBlocked,
+        reason: companyBlocked ? COMPANY_PAUSED_MESSAGE : null,
+      };
+    }
 
     const workerId = ((workerRow as any)?.id as string | undefined) ?? null;
-    if (!workerId) return base; // sem vínculo de trabalhador — nada a verificar nesta etapa
+    if (!workerId) {
+      return { ...base, companyPaused, allowed: !companyBlocked, reason: companyBlocked ? COMPANY_PAUSED_MESSAGE : null };
+    }
 
     const { data: licRow } = await supabase
       .from("worker_access_licenses")
@@ -324,7 +373,11 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
     const accessEnd = license?.access_end ?? null;
 
     if (!enforcementEnabled) {
-      return { ...base, status, workerId, accessEnd };
+      return { ...base, status, workerId, accessEnd, companyPaused };
+    }
+
+    if (companyPaused) {
+      return { ...base, status, workerId, accessEnd, companyPaused, allowed: false, reason: COMPANY_PAUSED_MESSAGE };
     }
 
     // Bloqueia apenas pausado, expirado ou ainda não iniciado.
@@ -338,9 +391,12 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
       workerId,
       accessEnd,
       enforcementEnabled,
+      companyPaused,
     };
-  } catch {
-    // Falha de rede/consulta nunca bloqueia o usuário nesta etapa.
+  } catch (e) {
+    // Falha de rede/consulta nunca bloqueia o usuário.
+    console.error("Falha na verificação central de acesso:", e);
     return base;
   }
 }
+
