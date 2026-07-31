@@ -40,14 +40,20 @@ function addMonths(dateStr: string, months: number): string {
   return `${base.getFullYear()}-${mm}-${dd}`;
 }
 
-/** Dia seguinte a uma data local YYYY-MM-DD. */
-function nextDay(dateStr: string): string {
+/** Dia anterior a uma data local YYYY-MM-DD. */
+function prevDay(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
-  const n = new Date(y, m - 1, d + 1);
+  const n = new Date(y, m - 1, d - 1);
   const mm = String(n.getMonth() + 1).padStart(2, "0");
   const dd = String(n.getDate()).padStart(2, "0");
   return `${n.getFullYear()}-${mm}-${dd}`;
 }
+
+/** Fim do período: início + N meses − 1 dia (mesma regra do frontend). */
+function addMonthsEnd(startStr: string, months: number): string {
+  return prevDay(addMonths(startStr, months));
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -82,7 +88,9 @@ Deno.serve(async (req) => {
     const paymentMethod = typeof body.payment_method === "string" ? body.payment_method.trim() || null : null;
     const notes = typeof body.notes === "string" ? body.notes.trim() || null : null;
     const monthsGranted = Number(body.months_granted ?? 0);
-    const customStart = typeof body.custom_start_date === "string" && body.custom_start_date ? body.custom_start_date : null;
+    const startDate = typeof body.start_date === "string" && body.start_date
+      ? body.start_date
+      : (typeof body.custom_start_date === "string" && body.custom_start_date ? body.custom_start_date : null);
     const customEnd = typeof body.custom_end_date === "string" && body.custom_end_date ? body.custom_end_date : null;
 
     if (!Number.isFinite(monthlyPrice) || monthlyPrice < 0) return json(400, { error: "Valor mensal inválido" });
@@ -90,7 +98,7 @@ Deno.serve(async (req) => {
     if (!customEnd && (!Number.isFinite(monthsGranted) || monthsGranted <= 0)) {
       return json(400, { error: "Quantidade de meses deve ser maior que zero" });
     }
-    if (customStart && !DATE_RE.test(customStart)) return json(400, { error: "Data inicial inválida" });
+    if (startDate && !DATE_RE.test(startDate)) return json(400, { error: "Data inicial inválida" });
     if (customEnd && !DATE_RE.test(customEnd)) return json(400, { error: "Data final inválida" });
 
     // ---------- dados carregados no servidor (nunca vindos do frontend) ----------
@@ -117,17 +125,14 @@ Deno.serve(async (req) => {
     const currentEnd: string | null = license?.access_end ? String(license.access_end).slice(0, 10) : null;
     const stillValid = !!currentEnd && currentEnd >= today;
 
-    // ---------- início do novo período ----------
-    let periodStart: string;
-    if (stillValid) {
-      // Renovação antecipada: continua no dia seguinte ao fim atual (não perde dias pagos).
-      periodStart = nextDay(currentEnd!);
-    } else {
-      periodStart = customStart ?? today;
+    // ---------- período (a data inicial escolhida é sempre respeitada) ----------
+    const periodStart = startDate ?? today;
+    const periodEnd = customEnd ?? addMonthsEnd(periodStart, monthsGranted);
+    if (periodEnd < periodStart) return json(400, { error: "A data final não pode ser anterior à data inicial" });
+    if (currentEnd && periodEnd < currentEnd) {
+      return json(400, { error: "A renovação não pode encurtar o acesso já concedido" });
     }
 
-    const periodEnd = customEnd ?? addMonths(periodStart, monthsGranted);
-    if (periodEnd < periodStart) return json(400, { error: "A data final não pode ser anterior à data inicial" });
 
     // ---------- proteção contra duplicidade ----------
     if (lastPeriod

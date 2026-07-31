@@ -57,22 +57,28 @@ export default function RenewAccessDialog({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
   const [custom, setCustom] = useState(false);
-  const [customStart, setCustomStart] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
   const status = getAccessStatus(license ?? null);
   const currentEnd = license?.access_end ? String(license.access_end).slice(0, 10) : null;
   const stillValid = !!currentEnd && currentEnd >= todayLocal();
 
+  /** Sugestão inicial: dia seguinte ao vencimento (licença válida) ou hoje. */
+  const suggestedStart = stillValid && currentEnd ? nextDay(currentEnd) : todayLocal();
+
+  // Preenche a sugestão apenas ao abrir; depois o SuperAdmin controla o campo.
+  function handleOpenChange(o: boolean) {
+    if (saving) return;
+    if (o) setStartDate(suggestedStart);
+    setOpen(o);
+  }
+
   const monthsNum = Number(months);
-  const previewStart = useMemo(() => {
-    if (custom && !stillValid && customStart) return customStart;
-    if (stillValid && currentEnd) return nextDay(currentEnd);
-    return todayLocal();
-  }, [custom, stillValid, currentEnd, customStart]);
+  const previewStart = startDate || suggestedStart;
 
   const previewEnd = useMemo(() => {
-    if (custom && customEnd) return customEnd;
+    if (custom) return customEnd || null;
     if (!Number.isFinite(monthsNum) || monthsNum <= 0) return null;
     return addMonthsEnd(previewStart, monthsNum);
   }, [custom, customEnd, monthsNum, previewStart]);
@@ -84,8 +90,17 @@ export default function RenewAccessDialog({
     const m = monthsNum;
     if (!Number.isFinite(price) || price < 0) return toast.error("Valor mensal inválido");
     if (!Number.isFinite(paid) || paid < 0) return toast.error("Valor pago inválido");
+    if (!startDate) return toast.error("Informe a data inicial do novo período");
     const endOverride = custom ? customEnd : "";
+    if (custom && !endOverride) return toast.error("Informe a data final do período personalizado");
+    if (endOverride && endOverride < startDate) {
+      return toast.error("A data final não pode ser anterior à data inicial");
+    }
     if (!endOverride && (!Number.isFinite(m) || m <= 0)) return toast.error("Informe a quantidade de meses");
+    const finalEnd = endOverride || addMonthsEnd(startDate, m);
+    if (currentEnd && finalEnd < currentEnd) {
+      return toast.error("A renovação não pode encurtar o acesso já concedido");
+    }
 
     setSaving(true);
     try {
@@ -94,9 +109,9 @@ export default function RenewAccessDialog({
           worker_id: workerId,
           monthly_price: price,
           amount_paid: paid,
-          months_granted: m,
+          months_granted: custom ? null : m,
           payment_method: paymentMethod.trim() || null,
-          custom_start_date: custom && !stillValid && customStart ? customStart : null,
+          start_date: startDate,
           custom_end_date: endOverride || null,
           notes: notes.trim() || null,
         },
@@ -116,11 +131,11 @@ export default function RenewAccessDialog({
 
   return (
     <>
-      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => handleOpenChange(true)}>
         <CalendarPlus className="h-3.5 w-3.5 mr-1" /> Renovar acesso
       </Button>
 
-      <Dialog open={open} onOpenChange={(o) => !saving && setOpen(o)}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">Renovar acesso</DialogTitle>
@@ -163,23 +178,23 @@ export default function RenewAccessDialog({
               </div>
             </div>
 
+            <div>
+              <Label className="text-xs">Data inicial do novo período</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Sugestão: {formatAccessDate(suggestedStart)} — pode ser alterada.
+              </p>
+            </div>
+
             <div className="flex items-center justify-between rounded-md border p-2">
               <Label className="text-xs">Período personalizado</Label>
               <Switch checked={custom} onCheckedChange={setCustom} />
             </div>
 
             {custom && (
-              <div className="grid grid-cols-2 gap-2">
-                {!stillValid && (
-                  <div>
-                    <Label className="text-xs">Data inicial</Label>
-                    <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                  </div>
-                )}
-                <div>
-                  <Label className="text-xs">Data final</Label>
-                  <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-                </div>
+              <div>
+                <Label className="text-xs">Data final</Label>
+                <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
               </div>
             )}
 
@@ -192,10 +207,10 @@ export default function RenewAccessDialog({
               <p className="font-medium">Prévia</p>
               <p>Início do novo período: <span className="font-medium">{formatAccessDate(previewStart)}</span></p>
               <p>Final do novo período: <span className="font-medium">{previewEnd ? formatAccessDate(previewEnd) : "—"}</span></p>
-              <p>Quantidade de meses: <span className="font-medium">{Number.isFinite(monthsNum) && monthsNum > 0 ? monthsNum : "—"}</span></p>
+              <p>Quantidade de meses: <span className="font-medium">{!custom && Number.isFinite(monthsNum) && monthsNum > 0 ? monthsNum : "—"}</span></p>
               <p>Valor pago: <span className="font-medium">{formatMoney(Number(amountPaid.replace(",", ".")) || 0)}</span></p>
-              {stillValid && (
-                <p className="text-muted-foreground">O novo período será acrescentado após o vencimento atual.</p>
+              {currentEnd && previewEnd && previewEnd < currentEnd && (
+                <p className="text-destructive">A renovação não pode encurtar o acesso já concedido ({formatAccessDate(currentEnd)}).</p>
               )}
             </div>
 
