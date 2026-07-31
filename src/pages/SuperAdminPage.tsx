@@ -421,15 +421,21 @@ function AdminsTab() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-sm truncate">{a.nome}</p>
-                      {a.active
-                        ? <Badge className="text-[9px] h-4">Ativo</Badge>
-                        : <Badge variant="secondary" className="text-[9px] h-4">Inativo</Badge>}
+                      <Badge
+                        variant={isCompanyPaused(controlByAdmin[a.id]) ? "destructive" : "outline"}
+                        className="text-[9px] h-4"
+                      >
+                        {companyStatusLabel(controlByAdmin[a.id])}
+                      </Badge>
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">{a.email_real}</p>
                     {a.login_codigo && <p className="text-[10px] text-muted-foreground">Login <span className="font-mono">{a.login_codigo}</span></p>}
                   </div>
-                  <Switch checked={a.active} onCheckedChange={() => toggleActive(a)} />
+                  <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={onGoAccess}>
+                    Acessos
+                  </Button>
                 </div>
+
 
                 <p className="text-[11px] text-muted-foreground">
                   Trabalhadores: <b className="text-foreground">{s?.workers_count ?? 0}</b> · Visão financeira no Dashboard
