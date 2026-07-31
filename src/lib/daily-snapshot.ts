@@ -2,7 +2,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getCurrentDailyCashScope, applyDailyCashScope, type ExplicitScope } from "@/lib/cash-utils";
 import { DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
-import { formatProgress, formatDelta, installmentAmountOf, loanProgressAt } from "@/lib/progress-utils";
+import { loanProgressAt } from "@/lib/progress-utils";
+import { buildPaidGroupsFromFrozenEvents, type PaidGroup } from "@/lib/paid-groups";
+
 
 /**
  * Payload jsonb stored in `daily_cash_snapshots`. This is the frozen picture
@@ -18,26 +20,9 @@ export const DAILY_SNAPSHOT_VERSION = 2;
 
 export type SnapshotClientNames = Record<string, string>;
 
-export type SnapshotPaidGroup = {
-  movementId: string;
-  clientName: string;
-  clientId: string;
-  loanId: string;
-  totalPaid: number;
-  accumulatedPaid: number;
-  remainingBalance: number;
-  instAmount: number;
-  installmentIds: string[];
-  totalAmount: number;
-  installmentCount: number;
-  paidBefore: number;
-  paidAfter: number;
-  remainingBefore: number;
-  remainingAfter: number;
-  progressBeforeFormatted: string;
-  progressAfterFormatted: string;
-  progressDeltaFormatted: string;
-};
+/** Card de pagamento congelado — mesma forma usada na Rota do Dia. */
+export type SnapshotPaidGroup = PaidGroup;
+
 
 export type SnapshotNotPaidMark = {
   id: string;
