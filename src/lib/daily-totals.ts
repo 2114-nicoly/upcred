@@ -128,6 +128,37 @@ export async function getDailyCollectionSummary(
   const { workerId = null, adminId = null } = options;
   let hasError = false;
 
+  // 0) Dia FECHADO -> valores congelados no snapshot oficial (nunca recalculados
+  //    com as parcelas atuais). Dia aberto segue com os dados atuais.
+  try {
+    const scope0 = await getCurrentDailyCashScope({ workerId, adminId });
+    const { data: dc0 } = await applyDailyCashScope(
+      supabase.from("daily_cash").select("status").eq("cash_date", cashDate),
+      scope0
+    ).maybeSingle();
+    if ((dc0 as any)?.status === "closed") {
+      const { loadDailyCashSnapshot } = await import("@/lib/daily-snapshot");
+      const snap = await loadDailyCashSnapshot(cashDate, { workerId, adminId });
+      const ds = snap?.daily_summary;
+      if (ds) {
+        return {
+          expectedToReceiveToday: Number(ds.expectedToReceiveToday) || 0,
+          receivedToday: Number(ds.receivedToday) || 0,
+          receivedFromExpected: Number(
+            ds.receivedFromExpected ?? Math.max((ds.expectedToReceiveToday || 0) - (ds.pendingToReceiveToday || 0), 0)
+          ) || 0,
+          pendingToReceiveToday: Number(ds.pendingToReceiveToday) || 0,
+          overdueAmount: Number(ds.overdueAmount ?? 0) || 0,
+          cashExpectedForClosing: Number(ds.cashExpectedForClosing) || 0,
+          hasError: false,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[getDailyCollectionSummary] snapshot indisponível, usando dados atuais", err);
+  }
+
+
   // 1) Previsto / falta receber / atrasado — fonte única compartilhada.
   //    Sem multas, sem parcelas de outros dias, sem saldo total do empréstimo.
   let expectedToReceiveToday = 0;
