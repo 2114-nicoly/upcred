@@ -212,38 +212,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   }
 
 
-  async function handleToggleActive(w: Worker, e: React.MouseEvent) {
-    e.stopPropagation();
-    const desativando = w.active;
-    const ok = await confirm({
-      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
-      description: desativando ? "O trabalhador perderá acesso. Histórico preservado." : "O trabalhador voltará a acessar o sistema.",
-      affected: [{ label: "Trabalhador", value: w.nome }],
-      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
-    });
-    if (!ok) return;
-    try {
-      await requireAudit(
-        desativando ? "desativar_trabalhador" : "ativar_trabalhador",
-        "worker", w.id,
-        { active: w.active, nome: w.nome },
-        { active: !w.active, nome: w.nome },
-        desativando ? "Desativação de trabalhador" : "Ativação de trabalhador",
-        w.id,
-      );
-    } catch (err) {
-      if (err instanceof AuditRequiredError) return;
-      throw err;
-    }
-    const { error } = await supabase.rpc("set_worker_active" as any, { p_worker_id: w.id, p_active: !w.active });
-    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
-    toast({ title: w.active ? "Desativado" : "Ativado" });
-    load();
-  }
+  // Ativar/desativar trabalhador (workers.active) foi removido: liberar ou
+  // bloquear login é controlado apenas pela licença, na aba "Acessos".
 
   async function handleArchive(w: Worker, e: React.MouseEvent) {
     e.stopPropagation();
-    if (w.active) return toast({ title: "Desative o trabalhador antes de arquivar", variant: "destructive" });
+
     const ok = await confirm({
       title: "Arquivar trabalhador?",
       description: "Sai da operação ativa. Histórico preservado. Pode desarquivar depois.",
