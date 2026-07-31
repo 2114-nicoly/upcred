@@ -303,7 +303,11 @@ export default function AccessManagementTab() {
                         <p className="text-xs font-medium flex items-center gap-1 flex-wrap">
                           {w.nome}
                           <AccessStatusBadge status={statusOf(w.id)} />
+                          {isCompanyPaused(control) && (
+                            <Badge variant="secondary" className="text-[9px]">Empresa pausada</Badge>
+                          )}
                         </p>
+
                         <WorkerAccessSummary
                           license={maps.licenseByWorker[w.id]}
                           lastPeriod={maps.lastPeriodByWorker[w.id]}
