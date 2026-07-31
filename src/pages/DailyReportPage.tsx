@@ -678,8 +678,6 @@ export default function DailyReportPage({
     ? cashSummary.counted
     : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
 
-  const oldestDay = days.length ? days[days.length - 1] : null;
-  const newestDay = days.length ? days[0] : null;
   // Caixa inicial do 1º dia, caixa final do último — direto da fonte congelada.
   const periodOpening = frozen.days.length ? frozen.totals.opening : (cashSummary?.opening ?? 0);
   const periodFinal = frozen.days.length ? frozen.totals.finalCash : finalCash;
