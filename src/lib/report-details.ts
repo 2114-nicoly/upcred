@@ -248,18 +248,28 @@ export async function fetchReportDetails(opts: {
     const instAmount = instOfEvent?.amount ?? st.next?.amount ?? (loan && totalInst ? Number(loan.total_amount) / totalInst : null);
 
     if (e.event_type === "pagamento" || e.event_type === "recebimento_multa") {
+      // FONTE PRIMÁRIA: metadata imutável gravado no momento do pagamento.
+      // Só recorremos à auditoria/estado atual quando o metadata não existe (registros antigos).
+      const hasMeta = meta.remaining_balance_before != null && meta.remaining_balance_after != null;
       const audit = auditByEvent[e.id];
-      const before = audit?.old_value?.remaining_balance;
-      const after = audit?.new_value?.remaining_balance;
+      const before = hasMeta ? Number(meta.remaining_balance_before) : audit?.old_value?.remaining_balance;
+      const after = hasMeta ? Number(meta.remaining_balance_after) : audit?.new_value?.remaining_balance;
       const snapStatus = audit?.new_value?.loan_snapshot?.status;
-      const paidBefore = paidUntil(e.loan_id, e.created_at) - 0;
-      // parcelas cobertas: diferença entre pagas até o instante do pagamento e antes dele
-      const paidAfter = st.paid.filter((i) => i.paid_at && String(i.paid_at) <= e.created_at).length;
-      const paidBeforeCount = st.paid.filter((i) => i.paid_at && String(i.paid_at) < e.created_at).length;
-      const covered = Math.max(0, paidAfter - paidBeforeCount);
-      const restantes = totalInst != null ? Math.max(0, totalInst - paidAfter) : null;
+      const paidAfterLive = st.paid.filter((i) => i.paid_at && String(i.paid_at) <= e.created_at).length;
+      const paidBeforeLive = st.paid.filter((i) => i.paid_at && String(i.paid_at) < e.created_at).length;
+      const paidBeforeCount = hasMeta && meta.paid_installments_before != null
+        ? Number(meta.paid_installments_before) : paidBeforeLive;
+      const paidAfter = hasMeta && meta.paid_installments_after != null
+        ? Number(meta.paid_installments_after) : paidAfterLive;
+      const covered = hasMeta && meta.installments_advanced != null
+        ? Number(meta.installments_advanced)
+        : Math.max(0, paidAfterLive - paidBeforeLive);
+      const totalInstFrozen = hasMeta && meta.total_installments ? Number(meta.total_installments) : totalInst;
+      const instAmountFrozen = hasMeta && meta.installment_amount != null
+        ? Number(meta.installment_amount) : instAmount;
+      const restantes = totalInstFrozen != null ? Math.max(0, totalInstFrozen - paidAfter) : null;
       const isQuit = after != null && Number(after) <= 0.01;
-      const isPartial = !isQuit && instAmount != null && amountIn + 0.01 < Number(instAmount);
+      const isPartial = !isQuit && instAmountFrozen != null && amountIn + 0.01 < Number(instAmountFrozen);
       const tipo = isQuit ? "Quitação" : isPartial ? "Pagamento parcial" : "Parcela completa";
       title = e.event_type === "recebimento_multa" ? "Multa recebida" : tipo;
 
@@ -270,27 +280,31 @@ export async function fetchReportDetails(opts: {
       push(details, "Situação do empréstimo antes", snapStatus ? LOAN_STATUS_LABEL[snapStatus] || snapStatus : null);
       if (before != null) push(details, "Saldo devedor antes", money(before));
       if (after != null) push(details, "Saldo devedor depois", money(after));
-      push(details, "Total de parcelas", totalInst);
+      push(details, "Progresso antes", nn(meta.installment_progress_before));
+      push(details, "Progresso depois", nn(meta.installment_progress_after));
+      push(details, "Total de parcelas", totalInstFrozen);
       push(details, "Parcelas pagas antes", paidBeforeCount);
       if (covered > 0) push(details, "Parcelas pagas com este recebimento", covered);
       push(details, "Parcelas pagas depois", paidAfter);
       push(details, "Parcelas restantes", restantes);
-      if (instAmount != null) push(details, "Valor da parcela", money(instAmount));
-      if (st.next && instAmount != null && Math.abs(Number(st.next.amount) - Number(instAmount)) > 0.01) {
-        push(details, "Novo valor da parcela", money(st.next.amount));
-      }
-      push(details, "Número da parcela paga", instOfEvent ? `${instOfEvent.number}${totalInst ? ` de ${totalInst}` : ""}` : null);
+      if (instAmountFrozen != null) push(details, "Valor da parcela", money(instAmountFrozen));
+      push(details, "Número da parcela paga", instOfEvent ? `${instOfEvent.number}${totalInstFrozen ? ` de ${totalInstFrozen}` : ""}` : null);
+      (Array.isArray(meta.affected_installments) ? meta.affected_installments : []).forEach((a: any, idx: number) => {
+        push(details, `Parcela afetada ${idx + 1}`,
+          `Nº ${a.number} · aplicado ${money(a.amount_applied)} · pago ${money(a.paid_amount_before)} → ${money(a.paid_amount_after)}`);
+      });
       push(details, "Próxima data de pagamento", dt(st.next?.due_date));
       push(details, "Forma de pagamento", nn(meta.payment_method));
       push(details, "Observação", nn(e.observation));
 
       const partes: string[] = [];
-      if (before != null && totalInst) partes.push(`Antes: ${paidBeforeCount} de ${totalInst} parcelas pagas${instAmount != null ? `, parcela de ${money(instAmount)}` : ""} e saldo de ${money(before)}.`);
+      if (before != null && totalInstFrozen) partes.push(`Antes: ${meta.installment_progress_before || `${paidBeforeCount} de ${totalInstFrozen}`} parcelas pagas${instAmountFrozen != null ? `, parcela de ${money(instAmountFrozen)}` : ""} e saldo de ${money(before)}.`);
       partes.push(`Pagamento: ${money(amountIn)}${covered > 0 ? `, correspondente a ${covered} parcela(s)` : ""}.`);
-      if (after != null && totalInst) partes.push(`Depois: ${paidAfter} de ${totalInst} parcelas pagas, ${restantes} restantes, saldo de ${money(after)}${st.next ? ` e próxima cobrança em ${dt(st.next.due_date)}` : ""}.`);
+      if (after != null && totalInstFrozen) partes.push(`Depois: ${meta.installment_progress_after || `${paidAfter} de ${totalInstFrozen}`} parcelas pagas, ${restantes} restantes, saldo de ${money(after)}.`);
       summary = partes.join(" ");
       return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
     }
+
 
     if (e.event_type === "emprestimo_novo" || e.event_type === "emprestimo_importado") {
       const lastDue = st.active.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(-1)[0];
