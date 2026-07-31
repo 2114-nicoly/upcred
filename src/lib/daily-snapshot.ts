@@ -173,25 +173,49 @@ const daysBetween = (fromISO: string, toISO: string) => {
   return Math.max(0, Math.round((b - a) / 86400000));
 };
 
-/** Nomes congelados do escopo (trabalhador / empresa-administrador). */
-async function loadScopeNames(scope: { worker_id: string | null; admin_id: string | null }) {
-  let workerName: string | null = null;
-  let adminName: string | null = null;
-  try {
-    if (scope.worker_id) {
-      const { data } = await supabase.from("workers").select("nome").eq("id", scope.worker_id).maybeSingle();
-      workerName = (data as any)?.nome ?? null;
-    }
-    if (scope.admin_id) {
-      const { data } = await supabase.from("admins").select("nome").eq("id", scope.admin_id).maybeSingle();
-      adminName = (data as any)?.nome ?? null;
-    }
-  } catch { /* nomes são informativos */ }
-  return { worker_name: workerName, admin_name: adminName };
+export type SnapshotScope = { worker_id: string | null; admin_id: string | null };
+
+export const SNAPSHOT_INCOMPLETE_MESSAGE =
+  "Não foi possível congelar todas as informações. O caixa continua aberto.";
+
+const OUT_OF_SCOPE_MESSAGE =
+  "Foram encontrados dados fora do escopo deste caixa. O fechamento foi cancelado.";
+
+/**
+ * Toda consulta usada no snapshot passa por aqui. Erro NUNCA vira lista vazia:
+ * o fechamento é abortado e o caixa continua aberto.
+ */
+export function requireSnapshotQuery<T = any>(
+  label: string,
+  result: { data?: T | null; error?: any } | null | undefined,
+): T {
+  if (!result || result.error) {
+    console.error(`[daily-snapshot] consulta obrigatória falhou: ${label}`, result?.error);
+    throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
+  }
+  return (result.data ?? ([] as unknown as T)) as T;
 }
 
-
-export type SnapshotScope = { worker_id: string | null; admin_id: string | null };
+/** Nomes congelados do escopo (trabalhador / empresa-administrador). */
+async function loadScopeNames(scope: SnapshotScope) {
+  let workerName: string | null = null;
+  let adminName: string | null = null;
+  if (scope.worker_id) {
+    const res = await supabase.from("workers").select("nome").eq("id", scope.worker_id).maybeSingle();
+    const row = requireSnapshotQuery<any>("workers (nome do trabalhador)", res as any);
+    workerName = (row as any)?.nome ?? null;
+    if (!workerName) {
+      console.error("[daily-snapshot] nome do trabalhador não encontrado", scope);
+      throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
+    }
+  }
+  if (scope.admin_id) {
+    const res = await supabase.from("admins").select("nome").eq("id", scope.admin_id).maybeSingle();
+    const row = requireSnapshotQuery<any>("admins (nome da empresa)", res as any);
+    adminName = (row as any)?.nome ?? null;
+  }
+  return { worker_name: workerName, admin_name: adminName };
+}
 
 /**
  * Isolamento OBRIGATÓRIO do snapshot. Não depende da RLS:
@@ -211,20 +235,20 @@ function applyStrictScope(query: any, scope: SnapshotScope): any {
   return q;
 }
 
-/** Verdadeiro quando a linha pertence exatamente ao escopo do caixa. */
+/**
+ * Verdadeiro somente quando a linha pertence EXATAMENTE ao escopo:
+ * - com workerId: worker_id idêntico;
+ * - sem workerId: worker_id NULL;
+ * - com adminId: admin_id idêntico (NULL é rejeitado);
+ * - sem adminId: admin_id NULL.
+ */
 function inScope(row: any, scope: SnapshotScope): boolean {
   const w = row?.worker_id ?? null;
   const a = row?.admin_id ?? null;
-  if (scope.worker_id) {
-    if (w !== scope.worker_id) return false;
-  } else if (w !== null) return false;
-  if (scope.admin_id && a !== null && a !== scope.admin_id) return false;
-  if (!scope.admin_id && scope.worker_id === null && a !== null) return false;
+  if (scope.worker_id ? w !== scope.worker_id : w !== null) return false;
+  if (scope.admin_id ? a !== scope.admin_id : a !== null) return false;
   return true;
 }
-
-const OUT_OF_SCOPE_MESSAGE =
-  "Foram encontrados dados fora do escopo deste caixa. O fechamento foi cancelado.";
 
 function assertAllInScope(rows: any[] | null | undefined, scope: SnapshotScope, label: string) {
   for (const r of rows || []) {
@@ -239,16 +263,12 @@ async function fetchScopedEvents(cashDate: string, scope: SnapshotScope, include
   let q: any = supabase.from("daily_events" as any).select("*").eq("cash_date", cashDate);
   q = applyStrictScope(q, scope);
   if (!includeReversed) q = q.is("reversed_at", null);
-  const { data, error } = await q.order("created_at", { ascending: false });
-  if (error) throw error;
-  return ((data as unknown as DailyEvent[]) || []);
+  const res = await q.order("created_at", { ascending: false });
+  const label = includeReversed ? "daily_events (com estornados)" : "daily_events";
+  return (requireSnapshotQuery<any[]>(label, res) || []) as unknown as DailyEvent[];
 }
 
-
-export const SNAPSHOT_INCOMPLETE_MESSAGE =
-  "Não foi possível congelar todas as informações. O caixa continua aberto.";
-
-async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
+async function loadDailyCollectionSummary(cashDate: string, scope: SnapshotScope) {
   const { getDailyCollectionSummary } = await import("@/lib/daily-totals");
   return await getDailyCollectionSummary(cashDate, {
     workerId: scope.worker_id || null,
@@ -256,12 +276,7 @@ async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: 
   });
 }
 
-
-/**
- * Build the payload from live data. Call this at close time, BEFORE any
- * further mutation can happen.
- */
-export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
+export type SnapshotExtraTotals = {
   opening_balance: number;
   expected_worker_cash: number;
   counted_cash: number;
@@ -279,8 +294,23 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   not_paid_count: number;
   events_count: number;
   observation: string | null;
-}): Promise<DailyCashSnapshotPayload> {
-  const scope = await getCurrentDailyCashScope();
+};
+
+export type BuildSnapshotArgs = {
+  cashDate: string;
+  workerId: string | null;
+  adminId: string | null;
+  extra: SnapshotExtraTotals;
+};
+
+/**
+ * Build the payload from live data, com escopo EXPLÍCITO (nunca inferido
+ * silenciosamente pelo usuário autenticado). Call this at close time, BEFORE
+ * any further mutation can happen.
+ */
+export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Promise<DailyCashSnapshotPayload> {
+  const { cashDate, extra } = args;
+  const scope: SnapshotScope = { worker_id: args.workerId ?? null, admin_id: args.adminId ?? null };
   const actor = await getCurrentActorIdentity();
 
   const [
@@ -302,7 +332,7 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     ),
     applyStrictScope(
       supabase.from("cash_movements")
-        .select("id, worker_id, admin_id, loan_id, installment_id, amount, created_at")
+        .select("id, worker_id, admin_id, loan_id, client_id, installment_id, amount, cash_date, created_at, daily_event_id")
         .eq("cash_date", cashDate)
         .eq("type", "recebimento_normal")
         .is("reversed_at", null),
@@ -318,6 +348,10 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     ),
   ]);
 
+  const npRows = requireSnapshotQuery<any[]>("not_paid_marks", npRes) || [];
+  const newLoanRows = requireSnapshotQuery<any[]>("loans do dia", newLoansRes) || [];
+  const paidMoveRows = requireSnapshotQuery<any[]>("cash_movements (pagamentos)", paidMovesRes) || [];
+  const penaltyMoveRows = requireSnapshotQuery<any[]>("cash_movements (multas)", penaltyMovesRes) || [];
 
   const events = (liveEvents || []) as DailyEvent[];
   const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(e => e.reversed_at != null);
@@ -325,148 +359,39 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
 
   assertAllInScope(events, scope, "daily_events");
   assertAllInScope(reversed, scope, "daily_events (estornados)");
-  assertAllInScope((npRes.data as any[]) || [], scope, "not_paid_marks");
-  assertAllInScope((newLoansRes.data as any[]) || [], scope, "loans do dia");
-  assertAllInScope((paidMovesRes.data as any[]) || [], scope, "cash_movements (pagamentos)");
-  assertAllInScope((penaltyMovesRes.data as any[]) || [], scope, "cash_movements (multas)");
+  assertAllInScope(npRows, scope, "not_paid_marks");
+  assertAllInScope(newLoanRows, scope, "loans do dia");
+  assertAllInScope(paidMoveRows, scope, "cash_movements (pagamentos)");
+  assertAllInScope(penaltyMoveRows, scope, "cash_movements (multas)");
 
   // client_names — for any event or paid loan
   const clientIds = new Set<string>();
   for (const e of events) if (e.client_id) clientIds.add(e.client_id);
   for (const e of reversed) if (e.client_id) clientIds.add(e.client_id);
-  const newLoans = ((newLoansRes.data as any[]) || []) as SnapshotNewLoan[];
+  const newLoans = newLoanRows as SnapshotNewLoan[];
   for (const l of newLoans) if (l.clients?.id) clientIds.add(l.clients.id);
 
   const clientNames: SnapshotClientNames = {};
   if (clientIds.size > 0) {
-    const { data: cs } = await supabase.from("clients").select("id, name").in("id", [...clientIds]);
-    for (const c of (cs || [])) clientNames[c.id] = c.name;
+    const csRes = await supabase.from("clients").select("id, name").in("id", [...clientIds]);
+    const cs = requireSnapshotQuery<any[]>("clients", csRes as any) || [];
+    for (const c of cs) clientNames[c.id] = c.name;
   }
 
-  // Paid groups (mirrors DailyCashPage logic)
-  const paidMovements = (paidMovesRes.data || []) as Array<{ id: string; loan_id: string | null; installment_id: string | null; amount: number; created_at: string }>;
-  const paidLoanIds = new Set<string>();
-  const paidMovementsByLoan = new Map<string, typeof paidMovements>();
-  for (const mov of paidMovements) {
-    if (!mov.loan_id) continue;
-    paidLoanIds.add(mov.loan_id);
-    const arr = paidMovementsByLoan.get(mov.loan_id) || [];
-    arr.push(mov);
-    paidMovementsByLoan.set(mov.loan_id, arr);
-  }
-  // Also account for pagamento events without cash_movement link (legacy)
-  const paidEventsByLoan = new Map<string, number>();
-  for (const ev of events) {
-    if (ev.event_type === "pagamento" && ev.loan_id) {
-      paidLoanIds.add(ev.loan_id);
-      paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
-    }
-  }
+  // Paid groups — SOMENTE metadata congelado no momento do pagamento.
+  // Pagamento antigo sem metadata permanece sem progresso (nunca reconstruído
+  // com o saldo atual do empréstimo).
+  const paidMovements = paidMoveRows as Array<{
+    id: string; loan_id: string | null; client_id?: string | null; amount: number;
+    created_at: string; cash_date?: string | null; worker_id?: string | null;
+    admin_id?: string | null; daily_event_id?: string | null;
+  }>;
+  const paidGroups: SnapshotPaidGroup[] = buildPaidGroupsFromFrozenEvents(events as any[], {
+    scope: { workerId: scope.worker_id, adminId: scope.admin_id },
+    cashDate,
+    legacyMovements: paidMovements,
+  });
 
-  const paidGroups: SnapshotPaidGroup[] = [];
-  // 1) Fonte primária: metadata VERDADEIRO gravado no momento do pagamento.
-  //    Nunca reconstruímos um pagamento antigo a partir do remaining_balance atual.
-  const paymentEvents = events
-    .filter(e => e.event_type === "pagamento" && e.loan_id)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  const loansWithMetadata = new Set<string>();
-  for (const ev of paymentEvents) {
-    const md: any = ev.metadata || null;
-    if (!md || md.remaining_balance_before == null || md.remaining_balance_after == null) continue;
-    loansWithMetadata.add(ev.loan_id!);
-    const totalAmount = Number(md.total_amount ?? (Number(md.installment_amount || 0) * Number(md.total_installments || 0)));
-    const instCount = Number(md.total_installments || 0);
-    const instAmount = Number(md.installment_amount || (instCount > 0 ? totalAmount / instCount : 0));
-    const remainingBefore = Number(md.remaining_balance_before);
-    const remainingAfter = Number(md.remaining_balance_after);
-    const paidBefore = Math.max(0, totalAmount - remainingBefore);
-    const paidAfter = Math.max(0, totalAmount - remainingAfter);
-    paidGroups.push({
-      movementId: ev.cash_movement_id || "",
-      clientName: (ev.client_id && clientNames[ev.client_id]) || "Cliente",
-      clientId: ev.client_id || "",
-      loanId: ev.loan_id!,
-      totalPaid: Number(md.payment_amount ?? ev.amount_in),
-      accumulatedPaid: paidAfter,
-      remainingBalance: remainingAfter,
-      instAmount,
-      installmentIds: ((md.affected_installments || []) as any[]).map(a => a.installment_id).filter(Boolean),
-      totalAmount,
-      installmentCount: instCount,
-      paidBefore,
-      paidAfter,
-      remainingBefore,
-      remainingAfter,
-      progressBeforeFormatted: md.installment_progress_before || formatProgress(paidBefore, instAmount, instCount),
-      progressAfterFormatted: md.installment_progress_after || formatProgress(paidAfter, instAmount, instCount),
-      progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
-    });
-  }
-
-  // 2) Compatibilidade: pagamentos antigos sem metadata continuam sendo
-  //    reconstruídos pela sequência de movimentações do dia.
-  const legacyLoanIds = [...paidLoanIds].filter(id => !loansWithMetadata.has(id));
-  if (legacyLoanIds.length > 0) {
-    const { data: paidLoansData } = await supabase
-      .from("loans")
-      .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-      .in("id", legacyLoanIds);
-    for (const loan of ((paidLoansData as any[]) || [])) {
-      const totalAmount = Number(loan.total_amount);
-      const instCount = Number(loan.installment_count);
-      const instAmount = installmentAmountOf(loan);
-      const currentRemaining = Number(loan.remaining_balance);
-      const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
-      const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-      const baseStatic = {
-        clientName: loan.clients?.name || "Cliente",
-        clientId: loan.client_id,
-        loanId: loan.id,
-        accumulatedPaid,
-        remainingBalance: currentRemaining,
-        instAmount,
-        installmentIds: (movements.map(m => m.installment_id).filter(Boolean) as string[]),
-        totalAmount,
-        installmentCount: instCount,
-      };
-      const buildProgress = (totalPaid: number, remainingAfter: number) => {
-        const remainingBefore = Math.min(totalAmount, remainingAfter + totalPaid);
-        const paidBefore = Math.max(0, totalAmount - remainingBefore);
-        const paidAfter = Math.max(0, totalAmount - remainingAfter);
-        return {
-          paidBefore, paidAfter, remainingBefore, remainingAfter,
-          progressBeforeFormatted: formatProgress(paidBefore, instAmount, instCount),
-          progressAfterFormatted: formatProgress(paidAfter, instAmount, instCount),
-          progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
-        };
-      };
-      if (movements.length > 0) {
-        const totalToday = movements.reduce((s, m) => s + Number(m.amount), 0);
-        let runningRemaining = Math.min(totalAmount, currentRemaining + totalToday);
-        for (const mov of movements) {
-          const amt = Number(mov.amount);
-          const after = Math.max(0, runningRemaining - amt);
-          paidGroups.push({
-            ...baseStatic,
-            movementId: mov.id,
-            totalPaid: amt,
-            ...buildProgress(amt, after),
-          });
-          runningRemaining = after;
-        }
-      } else {
-        const totalPaid = paidEventsByLoan.get(loan.id) || 0;
-        paidGroups.push({
-          ...baseStatic,
-          movementId: "",
-          totalPaid,
-          ...buildProgress(totalPaid, currentRemaining),
-        });
-      }
-    }
-  }
 
 
   // Not paid marks + installment enrichment
