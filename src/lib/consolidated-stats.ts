@@ -155,7 +155,9 @@ export async function loadWorkersStats(
   const collectibleStatuses = [...INSTALLMENT_COLLECTIBLE_STATUSES];
   const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
   const today = format(new Date(), "yyyy-MM-dd");
-  const overdueReferenceDate = range.endDate > today ? today : range.endDate;
+  // Atraso é sempre ANTERIOR ao início do período selecionado (e nunca no futuro),
+  // para que nenhuma parcela apareça ao mesmo tempo no previsto e no valor atrasado.
+  const overdueReferenceDate = overdueReferenceFor(range.startDate, today);
   // Parcelas/empréstimos encerrados por cancelamento ou renegociação nunca entram no previsto.
   const deadInstallmentStatuses = ["cancelled", "renegotiated"];
   const deadLoanStatuses = ["cancelled", "renegotiated"];
