@@ -146,7 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const channel = supabase
       .channel(`access-watch-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "access_control_settings" }, recheck);
+      .on("postgres_changes", { event: "*", schema: "public", table: "access_control_settings" }, recheck)
+      .on("postgres_changes", { event: "*", schema: "public", table: "company_access_controls" }, recheck);
 
     if (workerId) {
       channel.on(
@@ -155,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         recheck,
       );
     }
+
     channel.subscribe();
 
     const onVisible = () => { if (document.visibilityState === "visible") recheck(); };
