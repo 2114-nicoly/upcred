@@ -1672,15 +1672,21 @@ export default function DailyCashPage() {
             </div>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+            <span className="text-xs text-muted-foreground">Previsto do dia</span>
             <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+            <span className="text-xs text-muted-foreground">Recebido Hoje (total)</span>
             <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(dailySummary.receivedToday)}</span>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Valor atrasado (dias anteriores)</span>
+            <span className={`text-sm font-bold tabular-nums ${dailySummary.overdueAmount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+              {formatCurrency(dailySummary.overdueAmount)}
+            </span>
+          </div>
           <div className="flex items-center justify-between border-t border-border pt-2">
-            <span className="text-xs font-bold">Falta Receber</span>
+            <span className="text-xs font-bold">Falta Receber do dia</span>
             <span className={`text-base font-extrabold tabular-nums ${dailySummary.pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
               {formatCurrency(dailySummary.pendingToReceiveToday)}
             </span>
