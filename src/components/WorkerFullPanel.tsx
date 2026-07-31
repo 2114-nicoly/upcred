@@ -182,6 +182,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
                 <Stat label="Previsto" value={formatCurrency(stats.previsto)} />
                 <Stat label="Recebido" value={formatCurrency(stats.recebido)} cls="text-success" />
                 <Stat label="Falta" value={formatCurrency(stats.faltaReceber)} cls="text-destructive" />
+                <Stat label="Atrasado" value={formatCurrency(stats.valorAtrasado)} cls="text-destructive" />
                 <Stat label="%" value={`${stats.percentual.toFixed(0)}%`} />
                 <Stat label="Emprestado" value={formatCurrency(stats.emprestado)} />
                 <Stat label="Retirado" value={formatCurrency(stats.retirada)} cls="text-destructive" />

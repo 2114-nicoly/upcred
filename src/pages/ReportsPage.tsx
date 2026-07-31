@@ -263,6 +263,7 @@ export default function ReportsPage() {
     caixaDisponivel: s.availableCash,
     previsto: s.previsto,
     faltaReceber: s.faltaReceber,
+    valorAtrasado: s.valorAtrasado,
     saldoNaRua: s.saldoNaRua,
     clientesAtivos: s.clientesAtivos,
     emprestimosAtivos: s.emprestimosAtivos,
@@ -728,7 +729,8 @@ export default function ReportsPage() {
                 tone={pendentesTotal > 0 ? "warning" : "neutral"}
               />
               <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Previsto no período" value={formatCurrency(summary.previsto)} />
-              <ReportKpiCard icon={<AlertTriangle className="h-4 w-4 text-warning" />} label="Falta receber" value={formatCurrency(summary.faltaReceber)} tone={summary.faltaReceber > 0 ? "warning" : "neutral"} />
+              <ReportKpiCard icon={<AlertTriangle className="h-4 w-4 text-warning" />} label="Falta receber (previsto)" value={formatCurrency(summary.faltaReceber)} tone={summary.faltaReceber > 0 ? "warning" : "neutral"} />
+              <ReportKpiCard icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Valor atrasado" value={formatCurrency(summary.valorAtrasado)} tone={summary.valorAtrasado > 0 ? "negative" : "neutral"} />
               <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Saldo emprestado na rua" value={formatCurrency(summary.saldoNaRua)} />
               <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Clientes ativos" value={String(summary.clientesAtivos)} />
               <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Empréstimos ativos" value={String(summary.emprestimosAtivos)} />

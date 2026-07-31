@@ -391,6 +391,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <Stat label="Previsto" value={formatCurrency(total.previsto)} />
             <Stat label="Recebido" value={formatCurrency(total.recebido)} cls="text-success" />
             <Stat label="Falta Receber" value={formatCurrency(total.faltaReceber)} cls="text-destructive" />
+            <Stat label="Valor Atrasado" value={formatCurrency(total.valorAtrasado)} cls="text-destructive" />
             <Stat label="%" value={`${total.percentual.toFixed(0)}%`} />
             <Stat label="Emprestado" value={formatCurrency(total.emprestado)} />
             <Stat label="Retirado" value={formatCurrency(total.retirada)} cls="text-destructive" />
