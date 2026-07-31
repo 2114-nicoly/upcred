@@ -966,7 +966,7 @@ export default function DailyCashPage() {
         .maybeSingle();
       if (existingMark) {
         toast.info("Esta parcela já está marcada como “Não Pagou” hoje.");
-        setNotPaidOpen(false);
+        setNotPaidDialogId(null);
         await fetchData();
         return;
       }
