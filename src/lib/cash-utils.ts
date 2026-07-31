@@ -132,15 +132,27 @@ export type CashBalance = {
  * - Admin / super_admin sem escopo: linha admin/global (worker_id IS NULL)
  */
 export async function getCashBalance(scope?: ExplicitScope): Promise<CashBalance | null> {
+  const { data } = await getCashBalanceResult(scope);
+  return data as unknown as CashBalance;
+}
+
+/**
+ * Leitura ESTRITA do cash_balance: devolve `{ data, error }` para que o
+ * chamador possa distinguir erro de consulta de "linha inexistente".
+ */
+export async function getCashBalanceResult(
+  scope?: ExplicitScope,
+): Promise<{ data: CashBalance | null; error: any }> {
   const explicitWorker = scope?.workerId ?? null;
   const workerId = explicitWorker ?? (await getCurrentWorkerId());
   let q = supabase.from("cash_balance").select("*");
   if (workerId) q = q.eq("worker_id", workerId);
   else if (scope?.adminId) q = q.is("worker_id", null).eq("admin_id", scope.adminId);
   else q = q.is("worker_id", null);
-  const { data } = await q.limit(1).maybeSingle();
-  return data as unknown as CashBalance;
+  const { data, error } = await q.limit(1).maybeSingle();
+  return { data: (data as unknown as CashBalance) ?? null, error };
 }
+
 
 
 export async function updateCashBalance(changes: {
