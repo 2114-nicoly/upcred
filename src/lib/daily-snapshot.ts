@@ -552,7 +552,7 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
     }
     if (overdueByClient.size > 0) {
       const clientIdList = [...new Set([...overdueByClient.values()].map(e => e.client_id))].filter(Boolean);
-      const { data: lastPays } = await applyStrictScope(
+      const lastPaysRes = await applyStrictScope(
         supabase
           .from("cash_movements")
           .select("client_id, amount, cash_date, worker_id, admin_id")
@@ -564,9 +564,11 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
       )
         .order("cash_date", { ascending: false })
         .limit(500);
+      const lastPays = requireSnapshotQuery<any[]>("cash_movements (últimos pagamentos)", lastPaysRes) || [];
 
       const seen = new Map<string, { date: string; amount: number }>();
-      for (const p of ((lastPays as any[]) || [])) {
+      for (const p of lastPays) {
+
         if (!p.client_id || seen.has(p.client_id)) continue;
         seen.set(p.client_id, { date: p.cash_date, amount: Number(p.amount) });
       }
