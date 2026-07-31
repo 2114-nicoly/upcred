@@ -367,6 +367,14 @@ export default function AccessManagementTab() {
                             lastPeriod={maps.lastPeriodByWorker[w.id]}
                             onDone={() => void reload()}
                           />
+                          <EditAccessPeriodDialog
+                            workerId={w.id}
+                            workerName={w.nome}
+                            companyName={a.nome}
+                            license={maps.licenseByWorker[w.id]}
+                            onDone={() => void reload()}
+                          />
+
                           <PauseAccessDialog
                             workerId={w.id}
                             workerName={w.nome}
