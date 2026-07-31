@@ -34,8 +34,25 @@ export default function AuthPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
 
 
+  /**
+   * Autentica e só então executa a verificação central de acesso.
+   * Retorna null quando permitido; retorna a mensagem de bloqueio quando negado
+   * (encerrando a sessão recém-criada).
+   */
   const trySignIn = async (email: string, pwd: string) => {
     return await supabase.auth.signInWithPassword({ email, password: pwd });
+  };
+
+  const finishLogin = async (): Promise<string | null> => {
+    const { data } = await supabase.auth.getUser();
+    const uid = data.user?.id;
+    if (!uid) return "Não foi possível validar a sessão.";
+    const result = await checkWorkerAccess(uid);
+    if (result.allowed) return null;
+    await supabase.auth.signOut();
+    // Evita mensagem duplicada vinda do guard central da sessão.
+    try { sessionStorage.removeItem(ACCESS_BLOCK_STORAGE_KEY); } catch { /* ignore */ }
+    return result.reason ?? "Acesso indisponível.";
   };
 
   const resolveEmailViaFn = async (login: string): Promise<string | null> => {
@@ -47,6 +64,7 @@ export default function AuthPage() {
       return null;
     }
   };
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
