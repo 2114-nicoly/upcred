@@ -40,14 +40,20 @@ function addMonths(dateStr: string, months: number): string {
   return `${base.getFullYear()}-${mm}-${dd}`;
 }
 
-/** Dia seguinte a uma data local YYYY-MM-DD. */
-function nextDay(dateStr: string): string {
+/** Dia anterior a uma data local YYYY-MM-DD. */
+function prevDay(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
-  const n = new Date(y, m - 1, d + 1);
+  const n = new Date(y, m - 1, d - 1);
   const mm = String(n.getMonth() + 1).padStart(2, "0");
   const dd = String(n.getDate()).padStart(2, "0");
   return `${n.getFullYear()}-${mm}-${dd}`;
 }
+
+/** Fim do período: início + N meses − 1 dia (mesma regra do frontend). */
+function addMonthsEnd(startStr: string, months: number): string {
+  return prevDay(addMonths(startStr, months));
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
