@@ -417,34 +417,10 @@ function WorkersTab() {
     }
   }
 
-  async function handleToggleActive(w: Worker) {
-    const desativando = w.active;
-    const ok = await confirm({
-      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
-      description: desativando ? "O trabalhador perderá acesso ao sistema." : "O trabalhador voltará a poder acessar o sistema.",
-      affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
-      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
-    });
-    if (!ok) return;
-    const { error } = await supabase.from("workers").update({ active: !w.active } as any).eq("id", w.id);
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    const actor = await getCurrentActorIdentity();
-    await logAction(
-      w.active ? "desativar_trabalhador" : "ativar_trabalhador",
-      "worker", w.id,
-      { name: w.nome, username: w.login_codigo, status: w.active ? "ativo" : "inativo" },
-      {
-        before: { name: w.nome, username: w.login_codigo, status: w.active ? "ativo" : "inativo" },
-        after:  { name: w.nome, username: w.login_codigo, status: w.active ? "inativo" : "ativo" },
-        performed_by: actor.id,
-        performed_by_name: actor.name,
-        performed_by_role: actor.role,
-        timestamp: new Date().toISOString(),
-      },
-    );
-    toast({ title: w.active ? "Desativado" : "Ativado" });
-    load();
-  }
+  // Ativar/desativar trabalhador (workers.active) foi removido daqui:
+  // pausa e liberação de acesso são controladas apenas pela licença,
+  // na aba "Acessos" do SuperAdministrador.
+
 
 
   async function handleResetPassword(w: Worker) {
