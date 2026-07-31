@@ -306,6 +306,8 @@ function WorkersTab() {
   // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
   // Acesso/mensalidade é apenas leitura (gerenciado pelo SuperAdministrador).
   const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
+  // Empresa pausada — somente exibição; não altera a licença individual.
+  const companyPaused = Object.values(accessMaps.controlByAdmin).some(isCompanyPaused);
 
   async function load() {
     setLoading(true);
