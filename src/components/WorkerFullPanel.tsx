@@ -203,6 +203,12 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Sem dados no período.</CardContent></Card>
           )}
 
+          <WorkerAccessSummary
+            license={accessMaps.licenseByWorker[worker.id]}
+            lastPeriod={accessMaps.lastPeriodByWorker[worker.id]}
+            companyPaused={isCompanyPaused(worker.parent_admin_id ? accessMaps.controlByAdmin[worker.parent_admin_id] : null)}
+          />
+
           <AccessSection
             targetKind="worker"
             targetId={worker.id}
@@ -210,6 +216,7 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             nome={worker.nome}
             active={worker.active}
           />
+
 
           <RecentCashesSection workerId={worker.id} />
 
