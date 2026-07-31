@@ -206,6 +206,59 @@ async function loadScopeNames(scope: { worker_id: string | null; admin_id: strin
 }
 
 
+export type SnapshotScope = { worker_id: string | null; admin_id: string | null };
+
+/**
+ * Isolamento OBRIGATÓRIO do snapshot. Não depende da RLS:
+ * - caixa de trabalhador: worker_id = scope.worker_id (+ admin_id quando existir)
+ * - caixa próprio do administrador: worker_id IS NULL + admin_id = scope.admin_id
+ */
+function applyStrictScope(query: any, scope: SnapshotScope): any {
+  let q = query;
+  if (scope.worker_id) {
+    q = q.eq("worker_id", scope.worker_id);
+    if (scope.admin_id) q = q.eq("admin_id", scope.admin_id);
+    return q;
+  }
+  q = q.is("worker_id", null);
+  if (scope.admin_id) q = q.eq("admin_id", scope.admin_id);
+  else q = q.is("admin_id", null);
+  return q;
+}
+
+/** Verdadeiro quando a linha pertence exatamente ao escopo do caixa. */
+function inScope(row: any, scope: SnapshotScope): boolean {
+  const w = row?.worker_id ?? null;
+  const a = row?.admin_id ?? null;
+  if (scope.worker_id) {
+    if (w !== scope.worker_id) return false;
+  } else if (w !== null) return false;
+  if (scope.admin_id && a !== null && a !== scope.admin_id) return false;
+  if (!scope.admin_id && scope.worker_id === null && a !== null) return false;
+  return true;
+}
+
+const OUT_OF_SCOPE_MESSAGE =
+  "Foram encontrados dados fora do escopo deste caixa. O fechamento foi cancelado.";
+
+function assertAllInScope(rows: any[] | null | undefined, scope: SnapshotScope, label: string) {
+  for (const r of rows || []) {
+    if (!inScope(r, scope)) {
+      console.error(`[daily-snapshot] registro fora do escopo em ${label}`, { id: r?.id, scope });
+      throw new Error(OUT_OF_SCOPE_MESSAGE);
+    }
+  }
+}
+
+async function fetchScopedEvents(cashDate: string, scope: SnapshotScope, includeReversed: boolean) {
+  let q: any = supabase.from("daily_events" as any).select("*").eq("cash_date", cashDate);
+  q = applyStrictScope(q, scope);
+  if (!includeReversed) q = q.is("reversed_at", null);
+  const { data, error } = await q.order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data as unknown as DailyEvent[]) || []);
+}
+
 
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
   try {
