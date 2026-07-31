@@ -181,8 +181,11 @@ export type Database = {
           installment_id: string | null
           loan_id: string | null
           observation: string | null
+          reversal_movement_id: string | null
+          reversal_reason: string | null
           reversed_at: string | null
           reversed_by: string | null
+          reverses_movement_id: string | null
           type: string
           user_id: string | null
           worker_id: string | null
@@ -198,8 +201,11 @@ export type Database = {
           installment_id?: string | null
           loan_id?: string | null
           observation?: string | null
+          reversal_movement_id?: string | null
+          reversal_reason?: string | null
           reversed_at?: string | null
           reversed_by?: string | null
+          reverses_movement_id?: string | null
           type: string
           user_id?: string | null
           worker_id?: string | null
@@ -215,8 +221,11 @@ export type Database = {
           installment_id?: string | null
           loan_id?: string | null
           observation?: string | null
+          reversal_movement_id?: string | null
+          reversal_reason?: string | null
           reversed_at?: string | null
           reversed_by?: string | null
+          reverses_movement_id?: string | null
           type?: string
           user_id?: string | null
           worker_id?: string | null
@@ -248,6 +257,20 @@ export type Database = {
             columns: ["loan_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_reversal_movement_id_fkey"
+            columns: ["reversal_movement_id"]
+            isOneToOne: false
+            referencedRelation: "cash_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_reverses_movement_id_fkey"
+            columns: ["reverses_movement_id"]
+            isOneToOne: false
+            referencedRelation: "cash_movements"
             referencedColumns: ["id"]
           },
           {
@@ -703,7 +726,11 @@ export type Database = {
           metadata: Json | null
           observation: string | null
           origin: string | null
+          reversal_event_id: string | null
+          reversal_reason: string | null
           reversed_at: string | null
+          reversed_by: string | null
+          reverses_event_id: string | null
           user_id: string | null
           worker_id: string | null
         }
@@ -722,7 +749,11 @@ export type Database = {
           metadata?: Json | null
           observation?: string | null
           origin?: string | null
+          reversal_event_id?: string | null
+          reversal_reason?: string | null
           reversed_at?: string | null
+          reversed_by?: string | null
+          reverses_event_id?: string | null
           user_id?: string | null
           worker_id?: string | null
         }
@@ -741,7 +772,11 @@ export type Database = {
           metadata?: Json | null
           observation?: string | null
           origin?: string | null
+          reversal_event_id?: string | null
+          reversal_reason?: string | null
           reversed_at?: string | null
+          reversed_by?: string | null
+          reverses_event_id?: string | null
           user_id?: string | null
           worker_id?: string | null
         }
@@ -772,6 +807,20 @@ export type Database = {
             columns: ["loan_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_events_reversal_event_id_fkey"
+            columns: ["reversal_event_id"]
+            isOneToOne: false
+            referencedRelation: "daily_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_events_reverses_event_id_fkey"
+            columns: ["reverses_event_id"]
+            isOneToOne: false
+            referencedRelation: "daily_events"
             referencedColumns: ["id"]
           },
           {
