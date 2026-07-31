@@ -144,20 +144,14 @@ type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } |
 type CashMovementPaymentRow = {
   id: string;
   loan_id: string | null;
+  client_id?: string | null;
   amount: number;
   created_at: string;
+  cash_date?: string | null;
+  worker_id?: string | null;
+  admin_id?: string | null;
 };
 
-type PaidLoanRow = {
-  id: string;
-  client_id: string;
-  amount: number;
-  total_amount: number;
-  remaining_balance: number;
-  installment_count: number;
-  payment_type: string;
-  clients: { id: string; name: string } | null;
-};
 
 type PenaltyMovementRow = { amount: number };
 
