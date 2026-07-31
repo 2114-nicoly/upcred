@@ -161,6 +161,7 @@ type CashMovementPaymentRow = {
   cash_date?: string | null;
   worker_id?: string | null;
   admin_id?: string | null;
+  daily_event_id?: string | null;
 };
 
 
