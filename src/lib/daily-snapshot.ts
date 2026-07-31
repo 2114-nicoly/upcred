@@ -339,12 +339,20 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(e => e.reversed_at != null);
   const renewalEvents = events.filter(e => e.event_type === "renovacao");
 
+  assertAllInScope(events, scope, "daily_events");
+  assertAllInScope(reversed, scope, "daily_events (estornados)");
+  assertAllInScope((npRes.data as any[]) || [], scope, "not_paid_marks");
+  assertAllInScope((newLoansRes.data as any[]) || [], scope, "loans do dia");
+  assertAllInScope((paidMovesRes.data as any[]) || [], scope, "cash_movements (pagamentos)");
+  assertAllInScope((penaltyMovesRes.data as any[]) || [], scope, "cash_movements (multas)");
+
   // client_names — for any event or paid loan
   const clientIds = new Set<string>();
   for (const e of events) if (e.client_id) clientIds.add(e.client_id);
   for (const e of reversed) if (e.client_id) clientIds.add(e.client_id);
   const newLoans = ((newLoansRes.data as any[]) || []) as SnapshotNewLoan[];
   for (const l of newLoans) if (l.clients?.id) clientIds.add(l.clients.id);
+
   const clientNames: SnapshotClientNames = {};
   if (clientIds.size > 0) {
     const { data: cs } = await supabase.from("clients").select("id, name").in("id", [...clientIds]);
