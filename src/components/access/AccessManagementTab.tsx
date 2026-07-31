@@ -169,7 +169,9 @@ export default function AccessManagementTab() {
     scoped.forEach((w) => {
       const lic = maps.licenseByWorker[w.id];
       if (lic) { configured++; monthly += Number(lic.monthly_price ?? 0); } else unconfigured++;
-      const s = statusOf(w.id);
+      // Métricas de mensalidade seguem sempre a licença individual — a pausa da
+      // empresa afeta apenas o acesso, não o status registrado da licença.
+      const s = getAccessStatus(lic);
       if (s === "active" || s === "expiring") active++;
       if (s === "expiring") {
         const d = daysRemaining(lic);
@@ -178,6 +180,7 @@ export default function AccessManagementTab() {
       if (s === "expired") expired++;
       if (s === "paused") paused++;
     });
+
     return {
       companies: companyFilter === "all" ? admins.length : 1,
       workers: scoped.length,
