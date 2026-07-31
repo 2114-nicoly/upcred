@@ -475,11 +475,40 @@ export default function CaixaPage() {
     }
     setSubmitting(true);
     try {
+      // 1) Monta o snapshot ANTES de fechar (estado vivo do dia).
+      const payload = await buildDailyCashSnapshotPayload(selectedDate, {
+        opening_balance: Number(summary.opening.toFixed(2)),
+        expected_worker_cash: expected,
+        counted_cash: counted,
+        final_cash: Number(summary.finalCash.toFixed(2)),
+        received: Number(summary.received.toFixed(2)),
+        penalty: Number(summary.penalty.toFixed(2)),
+        manual_in: Number(summary.manualIn.toFixed(2)),
+        manual_out: Number(summary.manualOut.toFixed(2)),
+        expenses: Number(summary.expenses.toFixed(2)),
+        new_loans: Number(summary.newLoans.toFixed(2)),
+        renewals: Number(summary.renewals.toFixed(2)),
+        lent: Number(summary.lent.toFixed(2)),
+        total_in: Number(summary.totalIn.toFixed(2)),
+        total_out: Number(summary.totalOut.toFixed(2)),
+        not_paid_count: Number(summary.notPaidCount || 0),
+        events_count: Number(summary.eventsCount || 0),
+        observation: closeNote.trim() || null,
+      });
+
+      // 2) Fecha o caixa e grava o histórico na MESMA transação:
+      //    se o snapshot falhar, o caixa NÃO fecha.
       const { error } = await supabase.rpc(
-        "close_daily_cash_v2" as any,
-        { p_cash_date: selectedDate, p_counted: counted, p_note: closeNote.trim() || null } as any
+        "close_daily_cash_with_snapshot" as any,
+        {
+          p_cash_date: selectedDate,
+          p_counted: counted,
+          p_note: closeNote.trim() || null,
+          p_payload: payload as any,
+        } as any
       );
       if (error) throw error;
+
       try {
         await logAction(
           "fechar_caixa",
@@ -506,32 +535,6 @@ export default function CaixaPage() {
         );
       } catch (e) { console.warn("[caixa] audit log failed", e); }
 
-      // Snapshot: congela o estado exato do dia no momento do fechamento.
-      try {
-        const payload = await buildDailyCashSnapshotPayload(selectedDate, {
-          opening_balance: Number(summary.opening.toFixed(2)),
-          expected_worker_cash: expected,
-          counted_cash: counted,
-          final_cash: Number(summary.finalCash.toFixed(2)),
-          received: Number(summary.received.toFixed(2)),
-          penalty: Number(summary.penalty.toFixed(2)),
-          manual_in: Number(summary.manualIn.toFixed(2)),
-          manual_out: Number(summary.manualOut.toFixed(2)),
-          expenses: Number(summary.expenses.toFixed(2)),
-          new_loans: Number(summary.newLoans.toFixed(2)),
-          renewals: Number(summary.renewals.toFixed(2)),
-          lent: Number(summary.lent.toFixed(2)),
-          total_in: Number(summary.totalIn.toFixed(2)),
-          total_out: Number(summary.totalOut.toFixed(2)),
-          not_paid_count: Number(summary.notPaidCount || 0),
-          events_count: Number(summary.eventsCount || 0),
-          observation: closeNote.trim() || null,
-        });
-        await saveDailyCashSnapshot(selectedDate, payload);
-      } catch (e) {
-        console.warn("[caixa] snapshot save failed", e);
-        toast.warning("Caixa fechado, mas o snapshot não foi salvo. Contate o administrador.");
-      }
 
       toast.success("Caixa fechado!");
       setCloseOpen(false);
