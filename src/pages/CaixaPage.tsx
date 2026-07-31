@@ -835,15 +835,21 @@ export default function CaixaPage() {
               <p className="text-[11px] text-destructive font-medium">Não foi possível carregar os totais.</p>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+              <span className="text-xs text-muted-foreground">Previsto do dia</span>
               <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+              <span className="text-xs text-muted-foreground">Recebido Hoje (total)</span>
               <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(receivedToday)}</span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Valor atrasado (dias anteriores)</span>
+              <span className={`text-sm font-bold tabular-nums ${collectionSummary.overdueAmount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                {formatCurrency(collectionSummary.overdueAmount)}
+              </span>
+            </div>
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Falta Receber</span>
+              <span className="text-xs font-semibold">Falta Receber do dia</span>
               <span className={`text-sm font-bold tabular-nums ${pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                 {formatCurrency(pendingToReceiveToday)}
               </span>
