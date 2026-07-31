@@ -131,11 +131,11 @@ export default function RenewAccessDialog({
 
   return (
     <>
-      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => handleOpenChange(true)}>
         <CalendarPlus className="h-3.5 w-3.5 mr-1" /> Renovar acesso
       </Button>
 
-      <Dialog open={open} onOpenChange={(o) => !saving && setOpen(o)}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">Renovar acesso</DialogTitle>
