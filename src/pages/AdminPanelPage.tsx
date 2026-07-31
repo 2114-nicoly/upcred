@@ -34,7 +34,7 @@ import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import WorkerRequestsAdminSection from "@/components/access/WorkerRequestsAdminSection";
 
-import { AccessMaps, EMPTY_ACCESS_MAPS, loadAccessMaps } from "@/lib/access-control";
+import { AccessMaps, EMPTY_ACCESS_MAPS, isCompanyPaused, loadAccessMaps } from "@/lib/access-control";
 
 
 
