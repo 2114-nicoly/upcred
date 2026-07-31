@@ -165,6 +165,9 @@ export async function createCashMovement(movement: {
   observation?: string | null;
   cash_date?: string | null;
   daily_event_id?: string | null;
+  /** Preenchido apenas em movimentações de estorno (contrapartida). */
+  reverses_movement_id?: string | null;
+  reversal_reason?: string | null;
 }) {
   const userId = await getCurrentUserId();
   const { worker_id, admin_id } = await resolveScope({
@@ -181,6 +184,8 @@ export async function createCashMovement(movement: {
     observation: movement.observation || null,
     cash_date: movement.cash_date || new Date().toISOString().slice(0, 10),
     daily_event_id: movement.daily_event_id || null,
+    reverses_movement_id: movement.reverses_movement_id || null,
+    reversal_reason: movement.reversal_reason || null,
     user_id: userId,
     worker_id,
     admin_id,
@@ -188,6 +193,7 @@ export async function createCashMovement(movement: {
   if (error) throw error;
   return data;
 }
+
 
 export async function linkCashMovementToDailyEvent(movementId: string, eventId: string) {
   const { error } = await supabase.from("cash_movements").update({ daily_event_id: eventId } as any).eq("id", movementId);
