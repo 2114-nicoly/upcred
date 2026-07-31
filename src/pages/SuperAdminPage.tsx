@@ -336,28 +336,9 @@ function AdminsTab() {
   }
   useEffect(() => { load(); }, []);
 
-  async function toggleActive(a: AdminRow) {
-    const { error } = await supabase.rpc("super_admin_set_admin_active" as any, {
-      p_admin_id: a.id, p_active: !a.active,
-    });
-    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
-    toast({ title: a.active ? "Desativado" : "Ativado" });
-    const actor = await getCurrentActorIdentity();
-    await logAction(
-      a.active ? "desativar_admin" : "ativar_admin",
-      "admin", a.id,
-      { name: a.nome, username: a.login_codigo, status: a.active ? "ativo" : "inativo" },
-      {
-        before: { name: a.nome, username: a.login_codigo, status: a.active ? "ativo" : "inativo" },
-        after:  { name: a.nome, username: a.login_codigo, status: a.active ? "inativo" : "ativo" },
-        performed_by: actor.id,
-        performed_by_name: actor.name,
-        performed_by_role: actor.role,
-        timestamp: new Date().toISOString(),
-      },
-    );
-    load();
-  }
+  // Ativar/desativar cadastro do administrador foi removido: pausa e liberação
+  // de acesso da empresa são geridas apenas na aba "Acessos".
+
 
   async function resetAdminPassword(a: AdminRow) {
     const ok = await confirm({
