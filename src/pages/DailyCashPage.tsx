@@ -1367,9 +1367,9 @@ export default function DailyCashPage() {
 
   // === Paid row ===
   const renderPaidRow = (group: PaidGroup) => {
-    const isSettled = group.remainingAfter <= 0.01;
+    const isSettled = group.hasFrozenProgress && (group.remainingAfter ?? 1) <= 0.01;
     return (
-      <div key={safeKey("paid", group.loanId, group.movementId || group.totalPaid, group.paidAfter, group.remainingAfter)} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+      <div key={safeKey("paid", group.movementId || group.eventId || group.loanId, group.createdAt, group.totalPaid)} className="rounded-lg border border-success/30 bg-card px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-sm truncate">{group.clientName}</span>
           <div className="flex items-center gap-2">
@@ -1385,31 +1385,42 @@ export default function DailyCashPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleUndoPayment(group.loanId, group.movementId)} className="text-destructive">
+                  <DropdownMenuItem onClick={() => handleUndoPayment(group.movementId)} className="text-destructive">
                     Desfazer pagamento
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
-                    <Eye className="mr-2 h-4 w-4" /> Ver detalhes
-                  </DropdownMenuItem>
+                  {group.loanId && (
+                    <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
+                      <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
         </div>
-        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
-          <div>
-            Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
-            <span className="ml-1 text-success">({group.progressDeltaFormatted} parcela{group.progressDeltaFormatted === "+1" ? "" : "s"})</span>
+        {group.hasFrozenProgress ? (
+          <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
+            <div>
+              Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
+              {group.progressDeltaFormatted && (
+                <span className="ml-1 text-success">({group.progressDeltaFormatted} parcela{group.progressDeltaFormatted === "+1" ? "" : "s"})</span>
+              )}
+            </div>
+            <div>
+              Pago: {formatCurrency(group.paidBefore ?? 0)} → <span className="text-foreground font-medium">{formatCurrency(group.paidAfter ?? 0)}</span>
+              <span className="mx-1">•</span>
+              Saldo: {formatCurrency(group.remainingBefore ?? 0)} → <span className="text-foreground font-medium">{formatCurrency(group.remainingAfter ?? 0)}</span>
+            </div>
           </div>
-          <div>
-            Pago: {formatCurrency(group.paidBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.paidAfter)}</span>
-            <span className="mx-1">•</span>
-            Saldo: {formatCurrency(group.remainingBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.remainingAfter)}</span>
+        ) : (
+          <div className="mt-0.5 text-[11px] text-muted-foreground leading-tight italic">
+            {INCOMPLETE_HISTORY_LABEL}
           </div>
-        </div>
+        )}
       </div>
     );
   };
+
 
   // === Not-paid row ===
   const renderNotPaidRow = (mark: NotPaidMark & { installment?: InstallmentWithLoan }) => {
