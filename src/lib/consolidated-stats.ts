@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAvailableCashByWorker } from "@/lib/finance-totals";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
+import { accumulateOverdue, accumulateScheduled, emptyCollectionMetrics, overdueReferenceFor } from "@/lib/collection-metrics";
 
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays,
