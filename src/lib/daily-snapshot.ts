@@ -149,7 +149,9 @@ export type DailyCashSnapshotPayload = {
   daily_summary: {
     expectedToReceiveToday: number;
     receivedToday: number;
+    receivedFromExpected?: number;
     pendingToReceiveToday: number;
+    overdueAmount?: number;
     cashExpectedForClosing: number;
   } | null;
   events: DailyEvent[];              // non-reversed
