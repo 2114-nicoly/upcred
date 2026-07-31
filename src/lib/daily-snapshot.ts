@@ -177,21 +177,14 @@ export type DailyCashSnapshotVersion = {
   created_at: string;
 };
 
-// --- helpers copied from DailyCashPage to build paid groups identically ---
-function formatInstFraction(paid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0) return "0";
-  const frac = paid / instAmount;
-  const rounded = Math.round(frac * 10) / 10;
-  if (Math.abs(rounded - Math.round(rounded)) < 0.05) return Math.round(rounded).toString();
-  return rounded.toFixed(1).replace(".", ",");
-}
-function formatProgress(paid: number, instAmount: number, count: number): string {
-  return `${formatInstFraction(paid, instAmount)}/${count}`;
-}
-function formatDelta(deltaPaid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0 || deltaPaid <= 0) return "+0";
-  return `+${formatInstFraction(deltaPaid, instAmount)}`;
-}
+// Progresso: MESMA função usada no pagamento e na Rota.
+const daysBetween = (fromISO: string, toISO: string) => {
+  const a = new Date(fromISO + "T12:00:00").getTime();
+  const b = new Date(toISO + "T12:00:00").getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+};
+
 
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
   try {
