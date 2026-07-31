@@ -260,18 +260,17 @@ async function fetchScopedEvents(cashDate: string, scope: SnapshotScope, include
 }
 
 
+export const SNAPSHOT_INCOMPLETE_MESSAGE =
+  "Não foi possível congelar todas as informações. O caixa continua aberto.";
+
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
-  try {
-    const { getDailyCollectionSummary } = await import("@/lib/daily-totals");
-    return await getDailyCollectionSummary(cashDate, {
-      workerId: scope.worker_id || null,
-      adminId: scope.admin_id || null,
-    });
-  } catch (err) {
-    console.warn("[daily-snapshot] daily summary failed", err);
-    return null;
-  }
+  const { getDailyCollectionSummary } = await import("@/lib/daily-totals");
+  return await getDailyCollectionSummary(cashDate, {
+    workerId: scope.worker_id || null,
+    adminId: scope.admin_id || null,
+  });
 }
+
 
 /**
  * Build the payload from live data. Call this at close time, BEFORE any
@@ -664,16 +663,13 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     }
     overdueClients = [...overdueByClient.values()].sort((a, b) => b.overdue_days - a.overdue_days);
 
-    // --- Situação da carteira ao final do dia
-    let availableCash = 0;
-    try {
-      const { getCashBalance } = await import("@/lib/cash-utils");
-      const cb = await getCashBalance({
-        workerId: scope.worker_id,
-        adminId: scope.admin_id,
-      } as any);
-      availableCash = Number((cb as any)?.available_cash || 0);
-    } catch { availableCash = 0; }
+    // --- Situação da carteira ao final do dia (obrigatória)
+    const { getCashBalance } = await import("@/lib/cash-utils");
+    const cb = await getCashBalance({
+      workerId: scope.worker_id,
+      adminId: scope.admin_id,
+    } as any);
+    const availableCash = Number((cb as any)?.available_cash || 0);
 
     portfolioState = {
       available_cash: availableCash,
@@ -686,8 +682,10 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     };
   } catch (err) {
     if (err instanceof Error && err.message === OUT_OF_SCOPE_MESSAGE) throw err;
-    console.warn("[daily-snapshot] v2 sections failed", err);
+    console.error("[daily-snapshot] falha ao congelar seções obrigatórias", err);
+    throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
   }
+
 
   // ===== Validação final de isolamento (nada fora do escopo) =====
   assertAllInScope(events, scope, "daily_events");
