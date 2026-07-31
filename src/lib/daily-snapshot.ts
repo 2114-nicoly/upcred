@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getCurrentDailyCashScope, applyDailyCashScope, type ExplicitScope } from "@/lib/cash-utils";
 import { getDailyEvents, DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
+import { formatProgress, formatDelta, installmentAmountOf, loanProgressAt } from "@/lib/progress-utils";
 
 /**
  * Payload jsonb stored in `daily_cash_snapshots`. This is the frozen picture
