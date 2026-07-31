@@ -23,7 +23,7 @@ import {
  * Normal loan: paidInsideApp = total_amount - remaining_balance.
  * Imported/ongoing loan: paidInsideApp = initial_remaining_balance - remaining_balance.
  */
-export async function recalculateInstallments(loanId: string) {
+export async function recalculateInstallments(loanId: string, paidAtDate?: string) {
   const { data: loan } = await supabase
     .from("loans")
     .select("total_amount, remaining_balance, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
@@ -40,6 +40,11 @@ export async function recalculateInstallments(loanId: string) {
     : Number(loan.total_amount);
   const totalPaid = Math.max(0, paidBase - Number(loan.remaining_balance));
   const today = new Date().toISOString().split("T")[0];
+  // Data real do pagamento: quando o pagamento é lançado numa cash_date
+  // escolhida, paid_at deve refletir esse dia (meio-dia local), não "agora".
+  const paidAtIso = paidAtDate
+    ? new Date(paidAtDate + "T12:00:00").toISOString()
+    : new Date().toISOString();
 
   const { data: insts } = await supabase
     .from("installments")
@@ -63,7 +68,7 @@ export async function recalculateInstallments(loanId: string) {
         await supabase.from("installments").update({
           paid_amount: newPaid,
           status: INSTALLMENT_STATUS.PAID,
-          paid_at: inst.paid_at || new Date().toISOString(),
+          paid_at: inst.paid_at || paidAtIso,
         }).eq("id", inst.id);
       }
       remaining -= instAmount;
@@ -73,7 +78,7 @@ export async function recalculateInstallments(loanId: string) {
       await supabase.from("installments").update({
         paid_amount: newPaid,
         status: "partial",
-        paid_at: new Date().toISOString(),
+        paid_at: paidAtIso,
       }).eq("id", inst.id);
       remaining = 0;
     } else {
@@ -89,6 +94,28 @@ export async function recalculateInstallments(loanId: string) {
     }
   }
 }
+
+/** Snapshot of non-penalty installments used for before/after capture. */
+async function captureInstallmentState(loanId: string) {
+  const { data } = await supabase
+    .from("installments")
+    .select("id, number, amount, paid_amount, status")
+    .eq("loan_id", loanId)
+    .eq("is_penalty", false)
+    .order("number");
+  const map = new Map<string, { id: string; number: number; amount: number; paid_amount: number; status: string }>();
+  for (const i of ((data as any[]) || [])) {
+    map.set(i.id, {
+      id: i.id,
+      number: Number(i.number),
+      amount: Number(i.amount),
+      paid_amount: Number(i.paid_amount || 0),
+      status: String(i.status),
+    });
+  }
+  return map;
+}
+
 
 /**
  * Register a regular payment against a loan.
