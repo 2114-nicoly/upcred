@@ -25,7 +25,7 @@ import AccessSection from "@/components/AccessSection";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import {
-  AccessMaps, EMPTY_ACCESS_MAPS, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
+  AccessMaps, EMPTY_ACCESS_MAPS, companyStatusLabel, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
 } from "@/lib/access-control";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
