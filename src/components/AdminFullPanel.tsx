@@ -163,6 +163,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     const wList = (ws as Worker[]) || [];
     setAdmin(ad);
     setWorkers(wList);
+    setAccessMaps(await loadAccessMaps().catch(() => EMPTY_ACCESS_MAPS));
+
+
 
     const [allStats, cs, ls, evs] = await Promise.all([
       loadWorkersStats(range, { adminId }),
