@@ -244,9 +244,25 @@ export async function registerPayment(params: {
     }
     affected.sort((a, b) => a.number - b.number);
 
+    // Nomes/escopo congelados no momento exato da ação.
+    const evWorkerId = (event as any)?.worker_id ?? null;
+    const evAdminId = (event as any)?.admin_id ?? null;
+    let frozenWorkerName: string | null = null;
+    if (evWorkerId) {
+      const { data: w } = await supabase
+        .from("workers").select("nome").eq("id", evWorkerId).maybeSingle();
+      frozenWorkerName = (w as any)?.nome ?? null;
+    }
+
     const metadata = {
       payment_amount: applied,
       cash_date: cashDate,
+      recorded_at: new Date().toISOString(),
+      client_id: clientId,
+      client_name: clientName,
+      worker_id: evWorkerId,
+      admin_id: evAdminId,
+      worker_name: frozenWorkerName,
       remaining_balance_before: balanceBefore,
       remaining_balance_after: balanceAfter,
       installment_progress_before: progressBefore.formatted,
@@ -262,8 +278,8 @@ export async function registerPayment(params: {
       initial_remaining_balance: (loanData as any).initial_remaining_balance ?? null,
       amount_already_paid: (loanData as any).amount_already_paid ?? null,
       affected_installments: affected,
-      recorded_at: new Date().toISOString(),
     };
+
     await supabase
       .from("daily_events" as any)
       .update({ metadata } as any)
