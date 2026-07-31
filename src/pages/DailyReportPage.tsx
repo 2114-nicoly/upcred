@@ -20,6 +20,10 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
 import { fetchReportDetails, emptyReportDetails, type ReportDetailsData, type ReportRecord } from "@/lib/report-details";
+import {
+  loadFrozenReportPeriod, emptyFrozenPeriod, frozenSourceLabel,
+  type FrozenReportPeriod, type FrozenDay,
+} from "@/lib/frozen-report";
 import { RecordSection } from "@/components/reports/RecordSection";
 
 
@@ -109,7 +113,7 @@ export default function DailyReportPage({
     opening: number; expected: number; counted: number | null; diff: number | null;
     closingObs: string | null;
   } | null>(null);
-  const [cashRows, setCashRows] = useState<any[]>([]);
+  const [frozen, setFrozen] = useState<FrozenReportPeriod>(() => emptyFrozenPeriod());
   const [currentAvailableCash, setCurrentAvailableCash] = useState<number | null>(null);
   const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
   const [loading, setLoading] = useState(false);
@@ -158,30 +162,34 @@ export default function DailyReportPage({
     })();
   }, [selectedWorkerId, workers]);
 
-  // Fetch report data
+  // Fetch report data — SEMPRE pela fonte histórica congelada.
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // daily_events (período selecionado)
-        let eq: any = supabase.from("daily_events" as any).select("*")
-          .gte("cash_date", startDate).lte("cash_date", endDate);
-        if (selectedWorkerId) eq = eq.eq("worker_id", selectedWorkerId);
-        else if (isSuperAdmin && selectedAdminId) eq = eq.eq("admin_id", selectedAdminId).is("worker_id", null);
-        else if (isAdmin && !isSuperAdmin && myAdminId) eq = eq.eq("admin_id", myAdminId).is("worker_id", null);
-        const { data: evs } = await eq.order("created_at", { ascending: true });
-        const eventList = (evs as unknown as DailyEvent[]) || [];
-        setEvents(eventList);
+        const scopeAdminId = selectedWorkerId
+          ? null
+          : (isSuperAdmin ? selectedAdminId : (isAdmin ? myAdminId : null));
 
-        // audit_logs do período
+        const fp = await loadFrozenReportPeriod({
+          startDate,
+          endDate,
+          workerId: selectedWorkerId,
+          adminId: scopeAdminId,
+        });
+        setFrozen(fp);
+        const eventList = fp.events;
+        setEvents(eventList);
+        setDetails(fp.details);
+
+        // audit_logs do período (complemento de rastreio — não altera valores)
         const dayStart = `${startDate}T00:00:00`;
         const dayEnd = `${endDate}T23:59:59`;
         let aq: any = supabase.from("audit_logs").select("*")
           .gte("created_at", dayStart).lte("created_at", dayEnd)
           .in("entity_type", ["client", "loan", "installment", "penalty", "transfer", "payment", "cash"]);
         if (selectedWorkerId) aq = aq.eq("worker_id", selectedWorkerId);
-        else if (isSuperAdmin && selectedAdminId) aq = aq.eq("admin_id", selectedAdminId);
-        else if (isAdmin && !isSuperAdmin && myAdminId) aq = aq.eq("admin_id", myAdminId);
+        else if (scopeAdminId) aq = aq.eq("admin_id", scopeAdminId);
         const { data: audits } = await aq.order("created_at", { ascending: true });
         setAuditRows((audits as unknown as AuditRow[]) || []);
 
@@ -200,29 +208,17 @@ export default function DailyReportPage({
           setClientNames({});
         }
 
-        // daily_cash do período (dados salvos no fechamento — não recalculados)
-        let dcList: any[] = [];
-        if (selectedWorkerId) {
-          const { data: dc } = await supabase.from("daily_cash").select("*")
-            .gte("cash_date", startDate).lte("cash_date", endDate)
-            .eq("worker_id", selectedWorkerId).order("cash_date", { ascending: false });
-          dcList = dc || [];
-        } else if (isSuperAdmin && selectedAdminId) {
-          const { data: dc } = await supabase.from("daily_cash").select("*")
-            .gte("cash_date", startDate).lte("cash_date", endDate)
-            .eq("admin_id", selectedAdminId).is("worker_id", null).order("cash_date", { ascending: false });
-          dcList = dc || [];
-        }
-        setCashRows(dcList);
-
-        const dcRow: any = dcList.find((r) => r.cash_date === endDate) || null;
-        if (dcRow) {
-          setCashStatus(dcRow.status || null);
-          const opening = Number(dcRow.opening_balance || 0);
-          const expected = Number(dcRow.expected_closing_balance ?? (opening + Number(dcRow.total_in || 0) - Number(dcRow.total_out || 0)));
-          const counted = dcRow.counted_closing_balance != null ? Number(dcRow.counted_closing_balance) : null;
-          const diff = counted != null ? counted - expected : null;
-          setCashSummary({ opening, expected, counted, diff, closingObs: dcRow.closing_note || null });
+        // Situação do dia de referência (vinda do registro congelado do dia)
+        const refDay = fp.days.find((d) => d.date === endDate) || null;
+        if (refDay) {
+          setCashStatus(refDay.status === "none" ? null : refDay.status);
+          setCashSummary({
+            opening: refDay.totals.opening,
+            expected: refDay.totals.expected ?? refDay.totals.finalCash,
+            counted: refDay.totals.counted,
+            diff: refDay.totals.diff,
+            closingObs: refDay.closingObs,
+          });
         } else {
           setCashStatus(null);
           setCashSummary(null);
@@ -240,31 +236,16 @@ export default function DailyReportPage({
         } else {
           setCurrentAvailableCash(null);
         }
-
-        // Detalhamento (somente leitura) — pagamentos, empréstimos, renovações,
-        // renegociações, atrasos e clientes pendentes de registro.
-        try {
-          const det = await fetchReportDetails({
-            events: eventList,
-            startDate,
-            endDate,
-            workerId: selectedWorkerId,
-            adminId: selectedWorkerId ? null : (isSuperAdmin ? selectedAdminId : myAdminId),
-          });
-          setDetails(det);
-        } catch (detErr) {
-          console.warn("[DailyReport] detalhamento indisponível", detErr);
-          setDetails(emptyReportDetails());
-        }
-
       } catch (err: any) {
         console.error(err);
+        setFrozen(emptyFrozenPeriod(startDate, endDate));
         toast.error("Erro ao carregar relatório");
       } finally {
         setLoading(false);
       }
     })();
   }, [startDate, endDate, selectedWorkerId, selectedAdminId, isAdmin, isSuperAdmin, myAdminId]);
+
 
 
   // Build rows from events + audits
@@ -317,27 +298,27 @@ export default function DailyReportPage({
     return [...evRows, ...auditRowsMapped].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [events, auditRows, clientNames]);
 
+  // Totais do período: SOMPRE os totais congelados (snapshot nos dias fechados).
   const totals = useMemo(() => {
     const t = computeDailyTotals(events as any, 0);
-    // Fonte única compartilhada para recebido e emprestado.
-    const core = computeCoreTotals(events as any);
+    const f = frozen.totals;
     return {
-      totalIn: t.entradas,
-      totalOut: t.saidas,
-      payments: core.recebidoPrincipal,
-      penalties: core.multasRecebidas,
-      receivedTotal: core.recebidoTotal,
-      lent: core.emprestado,
+      totalIn: f.receivedTotal + f.manualIn,
+      totalOut: f.lent + f.manualOut + f.expenses,
+      payments: f.received,
+      penalties: f.penalties,
+      receivedTotal: f.receivedTotal,
+      lent: f.lent,
       loans: t.emprestimosLiberados,
       renewals: t.renovacoes + t.renegociacoes,
-      manualIn: t.entradasManuais,
-      manualOut: t.saidasManuais,
-      expenses: t.despesas,
+      manualIn: f.manualIn,
+      manualOut: f.manualOut,
+      expenses: f.expenses,
       expensesByCategory: t.despesasPorCategoria,
-      notPaidCount: t.naoPagos,
-      balance: t.entradas - t.saidas,
+      notPaidCount: f.notPaidCount,
+      balance: (f.receivedTotal + f.manualIn) - (f.lent + f.manualOut + f.expenses),
     };
-  }, [events]);
+  }, [events, frozen]);
 
   // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
   const groups = useMemo(() => buildGroups(events), [events]);
@@ -348,64 +329,47 @@ export default function DailyReportPage({
     [events, details],
   );
 
-  /** Clientes pendentes de registro em todo o período (sem duplicar dias). */
+  /** Clientes pendentes de registro/fechamento em todo o período. */
   const pendentesPeriodo = useMemo(
-    () => Object.values(details.pendentesByDate).flat(),
-    [details],
+    () => Object.values(frozen.pendentesByDate).flat(),
+    [frozen],
   );
 
+  /** Clientes atrasados — congelados no fechamento quando o dia já foi fechado. */
+  const atrasadosPeriodo = frozen.atrasados;
 
 
 
-  const estornosTotal = useMemo(
-    () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
-    [groups.estornos]
-  );
+
+  const estornosTotal = frozen.totals.estornos;
 
   const isMultiDay = startDate !== endDate;
 
-  // Dias do período (mais recente → mais antigo), cada um com seus próprios registros
+  // Dias do período (mais recente → mais antigo), lidos da fonte congelada.
   const days = useMemo(() => {
-    const set = new Set<string>();
-    events.forEach((e) => set.add(String((e as any).cash_date)));
-    cashRows.forEach((r) => set.add(String(r.cash_date)));
-    return Array.from(set)
-      .sort((a, b) => b.localeCompare(a))
-      .map((d) => {
-        const dayEvents = events.filter((e) => String((e as any).cash_date) === d);
-        const dc = cashRows.find((r) => r.cash_date === d) || null;
-        const closed = dc?.status === "closed";
-        const reopened = !!(dc?.reopened_at || (dc?.reopen_count ?? 0) > 0);
-        const opening = dc ? Number(dc.opening_balance || 0) : 0;
-        const savedExpected = dc?.expected_closing_balance != null ? Number(dc.expected_closing_balance) : null;
-        const counted = dc?.counted_closing_balance != null ? Number(dc.counted_closing_balance) : null;
-        const t = computeDailyTotals(dayEvents as any, 0);
-        return {
-          date: d,
-          events: dayEvents,
-          groups: buildGroups(dayEvents),
-          recordGroups: buildRecordGroups(dayEvents, details.recordFor),
-          pendentes: details.pendentesByDate[d] || [],
+    return frozen.days.map((d: FrozenDay) => ({
+      date: d.date,
+      events: d.events,
+      groups: buildGroups(d.events),
+      recordGroups: buildRecordGroups(d.events, details.recordFor),
+      pendentes: d.pendentes,
+      atrasados: d.atrasados,
+      status: d.status === "none" ? null : d.status,
+      statusLabel: frozenSourceLabel(d),
+      frozenSource: d.source,
+      incompleteSnapshot: d.incompleteSnapshot,
+      reopened: d.reopened,
+      opening: d.totals.opening,
+      finalCash: d.totals.finalCash,
+      diff: d.totals.diff,
+      received: d.totals.received,
+      out: d.totals.lent,
+      closingObs: d.closingObs,
+    }));
+  }, [frozen, details]);
 
-          status: closed ? "closed" : dc ? "open" : null,
-          reopened,
-          opening,
-          // Dias fechados: valores salvos no fechamento (sem recálculo). Dias abertos: previsão do dia.
-          finalCash: closed
-            ? (counted ?? savedExpected ?? 0)
-            : (savedExpected ?? (opening + t.pagamentos + t.multas + t.entradasManuais - (t.emprestimosLiberados + t.renovacoes + t.renegociacoes) - t.saidasManuais - t.despesas)),
-          diff: closed && counted != null ? counted - (savedExpected ?? 0) : null,
-          received: closed ? Number(dc.total_in ?? t.pagamentos) : t.pagamentos,
-          out: closed ? Number(dc.total_out ?? 0) : (t.emprestimosLiberados + t.renovacoes + t.renegociacoes),
-          closingObs: dc?.closing_note || null,
-        };
-      });
-  }, [events, cashRows, details]);
+  const periodDiff = frozen.totals.diff ?? 0;
 
-  const periodDiff = useMemo(
-    () => days.reduce((s, d) => s + (d.diff ?? 0), 0),
-    [days]
-  );
 
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);
   const periodLabel = useMemo(() => {
@@ -595,7 +559,7 @@ export default function DailyReportPage({
         ["Renegociações", String(recordGroups.renegociacoes.length)],
         ["Clientes não pagos", String(recordGroups.naoPagos.length)],
         ["Clientes pendentes de registro", String(pendentesPeriodo.length)],
-        ["Clientes atrasados", String(details.atrasados.length)],
+        ["Clientes atrasados", String(atrasadosPeriodo.length)],
         ["Despesas", String(recordGroups.despesas.length)],
         ["Entradas e saídas", String(recordGroups.outras.length)],
         ["Estornos", String(recordGroups.estornos.length)],
@@ -608,15 +572,13 @@ export default function DailyReportPage({
     // ===== 3. Detalhamento =====
     writeBlockTitle("3. Detalhamento");
 
-    if (events.length === 0 && pendentesPeriodo.length === 0 && details.atrasados.length === 0) {
+    if (events.length === 0 && pendentesPeriodo.length === 0 && atrasadosPeriodo.length === 0) {
       writeText("Não houve movimentações no período selecionado.", 10);
 
     } else if (isMultiDay) {
       days.forEach((d) => {
         const dayLabel = format(new Date(d.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
-        const statusLabel =
-          d.status === "closed" ? (d.reopened ? "Reaberto e fechado" : "Fechado")
-          : d.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
+        const statusLabel = d.statusLabel;
         ensureSpace(18);
         const y = cursorY() + 8;
         doc.setFontSize(10);
@@ -634,11 +596,11 @@ export default function DailyReportPage({
         if (d.events.length === 0 && d.pendentes.length === 0) writeText("Sem movimentações neste dia.", 8);
         else writeRecordGroups(d.recordGroups, d.pendentes);
       });
-      writeRecordSection("Clientes atrasados (situação atual)", details.atrasados);
+      writeRecordSection("Clientes atrasados", atrasadosPeriodo);
     } else {
       if (cashSummary?.closingObs) writeText(`Obs. fechamento: ${cashSummary.closingObs}`, 8);
       if (!isMultiDay && cashStatus !== "closed") writeText("Caixa ainda aberto — valores do dia podem mudar.", 8);
-      writeRecordGroups(recordGroups, details.pendentesByDate[endDate] || [], details.atrasados);
+      writeRecordGroups(recordGroups, frozen.pendentesByDate[endDate] || [], atrasadosPeriodo);
     }
 
 
@@ -716,11 +678,10 @@ export default function DailyReportPage({
     ? cashSummary.counted
     : (cashSummary?.expected ?? ((cashSummary?.opening ?? 0) + totals.payments + totals.penalties + totals.manualIn - (totals.loans + totals.renewals) - totals.manualOut - totals.expenses));
 
-  const oldestDay = days.length ? days[days.length - 1] : null;
-  const newestDay = days.length ? days[0] : null;
-  const periodOpening = isMultiDay ? (oldestDay?.opening ?? 0) : (cashSummary?.opening ?? 0);
-  const periodFinal = isMultiDay ? (newestDay?.finalCash ?? 0) : finalCash;
-  const periodDiffValue = isMultiDay ? periodDiff : (cashSummary?.diff ?? 0);
+  // Caixa inicial do 1º dia, caixa final do último — direto da fonte congelada.
+  const periodOpening = frozen.days.length ? frozen.totals.opening : (cashSummary?.opening ?? 0);
+  const periodFinal = frozen.days.length ? frozen.totals.finalCash : finalCash;
+  const periodDiffValue = isMultiDay ? periodDiff : (cashSummary?.diff ?? periodDiff);
 
   const PRESETS: { key: Preset; label: string }[] = [
     { key: "hoje", label: "Hoje" },
@@ -850,6 +811,18 @@ export default function DailyReportPage({
         <p className="text-xs text-muted-foreground">Caixa ainda aberto — valores do dia podem mudar.</p>
       )}
 
+      {frozen.warnings.length > 0 && (
+        <Card className="border-warning/50">
+          <CardContent className="p-3 text-xs space-y-1">
+            <p className="font-medium text-warning">Registro histórico incompleto</p>
+            {frozen.warnings.map((w) => (
+              <p key={w} className="text-muted-foreground">{w}</p>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+
       {!isMultiDay && cashSummary?.closingObs && (
         <Card>
           <CardContent className="p-3 text-xs">
@@ -880,7 +853,7 @@ export default function DailyReportPage({
           <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
           <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
           <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
-          <CountCard label="Clientes atrasados" value={details.atrasados.length} />
+          <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
         </div>
       )}
 
@@ -897,13 +870,13 @@ export default function DailyReportPage({
             <DaySection key={d.date} day={d} />
           ))}
           <p className="text-xs font-semibold text-muted-foreground uppercase pt-2">Situação atual da carteira</p>
-          <RecordSection title="Clientes atrasados" records={details.atrasados} />
+          <RecordSection title="Clientes atrasados" records={atrasadosPeriodo} />
         </div>
       ) : (
         <RecordGroupSections
           groups={recordGroups}
-          pendentes={details.pendentesByDate[endDate] || []}
-          atrasados={details.atrasados}
+          pendentes={frozen.pendentesByDate[endDate] || []}
+          atrasados={atrasadosPeriodo}
         />
       )}
 
@@ -1002,13 +975,13 @@ function DaySection({
 }: {
   day: {
     date: string; events: DailyEvent[]; groups: DayGroups; recordGroups: RecordGroups; pendentes: ReportRecord[];
-    status: string | null; reopened: boolean;
+    status: string | null; statusLabel: string; incompleteSnapshot?: boolean; reopened: boolean;
     opening: number; finalCash: number; diff: number | null; received: number; out: number; closingObs: string | null;
   };
 }) {
   const [open, setOpen] = useState(false);
   const label = format(new Date(day.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
-  const statusLabel = day.status === "closed" ? (day.reopened ? "Reaberto e fechado" : "Fechado") : day.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
+  const statusLabel = day.statusLabel;
 
   return (
     <Card>

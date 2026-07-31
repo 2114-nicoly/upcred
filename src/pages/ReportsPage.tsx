@@ -28,9 +28,12 @@ import {
 } from "@/components/reports/ReportUI";
 import DailyReportPage from "@/pages/DailyReportPage";
 import {
-  fetchReportDetails, emptyReportDetails,
+  emptyReportDetails,
   type ReportDetailsData, type ReportRecord,
 } from "@/lib/report-details";
+import {
+  loadFrozenReportPeriod, emptyFrozenPeriod, type FrozenReportPeriod,
+} from "@/lib/frozen-report";
 import { RecordSection } from "@/components/reports/RecordSection";
 import { computeCoreTotals } from "@/lib/finance-totals";
 import {
@@ -221,30 +224,27 @@ export default function ReportsPage() {
   const scopedCash = cashRows;
   const scopedEvents = events;
 
-  // Detalhamento (somente leitura): clientes pendentes de registro e atrasados por trabalhador.
-  const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
+  // Fonte histórica congelada: dias fechados vêm do snapshot oficial; abertos, dos dados atuais.
+  const [frozen, setFrozen] = useState<FrozenReportPeriod>(() => emptyFrozenPeriod());
+  const details: ReportDetailsData = frozen.details;
   useEffect(() => {
     let alive = true;
     const ids = Array.from(activeIds);
-    if (!ids.length) { setDetails(emptyReportDetails()); return; }
-    fetchReportDetails({
-      events: scopedEvents as any,
-      startDate,
-      endDate,
-      workerIds: ids,
-    })
-      .then((d) => { if (alive) setDetails(d); })
+    if (!ids.length) { setFrozen(emptyFrozenPeriod(startDate, endDate)); return; }
+    loadFrozenReportPeriod({ startDate, endDate, workerIds: ids })
+      .then((f) => { if (alive) setFrozen(f); })
       .catch((err) => {
-        console.error("[Reports] falha ao carregar detalhamento", err);
-        if (alive) { setDetails(emptyReportDetails()); setLoadError(true); }
+        console.error("[Reports] falha ao carregar histórico congelado", err);
+        if (alive) { setFrozen(emptyFrozenPeriod(startDate, endDate)); setLoadError(true); }
       });
     return () => { alive = false; };
-  }, [scopedEvents, activeIds, startDate, endDate]);
+  }, [activeIds, startDate, endDate]);
 
   const pendentesTotal = useMemo(
-    () => Object.values(details.pendentesByDate).reduce((s, l: ReportRecord[]) => s + l.length, 0),
-    [details],
+    () => Object.values(frozen.pendentesByDate).reduce((s, l: ReportRecord[]) => s + l.length, 0),
+    [frozen],
   );
+  const atrasadosPeriodo = frozen.atrasados;
 
   /** Adapta a estrutura única de WorkerStats para os rótulos usados na tela/PDF. */
   const toTotals = (s: WorkerStats) => ({
@@ -269,31 +269,29 @@ export default function ReportsPage() {
     atrasados: s.atrasados,
   });
 
-  // Detalhe por dia (mesma fórmula da fonte única, aplicada a um único dia).
-  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
-    const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
-      evs.filter((e) => types.includes(e.event_type)).reduce((s, e) => s + Number(e[field] || 0), 0);
-    const core = computeCoreTotals(evs as any);
-    const estornoEvs = evs.filter((e) => e.event_type.startsWith("estorno"));
-    return {
-      caixaInicial: cash.reduce((s, c) => s + Number(c.opening_balance || 0), 0),
-      caixaFinal: cash.reduce((s, c) => s + Number(c.counted_closing_balance ?? c.expected_closing_balance ?? 0), 0),
-      diferenca: cash.reduce((s, c) => s + Number(c.closing_difference || 0), 0),
-      recebido: core.recebidoPrincipal,
-      multas: core.multasRecebidas,
-      recebidoTotal: core.recebidoTotal,
-      emprestado: core.emprestado,
-      entradas: sumEv(["entrada_manual"], "amount_in"),
-      saidas: sumEv(["saida_manual", "saida"], "amount_out"),
-      despesas: sumEv(["despesa"], "amount_out"),
-      estornos: estornoEvs.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
-      estornosCount: estornoEvs.length,
-      caixaDisponivel: 0,
-    };
-  };
-
   // Resumo consolidado da equipe = SOMA dos valores já calculados por trabalhador.
-  const summary = useMemo(() => toTotals(consolidate(stats)), [stats]);
+  const summary = useMemo(() => {
+    const base = toTotals(consolidate(stats));
+    // Caixa inicial (1º dia), caixa final (último dia) e diferença vêm do histórico congelado.
+    return frozen.days.length
+      ? {
+          ...base,
+          caixaInicial: frozen.totals.opening,
+          caixaFinal: frozen.totals.finalCash,
+          diferenca: frozen.totals.diff ?? 0,
+          recebido: frozen.totals.received,
+          multas: frozen.totals.penalties,
+          recebidoTotal: frozen.totals.receivedTotal,
+          emprestado: frozen.totals.lent,
+          entradas: frozen.totals.manualIn,
+          saidas: frozen.totals.manualOut,
+          despesas: frozen.totals.expenses,
+          estornos: frozen.totals.estornos,
+          estornosCount: frozen.totals.estornosCount,
+          atrasados: frozen.atrasados.length || base.atrasados,
+        }
+      : base;
+  }, [stats, frozen]);
 
   // Comparativo por trabalhador ativo — exatamente os mesmos valores da linha da equipe.
   const workerRows = useMemo(() => {
@@ -336,41 +334,64 @@ export default function ReportsPage() {
 
 
 
-  // Detalhamento por dia (equipe) — sem misturar datas
+  // Detalhamento por dia (equipe) — cada dia com seus próprios valores congelados.
   const dayRows = useMemo(() => {
-    const dates = new Set<string>();
-    scopedCash.forEach((c) => dates.add(c.cash_date));
-    scopedEvents.forEach((e) => dates.add(e.cash_date));
-    return Array.from(dates)
-      .sort((a, b) => (a < b ? 1 : -1))
-      .map((date) => {
-        const dCash = scopedCash.filter((c) => c.cash_date === date);
-        const dEvents = scopedEvents.filter((e) => e.cash_date === date);
-        const openCount = dCash.filter((c) => c.status !== "closed").length;
-        const closedCount = dCash.filter((c) => c.status === "closed").length;
-
-        const perWorker = workers
-          .map((w) => {
-            const wCash = dCash.filter((c) => c.worker_id === w.id);
-            const wEvents = dEvents.filter((e) => e.worker_id === w.id);
-            if (wCash.length === 0 && wEvents.length === 0) return null;
-            const cash = wCash[0];
-            const isOpen = !!cash && cash.status !== "closed";
-            return {
-              worker: w,
-              isOpen,
-              statusLabel: !cash ? "Não aberto" : isOpen ? "Caixa ainda aberto" : "Fechado",
-              totals: sumTotals(wCash, wEvents),
-            };
-          })
-          .filter(Boolean) as {
-            worker: WorkerRow; isOpen: boolean; statusLabel: string;
-            totals: ReturnType<typeof sumTotals>;
-          }[];
-
-        return { date, openCount, closedCount, totals: sumTotals(dCash, dEvents), perWorker };
+    const byDate = new Map<string, typeof frozen.days>();
+    frozen.days.forEach((d) => {
+      const list = byDate.get(d.date) || [];
+      list.push(d);
+      byDate.set(d.date, list);
+    });
+    return Array.from(byDate.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([date, list]) => {
+        const sum = (pick: (t: (typeof list)[number]["totals"]) => number) =>
+          list.reduce((s, d) => s + pick(d.totals), 0);
+        const totals = {
+          caixaInicial: sum((t) => t.opening),
+          caixaFinal: sum((t) => t.finalCash),
+          diferenca: sum((t) => t.diff ?? 0),
+          recebido: sum((t) => t.received),
+          multas: sum((t) => t.penalties),
+          recebidoTotal: sum((t) => t.receivedTotal),
+          emprestado: sum((t) => t.lent),
+          entradas: sum((t) => t.manualIn),
+          saidas: sum((t) => t.manualOut),
+          despesas: sum((t) => t.expenses),
+          estornos: sum((t) => t.estornos),
+          estornosCount: sum((t) => t.estornosCount),
+          caixaDisponivel: 0,
+        };
+        return {
+          date,
+          openCount: list.filter((d) => d.status === "open").length,
+          closedCount: list.filter((d) => d.status === "closed").length,
+          totals,
+          perWorker: list.map((d) => ({
+            worker: { id: d.workerId || "-", nome: d.workerName } as WorkerRow,
+            isOpen: d.status === "open",
+            statusLabel: d.status === "closed"
+              ? (d.incompleteSnapshot ? "Fechado (registro congelado indisponível)" : "Fechado")
+              : d.status === "open" ? "Caixa ainda aberto" : "Não aberto",
+            totals: {
+              caixaInicial: d.totals.opening,
+              caixaFinal: d.totals.finalCash,
+              diferenca: d.totals.diff ?? 0,
+              recebido: d.totals.received,
+              multas: d.totals.penalties,
+              recebidoTotal: d.totals.receivedTotal,
+              emprestado: d.totals.lent,
+              entradas: d.totals.manualIn,
+              saidas: d.totals.manualOut,
+              despesas: d.totals.expenses,
+              estornos: d.totals.estornos,
+              estornosCount: d.totals.estornosCount,
+              caixaDisponivel: 0,
+            },
+          })),
+        };
       });
-  }, [scopedCash, scopedEvents, workers]);
+  }, [frozen]);
 
   const openWorkerOnDay = (workerId: string, date: string) => {
     setMode("custom");
@@ -433,19 +454,19 @@ export default function ReportsPage() {
         formatCurrency(r.totals.emprestado),
         formatCurrency(r.totals.despesas),
         formatCurrency(r.totals.diferenca),
-        String(details.pendentesByWorker[r.worker.id] || 0),
+        String(frozen.pendentesByWorker[r.worker.id] || 0),
         String(r.totals.atrasados),
       ]),
       { rightCols: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
     );
 
     // Detalhamento completo de clientes atrasados (situação atual da carteira)
-    if (details.atrasados.length) {
+    if (atrasadosPeriodo.length) {
       pdf.blockTitle("Clientes atrasados");
       pdf.table(
         null,
         ["Cliente", "Trabalhador", "Resumo"],
-        details.atrasados.map((r) => [r.clientName, r.workerName, r.summary]),
+        atrasadosPeriodo.map((r) => [r.clientName, r.workerName, r.summary]),
       );
     }
 
@@ -466,7 +487,7 @@ export default function ReportsPage() {
           ["Diferença total de caixa", formatCurrency(d.totals.diferenca)],
           ["Caixas abertos", String(d.openCount)],
           ["Caixas fechados", String(d.closedCount)],
-          ["Clientes pendentes de registro", String((details.pendentesByDate[d.date] || []).length)],
+          ["Clientes pendentes de registro", String((frozen.pendentesByDate[d.date] || []).length)],
 
         ], { rightCols: [1] });
 
@@ -659,6 +680,17 @@ export default function ReportsPage() {
 
       ) : (
         <>
+          {frozen.warnings.length > 0 && (
+            <Card className="border-warning/50">
+              <CardContent className="p-3 text-xs space-y-1">
+                <p className="font-medium text-warning">Registro histórico incompleto</p>
+                {frozen.warnings.map((w) => (
+                  <p key={w} className="text-muted-foreground">{w}</p>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Resumo financeiro do período */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
@@ -801,7 +833,7 @@ export default function ReportsPage() {
                               {formatCurrency(r.totals.diferenca)}
                             </b>
                           </span>
-                          <span>Pendentes: <b className="text-warning">{details.pendentesByWorker[r.worker.id] || 0}</b></span>
+                          <span>Pendentes: <b className="text-warning">{frozen.pendentesByWorker[r.worker.id] || 0}</b></span>
                           <span>Atrasados: <b className="text-destructive">{r.totals.atrasados}</b></span>
                         </div>
 
@@ -817,7 +849,7 @@ export default function ReportsPage() {
 
           {/* Situação atual da carteira da equipe */}
           {!globalMode && (
-            <RecordSection title="Clientes atrasados" records={details.atrasados} showWorker />
+            <RecordSection title="Clientes atrasados" records={atrasadosPeriodo} showWorker />
           )}
 
 
@@ -871,7 +903,7 @@ export default function ReportsPage() {
                                 </span>
                                 <span>Caixas abertos: <b className="text-foreground">{d.openCount}</b></span>
                                 <span>Caixas fechados: <b className="text-foreground">{d.closedCount}</b></span>
-                                <span>Pendentes de registro: <b className="text-warning">{(details.pendentesByDate[d.date] || []).length}</b></span>
+                                <span>Pendentes de registro: <b className="text-warning">{(frozen.pendentesByDate[d.date] || []).length}</b></span>
                               </div>
 
 
