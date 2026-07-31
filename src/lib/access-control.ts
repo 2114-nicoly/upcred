@@ -300,7 +300,10 @@ export type AccessCheck = {
   enforcementEnabled: boolean;
   /** Empresa vinculada com acesso pausado (informativo mesmo sem bloqueio). */
   companyPaused: boolean;
+  /** Empresa (admin_id) do próprio usuário — usada para observar só a própria empresa. */
+  adminId: string | null;
 };
+
 
 /** Mensagens exibidas ao usuário bloqueado (sem detalhes internos). */
 export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
