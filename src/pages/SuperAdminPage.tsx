@@ -83,6 +83,7 @@ type Creds = { nome: string; email: string; password: string };
 export default function SuperAdminPage() {
   const navigate = useNavigate();
   const { isSuperAdmin, loading } = useAuth();
+  const [tab, setTab] = useState("dashboard");
 
   useEffect(() => {
     if (!loading && !isSuperAdmin) navigate("/");
