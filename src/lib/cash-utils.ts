@@ -249,7 +249,9 @@ export async function deleteCashMovement(id: string) {
 export async function recalculateCashBalanceFromLedger() {
   const workerId = await getCurrentWorkerId();
 
-  let movQ = supabase.from("cash_movements").select("amount, worker_id, reversed_at");
+  let movQ = supabase
+    .from("cash_movements")
+    .select("id, amount, worker_id, reversed_at, reverses_movement_id, reversal_movement_id");
   let loanQ = supabase.from("loans").select("amount, total_amount, remaining_balance, status, worker_id");
   let instQ = supabase
     .from("installments")
@@ -265,15 +267,22 @@ export async function recalculateCashBalanceFromLedger() {
     movQ, loanQ, instQ,
   ]);
 
-  let available_cash = 0;
   let money_lent = 0;
   let interest_receivable = 0;
   let penalty_receivable = 0;
 
-  for (const m of (movements || []) as any[]) {
-    if (m.reversed_at) continue;
-    available_cash += Number(m.amount);
+  // REGRA ÚNICA: soma original + contrapartida (efeito líquido zero).
+  // Estornos legados (marcados sem contrapartida) são ignorados e sinalizados.
+  const { total: available_cash, legacyReversedWithoutCounter } = sumLedgerMovements(
+    (movements || []) as any[],
+  );
+  if (legacyReversedWithoutCounter.length > 0) {
+    console.warn(
+      "[cash-utils] movimentações estornadas sem contrapartida (padrão antigo):",
+      legacyReversedWithoutCounter,
+    );
   }
+
 
   for (const loan of (loans || []) as any[]) {
     // Skip inactive loans (cancelled/renegotiated) — they no longer represent receivables.
