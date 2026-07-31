@@ -309,7 +309,7 @@ function DMini({ label, value, cls }: { label: string; value: number; cls?: stri
 }
 
 /* ============ ADMINS TAB ============ */
-function AdminsTab() {
+function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [list, setList] = useState<AdminRow[]>([]);
