@@ -96,6 +96,8 @@ export default function AuthPage() {
       for (const email of candidates) {
         const { error } = await trySignIn(email, pwd);
         if (!error) {
+          const blocked = await finishLogin();
+          if (blocked) throw new Error(blocked);
           toast.success("Bem-vindo!");
           navigate("/", { replace: true });
           return;
@@ -112,6 +114,8 @@ export default function AuthPage() {
         if (resolved) {
           const { error } = await trySignIn(resolved, pwd);
           if (!error) {
+            const blocked = await finishLogin();
+            if (blocked) throw new Error(blocked);
             toast.success("Bem-vindo!");
             navigate("/", { replace: true });
             return;
@@ -119,6 +123,7 @@ export default function AuthPage() {
           lastError = error;
         }
       }
+
 
       const msg = (lastError?.message || "").toLowerCase();
       if (msg.includes("email not confirmed")) {
