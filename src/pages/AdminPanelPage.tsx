@@ -34,7 +34,7 @@ import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import WorkerRequestsAdminSection from "@/components/access/WorkerRequestsAdminSection";
 
-import { AccessMaps, EMPTY_ACCESS_MAPS, loadAccessMaps } from "@/lib/access-control";
+import { AccessMaps, EMPTY_ACCESS_MAPS, isCompanyPaused, loadAccessMaps } from "@/lib/access-control";
 
 
 
@@ -306,6 +306,8 @@ function WorkersTab() {
   // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
   // Acesso/mensalidade é apenas leitura (gerenciado pelo SuperAdministrador).
   const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
+  // Empresa pausada — somente exibição; não altera a licença individual.
+  const companyPaused = Object.values(accessMaps.controlByAdmin).some(isCompanyPaused);
 
   async function load() {
     setLoading(true);
@@ -417,34 +419,10 @@ function WorkersTab() {
     }
   }
 
-  async function handleToggleActive(w: Worker) {
-    const desativando = w.active;
-    const ok = await confirm({
-      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
-      description: desativando ? "O trabalhador perderá acesso ao sistema." : "O trabalhador voltará a poder acessar o sistema.",
-      affected: [{ label: "Trabalhador", value: w.nome }, { label: "Login", value: w.login_codigo }],
-      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
-    });
-    if (!ok) return;
-    const { error } = await supabase.from("workers").update({ active: !w.active } as any).eq("id", w.id);
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    const actor = await getCurrentActorIdentity();
-    await logAction(
-      w.active ? "desativar_trabalhador" : "ativar_trabalhador",
-      "worker", w.id,
-      { name: w.nome, username: w.login_codigo, status: w.active ? "ativo" : "inativo" },
-      {
-        before: { name: w.nome, username: w.login_codigo, status: w.active ? "ativo" : "inativo" },
-        after:  { name: w.nome, username: w.login_codigo, status: w.active ? "inativo" : "ativo" },
-        performed_by: actor.id,
-        performed_by_name: actor.name,
-        performed_by_role: actor.role,
-        timestamp: new Date().toISOString(),
-      },
-    );
-    toast({ title: w.active ? "Desativado" : "Ativado" });
-    load();
-  }
+  // Ativar/desativar trabalhador (workers.active) foi removido daqui:
+  // pausa e liberação de acesso são controladas apenas pela licença,
+  // na aba "Acessos" do SuperAdministrador.
+
 
 
   async function handleResetPassword(w: Worker) {
@@ -548,17 +526,12 @@ function WorkersTab() {
                     <button onClick={() => navigate(`/admin/worker/${w.id}`)} className="flex-1 text-left min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm truncate">{w.nome}</span>
-                        {w.archived_at ? (
+                        {w.archived_at && (
                           <Badge variant="outline" className="text-[10px]">Arquivado</Badge>
-                        ) : !w.active ? (
-                          <Badge variant="secondary" className="text-[10px]">Inativo</Badge>
-                        ) : null}
+                        )}
                       </div>
                       <div className="text-[11px] text-muted-foreground">Login <span className="font-mono">{w.login_codigo}</span></div>
                     </button>
-                    {!w.archived_at && (
-                      <Switch checked={w.active} onCheckedChange={() => handleToggleActive(w)} />
-                    )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
                   </div>
                   <div className="flex flex-wrap gap-1 mb-2">
@@ -587,7 +560,9 @@ function WorkersTab() {
                   <WorkerAccessSummary
                     license={accessMaps.licenseByWorker[w.id]}
                     lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
+                    companyPaused={companyPaused}
                   />
+
                   <div className="flex justify-end">
                     <AccessHistoryDialog
                       workerName={w.nome}
@@ -659,10 +634,10 @@ function WorkersTab() {
               <Label htmlFor="edit-notas">Observação</Label>
               <Textarea id="edit-notas" value={editNotas} onChange={(e) => setEditNotas(e.target.value)} rows={2} />
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Switch checked={editActive} onCheckedChange={setEditActive} />
-              <span>Ativo</span>
-            </label>
+            <p className="text-[11px] text-muted-foreground">
+              Pausa, vencimento e mensalidade são controlados apenas pela licença, na aba “Acessos” do SuperAdministrador.
+            </p>
+
             <DialogFooter>
               <Button type="submit" disabled={savingEdit} className="w-full">
                 {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}

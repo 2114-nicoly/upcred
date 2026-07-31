@@ -32,6 +32,7 @@ import {
   setEnforcementEnabled,
   formatMoney,
   getAccessStatus,
+  getEffectiveAccessStatus,
   loadAccessMaps,
 } from "@/lib/access-control";
 
@@ -127,7 +128,12 @@ export default function AccessManagementTab() {
 
 
 
-  const statusOf = (workerId: string) => getAccessStatus(maps.licenseByWorker[workerId]);
+  /** Status exibido com a prioridade oficial (empresa pausada em primeiro). */
+  const statusOf = (workerId: string) => {
+    const w = workers.find((x) => x.id === workerId);
+    const control = w?.parent_admin_id ? maps.controlByAdmin[w.parent_admin_id] : null;
+    return getEffectiveAccessStatus(maps.licenseByWorker[workerId], isCompanyPaused(control));
+  };
 
   const visibleWorkers = useMemo(
     () =>
@@ -332,16 +338,15 @@ export default function AccessManagementTab() {
                         <p className="text-xs font-medium flex items-center gap-1 flex-wrap">
                           {w.nome}
                           <AccessStatusBadge status={statusOf(w.id)} />
-                          {isCompanyPaused(control) && (
-                            <Badge variant="secondary" className="text-[9px]">Empresa pausada</Badge>
-                          )}
                         </p>
 
                         <WorkerAccessSummary
                           license={maps.licenseByWorker[w.id]}
                           lastPeriod={maps.lastPeriodByWorker[w.id]}
                           title="Licença"
+                          companyPaused={isCompanyPaused(control)}
                         />
+
                         <div className="flex flex-wrap items-center gap-1">
                           <RenewAccessDialog
                             workerId={w.id}

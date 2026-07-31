@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import {
+  ACCESS_STATUS_LABEL,
   fetchGrantorNames,
   WorkerAccessLicense,
   WorkerAccessPeriod,
   getAccessStatus,
+  getEffectiveAccessStatus,
   daysRemaining,
   formatAccessDate,
   formatDateTime,
@@ -16,13 +18,16 @@ type Props = {
   lastPeriod?: WorkerAccessPeriod | null;
   /** Compacto = usado dentro do card do trabalhador (Administrador). */
   title?: string;
+  /** Empresa pausada — apenas exibição, não altera a licença individual. */
+  companyPaused?: boolean;
 };
 
 /**
  * Bloco compartilhado (Administrador e SuperAdministrador) — somente leitura.
  */
-export default function WorkerAccessSummary({ license, lastPeriod, title = "Acesso e mensalidade" }: Props) {
-  const status = getAccessStatus(license);
+export default function WorkerAccessSummary({ license, lastPeriod, title = "Acesso e mensalidade", companyPaused = false }: Props) {
+  const status = getEffectiveAccessStatus(license, companyPaused);
+  const licenseStatus = getAccessStatus(license);
   const days = daysRemaining(license);
   const pausedBy = license?.paused_by ?? null;
   const [pausedByName, setPausedByName] = useState<string | null>(null);
@@ -36,7 +41,12 @@ export default function WorkerAccessSummary({ license, lastPeriod, title = "Aces
     <div className="rounded-md border bg-muted/30 p-2 space-y-1">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-[11px] font-medium">{title}</span>
-        <AccessStatusBadge status={status} />
+        <div className="flex items-center gap-1">
+          <AccessStatusBadge status={status} />
+          {companyPaused && status !== licenseStatus && (
+            <span className="text-[9px] text-muted-foreground">Licença: {ACCESS_STATUS_LABEL[licenseStatus]}</span>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
         <span>Mensalidade: <span className="font-medium text-foreground">{formatMoney(license?.monthly_price)}</span></span>

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2, Power,
+  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -22,6 +22,11 @@ import {
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
+import AccessStatusBadge from "@/components/access/AccessStatusBadge";
+import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import {
+  AccessMaps, EMPTY_ACCESS_MAPS, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
+} from "@/lib/access-control";
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
@@ -76,6 +81,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [workerToday, setWorkerToday] = useState<Record<string, WorkerToday>>({});
+  // Acesso/mensalidade: somente leitura aqui (gerenciado na aba "Acessos").
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
+  const companyPaused = isCompanyPaused(accessMaps.controlByAdmin[adminId]);
   const [reopenReqs, setReopenReqs] = useState<ReopenReq[]>([]);
   const [reopenBusy, setReopenBusy] = useState<string | null>(null);
 
@@ -155,6 +163,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     const wList = (ws as Worker[]) || [];
     setAdmin(ad);
     setWorkers(wList);
+    setAccessMaps(await loadAccessMaps().catch(() => EMPTY_ACCESS_MAPS));
+
+
 
     const [allStats, cs, ls, evs] = await Promise.all([
       loadWorkersStats(range, { adminId }),
@@ -212,38 +223,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   }
 
 
-  async function handleToggleActive(w: Worker, e: React.MouseEvent) {
-    e.stopPropagation();
-    const desativando = w.active;
-    const ok = await confirm({
-      title: desativando ? "Desativar trabalhador?" : "Ativar trabalhador?",
-      description: desativando ? "O trabalhador perderá acesso. Histórico preservado." : "O trabalhador voltará a acessar o sistema.",
-      affected: [{ label: "Trabalhador", value: w.nome }],
-      confirmText: desativando ? "Desativar" : "Ativar", destructive: desativando,
-    });
-    if (!ok) return;
-    try {
-      await requireAudit(
-        desativando ? "desativar_trabalhador" : "ativar_trabalhador",
-        "worker", w.id,
-        { active: w.active, nome: w.nome },
-        { active: !w.active, nome: w.nome },
-        desativando ? "Desativação de trabalhador" : "Ativação de trabalhador",
-        w.id,
-      );
-    } catch (err) {
-      if (err instanceof AuditRequiredError) return;
-      throw err;
-    }
-    const { error } = await supabase.rpc("set_worker_active" as any, { p_worker_id: w.id, p_active: !w.active });
-    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
-    toast({ title: w.active ? "Desativado" : "Ativado" });
-    load();
-  }
+  // Ativar/desativar trabalhador (workers.active) foi removido: liberar ou
+  // bloquear login é controlado apenas pela licença, na aba "Acessos".
 
   async function handleArchive(w: Worker, e: React.MouseEvent) {
     e.stopPropagation();
-    if (w.active) return toast({ title: "Desative o trabalhador antes de arquivar", variant: "destructive" });
+
     const ok = await confirm({
       title: "Arquivar trabalhador?",
       description: "Sai da operação ativa. Histórico preservado. Pode desarquivar depois.",
@@ -488,9 +473,11 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
         <TabsContent value="trabalhadores" className="mt-3 space-y-2">
           <p className="text-[11px] text-muted-foreground">
             {workers.length} trabalhador(es) ·{" "}
-            {workers.filter((w) => w.active).length} ativos ·{" "}
-            {workers.filter((w) => !w.active && !w.archived_at).length} inativos ·{" "}
+            {workers.filter((w) => !w.archived_at).length} na operação ·{" "}
             {workers.filter((w) => w.archived_at).length} arquivados
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            Arquivar serve apenas para organizar a equipe. Pausa, vencimento e mensalidade ficam na aba “Acessos” do SuperAdministrador.
           </p>
           {workers.length === 0 ? (
             <Card><CardContent className="p-4 text-center text-sm text-muted-foreground">Nenhum trabalhador desta equipe.</CardContent></Card>
@@ -510,11 +497,8 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate flex items-center gap-1 flex-wrap">
                           {w.nome}
-                          {isArchived
-                            ? <Badge variant="outline" className="text-[9px]">Arquivado</Badge>
-                            : w.active
-                              ? <Badge className="text-[9px]">Ativo</Badge>
-                              : <Badge variant="secondary" className="text-[9px]">Inativo</Badge>}
+                          <AccessStatusBadge status={getEffectiveAccessStatus(accessMaps.licenseByWorker[w.id], companyPaused)} />
+                          {isArchived && <Badge variant="outline" className="text-[9px]">Arquivado</Badge>}
                           {!isArchived && <Badge variant={cashVariant} className="text-[9px]">Caixa: {cashLabel}</Badge>}
                         </p>
                         <p className="text-[10px] text-muted-foreground">
@@ -531,13 +515,14 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
 
+                    <WorkerAccessSummary
+                      license={accessMaps.licenseByWorker[w.id]}
+                      lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
+                      companyPaused={companyPaused}
+                    />
+
                     <div className="flex flex-wrap gap-1">
                       {!isArchived && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleToggleActive(w, e)}>
-                          <Power className="h-3.5 w-3.5 mr-1" /> {w.active ? "Desativar" : "Ativar"}
-                        </Button>
-                      )}
-                      {!isArchived && !w.active && (
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleArchive(w, e)}>
                           <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
                         </Button>
@@ -554,6 +539,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       )}
 
                     </div>
+
                   </CardContent>
                 </Card>
               );

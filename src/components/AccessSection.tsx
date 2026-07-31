@@ -118,16 +118,20 @@ export default function AccessSection({ targetKind, targetId, loginCodigo, nome,
             <span className="font-mono font-bold">{loginCodigo || "—"}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-xs">Status</span>
+            <span className="text-muted-foreground text-xs">Cadastro</span>
             <div className="flex gap-1">
               {active ? (
-                <Badge className="text-[10px]">Ativo</Badge>
+                <Badge variant="outline" className="text-[10px]">Cadastro ativo</Badge>
               ) : (
-                <Badge variant="secondary" className="text-[10px]">Inativo</Badge>
+                <Badge variant="secondary" className="text-[10px]">Cadastro inativo</Badge>
               )}
               {archivedAt && <Badge variant="outline" className="text-[10px]">Arquivado</Badge>}
             </div>
           </div>
+          <p className="text-[10px] text-muted-foreground">
+            Não controla mensalidade. Pausa e vencimento ficam na aba “Acessos”.
+          </p>
+
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-xs">Última redefinição</span>
             <span className="text-xs">

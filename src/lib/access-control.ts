@@ -47,6 +47,7 @@ export type WorkerAccessPeriod = {
 
 export type AccessStatus =
   | "unconfigured"
+  | "company_paused"
   | "paused"
   | "expired"
   | "expiring"
@@ -55,6 +56,7 @@ export type AccessStatus =
 
 export const ACCESS_STATUS_LABEL: Record<AccessStatus, string> = {
   unconfigured: "Não configurado",
+  company_paused: "Empresa pausada",
   paused: "Pausado",
   expired: "Expirado",
   expiring: "Vence em breve",
@@ -68,8 +70,11 @@ export const ACCESS_STATUS_FILTERS: { value: AccessStatus | "all"; label: string
   { value: "active", label: "Ativo" },
   { value: "expiring", label: "Vence em breve" },
   { value: "expired", label: "Expirado" },
+  { value: "scheduled", label: "Agendado" },
   { value: "paused", label: "Pausado" },
+  { value: "company_paused", label: "Empresa pausada" },
 ];
+
 
 /* ---------------- datas locais (sem deslocamento de fuso) ---------------- */
 
@@ -128,6 +133,19 @@ export function getAccessStatus(license?: WorkerAccessLicense | null): AccessSta
   if (days == null) return "active";
   if (days <= 7) return "expiring";
   return "active";
+}
+
+/**
+ * Status EXIBIDO do trabalhador, com a prioridade oficial:
+ * Empresa pausada > Pausado > Expirado > Agendado > Vence em breve > Ativo > Não configurado.
+ * Nunca altera o status armazenado na licença individual.
+ */
+export function getEffectiveAccessStatus(
+  license?: WorkerAccessLicense | null,
+  companyPaused?: boolean | null,
+): AccessStatus {
+  if (companyPaused) return "company_paused";
+  return getAccessStatus(license);
 }
 
 /* ---------------- consultas ---------------- */

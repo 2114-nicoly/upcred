@@ -3,13 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AccessManagementTab from "@/components/access/AccessManagementTab";
+import {
+  CompanyAccessControl, EMPTY_ACCESS_MAPS, companyStatusLabel, isCompanyPaused, loadAccessMaps,
+} from "@/lib/access-control";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -80,6 +82,7 @@ type Creds = { nome: string; email: string; password: string };
 export default function SuperAdminPage() {
   const navigate = useNavigate();
   const { isSuperAdmin, loading } = useAuth();
+  const [tab, setTab] = useState("dashboard");
 
   useEffect(() => {
     if (!loading && !isSuperAdmin) navigate("/");
@@ -91,7 +94,7 @@ export default function SuperAdminPage() {
   return (
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Super Admin</h1>
-      <Tabs defaultValue="dashboard">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="dashboard" className="text-[10px] px-1">Dashboard</TabsTrigger>
           <TabsTrigger value="admins" className="text-[10px] px-1">Admins</TabsTrigger>
@@ -100,7 +103,8 @@ export default function SuperAdminPage() {
           <TabsTrigger value="maintenance" className="text-[10px] px-1">Manutenção</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard" className="mt-3"><DashboardTab /></TabsContent>
-        <TabsContent value="admins" className="mt-3"><AdminsTab /></TabsContent>
+        <TabsContent value="admins" className="mt-3"><AdminsTab onGoAccess={() => setTab("acessos")} /></TabsContent>
+
         <TabsContent value="ranking" className="mt-3"><RankingTab /></TabsContent>
         <TabsContent value="acessos" className="mt-3"><AccessManagementTab /></TabsContent>
         <TabsContent value="maintenance" className="mt-3"><SuperMaintenanceTab /></TabsContent>
@@ -309,7 +313,7 @@ function DMini({ label, value, cls }: { label: string; value: number; cls?: stri
 }
 
 /* ============ ADMINS TAB ============ */
-function AdminsTab() {
+function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [list, setList] = useState<AdminRow[]>([]);
@@ -317,47 +321,33 @@ function AdminsTab() {
   const [loading, setLoading] = useState(true);
   const [openCreate, setOpenCreate] = useState(false);
   const [creds, setCreds] = useState<GeneratedCreds | null>(null);
+  // Status oficial da empresa (pausa) — somente exibição aqui.
+  const [controlByAdmin, setControlByAdmin] = useState<Record<string, CompanyAccessControl>>({});
 
   async function load() {
     setLoading(true);
     const today = new Date().toISOString().slice(0, 10);
     const monthStart = new Date(); monthStart.setDate(1);
     const ms = monthStart.toISOString().slice(0, 10);
-    const [{ data: admins, error }, { data: stats }] = await Promise.all([
+    const [{ data: admins, error }, { data: stats }, maps] = await Promise.all([
       supabase.rpc("super_admin_list_admins" as any),
       supabase.rpc("super_admin_stats_by_admin" as any, { p_start: ms, p_end: today }),
+      loadAccessMaps().catch(() => EMPTY_ACCESS_MAPS),
     ]);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
     setList((admins as AdminRow[]) || []);
+    setControlByAdmin(maps.controlByAdmin);
     const map: Record<string, AdminStat> = {};
     ((stats as AdminStat[]) || []).forEach((s) => { map[s.admin_id] = s; });
     setStatsByAdmin(map);
+
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
-  async function toggleActive(a: AdminRow) {
-    const { error } = await supabase.rpc("super_admin_set_admin_active" as any, {
-      p_admin_id: a.id, p_active: !a.active,
-    });
-    if (error) return toast({ title: "Erro", description: error.message, variant: "destructive" });
-    toast({ title: a.active ? "Desativado" : "Ativado" });
-    const actor = await getCurrentActorIdentity();
-    await logAction(
-      a.active ? "desativar_admin" : "ativar_admin",
-      "admin", a.id,
-      { name: a.nome, username: a.login_codigo, status: a.active ? "ativo" : "inativo" },
-      {
-        before: { name: a.nome, username: a.login_codigo, status: a.active ? "ativo" : "inativo" },
-        after:  { name: a.nome, username: a.login_codigo, status: a.active ? "inativo" : "ativo" },
-        performed_by: actor.id,
-        performed_by_name: actor.name,
-        performed_by_role: actor.role,
-        timestamp: new Date().toISOString(),
-      },
-    );
-    load();
-  }
+  // Ativar/desativar cadastro do administrador foi removido: pausa e liberação
+  // de acesso da empresa são geridas apenas na aba "Acessos".
+
 
   async function resetAdminPassword(a: AdminRow) {
     const ok = await confirm({
@@ -421,15 +411,21 @@ function AdminsTab() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-sm truncate">{a.nome}</p>
-                      {a.active
-                        ? <Badge className="text-[9px] h-4">Ativo</Badge>
-                        : <Badge variant="secondary" className="text-[9px] h-4">Inativo</Badge>}
+                      <Badge
+                        variant={isCompanyPaused(controlByAdmin[a.id]) ? "destructive" : "outline"}
+                        className="text-[9px] h-4"
+                      >
+                        {companyStatusLabel(controlByAdmin[a.id])}
+                      </Badge>
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">{a.email_real}</p>
                     {a.login_codigo && <p className="text-[10px] text-muted-foreground">Login <span className="font-mono">{a.login_codigo}</span></p>}
                   </div>
-                  <Switch checked={a.active} onCheckedChange={() => toggleActive(a)} />
+                  <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={onGoAccess}>
+                    Acessos
+                  </Button>
                 </div>
+
 
                 <p className="text-[11px] text-muted-foreground">
                   Trabalhadores: <b className="text-foreground">{s?.workers_count ?? 0}</b> · Visão financeira no Dashboard
