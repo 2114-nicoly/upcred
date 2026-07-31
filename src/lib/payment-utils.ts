@@ -10,6 +10,7 @@ import {
   LOAN_STATUS,
   isLoanActive,
 } from "@/lib/status-constants";
+import { loanProgressAt } from "@/lib/progress-utils";
 
 
 /**
@@ -23,7 +24,7 @@ import {
  * Normal loan: paidInsideApp = total_amount - remaining_balance.
  * Imported/ongoing loan: paidInsideApp = initial_remaining_balance - remaining_balance.
  */
-export async function recalculateInstallments(loanId: string) {
+export async function recalculateInstallments(loanId: string, paidAtDate?: string) {
   const { data: loan } = await supabase
     .from("loans")
     .select("total_amount, remaining_balance, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
@@ -40,6 +41,11 @@ export async function recalculateInstallments(loanId: string) {
     : Number(loan.total_amount);
   const totalPaid = Math.max(0, paidBase - Number(loan.remaining_balance));
   const today = new Date().toISOString().split("T")[0];
+  // Data real do pagamento: quando o pagamento é lançado numa cash_date
+  // escolhida, paid_at deve refletir esse dia (meio-dia local), não "agora".
+  const paidAtIso = paidAtDate
+    ? new Date(paidAtDate + "T12:00:00").toISOString()
+    : new Date().toISOString();
 
   const { data: insts } = await supabase
     .from("installments")
@@ -63,7 +69,7 @@ export async function recalculateInstallments(loanId: string) {
         await supabase.from("installments").update({
           paid_amount: newPaid,
           status: INSTALLMENT_STATUS.PAID,
-          paid_at: inst.paid_at || new Date().toISOString(),
+          paid_at: inst.paid_at || paidAtIso,
         }).eq("id", inst.id);
       }
       remaining -= instAmount;
@@ -73,7 +79,7 @@ export async function recalculateInstallments(loanId: string) {
       await supabase.from("installments").update({
         paid_amount: newPaid,
         status: "partial",
-        paid_at: new Date().toISOString(),
+        paid_at: paidAtIso,
       }).eq("id", inst.id);
       remaining = 0;
     } else {
@@ -89,6 +95,28 @@ export async function recalculateInstallments(loanId: string) {
     }
   }
 }
+
+/** Snapshot of non-penalty installments used for before/after capture. */
+async function captureInstallmentState(loanId: string) {
+  const { data } = await supabase
+    .from("installments")
+    .select("id, number, amount, paid_amount, status")
+    .eq("loan_id", loanId)
+    .eq("is_penalty", false)
+    .order("number");
+  const map = new Map<string, { id: string; number: number; amount: number; paid_amount: number; status: string }>();
+  for (const i of ((data as any[]) || [])) {
+    map.set(i.id, {
+      id: i.id,
+      number: Number(i.number),
+      amount: Number(i.amount),
+      paid_amount: Number(i.paid_amount || 0),
+      status: String(i.status),
+    });
+  }
+  return map;
+}
+
 
 /**
  * Register a regular payment against a loan.
@@ -114,7 +142,7 @@ export async function registerPayment(params: {
 
   const { data: loanData } = await supabase
     .from("loans")
-    .select("amount, total_amount, remaining_balance, status")
+    .select("amount, total_amount, remaining_balance, status, installment_count, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
     .eq("id", loanId)
     .single();
 
@@ -123,6 +151,10 @@ export async function registerPayment(params: {
 
   const applied = Math.min(amount, Math.max(0, Number(loanData.remaining_balance)));
   if (applied <= 0.01) return { applied: 0, newBalance: Number(loanData.remaining_balance) };
+
+  // === Captura ANTES (empréstimo + parcelas) ===
+  const progressBefore = loanProgressAt(loanData as any, Number(loanData.remaining_balance));
+  const instBefore = await captureInstallmentState(loanId);
 
   // 1. Atomic RPC: update remaining_balance
   const { data: newBalance, error: rpcError } = await supabase.rpc("apply_loan_payment", {
@@ -171,16 +203,68 @@ export async function registerPayment(params: {
     if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
     if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: applied });
-    await recalculateInstallments(loanId);
+    await recalculateInstallments(loanId, cashDate);
     throw err;
   }
 
   // Recalculate installment distribution based on remaining_balance
-  await recalculateInstallments(loanId);
+  await recalculateInstallments(loanId, cashDate);
   await recalculateCashBalanceFromLedger();
 
   const balanceBefore = Number(loanData.remaining_balance);
   const balanceAfter = Number(newBalance);
+
+  // === Captura DEPOIS + gravação imutável no metadata do evento ===
+  try {
+    const progressAfter = loanProgressAt(loanData as any, balanceAfter);
+    const instAfter = await captureInstallmentState(loanId);
+    const affected: any[] = [];
+    for (const [id, after] of instAfter) {
+      const before = instBefore.get(id);
+      const paidBeforeAmt = before ? before.paid_amount : 0;
+      const delta = after.paid_amount - paidBeforeAmt;
+      if (Math.abs(delta) < 0.005 && (before?.status ?? null) === after.status) continue;
+      affected.push({
+        installment_id: id,
+        number: after.number,
+        amount: after.amount,
+        paid_amount_before: paidBeforeAmt,
+        paid_amount_after: after.paid_amount,
+        status_before: before?.status ?? null,
+        status_after: after.status,
+        amount_applied: Number(delta.toFixed(2)),
+      });
+    }
+    affected.sort((a, b) => a.number - b.number);
+
+    const metadata = {
+      payment_amount: applied,
+      cash_date: cashDate,
+      remaining_balance_before: balanceBefore,
+      remaining_balance_after: balanceAfter,
+      installment_progress_before: progressBefore.formatted,
+      installment_progress_after: progressAfter.formatted,
+      paid_installments_before: progressBefore.paid_installments,
+      paid_installments_after: progressAfter.paid_installments,
+      installments_advanced: Math.max(0, progressAfter.paid_installments - progressBefore.paid_installments),
+      total_installments: progressAfter.total_installments,
+      installment_amount: progressAfter.installment_amount,
+      progress_units_before: progressBefore.progress_units,
+      progress_units_after: progressAfter.progress_units,
+      is_imported_ongoing: !!(loanData as any).is_imported_ongoing,
+      initial_remaining_balance: (loanData as any).initial_remaining_balance ?? null,
+      amount_already_paid: (loanData as any).amount_already_paid ?? null,
+      affected_installments: affected,
+      recorded_at: new Date().toISOString(),
+    };
+    await supabase
+      .from("daily_events" as any)
+      .update({ metadata } as any)
+      .eq("id", event.id);
+  } catch (err) {
+    console.warn("[registerPayment] progress metadata capture failed", err);
+  }
+
 
   // Standard payment audit — always includes ids + snapshot for traceability.
   await logAction(

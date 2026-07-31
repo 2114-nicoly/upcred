@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getCurrentDailyCashScope, applyDailyCashScope, type ExplicitScope } from "@/lib/cash-utils";
 import { getDailyEvents, DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
+import { formatProgress, formatDelta, installmentAmountOf, loanProgressAt } from "@/lib/progress-utils";
 
 /**
  * Payload jsonb stored in `daily_cash_snapshots`. This is the frozen picture
@@ -13,7 +14,7 @@ import { getCurrentActorIdentity } from "@/lib/audit-utils";
  *
  * Version bump if the shape changes so future readers can adapt.
  */
-export const DAILY_SNAPSHOT_VERSION = 1;
+export const DAILY_SNAPSHOT_VERSION = 2;
 
 export type SnapshotClientNames = Record<string, string>;
 
@@ -62,7 +63,63 @@ export type SnapshotNewLoan = {
   clients: { id: string; name: string } | null;
 };
 
+/** v2 — pendente no fechamento (cliente que ficou sem nenhuma ação no dia). */
+export type SnapshotPendingInstallment = {
+  installment_id: string;
+  loan_id: string;
+  client_id: string | null;
+  client_name: string;
+  worker_id: string | null;
+  worker_name: string | null;
+  installment_number: number;
+  total_installments: number;
+  installment_amount: number;
+  paid_amount: number;
+  pending_amount: number;
+  due_date: string;
+  overdue_days: number;
+  loan_remaining_balance: number;
+  progress_at_close: string;
+  status: "Pendente no fechamento";
+};
+
+/** v2 — atraso congelado na data do fechamento. */
+export type SnapshotOverdueClient = {
+  client_id: string;
+  client_name: string;
+  worker_id: string | null;
+  worker_name: string | null;
+  overdue_installments_count: number;
+  overdue_total: number;
+  oldest_due_date: string;
+  overdue_days: number;
+  loan_remaining_balance: number;
+  last_payment: { date: string | null; amount: number | null } | null;
+  installments: Array<{
+    installment_id: string;
+    loan_id: string;
+    number: number;
+    amount: number;
+    paid_amount: number;
+    pending_amount: number;
+    due_date: string;
+    overdue_days: number;
+  }>;
+};
+
+/** v2 — situação da carteira ao final do dia. */
+export type SnapshotPortfolioState = {
+  available_cash: number;
+  saldo_na_rua: number;
+  clientes_ativos: number;
+  emprestimos_ativos: number;
+  clientes_atrasados: number;
+  valor_atrasado: number;
+  parcelas_vencidas: number;
+};
+
 export type DailyCashSnapshotPayload = {
+
   version: number;
   cash_date: string;
   scope: { worker_id: string | null; admin_id: string | null };
@@ -103,6 +160,11 @@ export type DailyCashSnapshotPayload = {
   not_paid_marks: SnapshotNotPaidMark[];
   new_loans: SnapshotNewLoan[];
   expense_breakdown: Record<string, number>;
+  /** v2 — opcionais para manter leitura compatível com snapshots v1. */
+  pending_installments?: SnapshotPendingInstallment[];
+  overdue_clients?: SnapshotOverdueClient[];
+  portfolio_state?: SnapshotPortfolioState | null;
+  scope_names?: { worker_name: string | null; admin_name: string | null };
 };
 
 export type DailyCashSnapshotVersion = {
@@ -116,21 +178,32 @@ export type DailyCashSnapshotVersion = {
   created_at: string;
 };
 
-// --- helpers copied from DailyCashPage to build paid groups identically ---
-function formatInstFraction(paid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0) return "0";
-  const frac = paid / instAmount;
-  const rounded = Math.round(frac * 10) / 10;
-  if (Math.abs(rounded - Math.round(rounded)) < 0.05) return Math.round(rounded).toString();
-  return rounded.toFixed(1).replace(".", ",");
+// Progresso: MESMA função usada no pagamento e na Rota.
+const daysBetween = (fromISO: string, toISO: string) => {
+  const a = new Date(fromISO + "T12:00:00").getTime();
+  const b = new Date(toISO + "T12:00:00").getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+};
+
+/** Nomes congelados do escopo (trabalhador / empresa-administrador). */
+async function loadScopeNames(scope: { worker_id: string | null; admin_id: string | null }) {
+  let workerName: string | null = null;
+  let adminName: string | null = null;
+  try {
+    if (scope.worker_id) {
+      const { data } = await supabase.from("workers").select("nome").eq("id", scope.worker_id).maybeSingle();
+      workerName = (data as any)?.nome ?? null;
+    }
+    if (scope.admin_id) {
+      const { data } = await supabase.from("admins").select("nome").eq("id", scope.admin_id).maybeSingle();
+      adminName = (data as any)?.nome ?? null;
+    }
+  } catch { /* nomes são informativos */ }
+  return { worker_name: workerName, admin_name: adminName };
 }
-function formatProgress(paid: number, instAmount: number, count: number): string {
-  return `${formatInstFraction(paid, instAmount)}/${count}`;
-}
-function formatDelta(deltaPaid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0 || deltaPaid <= 0) return "+0";
-  return `+${formatInstFraction(deltaPaid, instAmount)}`;
-}
+
+
 
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
   try {
@@ -234,15 +307,57 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   }
 
   const paidGroups: SnapshotPaidGroup[] = [];
-  if (paidLoanIds.size > 0) {
+  // 1) Fonte primária: metadata VERDADEIRO gravado no momento do pagamento.
+  //    Nunca reconstruímos um pagamento antigo a partir do remaining_balance atual.
+  const paymentEvents = events
+    .filter(e => e.event_type === "pagamento" && e.loan_id)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const loansWithMetadata = new Set<string>();
+  for (const ev of paymentEvents) {
+    const md: any = ev.metadata || null;
+    if (!md || md.remaining_balance_before == null || md.remaining_balance_after == null) continue;
+    loansWithMetadata.add(ev.loan_id!);
+    const totalAmount = Number(md.total_amount ?? (Number(md.installment_amount || 0) * Number(md.total_installments || 0)));
+    const instCount = Number(md.total_installments || 0);
+    const instAmount = Number(md.installment_amount || (instCount > 0 ? totalAmount / instCount : 0));
+    const remainingBefore = Number(md.remaining_balance_before);
+    const remainingAfter = Number(md.remaining_balance_after);
+    const paidBefore = Math.max(0, totalAmount - remainingBefore);
+    const paidAfter = Math.max(0, totalAmount - remainingAfter);
+    paidGroups.push({
+      movementId: ev.cash_movement_id || "",
+      clientName: (ev.client_id && clientNames[ev.client_id]) || "Cliente",
+      clientId: ev.client_id || "",
+      loanId: ev.loan_id!,
+      totalPaid: Number(md.payment_amount ?? ev.amount_in),
+      accumulatedPaid: paidAfter,
+      remainingBalance: remainingAfter,
+      instAmount,
+      installmentIds: ((md.affected_installments || []) as any[]).map(a => a.installment_id).filter(Boolean),
+      totalAmount,
+      installmentCount: instCount,
+      paidBefore,
+      paidAfter,
+      remainingBefore,
+      remainingAfter,
+      progressBeforeFormatted: md.installment_progress_before || formatProgress(paidBefore, instAmount, instCount),
+      progressAfterFormatted: md.installment_progress_after || formatProgress(paidAfter, instAmount, instCount),
+      progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
+    });
+  }
+
+  // 2) Compatibilidade: pagamentos antigos sem metadata continuam sendo
+  //    reconstruídos pela sequência de movimentações do dia.
+  const legacyLoanIds = [...paidLoanIds].filter(id => !loansWithMetadata.has(id));
+  if (legacyLoanIds.length > 0) {
     const { data: paidLoansData } = await supabase
       .from("loans")
       .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-      .in("id", [...paidLoanIds]);
+      .in("id", legacyLoanIds);
     for (const loan of ((paidLoansData as any[]) || [])) {
       const totalAmount = Number(loan.total_amount);
       const instCount = Number(loan.installment_count);
-      const instAmount = instCount > 0 ? totalAmount / instCount : 0;
+      const instAmount = installmentAmountOf(loan);
       const currentRemaining = Number(loan.remaining_balance);
       const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
       const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
@@ -296,6 +411,7 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     }
   }
 
+
   // Not paid marks + installment enrichment
   const npMarks = ((npRes.data as any[]) || []) as SnapshotNotPaidMark[];
   const npInstIds = [...new Set(npMarks.map(m => m.installment_id).filter(Boolean))];
@@ -321,6 +437,178 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   }
 
   const dailySummary = await loadDailyCollectionSummary(cashDate, scope);
+
+  // ===== v2: pendentes, atrasados, carteira e nomes do escopo =====
+  // Loans "tratados" hoje: qualquer ação válida registrada no dia.
+  const ACTION_TYPES = new Set([
+    "pagamento", "recebimento_multa", "nao_pagou", "renovacao",
+    "renegociacao", "quitacao", "emprestimo_novo",
+  ]);
+  const treatedLoanIds = new Set<string>();
+  for (const ev of events) if (ev.loan_id && ACTION_TYPES.has(ev.event_type)) treatedLoanIds.add(ev.loan_id);
+  for (const m of npMarks) if (m.loan_id) treatedLoanIds.add(m.loan_id);
+
+  const scopeNames = await loadScopeNames(scope);
+  let pendingInstallments: SnapshotPendingInstallment[] = [];
+  let overdueClients: SnapshotOverdueClient[] = [];
+  let portfolioState: SnapshotPortfolioState | null = null;
+  try {
+    const loansQ = applyDailyCashScope(
+      supabase.from("loans")
+        .select("id, client_id, worker_id, total_amount, remaining_balance, installment_count, status, is_imported_ongoing, initial_remaining_balance, amount_already_paid, clients:client_id(id, name)")
+        .in("status", ["open", "overdue"]),
+      scope,
+    );
+    const { data: activeLoansData } = await loansQ;
+    const activeLoans = ((activeLoansData as any[]) || []).filter(l => Number(l.remaining_balance) > 0.01);
+    const loanById = new Map<string, any>(activeLoans.map(l => [l.id, l]));
+
+    let instRows: any[] = [];
+    if (activeLoans.length > 0) {
+      const { data } = await supabase
+        .from("installments")
+        .select("id, loan_id, number, amount, paid_amount, due_date, status, is_penalty")
+        .in("loan_id", activeLoans.map(l => l.id))
+        .eq("is_penalty", false)
+        .in("status", ["pending", "partial", "overdue"])
+        .order("number");
+      instRows = (data as any[]) || [];
+    }
+
+    // --- Pendentes no fechamento: parcela mais antiga vencida/para hoje,
+    //     de empréstimo SEM nenhuma ação registrada no dia.
+    const firstDueByLoan = new Map<string, any>();
+    for (const i of instRows) {
+      if (i.due_date > cashDate) continue;
+      const prev = firstDueByLoan.get(i.loan_id);
+      if (!prev || Number(i.number) < Number(prev.number)) firstDueByLoan.set(i.loan_id, i);
+    }
+    for (const [loanId, inst] of firstDueByLoan) {
+      if (treatedLoanIds.has(loanId)) continue;
+      const loan = loanById.get(loanId);
+      if (!loan) continue;
+      const progress = loanProgressAt(loan, Number(loan.remaining_balance));
+      pendingInstallments.push({
+        installment_id: inst.id,
+        loan_id: loanId,
+        client_id: loan.client_id ?? null,
+        client_name: loan.clients?.name || clientNames[loan.client_id] || "Cliente",
+        worker_id: loan.worker_id ?? null,
+        worker_name: scopeNames.worker_name,
+        installment_number: Number(inst.number),
+        total_installments: Number(loan.installment_count),
+        installment_amount: Number(inst.amount),
+        paid_amount: Number(inst.paid_amount || 0),
+        pending_amount: Math.max(0, Number(inst.amount) - Number(inst.paid_amount || 0)),
+        due_date: inst.due_date,
+        overdue_days: inst.due_date < cashDate ? daysBetween(inst.due_date, cashDate) : 0,
+        loan_remaining_balance: Number(loan.remaining_balance),
+        progress_at_close: progress.formatted,
+        status: "Pendente no fechamento",
+      });
+    }
+    pendingInstallments.sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+    // --- Clientes atrasados congelados na data do fechamento
+    const overdueByClient = new Map<string, SnapshotOverdueClient>();
+    let overdueInstCount = 0;
+    let overdueTotal = 0;
+    for (const i of instRows) {
+      if (!(i.due_date < cashDate)) continue;
+      const loan = loanById.get(i.loan_id);
+      if (!loan) continue;
+      const pending = Math.max(0, Number(i.amount) - Number(i.paid_amount || 0));
+      if (pending <= 0.01) continue;
+      overdueInstCount += 1;
+      overdueTotal += pending;
+      const key = `${loan.worker_id ?? "null"}|${loan.client_id ?? "null"}`;
+      let entry = overdueByClient.get(key);
+      if (!entry) {
+        entry = {
+          client_id: loan.client_id,
+          client_name: loan.clients?.name || clientNames[loan.client_id] || "Cliente",
+          worker_id: loan.worker_id ?? null,
+          worker_name: scopeNames.worker_name,
+          overdue_installments_count: 0,
+          overdue_total: 0,
+          oldest_due_date: i.due_date,
+          overdue_days: 0,
+          loan_remaining_balance: 0,
+          last_payment: null,
+          installments: [],
+        };
+        overdueByClient.set(key, entry);
+      }
+      entry.overdue_installments_count += 1;
+      entry.overdue_total += pending;
+      if (i.due_date < entry.oldest_due_date) entry.oldest_due_date = i.due_date;
+      entry.overdue_days = daysBetween(entry.oldest_due_date, cashDate);
+      entry.loan_remaining_balance += 0; // somado abaixo por empréstimo único
+      entry.installments.push({
+        installment_id: i.id,
+        loan_id: i.loan_id,
+        number: Number(i.number),
+        amount: Number(i.amount),
+        paid_amount: Number(i.paid_amount || 0),
+        pending_amount: pending,
+        due_date: i.due_date,
+        overdue_days: daysBetween(i.due_date, cashDate),
+      });
+    }
+    // saldo devedor por cliente (empréstimos únicos) + último pagamento conhecido
+    for (const entry of overdueByClient.values()) {
+      const loanIds = [...new Set(entry.installments.map(i => i.loan_id))];
+      entry.loan_remaining_balance = loanIds.reduce(
+        (s, id) => s + Number(loanById.get(id)?.remaining_balance || 0), 0,
+      );
+    }
+    if (overdueByClient.size > 0) {
+      const clientIdList = [...new Set([...overdueByClient.values()].map(e => e.client_id))].filter(Boolean);
+      const { data: lastPays } = await supabase
+        .from("cash_movements")
+        .select("client_id, amount, cash_date")
+        .in("client_id", clientIdList)
+        .eq("type", "recebimento_normal")
+        .is("reversed_at", null)
+        .lte("cash_date", cashDate)
+        .order("cash_date", { ascending: false })
+        .limit(500);
+      const seen = new Map<string, { date: string; amount: number }>();
+      for (const p of ((lastPays as any[]) || [])) {
+        if (!p.client_id || seen.has(p.client_id)) continue;
+        seen.set(p.client_id, { date: p.cash_date, amount: Number(p.amount) });
+      }
+      for (const entry of overdueByClient.values()) {
+        const lp = seen.get(entry.client_id);
+        entry.last_payment = lp ? { date: lp.date, amount: lp.amount } : null;
+      }
+    }
+    overdueClients = [...overdueByClient.values()].sort((a, b) => b.overdue_days - a.overdue_days);
+
+    // --- Situação da carteira ao final do dia
+    let availableCash = 0;
+    try {
+      const { getCashBalance } = await import("@/lib/cash-utils");
+      const cb = await getCashBalance({
+        workerId: scope.worker_id,
+        adminId: scope.admin_id,
+      } as any);
+      availableCash = Number((cb as any)?.available_cash || 0);
+    } catch { availableCash = 0; }
+
+    portfolioState = {
+      available_cash: availableCash,
+      saldo_na_rua: activeLoans.reduce((s, l) => s + Number(l.remaining_balance || 0), 0),
+      clientes_ativos: new Set(activeLoans.map(l => l.client_id).filter(Boolean)).size,
+      emprestimos_ativos: activeLoans.length,
+      clientes_atrasados: overdueClients.length,
+      valor_atrasado: Number(overdueTotal.toFixed(2)),
+      parcelas_vencidas: overdueInstCount,
+    };
+  } catch (err) {
+    console.warn("[daily-snapshot] v2 sections failed", err);
+  }
+
 
   return {
     version: DAILY_SNAPSHOT_VERSION,
@@ -364,6 +652,11 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     not_paid_marks: enrichedNp,
     new_loans: newLoans,
     expense_breakdown: expenseBreakdown,
+    pending_installments: pendingInstallments,
+    overdue_clients: overdueClients,
+    portfolio_state: portfolioState,
+    scope_names: scopeNames,
+
   };
 }
 

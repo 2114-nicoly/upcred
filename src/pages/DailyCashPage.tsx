@@ -301,6 +301,8 @@ export default function DailyCashPage() {
 
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>("all");
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
+  // Versão do snapshot carregado (null = dia não fechado ou sem histórico).
+  const [snapshotVersion, setSnapshotVersion] = useState<number | null>(null);
   const [paidGroups, setPaidGroups] = useState<PaidGroup[]>([]);
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
@@ -487,8 +489,32 @@ export default function DailyCashPage() {
             setPaidGroups((snap.paid_groups as any) || []);
             setNotPaidMarks((snap.not_paid_marks as any) || []);
             setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
-            setPendingInstallments([]);
+            // Pendentes congelados (snapshot v2). Snapshots v1 não têm a lista.
+            const frozenPending = ((snap as any).pending_installments || []) as any[];
+            setPendingInstallments(frozenPending.map((p): InstallmentWithLoan => ({
+              id: p.installment_id,
+              number: Number(p.installment_number) || 0,
+              amount: Number(p.installment_amount) || 0,
+              due_date: p.due_date,
+              status: "pending",
+              loan_id: p.loan_id,
+              is_penalty: false,
+              paid_amount: Number(p.paid_amount) || 0,
+              paid_at: null,
+              loans: {
+                id: p.loan_id,
+                client_id: p.client_id,
+                amount: 0,
+                total_amount: Number(p.installment_amount) * (Number(p.total_installments) || 0),
+                remaining_balance: Number(p.loan_remaining_balance) || 0,
+                installment_count: Number(p.total_installments) || 0,
+                payment_type: "",
+                clients: { id: p.client_id, name: p.client_name || "Cliente" },
+              },
+            })));
+            setSnapshotVersion(Number((snap as any).version) || 1);
             setSelectedForNotPaid(new Set());
+
             setPendingPenalties([]);
             setRescheduledInstIds(new Set());
             return; // finally ainda roda (resumo + loading off)
@@ -497,6 +523,8 @@ export default function DailyCashPage() {
           console.warn("[DailyCashPage] snapshot load failed", e);
         }
       }
+
+      setSnapshotVersion(null);
 
       const visibleNewLoans = ((newLoanData as NewLoanInfo[]) || []).filter(
         (loan: any) => isLoanActive(loan)
@@ -929,6 +957,19 @@ export default function DailyCashPage() {
     setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // Evita duplicidade: se já existe marcação para esta parcela no dia, não repete o evento.
+      const { data: existingMark } = await supabase
+        .from("not_paid_marks")
+        .select("id")
+        .eq("mark_date", selectedDate)
+        .eq("installment_id", inst.id)
+        .maybeSingle();
+      if (existingMark) {
+        toast.info("Esta parcela já está marcada como “Não Pagou” hoje.");
+        setNotPaidDialogId(null);
+        await fetchData();
+        return;
+      }
       const { error: insertErr } = await supabase
         .from("not_paid_marks")
         .upsert({
@@ -1667,6 +1708,12 @@ export default function DailyCashPage() {
             <h2 className="text-xs font-semibold text-foreground flex items-center gap-1 uppercase tracking-wider">
               <Clock className="h-3 w-3" /> Pendentes ({pendingInstallments.length})
             </h2>
+            {isClosed && snapshotVersion !== null && snapshotVersion < 2 && (
+              <p className="text-[11px] text-warning">
+                Este dia foi fechado antes do histórico completo — a lista de clientes
+                pendentes não foi congelada e não pode ser reconstruída.
+              </p>
+            )}
             {pendingInstallments.length === 0 ? (
               <div className="flex flex-col items-center py-6">
                 <CheckCircle className="mb-2 h-8 w-8 text-success" />
