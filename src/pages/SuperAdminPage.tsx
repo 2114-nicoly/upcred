@@ -94,7 +94,7 @@ export default function SuperAdminPage() {
   return (
     <div className="p-3 max-w-3xl mx-auto pb-24">
       <h1 className="text-xl font-bold mb-3">Super Admin</h1>
-      <Tabs defaultValue="dashboard">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="dashboard" className="text-[10px] px-1">Dashboard</TabsTrigger>
           <TabsTrigger value="admins" className="text-[10px] px-1">Admins</TabsTrigger>
@@ -103,7 +103,8 @@ export default function SuperAdminPage() {
           <TabsTrigger value="maintenance" className="text-[10px] px-1">Manutenção</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard" className="mt-3"><DashboardTab /></TabsContent>
-        <TabsContent value="admins" className="mt-3"><AdminsTab /></TabsContent>
+        <TabsContent value="admins" className="mt-3"><AdminsTab onGoAccess={() => setTab("acessos")} /></TabsContent>
+
         <TabsContent value="ranking" className="mt-3"><RankingTab /></TabsContent>
         <TabsContent value="acessos" className="mt-3"><AccessManagementTab /></TabsContent>
         <TabsContent value="maintenance" className="mt-3"><SuperMaintenanceTab /></TabsContent>
