@@ -80,6 +80,10 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
       if (cancel) return;
       const wRow = w as Worker | null;
       setWorker(wRow);
+      loadAccessMaps({ workerIds: [workerId], adminIds: wRow?.parent_admin_id ? [wRow.parent_admin_id] : [] })
+        .then((m) => { if (!cancel) setAccessMaps(m); })
+        .catch(() => { /* exibição não deve quebrar o painel */ });
+
       setStats(statsList.find((s) => s.worker_id === workerId) ?? null);
       setClients((cs as ClientRow[]) || []);
       setLoans((ls as any) || []);
