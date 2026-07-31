@@ -354,7 +354,9 @@ export async function loadWorkersStats(
   for (const s of map.values()) {
     s.totalSaidas = s.emprestado + s.retirada + s.despesas;
     s.faltaReceber = Math.max(0, s.faltaReceber);
-    s.percentual = s.previsto > 0 ? ((s.previsto - s.faltaReceber) / s.previsto) * 100 : 0;
+    s.valorAtrasado = Math.max(0, s.valorAtrasado);
+    s.recebidoDoPrevisto = Math.max(0, s.recebidoDoPrevisto);
+    s.percentual = s.previsto > 0 ? (s.recebidoDoPrevisto / s.previsto) * 100 : 0;
     s.saldoLiquido = s.recebido + s.aporte - s.emprestado - s.retirada - s.despesas;
   }
 
