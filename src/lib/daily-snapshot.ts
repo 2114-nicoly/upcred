@@ -671,11 +671,19 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
       parcelas_vencidas: overdueInstCount,
     };
   } catch (err) {
+    if (err instanceof Error && err.message === OUT_OF_SCOPE_MESSAGE) throw err;
     console.warn("[daily-snapshot] v2 sections failed", err);
   }
 
+  // ===== Validação final de isolamento (nada fora do escopo) =====
+  assertAllInScope(events, scope, "daily_events");
+  assertAllInScope(reversed, scope, "daily_events (estornados)");
+  assertAllInScope(npMarks, scope, "not_paid_marks");
+  assertAllInScope(newLoans as any[], scope, "loans do dia");
+  assertAllInScope(paidMovements as any[], scope, "cash_movements");
 
   return {
+
     version: DAILY_SNAPSHOT_VERSION,
     cash_date: cashDate,
     scope,
