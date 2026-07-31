@@ -62,7 +62,63 @@ export type SnapshotNewLoan = {
   clients: { id: string; name: string } | null;
 };
 
+/** v2 — pendente no fechamento (cliente que ficou sem nenhuma ação no dia). */
+export type SnapshotPendingInstallment = {
+  installment_id: string;
+  loan_id: string;
+  client_id: string | null;
+  client_name: string;
+  worker_id: string | null;
+  worker_name: string | null;
+  installment_number: number;
+  total_installments: number;
+  installment_amount: number;
+  paid_amount: number;
+  pending_amount: number;
+  due_date: string;
+  overdue_days: number;
+  loan_remaining_balance: number;
+  progress_at_close: string;
+  status: "Pendente no fechamento";
+};
+
+/** v2 — atraso congelado na data do fechamento. */
+export type SnapshotOverdueClient = {
+  client_id: string;
+  client_name: string;
+  worker_id: string | null;
+  worker_name: string | null;
+  overdue_installments_count: number;
+  overdue_total: number;
+  oldest_due_date: string;
+  overdue_days: number;
+  loan_remaining_balance: number;
+  last_payment: { date: string | null; amount: number | null } | null;
+  installments: Array<{
+    installment_id: string;
+    loan_id: string;
+    number: number;
+    amount: number;
+    paid_amount: number;
+    pending_amount: number;
+    due_date: string;
+    overdue_days: number;
+  }>;
+};
+
+/** v2 — situação da carteira ao final do dia. */
+export type SnapshotPortfolioState = {
+  available_cash: number;
+  saldo_na_rua: number;
+  clientes_ativos: number;
+  emprestimos_ativos: number;
+  clientes_atrasados: number;
+  valor_atrasado: number;
+  parcelas_vencidas: number;
+};
+
 export type DailyCashSnapshotPayload = {
+
   version: number;
   cash_date: string;
   scope: { worker_id: string | null; admin_id: string | null };
