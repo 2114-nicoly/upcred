@@ -178,23 +178,23 @@ export default function RenewAccessDialog({
               </div>
             </div>
 
+            <div>
+              <Label className="text-xs">Data inicial do novo período</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Sugestão: {formatAccessDate(suggestedStart)} — pode ser alterada.
+              </p>
+            </div>
+
             <div className="flex items-center justify-between rounded-md border p-2">
               <Label className="text-xs">Período personalizado</Label>
               <Switch checked={custom} onCheckedChange={setCustom} />
             </div>
 
             {custom && (
-              <div className="grid grid-cols-2 gap-2">
-                {!stillValid && (
-                  <div>
-                    <Label className="text-xs">Data inicial</Label>
-                    <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                  </div>
-                )}
-                <div>
-                  <Label className="text-xs">Data final</Label>
-                  <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-                </div>
+              <div>
+                <Label className="text-xs">Data final</Label>
+                <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
               </div>
             )}
 
