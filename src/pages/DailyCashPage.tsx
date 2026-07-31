@@ -16,6 +16,17 @@ import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/l
 import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger, getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { createDailyEvent, reverseDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
+import {
+  buildPaidGroupsFromFrozenEvents,
+  normalizeSnapshotPaidGroups,
+  removePaidGroupByMovement,
+  findPaidGroupByMovement,
+  INCOMPLETE_HISTORY_LABEL,
+  type PaidGroup,
+  type FrozenPaymentEvent,
+  type LegacyPaymentMovement,
+} from "@/lib/paid-groups";
+
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { logAction } from "@/lib/audit-utils";
 import { isCashClosed } from "@/lib/cash-lock";
@@ -144,20 +155,14 @@ type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } |
 type CashMovementPaymentRow = {
   id: string;
   loan_id: string | null;
+  client_id?: string | null;
   amount: number;
   created_at: string;
+  cash_date?: string | null;
+  worker_id?: string | null;
+  admin_id?: string | null;
 };
 
-type PaidLoanRow = {
-  id: string;
-  client_id: string;
-  amount: number;
-  total_amount: number;
-  remaining_balance: number;
-  installment_count: number;
-  payment_type: string;
-  clients: { id: string; name: string } | null;
-};
 
 type PenaltyMovementRow = { amount: number };
 
@@ -220,43 +225,9 @@ const mapRouteInstallment = (row: RouteInstallmentRow): InstallmentWithLoan => (
   },
 });
 
-// Paid group for display
-type PaidGroup = {
-  movementId: string;
-  clientName: string;
-  clientId: string;
-  loanId: string;
-  totalPaid: number;
-  accumulatedPaid: number;
-  remainingBalance: number;
-  instAmount: number;
-  installmentIds: string[];
-  // Progress tracking (before/after payment)
-  totalAmount: number;
-  installmentCount: number;
-  paidBefore: number;
-  paidAfter: number;
-  remainingBefore: number;
-  remainingAfter: number;
-  progressBeforeFormatted: string;
-  progressAfterFormatted: string;
-  progressDeltaFormatted: string;
-};
+// Cards "Pagos do Dia": montados apenas a partir do histórico congelado
+// (src/lib/paid-groups.ts). Nunca do estado atual do empréstimo.
 
-function formatInstFraction(paid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0) return "0";
-  const frac = paid / instAmount;
-  const rounded = Math.round(frac * 10) / 10;
-  if (Math.abs(rounded - Math.round(rounded)) < 0.05) return Math.round(rounded).toString();
-  return rounded.toFixed(1).replace(".", ",");
-}
-function formatProgress(paid: number, instAmount: number, count: number): string {
-  return `${formatInstFraction(paid, instAmount)}/${count}`;
-}
-function formatDelta(deltaPaid: number, instAmount: number): string {
-  if (!instAmount || instAmount <= 0 || deltaPaid <= 0) return "+0";
-  return `+${formatInstFraction(deltaPaid, instAmount)}`;
-}
 
 type PendingFilter = "all" | "overdue" | "today";
 
@@ -290,9 +261,11 @@ export default function DailyCashPage() {
   /** Aplica worker_id/admin_id efetivos em qualquer query desta tela. */
   const scopeRows = useCallback((q: any) => {
     let out = q;
+    // Escopo: aplicar AMBOS quando disponíveis (nunca worker OU admin).
     if (effectiveWorkerId) out = out.eq("worker_id", effectiveWorkerId);
-    else if (effectiveAdminId) out = out.eq("admin_id", effectiveAdminId);
+    if (effectiveAdminId) out = out.eq("admin_id", effectiveAdminId);
     return out;
+
   }, [effectiveWorkerId, effectiveAdminId]);
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -461,7 +434,7 @@ export default function DailyCashPage() {
           .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, worker_id, clients:client_id(id, name)")
           .eq("loan_date", selectedDate)) as unknown as QueryResult<NewLoanInfo>,
         scopeRows(supabase.from("cash_movements")
-          .select("id, loan_id, amount, created_at")
+          .select("id, loan_id, client_id, amount, created_at, cash_date, worker_id, admin_id")
           .eq("cash_date", selectedDate)
           .eq("type", "recebimento_normal")
           .is("reversed_at", null)) as unknown as QueryResult<CashMovementPaymentRow>,
@@ -486,7 +459,7 @@ export default function DailyCashPage() {
             setNewLoans((snap.new_loans as any) || []);
             setRenewalEvents((snap.renewal_events as any) || []);
             setReversedEvents((snap.reversed_events as any) || []);
-            setPaidGroups((snap.paid_groups as any) || []);
+            setPaidGroups(normalizeSnapshotPaidGroups((snap.paid_groups as any) || []));
             setNotPaidMarks((snap.not_paid_marks as any) || []);
             setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
             // Pendentes congelados (snapshot v2). Snapshots v1 não têm a lista.
@@ -565,123 +538,35 @@ export default function DailyCashPage() {
       setReversedEvents((allEventsIncReversed || []).filter((e) => e.reversed_at !== null));
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
-      // Build sets of loan IDs that already have payment or nao_pagou events today
-      const paidEventsByLoan = new Map<string, number>();
+      // Loans com pagamento/não pagou hoje (anti-reaparecimento na lista de pendentes)
       const paidLoanIds = new Set<string>();
       const npLoanIds = new Set<string>();
       const npInstIds = new Set<string>();
 
       for (const ev of allEvents) {
-        if (ev.event_type === "pagamento" && ev.loan_id) {
-          paidLoanIds.add(ev.loan_id);
-          paidEventsByLoan.set(ev.loan_id, (paidEventsByLoan.get(ev.loan_id) || 0) + Number(ev.amount_in));
-        }
+        if (ev.event_type === "pagamento" && ev.loan_id) paidLoanIds.add(ev.loan_id);
       }
-      const paidMovementsByLoan = new Map<string, CashMovementPaymentRow[]>();
       for (const mov of (paidMovementsData || []) as CashMovementPaymentRow[]) {
-        if (mov.loan_id) paidMovementsByLoan.set(mov.loan_id, [...(paidMovementsByLoan.get(mov.loan_id) || []), mov]);
-      }
-      for (const [loanId, movements] of paidMovementsByLoan) {
-        const total = movements.reduce((sum, mov) => sum + Number(mov.amount), 0);
-        if (!paidEventsByLoan.has(loanId)) paidEventsByLoan.set(loanId, total);
-        paidLoanIds.add(loanId);
+        if (mov.loan_id) paidLoanIds.add(mov.loan_id);
       }
       for (const m of npMarks) {
         npLoanIds.add(m.loan_id);
         npInstIds.add(m.installment_id);
       }
 
-      // Build paid groups from daily_events (source of truth for display)
-      // We need loan info for display - fetch loans that have payments today
-      const paidLoanIdArr = [...paidLoanIds];
-      const paidGroupsList: PaidGroup[] = [];
-      if (paidLoanIdArr.length > 0) {
-        const { data: paidLoansData } = await scopeRows(supabase
-          .from("loans")
-          .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-          .in("id", paidLoanIdArr)) as unknown as { data: PaidLoanRow[] | null };
-
-        for (const loan of (paidLoansData || [])) {
-          const client = loan.clients;
-          const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          );
-          const totalAmount = Number(loan.total_amount);
-          const instCount = Number(loan.installment_count);
-          const instAmount = instCount > 0 ? totalAmount / instCount : 0;
-          const currentRemaining = Number(loan.remaining_balance);
-          const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
-
-          const baseStatic = {
-            clientName: client?.name || "Cliente",
-            clientId: loan.client_id,
-            loanId: loan.id,
-            accumulatedPaid,
-            remainingBalance: currentRemaining,
-            instAmount,
-            installmentIds: [] as string[],
-            totalAmount,
-            installmentCount: instCount,
-          };
-
-          const buildProgress = (totalPaid: number, remainingAfter: number): Partial<PaidGroup> => {
-            const remainingBefore = Math.min(totalAmount, remainingAfter + totalPaid);
-            const paidBefore = Math.max(0, totalAmount - remainingBefore);
-            const paidAfter = Math.max(0, totalAmount - remainingAfter);
-            return {
-              paidBefore, paidAfter, remainingBefore, remainingAfter,
-              progressBeforeFormatted: formatProgress(paidBefore, instAmount, instCount),
-              progressAfterFormatted: formatProgress(paidAfter, instAmount, instCount),
-              progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
-            };
-          };
-
-          if (movements.length > 0) {
-            // Walk forward: remainingBefore for first mov = currentRemaining + sum(all movements today)
-            const totalToday = movements.reduce((s, m) => s + Number(m.amount), 0);
-            let runningRemaining = Math.min(totalAmount, currentRemaining + totalToday);
-            for (const mov of movements) {
-              const amt = Number(mov.amount);
-              const after = Math.max(0, runningRemaining - amt);
-              paidGroupsList.push({
-                ...baseStatic,
-                movementId: mov.id,
-                totalPaid: amt,
-                ...buildProgress(amt, after),
-              } as PaidGroup);
-              runningRemaining = after;
-            }
-          } else {
-            const totalPaid = paidEventsByLoan.get(loan.id) || 0;
-            paidGroupsList.push({
-              ...baseStatic,
-              movementId: "",
-              totalPaid,
-              ...buildProgress(totalPaid, currentRemaining),
-            } as PaidGroup);
-          }
-        }
-
-        // Get installment IDs for undo capability
-        const { data: cmData } = await scopeRows(supabase.from("cash_movements")
-          .select("installment_id, loan_id")
-          .eq("type", "recebimento_normal")
-          .eq("cash_date", selectedDate)
-          .in("loan_id", paidLoanIdArr)
-          .is("reversed_at", null));
-        const instByLoan = new Map<string, string[]>();
-        for (const cm of (cmData || [])) {
-          if (cm.installment_id && cm.loan_id) {
-            if (!instByLoan.has(cm.loan_id)) instByLoan.set(cm.loan_id, []);
-            instByLoan.get(cm.loan_id)!.push(cm.installment_id);
-          }
-        }
-        for (const g of paidGroupsList) {
-          g.installmentIds = instByLoan.get(g.loanId) || [];
-        }
-      }
+      // Cards de pagamento: SOMENTE histórico congelado dos daily_events.
+      // Nada de saldo/parcelas atuais — pagamentos antigos nunca mudam.
+      const paidGroupsList = buildPaidGroupsFromFrozenEvents(
+        allEvents as unknown as FrozenPaymentEvent[],
+        {
+          cashDate: selectedDate,
+          scope: { workerId: effectiveWorkerId, adminId: effectiveAdminId },
+          legacyMovements: (paidMovementsData || []) as unknown as LegacyPaymentMovement[],
+        },
+      );
       if (isStale()) return;
       setPaidGroups(paidGroupsList);
+
 
       // Penalty payments total today (recebimento_multa)
       const { data: penPayData } = await (scopeRows(supabase
@@ -1139,17 +1024,19 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleUndoPayment= async (loanId: string, movementId: string) => {
+  const handleUndoPayment = async (movementId: string) => {
     if (isSubmitting) return;
     if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
-    const group = paidGroups.find(g => g.loanId === loanId);
+    // Localizar SEMPRE pelo movementId: dois pagamentos do mesmo empréstimo
+    // são movimentações distintas.
+    const group = findPaidGroupByMovement(paidGroups, movementId);
     const ok = await confirm({
       title: "Desfazer pagamento?",
       description: "O valor sairá do caixa e a parcela voltará a ficar pendente.",
       affected: group ? [
-        { label: "Cliente", value: (group as any).clientName || "—" },
+        { label: "Cliente", value: group.clientName || "—" },
         { label: "Valor", value: formatCurrency(group.totalPaid) },
       ] : undefined,
       confirmText: "Desfazer", destructive: true,
@@ -1157,9 +1044,10 @@ export default function DailyCashPage() {
     if (!ok) return;
     setIsSubmitting(true);
 
-    // Optimistic: remove from paid
-    setPaidGroups(prev => prev.filter(g => g.loanId !== loanId));
-    localActionedLoanIds.current.delete(loanId);
+    // Otimista: remover SOMENTE o card desta movimentação.
+    setPaidGroups(prev => removePaidGroupByMovement(prev, movementId));
+    if (group?.loanId) localActionedLoanIds.current.delete(group.loanId);
+
 
     try {
       await reversePayment({ movementId });
@@ -1479,9 +1367,9 @@ export default function DailyCashPage() {
 
   // === Paid row ===
   const renderPaidRow = (group: PaidGroup) => {
-    const isSettled = group.remainingAfter <= 0.01;
+    const isSettled = group.hasFrozenProgress && (group.remainingAfter ?? 1) <= 0.01;
     return (
-      <div key={safeKey("paid", group.loanId, group.movementId || group.totalPaid, group.paidAfter, group.remainingAfter)} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+      <div key={safeKey("paid", group.movementId || group.eventId || group.loanId, group.createdAt, group.totalPaid)} className="rounded-lg border border-success/30 bg-card px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-sm truncate">{group.clientName}</span>
           <div className="flex items-center gap-2">
@@ -1497,31 +1385,42 @@ export default function DailyCashPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleUndoPayment(group.loanId, group.movementId)} className="text-destructive">
+                  <DropdownMenuItem onClick={() => handleUndoPayment(group.movementId)} className="text-destructive">
                     Desfazer pagamento
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
-                    <Eye className="mr-2 h-4 w-4" /> Ver detalhes
-                  </DropdownMenuItem>
+                  {group.loanId && (
+                    <DropdownMenuItem onClick={() => navigate(`/loans/${group.loanId}`)}>
+                      <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
         </div>
-        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
-          <div>
-            Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
-            <span className="ml-1 text-success">({group.progressDeltaFormatted} parcela{group.progressDeltaFormatted === "+1" ? "" : "s"})</span>
+        {group.hasFrozenProgress ? (
+          <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
+            <div>
+              Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
+              {group.progressDeltaFormatted && (
+                <span className="ml-1 text-success">({group.progressDeltaFormatted} parcela{group.progressDeltaFormatted === "+1" ? "" : "s"})</span>
+              )}
+            </div>
+            <div>
+              Pago: {formatCurrency(group.paidBefore ?? 0)} → <span className="text-foreground font-medium">{formatCurrency(group.paidAfter ?? 0)}</span>
+              <span className="mx-1">•</span>
+              Saldo: {formatCurrency(group.remainingBefore ?? 0)} → <span className="text-foreground font-medium">{formatCurrency(group.remainingAfter ?? 0)}</span>
+            </div>
           </div>
-          <div>
-            Pago: {formatCurrency(group.paidBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.paidAfter)}</span>
-            <span className="mx-1">•</span>
-            Saldo: {formatCurrency(group.remainingBefore)} → <span className="text-foreground font-medium">{formatCurrency(group.remainingAfter)}</span>
+        ) : (
+          <div className="mt-0.5 text-[11px] text-muted-foreground leading-tight italic">
+            {INCOMPLETE_HISTORY_LABEL}
           </div>
-        </div>
+        )}
       </div>
     );
   };
+
 
   // === Not-paid row ===
   const renderNotPaidRow = (mark: NotPaidMark & { installment?: InstallmentWithLoan }) => {
