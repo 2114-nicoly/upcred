@@ -189,26 +189,49 @@ export default function PaymentHistoryPage() {
                 <button className="flex w-full items-center justify-between p-4 text-left" onClick={() => setExpandedDay(isExpanded ? null : day)}>
                   <div>
                     <p className="font-semibold capitalize">{getDayLabel(day)}</p>
-                    <p className="text-sm text-muted-foreground">{payments.length} lançamento(s) • {formatCurrency(total)}</p>
+                    <p className="text-sm text-muted-foreground">{payments.length} lançamento(s) • líquido {formatCurrency(total)}</p>
                   </div>
                   {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                 </button>
                 {isExpanded && (
                   <CardContent className="space-y-2 border-t pt-3">
-                    {payments.map((payment) => (
-                      <div key={payment.movementId} className="flex items-center justify-between rounded-lg bg-accent p-3">
+                    {payments.map((payment) => {
+                      const isReversal = payment.type === "estorno_pagamento" || !!payment.reversesMovementId;
+                      const isReversed = !!payment.reversedAt;
+                      const canAct = !isReversal && !isReversed;
+                      return (
+                      <div
+                        key={payment.movementId}
+                        className={`flex items-center justify-between rounded-lg p-3 ${isReversal || isReversed ? "bg-muted opacity-80" : "bg-accent"}`}
+                      >
                         <div>
-                          <p className="font-medium">{payment.clientName}</p>
+                          <p className={`font-medium ${isReversed ? "line-through" : ""}`}>{payment.clientName}</p>
                           <p className="text-sm text-muted-foreground">
                             {getMovementTypeLabel(payment.type)} • {formatCurrency(payment.amount)}
                           </p>
                           {payment.observation && <p className="text-xs text-muted-foreground italic">{payment.observation}</p>}
+                          {payment.reversalReason && (
+                            <p className="text-xs text-muted-foreground">Motivo: {payment.reversalReason}</p>
+                          )}
+                          {(isReversal || isReversed) && (
+                            <p className="text-xs text-muted-foreground">Impacto no caixa: {formatCurrency(0)}</p>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
-                          <Badge className={payment.type === "recebimento_multa" ? "bg-warning text-warning-foreground" : "bg-success text-success-foreground"}>
-                            {payment.type === "recebimento_multa" ? "Multa" : "Pago"}
+                          <Badge
+                            className={
+                              isReversal
+                                ? "bg-muted text-muted-foreground"
+                                : isReversed
+                                ? "bg-destructive text-destructive-foreground"
+                                : payment.type === "recebimento_multa"
+                                ? "bg-warning text-warning-foreground"
+                                : "bg-success text-success-foreground"
+                            }
+                          >
+                            {isReversal ? "Estorno" : isReversed ? "Estornada" : payment.type === "recebimento_multa" ? "Multa" : "Pago"}
                           </Badge>
-                          {payment.type === "recebimento_normal" && (
+                          {canAct && payment.type === "recebimento_normal" && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -222,20 +245,24 @@ export default function PaymentHistoryPage() {
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-destructive"
-                            onClick={() => handleUndoPayment(payment)}
-                            disabled={isSubmitting}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          {canAct && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-destructive"
+                              onClick={() => handleUndoPayment(payment)}
+                              disabled={isSubmitting}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </CardContent>
                 )}
+
               </Card>
             );
           })}
