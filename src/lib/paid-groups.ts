@@ -166,7 +166,7 @@ export function buildPaidGroupsFromFrozenEvents(
         ? (formatUnitsDelta(unitsBefore, unitsAfter) ?? (advanced !== null ? `+${advanced}` : null))
         : null,
       installmentsAdvanced: hasFrozenProgress ? advanced : null,
-      installmentIds: affected
+      installmentIds: (affected ?? [])
         .map((a: any) => a?.installment_id)
         .filter((id: any): id is string => typeof id === "string"),
     });
@@ -175,6 +175,7 @@ export function buildPaidGroupsFromFrozenEvents(
   // Movimentos antigos sem daily_event: histórico incompleto, campos próprios.
   for (const mov of opts.legacyMovements || []) {
     if (!mov || seenMovementIds.has(mov.id)) continue;
+    if (mov.daily_event_id) continue; // já representado por um evento
     if (opts.cashDate && mov.cash_date && mov.cash_date !== opts.cashDate) continue;
     if (!inScope(mov, scope)) continue;
     groups.push({
