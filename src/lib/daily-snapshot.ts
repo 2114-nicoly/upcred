@@ -629,15 +629,19 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     }
     if (overdueByClient.size > 0) {
       const clientIdList = [...new Set([...overdueByClient.values()].map(e => e.client_id))].filter(Boolean);
-      const { data: lastPays } = await supabase
-        .from("cash_movements")
-        .select("client_id, amount, cash_date")
-        .in("client_id", clientIdList)
-        .eq("type", "recebimento_normal")
-        .is("reversed_at", null)
-        .lte("cash_date", cashDate)
+      const { data: lastPays } = await applyStrictScope(
+        supabase
+          .from("cash_movements")
+          .select("client_id, amount, cash_date, worker_id, admin_id")
+          .in("client_id", clientIdList)
+          .eq("type", "recebimento_normal")
+          .is("reversed_at", null)
+          .lte("cash_date", cashDate),
+        scope,
+      )
         .order("cash_date", { ascending: false })
         .limit(500);
+
       const seen = new Map<string, { date: string; amount: number }>();
       for (const p of ((lastPays as any[]) || [])) {
         if (!p.client_id || seen.has(p.client_id)) continue;
