@@ -141,7 +141,7 @@ export async function registerPayment(params: {
 
   const { data: loanData } = await supabase
     .from("loans")
-    .select("amount, total_amount, remaining_balance, status")
+    .select("amount, total_amount, remaining_balance, status, installment_count, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
     .eq("id", loanId)
     .single();
 
@@ -150,6 +150,10 @@ export async function registerPayment(params: {
 
   const applied = Math.min(amount, Math.max(0, Number(loanData.remaining_balance)));
   if (applied <= 0.01) return { applied: 0, newBalance: Number(loanData.remaining_balance) };
+
+  // === Captura ANTES (empréstimo + parcelas) ===
+  const progressBefore = loanProgressAt(loanData as any, Number(loanData.remaining_balance));
+  const instBefore = await captureInstallmentState(loanId);
 
   // 1. Atomic RPC: update remaining_balance
   const { data: newBalance, error: rpcError } = await supabase.rpc("apply_loan_payment", {
@@ -198,16 +202,68 @@ export async function registerPayment(params: {
     if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
     if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
     await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: applied });
-    await recalculateInstallments(loanId);
+    await recalculateInstallments(loanId, cashDate);
     throw err;
   }
 
   // Recalculate installment distribution based on remaining_balance
-  await recalculateInstallments(loanId);
+  await recalculateInstallments(loanId, cashDate);
   await recalculateCashBalanceFromLedger();
 
   const balanceBefore = Number(loanData.remaining_balance);
   const balanceAfter = Number(newBalance);
+
+  // === Captura DEPOIS + gravação imutável no metadata do evento ===
+  try {
+    const progressAfter = loanProgressAt(loanData as any, balanceAfter);
+    const instAfter = await captureInstallmentState(loanId);
+    const affected: any[] = [];
+    for (const [id, after] of instAfter) {
+      const before = instBefore.get(id);
+      const paidBeforeAmt = before ? before.paid_amount : 0;
+      const delta = after.paid_amount - paidBeforeAmt;
+      if (Math.abs(delta) < 0.005 && (before?.status ?? null) === after.status) continue;
+      affected.push({
+        installment_id: id,
+        number: after.number,
+        amount: after.amount,
+        paid_amount_before: paidBeforeAmt,
+        paid_amount_after: after.paid_amount,
+        status_before: before?.status ?? null,
+        status_after: after.status,
+        amount_applied: Number(delta.toFixed(2)),
+      });
+    }
+    affected.sort((a, b) => a.number - b.number);
+
+    const metadata = {
+      payment_amount: applied,
+      cash_date: cashDate,
+      remaining_balance_before: balanceBefore,
+      remaining_balance_after: balanceAfter,
+      installment_progress_before: progressBefore.formatted,
+      installment_progress_after: progressAfter.formatted,
+      paid_installments_before: progressBefore.paid_installments,
+      paid_installments_after: progressAfter.paid_installments,
+      installments_advanced: Math.max(0, progressAfter.paid_installments - progressBefore.paid_installments),
+      total_installments: progressAfter.total_installments,
+      installment_amount: progressAfter.installment_amount,
+      progress_units_before: progressBefore.progress_units,
+      progress_units_after: progressAfter.progress_units,
+      is_imported_ongoing: !!(loanData as any).is_imported_ongoing,
+      initial_remaining_balance: (loanData as any).initial_remaining_balance ?? null,
+      amount_already_paid: (loanData as any).amount_already_paid ?? null,
+      affected_installments: affected,
+      recorded_at: new Date().toISOString(),
+    };
+    await supabase
+      .from("daily_events" as any)
+      .update({ metadata } as any)
+      .eq("id", event.id);
+  } catch (err) {
+    console.warn("[registerPayment] progress metadata capture failed", err);
+  }
+
 
   // Standard payment audit — always includes ids + snapshot for traceability.
   await logAction(
