@@ -207,10 +207,10 @@ export default function RenewAccessDialog({
               <p className="font-medium">Prévia</p>
               <p>Início do novo período: <span className="font-medium">{formatAccessDate(previewStart)}</span></p>
               <p>Final do novo período: <span className="font-medium">{previewEnd ? formatAccessDate(previewEnd) : "—"}</span></p>
-              <p>Quantidade de meses: <span className="font-medium">{Number.isFinite(monthsNum) && monthsNum > 0 ? monthsNum : "—"}</span></p>
+              <p>Quantidade de meses: <span className="font-medium">{!custom && Number.isFinite(monthsNum) && monthsNum > 0 ? monthsNum : "—"}</span></p>
               <p>Valor pago: <span className="font-medium">{formatMoney(Number(amountPaid.replace(",", ".")) || 0)}</span></p>
-              {stillValid && (
-                <p className="text-muted-foreground">O novo período será acrescentado após o vencimento atual.</p>
+              {currentEnd && previewEnd && previewEnd < currentEnd && (
+                <p className="text-destructive">A renovação não pode encurtar o acesso já concedido ({formatAccessDate(currentEnd)}).</p>
               )}
             </div>
 
