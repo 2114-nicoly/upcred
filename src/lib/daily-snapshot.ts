@@ -443,23 +443,25 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
         .in("status", ["open", "overdue"]),
       scope,
     );
-    const { data: activeLoansData } = await loansQ;
-    assertAllInScope((activeLoansData as any[]) || [], scope, "empréstimos ativos");
-    const activeLoans = ((activeLoansData as any[]) || []).filter(l => Number(l.remaining_balance) > 0.01);
+    const activeLoansRes = await loansQ;
+    const activeLoansData = requireSnapshotQuery<any[]>("empréstimos ativos", activeLoansRes) || [];
+    assertAllInScope(activeLoansData, scope, "empréstimos ativos");
+    const activeLoans = activeLoansData.filter(l => Number(l.remaining_balance) > 0.01);
     const loanById = new Map<string, any>(activeLoans.map(l => [l.id, l]));
 
 
     let instRows: any[] = [];
     if (activeLoans.length > 0) {
-      const { data } = await supabase
+      const instRes = await supabase
         .from("installments")
         .select("id, loan_id, number, amount, paid_amount, due_date, status, is_penalty")
         .in("loan_id", activeLoans.map(l => l.id))
         .eq("is_penalty", false)
         .in("status", ["pending", "partial", "overdue"])
         .order("number");
-      instRows = (data as any[]) || [];
+      instRows = requireSnapshotQuery<any[]>("installments (carteira)", instRes as any) || [];
     }
+
 
     // --- Pendentes no fechamento: parcela mais antiga vencida/para hoje,
     //     de empréstimo SEM nenhuma ação registrada no dia.
