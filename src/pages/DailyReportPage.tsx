@@ -20,6 +20,10 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { downloadReportPdf, shareReportPdf } from "@/lib/report-pdf";
 import { fetchReportDetails, emptyReportDetails, type ReportDetailsData, type ReportRecord } from "@/lib/report-details";
+import {
+  loadFrozenReportPeriod, emptyFrozenPeriod, frozenSourceLabel,
+  type FrozenReportPeriod, type FrozenDay,
+} from "@/lib/frozen-report";
 import { RecordSection } from "@/components/reports/RecordSection";
 
 
