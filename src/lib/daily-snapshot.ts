@@ -260,18 +260,17 @@ async function fetchScopedEvents(cashDate: string, scope: SnapshotScope, include
 }
 
 
+export const SNAPSHOT_INCOMPLETE_MESSAGE =
+  "Não foi possível congelar todas as informações. O caixa continua aberto.";
+
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
-  try {
-    const { getDailyCollectionSummary } = await import("@/lib/daily-totals");
-    return await getDailyCollectionSummary(cashDate, {
-      workerId: scope.worker_id || null,
-      adminId: scope.admin_id || null,
-    });
-  } catch (err) {
-    console.warn("[daily-snapshot] daily summary failed", err);
-    return null;
-  }
+  const { getDailyCollectionSummary } = await import("@/lib/daily-totals");
+  return await getDailyCollectionSummary(cashDate, {
+    workerId: scope.worker_id || null,
+    adminId: scope.admin_id || null,
+  });
 }
+
 
 /**
  * Build the payload from live data. Call this at close time, BEFORE any
