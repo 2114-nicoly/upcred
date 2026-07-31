@@ -186,6 +186,24 @@ const daysBetween = (fromISO: string, toISO: string) => {
   return Math.max(0, Math.round((b - a) / 86400000));
 };
 
+/** Nomes congelados do escopo (trabalhador / empresa-administrador). */
+async function loadScopeNames(scope: { worker_id: string | null; admin_id: string | null }) {
+  let workerName: string | null = null;
+  let adminName: string | null = null;
+  try {
+    if (scope.worker_id) {
+      const { data } = await supabase.from("workers").select("nome").eq("id", scope.worker_id).maybeSingle();
+      workerName = (data as any)?.nome ?? null;
+    }
+    if (scope.admin_id) {
+      const { data } = await supabase.from("admins").select("nome").eq("id", scope.admin_id).maybeSingle();
+      adminName = (data as any)?.nome ?? null;
+    }
+  } catch { /* nomes são informativos */ }
+  return { worker_name: workerName, admin_name: adminName };
+}
+
+
 
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
   try {
