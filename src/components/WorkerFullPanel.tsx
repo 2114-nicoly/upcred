@@ -55,6 +55,8 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [tab, setTab] = useState("resumo");
   const [loading, setLoading] = useState(true);
+  // Acesso/mensalidade: exibição padronizada (gestão fica na aba "Acessos").
+  const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
 
