@@ -56,9 +56,9 @@ export default function PaymentHistoryPage() {
     try {
       let mq: any = supabase
         .from("cash_movements")
-        .select("id, type, amount, cash_date, observation, created_at, loan_id, client_id, daily_event_id")
-        .in("type", ["recebimento_normal", "recebimento_multa"])
-        .is("reversed_at", null);
+        .select("id, type, amount, cash_date, observation, created_at, loan_id, client_id, daily_event_id, reversed_at, reverses_movement_id, reversal_reason")
+        // Histórico completo: originais (inclusive estornados) + contrapartidas.
+        .in("type", ["recebimento_normal", "recebimento_multa", "estorno_pagamento"]);
       // Escopo efetivo (trabalhador visualizado tem prioridade sobre a sessão).
       if (effectiveWorkerId) mq = mq.eq("worker_id", effectiveWorkerId);
       else if (effectiveAdminId) mq = mq.eq("admin_id", effectiveAdminId);
@@ -90,8 +90,12 @@ export default function PaymentHistoryPage() {
           loanId: movement.loan_id,
           clientId: movement.client_id,
           clientName: clientMap.get(movement.client_id) || "Cliente",
+          reversedAt: movement.reversed_at ?? null,
+          reversesMovementId: movement.reverses_movement_id ?? null,
+          reversalReason: movement.reversal_reason ?? null,
         });
       });
+
       setPaymentsByDay(grouped);
     } catch (err: any) {
       console.error("PaymentHistoryPage fetchData error:", err);
