@@ -779,24 +779,53 @@ export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCash
   return nextVersion;
 }
 
+export const SNAPSHOT_READ_FAILED_MESSAGE =
+  "Não foi possível ler o histórico congelado deste caixa.";
+
+/** Filtro de leitura: worker_id e admin_id SEMPRE juntos. */
+function applySnapshotReadScope(query: any, scope: SnapshotScope): any {
+  let q = query;
+  if (scope.worker_id) q = q.eq("worker_id", scope.worker_id);
+  else q = q.is("worker_id", null);
+  if (scope.admin_id) q = q.eq("admin_id", scope.admin_id);
+  else q = q.is("admin_id", null);
+  return q;
+}
+
+function payloadBelongsToScope(payload: any, cashDate: string, scope: SnapshotScope): boolean {
+  if (!payload) return false;
+  if (payload.cash_date && payload.cash_date !== cashDate) return false;
+  const w = payload.scope?.worker_id ?? null;
+  const a = payload.scope?.admin_id ?? null;
+  if (w !== scope.worker_id) return false;
+  if (a !== scope.admin_id) return false;
+  return true;
+}
+
 /**
  * Load the LATEST snapshot version for a given closed day, if any. Returns
- * null when no snapshot exists (e.g. day closed before this feature shipped).
+ * null SOMENTE quando a consulta teve sucesso e não existe snapshot.
  */
 export async function loadDailyCashSnapshot(cashDate: string, explicit?: ExplicitScope): Promise<DailyCashSnapshotPayload | null> {
   const scope = await getCurrentDailyCashScope(explicit);
-  let q: any = supabase.from("daily_cash_snapshots" as any)
-    .select("payload, version")
-    .eq("cash_date", cashDate);
-  if (scope.worker_id) q = q.eq("worker_id", scope.worker_id);
-  else if (scope.admin_id) q = q.eq("admin_id", scope.admin_id).is("worker_id", null);
+  const q: any = applySnapshotReadScope(
+    supabase.from("daily_cash_snapshots" as any)
+      .select("payload, version, cash_date, worker_id, admin_id")
+      .eq("cash_date", cashDate),
+    scope,
+  );
   const { data, error } = await q.order("version", { ascending: false }).limit(1).maybeSingle();
   if (error) {
-    console.warn("[daily-snapshot] load failed", error);
-    return null;
+    console.error("[daily-snapshot] load failed", error);
+    throw new Error(SNAPSHOT_READ_FAILED_MESSAGE);
   }
   if (!data) return null;
-  return (data as any).payload as DailyCashSnapshotPayload;
+  const payload = (data as any).payload as DailyCashSnapshotPayload;
+  if (!payloadBelongsToScope(payload, cashDate, scope)) {
+    console.error("[daily-snapshot] snapshot fora do escopo solicitado", { cashDate, scope });
+    return null;
+  }
+  return payload;
 }
 
 /**
@@ -804,15 +833,19 @@ export async function loadDailyCashSnapshot(cashDate: string, explicit?: Explici
  */
 export async function listDailyCashSnapshotVersions(cashDate: string, explicit?: ExplicitScope): Promise<DailyCashSnapshotVersion[]> {
   const scope = await getCurrentDailyCashScope(explicit);
-  let q: any = supabase.from("daily_cash_snapshots" as any)
-    .select("id, daily_cash_id, version, closed_at, closed_by, reopen_reason, payload, created_at")
-    .eq("cash_date", cashDate);
-  if (scope.worker_id) q = q.eq("worker_id", scope.worker_id);
-  else if (scope.admin_id) q = q.eq("admin_id", scope.admin_id).is("worker_id", null);
+  const q: any = applySnapshotReadScope(
+    supabase.from("daily_cash_snapshots" as any)
+      .select("id, daily_cash_id, version, closed_at, closed_by, reopen_reason, payload, created_at, cash_date, worker_id, admin_id")
+      .eq("cash_date", cashDate),
+    scope,
+  );
   const { data, error } = await q.order("version", { ascending: false });
   if (error) {
-    console.warn("[daily-snapshot] list versions failed", error);
-    return [];
+    console.error("[daily-snapshot] list versions failed", error);
+    throw new Error(SNAPSHOT_READ_FAILED_MESSAGE);
   }
-  return ((data as any[]) || []) as DailyCashSnapshotVersion[];
+  return (((data as any[]) || []) as DailyCashSnapshotVersion[]).filter(
+    (v) => payloadBelongsToScope((v as any)?.payload, cashDate, scope),
+  );
 }
+
