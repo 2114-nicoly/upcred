@@ -957,6 +957,19 @@ export default function DailyCashPage() {
     setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // Evita duplicidade: se já existe marcação para esta parcela no dia, não repete o evento.
+      const { data: existingMark } = await supabase
+        .from("not_paid_marks")
+        .select("id")
+        .eq("mark_date", selectedDate)
+        .eq("installment_id", inst.id)
+        .maybeSingle();
+      if (existingMark) {
+        toast.info("Esta parcela já está marcada como “Não Pagou” hoje.");
+        setNotPaidOpen(false);
+        await fetchData();
+        return;
+      }
       const { error: insertErr } = await supabase
         .from("not_paid_marks")
         .upsert({
