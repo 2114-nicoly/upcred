@@ -126,22 +126,22 @@ export function buildPaidGroupsFromFrozenEvents(
     const progressBefore = typeof md.installment_progress_before === "string" ? md.installment_progress_before : null;
     const progressAfter = typeof md.installment_progress_after === "string" ? md.installment_progress_after : null;
     const totalInstallments = numOrNull(md.total_installments);
+    const instAmount = numOrNull(md.installment_amount);
+    const affected = Array.isArray(md.affected_installments) ? md.affected_installments : null;
+
     const hasFrozenProgress =
       remainingBefore !== null && remainingAfter !== null &&
-      progressBefore !== null && progressAfter !== null && totalInstallments !== null;
+      progressBefore !== null && progressAfter !== null &&
+      totalInstallments !== null && instAmount !== null &&
+      affected !== null;
 
     const unitsBefore = numOrNull(md.progress_units_before);
     const unitsAfter = numOrNull(md.progress_units_after);
     const advanced = numOrNull(md.installments_advanced);
-    const instAmount = numOrNull(md.installment_amount);
     const paymentAmount = numOrNull(md.payment_amount);
 
-    const affected = Array.isArray(md.affected_installments) ? md.affected_installments : [];
+    const totalAmount = hasFrozenProgress ? (instAmount as number) * (totalInstallments as number) : null;
 
-    const totalAmount =
-      hasFrozenProgress && instAmount !== null && totalInstallments !== null
-        ? instAmount * totalInstallments
-        : null;
 
     groups.push({
       eventId: ev.id,
