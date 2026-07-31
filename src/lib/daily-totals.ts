@@ -104,11 +104,19 @@ export function computeDailyTotals(
 // ============================================================================
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
+import { fetchCollectionMetrics } from "@/lib/collection-metrics";
 
 export type DailyCollectionSummary = {
+  /** Previsto do dia: parcelas regulares com vencimento EXATAMENTE na data. */
   expectedToReceiveToday: number;
+  /** Recebido total no dia (pagamentos + multas), independente do previsto. */
   receivedToday: number;
+  /** Recebido aplicado nas parcelas que venciam na data. */
+  receivedFromExpected: number;
+  /** Saldo pendente somente das parcelas que vencem na data. */
   pendingToReceiveToday: number;
+  /** Saldo pendente de parcelas vencidas ANTES da data (nunca da própria data). */
+  overdueAmount: number;
   cashExpectedForClosing: number;
   hasError: boolean;
 };
@@ -118,58 +126,56 @@ export async function getDailyCollectionSummary(
   options: { workerId?: string | null; adminId?: string | null } = {}
 ): Promise<DailyCollectionSummary> {
   const { workerId = null, adminId = null } = options;
-  const collectible = new Set(["pending", "partial", "overdue"]);
   let hasError = false;
 
-  // 1) Esperado: rota do dia + multas pendentes (não inclui saldo inicial nem caixa).
-  let expectedToReceiveToday = 0;
+  // 0) Dia FECHADO -> valores congelados no snapshot oficial (nunca recalculados
+  //    com as parcelas atuais). Dia aberto segue com os dados atuais.
   try {
-    const { data, error } = await (supabase as any).rpc("get_route_installments", { p_cash_date: cashDate });
-    if (!error) {
-      let rows = ((data || []) as any[]);
-      const d = new Date(cashDate + "T12:00:00");
-      if (d.getDay() === 0) rows = rows.filter(r => r.loan_payment_type !== "daily");
-
-      // Escopo por trabalhador/admin
-      if ((workerId || adminId) && rows.length > 0) {
-        const loanIds = [...new Set(rows.map(r => r.loan_id))];
-        const { data: loans } = await supabase
-          .from("loans")
-          .select("id, worker_id, admin_id")
-          .in("id", loanIds);
-        const allowed = new Set(((loans as any[]) || []).filter((l: any) => {
-          if (adminId && l.admin_id !== adminId) return false;
-          if (workerId && l.worker_id !== workerId) return false;
-          return true;
-        }).map((l: any) => l.id));
-        rows = rows.filter(r => allowed.has(r.loan_id));
+    const scope0 = await getCurrentDailyCashScope({ workerId, adminId });
+    const { data: dc0 } = await applyDailyCashScope(
+      supabase.from("daily_cash").select("status").eq("cash_date", cashDate),
+      scope0
+    ).maybeSingle();
+    if ((dc0 as any)?.status === "closed") {
+      const { loadDailyCashSnapshot } = await import("@/lib/daily-snapshot");
+      const snap = await loadDailyCashSnapshot(cashDate, { workerId, adminId });
+      const ds = snap?.daily_summary;
+      if (ds) {
+        return {
+          expectedToReceiveToday: Number(ds.expectedToReceiveToday) || 0,
+          receivedToday: Number(ds.receivedToday) || 0,
+          receivedFromExpected: Number(
+            ds.receivedFromExpected ?? Math.max((ds.expectedToReceiveToday || 0) - (ds.pendingToReceiveToday || 0), 0)
+          ) || 0,
+          pendingToReceiveToday: Number(ds.pendingToReceiveToday) || 0,
+          overdueAmount: Number(ds.overdueAmount ?? 0) || 0,
+          cashExpectedForClosing: Number(ds.cashExpectedForClosing) || 0,
+          hasError: false,
+        };
       }
-
-      for (const r of rows) {
-        if (!collectible.has(r.status)) continue;
-        const remaining = Number(r.amount || 0) - Number(r.paid_amount || 0);
-        if (remaining > 0.001) expectedToReceiveToday += remaining;
-      }
-    }
-
-    // Multas pendentes cobráveis até a data
-    const { data: pen } = await supabase
-      .from("penalties")
-      .select("amount, loan_id, loans:loan_id(worker_id, admin_id, remaining_balance, status)")
-      .eq("paid", false)
-      .lte("created_at", cashDate + "T23:59:59");
-    for (const p of ((pen as any[]) || [])) {
-      const l = p.loans;
-      if (!l) continue;
-      if (Number(l.remaining_balance || 0) <= 0.001) continue;
-      if (adminId && l.admin_id !== adminId) continue;
-      if (workerId && l.worker_id !== workerId) continue;
-      expectedToReceiveToday += Number(p.amount || 0);
     }
   } catch (err) {
-    console.error("[getDailyCollectionSummary] esperado/multas falhou", err);
+    console.warn("[getDailyCollectionSummary] snapshot indisponível, usando dados atuais", err);
+  }
+
+
+  // 1) Previsto / falta receber / atrasado — fonte única compartilhada.
+  //    Sem multas, sem parcelas de outros dias, sem saldo total do empréstimo.
+  let expectedToReceiveToday = 0;
+  let pendingToReceiveToday = 0;
+  let receivedFromExpected = 0;
+  let overdueAmount = 0;
+  try {
+    const m = await fetchCollectionMetrics(cashDate, cashDate, { workerId, adminId });
+    expectedToReceiveToday = m.previsto;
+    pendingToReceiveToday = m.faltaReceber;
+    receivedFromExpected = m.recebidoDoPrevisto;
+    overdueAmount = m.valorAtrasado;
+  } catch (err) {
+    console.error("[getDailyCollectionSummary] previsto/atrasado falhou", err);
     hasError = true;
   }
+
 
   // 2) Recebido hoje + componentes para conferência do caixa.
   //    NÃO usar soma genérica amount_in/amount_out: o "Valor Esperado no Caixa" segue a fórmula
@@ -247,12 +253,13 @@ export async function getDailyCollectionSummary(
 
   // Esperado no caixa = dinheiro físico esperado (sem futuras cobranças, sem importados).
   const cashExpectedForClosing = opening + pagamentos + multas + manualIn - lent - manualOut - expenses;
-  const pendingToReceiveToday = Math.max(0, expectedToReceiveToday - receivedToday);
 
   return {
     expectedToReceiveToday,
     receivedToday,
+    receivedFromExpected,
     pendingToReceiveToday,
+    overdueAmount,
     cashExpectedForClosing,
     hasError,
   };

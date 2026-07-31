@@ -37,7 +37,7 @@ import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { computeDailyTotals, getDailyCollectionSummary } from "@/lib/daily-totals";
+import { computeDailyTotals, getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
 import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
@@ -63,7 +63,7 @@ export default function CaixaPage() {
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [snapshot, setSnapshot] = useState<DailyCashSnapshotPayload | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [collectionSummary, setCollectionSummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
+  const [collectionSummary, setCollectionSummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
   const receivedToday = collectionSummary.receivedToday;
@@ -835,15 +835,21 @@ export default function CaixaPage() {
               <p className="text-[11px] text-destructive font-medium">Não foi possível carregar os totais.</p>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+              <span className="text-xs text-muted-foreground">Previsto do dia</span>
               <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+              <span className="text-xs text-muted-foreground">Recebido Hoje (total)</span>
               <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(receivedToday)}</span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Valor atrasado (dias anteriores)</span>
+              <span className={`text-sm font-bold tabular-nums ${collectionSummary.overdueAmount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                {formatCurrency(collectionSummary.overdueAmount)}
+              </span>
+            </div>
             <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Falta Receber</span>
+              <span className="text-xs font-semibold">Falta Receber do dia</span>
               <span className={`text-sm font-bold tabular-nums ${pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                 {formatCurrency(pendingToReceiveToday)}
               </span>

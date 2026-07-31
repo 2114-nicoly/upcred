@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAvailableCashByWorker } from "@/lib/finance-totals";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
+import { accumulateOverdue, accumulateScheduled, emptyCollectionMetrics, overdueReferenceFor } from "@/lib/collection-metrics";
 
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays,
@@ -50,6 +51,8 @@ export type WorkerStats = {
   recebidoPrincipal: number;
   multasRecebidas: number;
   faltaReceber: number;
+  /** Recebido aplicado nas parcelas previstas do período (não é o recebido total). */
+  recebidoDoPrevisto: number;
   /** Saldo pendente de parcelas do período cujo vencimento já chegou. */
   valorAtrasado: number;
   percentual: number;
@@ -82,7 +85,7 @@ export type WorkerStats = {
 
 const empty = (id: string | null, name: string, adminId: string | null = null): WorkerStats => ({
   worker_id: id, worker_name: name, admin_id: adminId,
-  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, faltaReceber: 0, valorAtrasado: 0, percentual: 0,
+  previsto: 0, recebido: 0, recebidoPrincipal: 0, multasRecebidas: 0, faltaReceber: 0, recebidoDoPrevisto: 0, valorAtrasado: 0, percentual: 0,
   emprestado: 0, retirada: 0, aporte: 0, despesas: 0, estornos: 0, estornosCount: 0,
   totalSaidas: 0, saldoLiquido: 0,
   naoPagosCount: 0, renovacoes: 0, emprestimosNovos: 0,
@@ -155,7 +158,9 @@ export async function loadWorkersStats(
   const collectibleStatuses = [...INSTALLMENT_COLLECTIBLE_STATUSES];
   const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
   const today = format(new Date(), "yyyy-MM-dd");
-  const overdueReferenceDate = range.endDate > today ? today : range.endDate;
+  // Atraso é sempre ANTERIOR ao início do período selecionado (e nunca no futuro),
+  // para que nenhuma parcela apareça ao mesmo tempo no previsto e no valor atrasado.
+  const overdueReferenceDate = overdueReferenceFor(range.startDate, today);
   // Parcelas/empréstimos encerrados por cancelamento ou renegociação nunca entram no previsto.
   const deadInstallmentStatuses = ["cancelled", "renegotiated"];
   const deadLoanStatuses = ["cancelled", "renegotiated"];
@@ -236,26 +241,15 @@ export async function loadWorkersStats(
 
   // Previsto do período = valor original das parcelas com vencimento no período.
   // Falta receber = saldo pendente dessas mesmas parcelas (nunca negativo).
+  // O valor atrasado NÃO sai daqui: vem das parcelas vencidas antes do período.
   (insRows as any[]).forEach((i) => {
     const s = get(i.loans?.worker_id ?? null);
     if (!s) return;
-    const amount = Number(i.amount || 0);
-    const paid = Number(i.paid_amount || 0);
-    s.previsto += amount;
-    const pending = Math.max(amount - paid, 0);
-    s.faltaReceber += pending;
-    // Valor atrasado: parcela do período com vencimento ANTERIOR à data de referência
-    // (hoje ou fim do período). Parcela que vence na data de referência NÃO é atrasada.
-    const dueDate = String(i.due_date || "");
-    const loanStatus = String(i.loans?.status ?? "");
-    if (
-      pending > 0.01 &&
-      dueDate && dueDate < overdueReferenceDate &&
-      (collectibleStatuses as readonly string[]).includes(String(i.status)) &&
-      (activeLoanStatuses as readonly string[]).includes(loanStatus)
-    ) {
-      s.valorAtrasado += pending;
-    }
+    const m = emptyCollectionMetrics();
+    accumulateScheduled(m, i);
+    s.previsto += m.previsto;
+    s.faltaReceber += m.faltaReceber;
+    s.recebidoDoPrevisto += m.recebidoDoPrevisto;
   });
 
   // Cash flow from daily_events (non-reversed, active workers only)
@@ -314,8 +308,8 @@ export async function loadWorkersStats(
     if (s) s.emprestimosAtivos = set.size;
   });
 
-  // "Clientes atrasados" conta worker_id+client_id único com pelo menos uma parcela vencida,
-  // regular, pendente/parcial/overdue e com saldo pendente. Nunca usa loans.status sozinho.
+  // Parcelas realmente vencidas (due_date < início do período): compõem o
+  // "Valor atrasado" e a contagem de clientes atrasados (worker_id+client_id único).
   const overdueClientsByWorker = new Map<string, Set<string>>();
   (overdueInstRows as any[]).forEach((i) => {
     const loan = i.loans;
@@ -323,8 +317,10 @@ export async function loadWorkersStats(
     const clientId = loan?.client_id ?? null;
     const s = get(workerId);
     if (!s || !workerId || !clientId) return;
-    const pending = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
-    if (pending <= 0.01) return;
+    const m = emptyCollectionMetrics();
+    accumulateOverdue(m, i);
+    if (m.valorAtrasado <= 0) return;
+    s.valorAtrasado += m.valorAtrasado;
     const key = `${workerId}|${clientId}`;
     const set = overdueClientsByWorker.get(workerId) || new Set<string>();
     set.add(key);
@@ -358,7 +354,9 @@ export async function loadWorkersStats(
   for (const s of map.values()) {
     s.totalSaidas = s.emprestado + s.retirada + s.despesas;
     s.faltaReceber = Math.max(0, s.faltaReceber);
-    s.percentual = s.previsto > 0 ? ((s.previsto - s.faltaReceber) / s.previsto) * 100 : 0;
+    s.valorAtrasado = Math.max(0, s.valorAtrasado);
+    s.recebidoDoPrevisto = Math.max(0, s.recebidoDoPrevisto);
+    s.percentual = s.previsto > 0 ? (s.recebidoDoPrevisto / s.previsto) * 100 : 0;
     s.saldoLiquido = s.recebido + s.aporte - s.emprestado - s.retirada - s.despesas;
   }
 
@@ -399,13 +397,14 @@ export function consolidate(
     total.clientesAtivos += s.clientesAtivos;
     total.emprestimosAtivos += s.emprestimosAtivos;
     total.faltaReceber += s.faltaReceber;
+    total.recebidoDoPrevisto += s.recebidoDoPrevisto;
     total.valorAtrasado += s.valorAtrasado;
   }
   total.atrasadosClientIds = Array.from(overdueClientKeys);
   total.atrasados = overdueClientKeys.size;
   total.totalSaidas = total.emprestado + total.retirada + total.despesas;
   total.faltaReceber = Math.max(0, total.faltaReceber);
-  total.percentual = total.previsto > 0 ? ((total.previsto - total.faltaReceber) / total.previsto) * 100 : 0;
+  total.percentual = total.previsto > 0 ? (total.recebidoDoPrevisto / total.previsto) * 100 : 0;
   total.saldoLiquido = total.recebido + total.aporte - total.emprestado - total.retirada - total.despesas;
   return total;
 }

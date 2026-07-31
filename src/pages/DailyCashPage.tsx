@@ -38,7 +38,7 @@ import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { getDailyCollectionSummary } from "@/lib/daily-totals";
+import { getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
 import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
 
@@ -343,7 +343,7 @@ export default function DailyCashPage() {
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
   const [quickSearch, setQuickSearch] = useState("");
-  const [dailySummary, setDailySummary] = useState<{ expectedToReceiveToday: number; receivedToday: number; pendingToReceiveToday: number; cashExpectedForClosing: number; hasError: boolean }>({ expectedToReceiveToday: 0, receivedToday: 0, pendingToReceiveToday: 0, cashExpectedForClosing: 0, hasError: false });
+  const [dailySummary, setDailySummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   // O resumo é carregado dentro de fetchData (atualização atômica após qualquer ação).
 
@@ -1672,15 +1672,21 @@ export default function DailyCashPage() {
             </div>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Saldo Esperado</span>
+            <span className="text-xs text-muted-foreground">Previsto do dia</span>
             <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+            <span className="text-xs text-muted-foreground">Recebido Hoje (total)</span>
             <span className="text-sm font-bold tabular-nums text-success">{formatCurrency(dailySummary.receivedToday)}</span>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Valor atrasado (dias anteriores)</span>
+            <span className={`text-sm font-bold tabular-nums ${dailySummary.overdueAmount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+              {formatCurrency(dailySummary.overdueAmount)}
+            </span>
+          </div>
           <div className="flex items-center justify-between border-t border-border pt-2">
-            <span className="text-xs font-bold">Falta Receber</span>
+            <span className="text-xs font-bold">Falta Receber do dia</span>
             <span className={`text-base font-extrabold tabular-nums ${dailySummary.pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
               {formatCurrency(dailySummary.pendingToReceiveToday)}
             </span>
