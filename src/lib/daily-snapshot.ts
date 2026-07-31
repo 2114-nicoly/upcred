@@ -159,6 +159,11 @@ export type DailyCashSnapshotPayload = {
   not_paid_marks: SnapshotNotPaidMark[];
   new_loans: SnapshotNewLoan[];
   expense_breakdown: Record<string, number>;
+  /** v2 — opcionais para manter leitura compatível com snapshots v1. */
+  pending_installments?: SnapshotPendingInstallment[];
+  overdue_clients?: SnapshotOverdueClient[];
+  portfolio_state?: SnapshotPortfolioState | null;
+  scope_names?: { worker_name: string | null; admin_name: string | null };
 };
 
 export type DailyCashSnapshotVersion = {
