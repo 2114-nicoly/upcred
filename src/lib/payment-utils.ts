@@ -103,26 +103,6 @@ export async function recalculateInstallments(loanId: string, paidAtDate?: strin
   }
 }
 
-/** Snapshot of non-penalty installments used for before/after capture. */
-async function captureInstallmentState(loanId: string) {
-  const { data } = await supabase
-    .from("installments")
-    .select("id, number, amount, paid_amount, status")
-    .eq("loan_id", loanId)
-    .eq("is_penalty", false)
-    .order("number");
-  const map = new Map<string, { id: string; number: number; amount: number; paid_amount: number; status: string }>();
-  for (const i of ((data as any[]) || [])) {
-    map.set(i.id, {
-      id: i.id,
-      number: Number(i.number),
-      amount: Number(i.amount),
-      paid_amount: Number(i.paid_amount || 0),
-      status: String(i.status),
-    });
-  }
-  return map;
-}
 
 
 /**
