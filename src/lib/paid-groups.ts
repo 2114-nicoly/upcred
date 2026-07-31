@@ -35,6 +35,8 @@ export type LegacyPaymentMovement = {
   cash_date?: string | null;
   worker_id?: string | null;
   admin_id?: string | null;
+  /** Quando preenchido, o movimento já pertence a um daily_event (não é legado). */
+  daily_event_id?: string | null;
 };
 
 export type PaidGroup = {
@@ -75,9 +77,8 @@ const numOrNull = (v: unknown): number | null => {
 };
 
 function inScope(row: { worker_id?: string | null; admin_id?: string | null }, scope: ScopeFilter): boolean {
-  if (scope.workerId && row.worker_id && row.worker_id !== scope.workerId) return false;
-  if (scope.workerId && !row.worker_id) return false;
-  if (scope.adminId && row.admin_id && row.admin_id !== scope.adminId) return false;
+  if (scope.workerId && row.worker_id !== scope.workerId) return false;
+  if (scope.adminId && row.admin_id !== scope.adminId) return false;
   return true;
 }
 
@@ -125,22 +126,22 @@ export function buildPaidGroupsFromFrozenEvents(
     const progressBefore = typeof md.installment_progress_before === "string" ? md.installment_progress_before : null;
     const progressAfter = typeof md.installment_progress_after === "string" ? md.installment_progress_after : null;
     const totalInstallments = numOrNull(md.total_installments);
+    const instAmount = numOrNull(md.installment_amount);
+    const affected = Array.isArray(md.affected_installments) ? md.affected_installments : null;
+
     const hasFrozenProgress =
       remainingBefore !== null && remainingAfter !== null &&
-      progressBefore !== null && progressAfter !== null && totalInstallments !== null;
+      progressBefore !== null && progressAfter !== null &&
+      totalInstallments !== null && instAmount !== null &&
+      affected !== null;
 
     const unitsBefore = numOrNull(md.progress_units_before);
     const unitsAfter = numOrNull(md.progress_units_after);
     const advanced = numOrNull(md.installments_advanced);
-    const instAmount = numOrNull(md.installment_amount);
     const paymentAmount = numOrNull(md.payment_amount);
 
-    const affected = Array.isArray(md.affected_installments) ? md.affected_installments : [];
+    const totalAmount = hasFrozenProgress ? (instAmount as number) * (totalInstallments as number) : null;
 
-    const totalAmount =
-      hasFrozenProgress && instAmount !== null && totalInstallments !== null
-        ? instAmount * totalInstallments
-        : null;
 
     groups.push({
       eventId: ev.id,
@@ -165,7 +166,7 @@ export function buildPaidGroupsFromFrozenEvents(
         ? (formatUnitsDelta(unitsBefore, unitsAfter) ?? (advanced !== null ? `+${advanced}` : null))
         : null,
       installmentsAdvanced: hasFrozenProgress ? advanced : null,
-      installmentIds: affected
+      installmentIds: (affected ?? [])
         .map((a: any) => a?.installment_id)
         .filter((id: any): id is string => typeof id === "string"),
     });
@@ -174,6 +175,7 @@ export function buildPaidGroupsFromFrozenEvents(
   // Movimentos antigos sem daily_event: histórico incompleto, campos próprios.
   for (const mov of opts.legacyMovements || []) {
     if (!mov || seenMovementIds.has(mov.id)) continue;
+    if (mov.daily_event_id) continue; // já representado por um evento
     if (opts.cashDate && mov.cash_date && mov.cash_date !== opts.cashDate) continue;
     if (!inScope(mov, scope)) continue;
     groups.push({
