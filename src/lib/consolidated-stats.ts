@@ -51,6 +51,8 @@ export type WorkerStats = {
   recebidoPrincipal: number;
   multasRecebidas: number;
   faltaReceber: number;
+  /** Recebido aplicado nas parcelas previstas do período (não é o recebido total). */
+  recebidoDoPrevisto: number;
   /** Saldo pendente de parcelas do período cujo vencimento já chegou. */
   valorAtrasado: number;
   percentual: number;
