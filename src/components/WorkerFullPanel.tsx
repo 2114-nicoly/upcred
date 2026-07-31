@@ -19,6 +19,11 @@ import { isLoanActive } from "@/lib/status-constants";
 import { PeriodMode, getPeriodRange, loadWorkersStats, WorkerStats } from "@/lib/consolidated-stats";
 import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
+import AccessStatusBadge from "@/components/access/AccessStatusBadge";
+import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import {
+  AccessMaps, EMPTY_ACCESS_MAPS, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
+} from "@/lib/access-control";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { getEventTypeLabel, getEventTypeColor } from "@/lib/daily-events";
