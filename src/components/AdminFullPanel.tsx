@@ -335,9 +335,13 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-bold truncate">{admin.nome}</h1>
-                {admin.active
-                  ? <Badge className="text-[10px]">Ativo</Badge>
-                  : <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
+                <Badge
+                  variant={companyPaused ? "destructive" : "outline"}
+                  className="text-[10px]"
+                >
+                  {companyStatusLabel(accessMaps.controlByAdmin[adminId])}
+                </Badge>
+
               </div>
               <p className="text-xs text-muted-foreground">
                 {admin.email_real}
