@@ -289,15 +289,57 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   }
 
   const paidGroups: SnapshotPaidGroup[] = [];
-  if (paidLoanIds.size > 0) {
+  // 1) Fonte primária: metadata VERDADEIRO gravado no momento do pagamento.
+  //    Nunca reconstruímos um pagamento antigo a partir do remaining_balance atual.
+  const paymentEvents = events
+    .filter(e => e.event_type === "pagamento" && e.loan_id)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const loansWithMetadata = new Set<string>();
+  for (const ev of paymentEvents) {
+    const md: any = ev.metadata || null;
+    if (!md || md.remaining_balance_before == null || md.remaining_balance_after == null) continue;
+    loansWithMetadata.add(ev.loan_id!);
+    const totalAmount = Number(md.total_amount ?? (Number(md.installment_amount || 0) * Number(md.total_installments || 0)));
+    const instCount = Number(md.total_installments || 0);
+    const instAmount = Number(md.installment_amount || (instCount > 0 ? totalAmount / instCount : 0));
+    const remainingBefore = Number(md.remaining_balance_before);
+    const remainingAfter = Number(md.remaining_balance_after);
+    const paidBefore = Math.max(0, totalAmount - remainingBefore);
+    const paidAfter = Math.max(0, totalAmount - remainingAfter);
+    paidGroups.push({
+      movementId: ev.cash_movement_id || "",
+      clientName: (ev.client_id && clientNames[ev.client_id]) || "Cliente",
+      clientId: ev.client_id || "",
+      loanId: ev.loan_id!,
+      totalPaid: Number(md.payment_amount ?? ev.amount_in),
+      accumulatedPaid: paidAfter,
+      remainingBalance: remainingAfter,
+      instAmount,
+      installmentIds: ((md.affected_installments || []) as any[]).map(a => a.installment_id).filter(Boolean),
+      totalAmount,
+      installmentCount: instCount,
+      paidBefore,
+      paidAfter,
+      remainingBefore,
+      remainingAfter,
+      progressBeforeFormatted: md.installment_progress_before || formatProgress(paidBefore, instAmount, instCount),
+      progressAfterFormatted: md.installment_progress_after || formatProgress(paidAfter, instAmount, instCount),
+      progressDeltaFormatted: formatDelta(paidAfter - paidBefore, instAmount),
+    });
+  }
+
+  // 2) Compatibilidade: pagamentos antigos sem metadata continuam sendo
+  //    reconstruídos pela sequência de movimentações do dia.
+  const legacyLoanIds = [...paidLoanIds].filter(id => !loansWithMetadata.has(id));
+  if (legacyLoanIds.length > 0) {
     const { data: paidLoansData } = await supabase
       .from("loans")
       .select("id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients:client_id(id, name)")
-      .in("id", [...paidLoanIds]);
+      .in("id", legacyLoanIds);
     for (const loan of ((paidLoansData as any[]) || [])) {
       const totalAmount = Number(loan.total_amount);
       const instCount = Number(loan.installment_count);
-      const instAmount = instCount > 0 ? totalAmount / instCount : 0;
+      const instAmount = installmentAmountOf(loan);
       const currentRemaining = Number(loan.remaining_balance);
       const accumulatedPaid = Math.max(0, totalAmount - currentRemaining);
       const movements = [...(paidMovementsByLoan.get(loan.id) || [])].sort(
@@ -350,6 +392,7 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
       }
     }
   }
+
 
   // Not paid marks + installment enrichment
   const npMarks = ((npRes.data as any[]) || []) as SnapshotNotPaidMark[];
