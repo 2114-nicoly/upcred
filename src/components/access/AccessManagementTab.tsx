@@ -295,6 +295,29 @@ export default function AccessManagementTab() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="px-3 pb-3 pt-0 space-y-2">
+                  <div className="rounded-md border p-2 text-[10px] space-y-1">
+                    <p>
+                      Situação da empresa:{" "}
+                      <span className="font-medium">{companyStatusLabel(control)}</span>
+                    </p>
+                    {isCompanyPaused(control) && (
+                      <>
+                        <p>Motivo: <span className="font-medium">{control?.pause_reason || "—"}</span></p>
+                        <p>Pausada em: <span className="font-medium">{formatDateTime(control?.paused_at)}</span></p>
+                        <p>Responsável: <span className="font-medium">{pauserNames[control?.paused_by ?? ""] ?? "—"}</span></p>
+                      </>
+                    )}
+                    <div className="pt-1">
+                      <PauseCompanyDialog
+                        adminId={a.id}
+                        companyName={a.nome}
+                        workersCount={all.length}
+                        control={control}
+                        onDone={() => void reload()}
+                      />
+                    </div>
+                  </div>
+
                   {list.length === 0 ? (
                     <p className="text-[11px] text-muted-foreground">Nenhum trabalhador para os filtros atuais.</p>
                   ) : (
