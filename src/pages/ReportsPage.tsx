@@ -269,29 +269,6 @@ export default function ReportsPage() {
     atrasados: s.atrasados,
   });
 
-  // Detalhe por dia (mesma fórmula da fonte única, aplicada a um único dia).
-  const sumTotals = (cash: DailyCashRow[], evs: DailyEventRow[]) => {
-    const sumEv = (types: string[], field: "amount_in" | "amount_out") =>
-      evs.filter((e) => types.includes(e.event_type)).reduce((s, e) => s + Number(e[field] || 0), 0);
-    const core = computeCoreTotals(evs as any);
-    const estornoEvs = evs.filter((e) => e.event_type.startsWith("estorno"));
-    return {
-      caixaInicial: cash.reduce((s, c) => s + Number(c.opening_balance || 0), 0),
-      caixaFinal: cash.reduce((s, c) => s + Number(c.counted_closing_balance ?? c.expected_closing_balance ?? 0), 0),
-      diferenca: cash.reduce((s, c) => s + Number(c.closing_difference || 0), 0),
-      recebido: core.recebidoPrincipal,
-      multas: core.multasRecebidas,
-      recebidoTotal: core.recebidoTotal,
-      emprestado: core.emprestado,
-      entradas: sumEv(["entrada_manual"], "amount_in"),
-      saidas: sumEv(["saida_manual", "saida"], "amount_out"),
-      despesas: sumEv(["despesa"], "amount_out"),
-      estornos: estornoEvs.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
-      estornosCount: estornoEvs.length,
-      caixaDisponivel: 0,
-    };
-  };
-
   // Resumo consolidado da equipe = SOMA dos valores já calculados por trabalhador.
   const summary = useMemo(() => {
     const base = toTotals(consolidate(stats));
@@ -845,7 +822,7 @@ export default function ReportsPage() {
                               {formatCurrency(r.totals.diferenca)}
                             </b>
                           </span>
-                          <span>Pendentes: <b className="text-warning">{details.pendentesByWorker[r.worker.id] || 0}</b></span>
+                          <span>Pendentes: <b className="text-warning">{frozen.pendentesByWorker[r.worker.id] || 0}</b></span>
                           <span>Atrasados: <b className="text-destructive">{r.totals.atrasados}</b></span>
                         </div>
 
@@ -861,7 +838,7 @@ export default function ReportsPage() {
 
           {/* Situação atual da carteira da equipe */}
           {!globalMode && (
-            <RecordSection title="Clientes atrasados" records={details.atrasados} showWorker />
+            <RecordSection title="Clientes atrasados" records={atrasadosPeriodo} showWorker />
           )}
 
 
@@ -915,7 +892,7 @@ export default function ReportsPage() {
                                 </span>
                                 <span>Caixas abertos: <b className="text-foreground">{d.openCount}</b></span>
                                 <span>Caixas fechados: <b className="text-foreground">{d.closedCount}</b></span>
-                                <span>Pendentes de registro: <b className="text-warning">{(details.pendentesByDate[d.date] || []).length}</b></span>
+                                <span>Pendentes de registro: <b className="text-warning">{(frozen.pendentesByDate[d.date] || []).length}</b></span>
                               </div>
 
 
