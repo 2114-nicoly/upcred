@@ -13,7 +13,7 @@ import { getCurrentActorIdentity } from "@/lib/audit-utils";
  *
  * Version bump if the shape changes so future readers can adapt.
  */
-export const DAILY_SNAPSHOT_VERSION = 1;
+export const DAILY_SNAPSHOT_VERSION = 2;
 
 export type SnapshotClientNames = Record<string, string>;
 
