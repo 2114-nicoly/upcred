@@ -81,13 +81,17 @@ export default function AccessManagementTab() {
   const toggleEnforcement = async () => {
     const next = !enforcement;
     if (next) {
-      let paused = 0, expired = 0, scheduled = 0;
+      let paused = 0, expired = 0, scheduled = 0, companyBlocked = 0;
+      const affectedWorkers = new Set<string>();
       workers.forEach((w) => {
+        const control = w.parent_admin_id ? maps.controlByAdmin[w.parent_admin_id] : null;
+        if (isCompanyPaused(control)) { companyBlocked++; affectedWorkers.add(w.id); }
         const s = getAccessStatus(maps.licenseByWorker[w.id]);
-        if (s === "paused") paused++;
-        else if (s === "expired") expired++;
-        else if (s === "scheduled") scheduled++;
+        if (s === "paused") { paused++; affectedWorkers.add(w.id); }
+        else if (s === "expired") { expired++; affectedWorkers.add(w.id); }
+        else if (s === "scheduled") { scheduled++; affectedWorkers.add(w.id); }
       });
+      const pausedCompanies = admins.filter((a) => isCompanyPaused(maps.controlByAdmin[a.id])).length;
       const ok = await confirm({
         title: "Ativar bloqueio de acesso?",
         description:
@@ -96,8 +100,11 @@ export default function AccessManagementTab() {
           { label: "Trabalhadores pausados", value: String(paused) },
           { label: "Trabalhadores expirados", value: String(expired) },
           { label: "Acesso ainda não iniciado", value: String(scheduled) },
-          { label: "Total que perderá o acesso", value: String(paused + expired + scheduled) },
+          { label: "Empresas pausadas", value: String(pausedCompanies) },
+          { label: "Trabalhadores de empresas pausadas", value: String(companyBlocked) },
+          { label: "Total que perderá o acesso", value: String(affectedWorkers.size) },
         ],
+
         confirmText: "Ativar bloqueio",
         destructive: true,
       });
