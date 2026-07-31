@@ -16,6 +16,17 @@ import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/l
 import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger, getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { createDailyEvent, reverseDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
+import {
+  buildPaidGroupsFromFrozenEvents,
+  normalizeSnapshotPaidGroups,
+  removePaidGroupByMovement,
+  findPaidGroupByMovement,
+  INCOMPLETE_HISTORY_LABEL,
+  type PaidGroup,
+  type FrozenPaymentEvent,
+  type LegacyPaymentMovement,
+} from "@/lib/paid-groups";
+
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { logAction } from "@/lib/audit-utils";
 import { isCashClosed } from "@/lib/cash-lock";
