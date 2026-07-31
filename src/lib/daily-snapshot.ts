@@ -642,7 +642,9 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
       ? {
           expectedToReceiveToday: dailySummary.expectedToReceiveToday,
           receivedToday: dailySummary.receivedToday,
+          receivedFromExpected: dailySummary.receivedFromExpected,
           pendingToReceiveToday: dailySummary.pendingToReceiveToday,
+          overdueAmount: dailySummary.overdueAmount,
           cashExpectedForClosing: dailySummary.cashExpectedForClosing,
         }
       : null,
