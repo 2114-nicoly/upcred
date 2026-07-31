@@ -580,12 +580,18 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
     overdueClients = [...overdueByClient.values()].sort((a, b) => b.overdue_days - a.overdue_days);
 
     // --- Situação da carteira ao final do dia (obrigatória)
-    const { getCashBalance } = await import("@/lib/cash-utils");
-    const cb = await getCashBalance({
+    const { getCashBalanceResult } = await import("@/lib/cash-utils");
+    const cbRes = await getCashBalanceResult({
       workerId: scope.worker_id,
       adminId: scope.admin_id,
-    } as any);
-    const availableCash = Number((cb as any)?.available_cash || 0);
+    });
+    const cb = requireSnapshotQuery<any>("cash_balance", cbRes as any);
+    const availableCash = Number((cb as any)?.available_cash);
+    if (!cb || !Number.isFinite(availableCash)) {
+      console.error("[daily-snapshot] cash_balance ausente ou inválido", scope);
+      throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
+    }
+
 
     portfolioState = {
       available_cash: availableCash,
