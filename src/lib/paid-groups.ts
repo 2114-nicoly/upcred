@@ -77,9 +77,8 @@ const numOrNull = (v: unknown): number | null => {
 };
 
 function inScope(row: { worker_id?: string | null; admin_id?: string | null }, scope: ScopeFilter): boolean {
-  if (scope.workerId && row.worker_id && row.worker_id !== scope.workerId) return false;
-  if (scope.workerId && !row.worker_id) return false;
-  if (scope.adminId && row.admin_id && row.admin_id !== scope.adminId) return false;
+  if (scope.workerId && row.worker_id !== scope.workerId) return false;
+  if (scope.adminId && row.admin_id !== scope.adminId) return false;
   return true;
 }
 
