@@ -13,6 +13,7 @@ import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import WorkerRequestsSuperAdminSection from "@/components/access/WorkerRequestsSuperAdminSection";
 import RenewAccessDialog from "@/components/access/RenewAccessDialog";
+import EditAccessPeriodDialog from "@/components/access/EditAccessPeriodDialog";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import PauseAccessDialog from "@/components/access/PauseAccessDialog";
 import PauseCompanyDialog from "@/components/access/PauseCompanyDialog";
