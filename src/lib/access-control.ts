@@ -304,27 +304,28 @@ export type AccessCheck = {
 
 /** Mensagens exibidas ao usuário bloqueado (sem detalhes internos). */
 export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
-  paused: "Seu acesso está pausado. Entre em contato com a empresa responsável.",
-  expired: "Seu período de acesso expirou. Entre em contato com a empresa responsável.",
+  paused: "Seu acesso está pausado no momento. Em caso de dúvidas, entre em contato com a empresa responsável.",
+  expired: "Seu período de acesso venceu e precisa ser renovado. Entre em contato com a empresa responsável.",
   unconfigured: "Seu acesso ainda não foi liberado.",
   scheduled: "Seu período de acesso ainda não começou.",
 
 };
 
 export const COMPANY_PAUSED_MESSAGE =
-  "Esta empresa está com o acesso pausado. Entre em contato com o responsável pelo sistema.";
+  "Esta empresa está atualmente inativa no sistema. Em caso de dúvidas, entre em contato com o responsável.";
 
 /**
  * Situação da empresa do próprio usuário (RLS libera apenas a própria empresa).
+ * Quando `adminId` é conhecido, a consulta é restrita a ele — nunca observa outra empresa.
  * Falha de consulta nunca bloqueia: a empresa é considerada ativa.
  */
-export async function fetchOwnCompanyPaused(): Promise<boolean> {
+export async function fetchOwnCompanyPaused(adminId?: string | null): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("company_access_controls")
-      .select("manual_status")
-      .limit(1)
-      .maybeSingle();
+      .select("manual_status");
+    if (adminId) query = query.eq("admin_id", adminId);
+    const { data, error } = await query.limit(1).maybeSingle();
     if (error) {
       console.error("Falha ao consultar situação da empresa:", error);
       return false;
@@ -335,6 +336,7 @@ export async function fetchOwnCompanyPaused(): Promise<boolean> {
     return false;
   }
 }
+
 
 /**
  * Verificação central de acesso.
