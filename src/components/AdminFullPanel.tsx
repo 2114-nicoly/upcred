@@ -350,7 +350,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
               </p>
               <p className="text-xs mt-1 flex items-center gap-1 text-muted-foreground">
                 <Users className="h-3 w-3" />
-                {workers.length} trabalhadores · {workers.filter((w) => w.active).length} ativos
+                {workers.length} trabalhadores · {workers.filter((w) => !w.archived_at).length} na operação
               </p>
             </div>
             <Button size="sm" onClick={() => viewAsAdmin("/admin")}>
