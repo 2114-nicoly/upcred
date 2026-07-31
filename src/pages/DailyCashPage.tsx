@@ -487,8 +487,32 @@ export default function DailyCashPage() {
             setPaidGroups((snap.paid_groups as any) || []);
             setNotPaidMarks((snap.not_paid_marks as any) || []);
             setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
-            setPendingInstallments([]);
+            // Pendentes congelados (snapshot v2). Snapshots v1 não têm a lista.
+            const frozenPending = ((snap as any).pending_installments || []) as any[];
+            setPendingInstallments(frozenPending.map((p): InstallmentWithLoan => ({
+              id: p.installment_id,
+              number: Number(p.installment_number) || 0,
+              amount: Number(p.installment_amount) || 0,
+              due_date: p.due_date,
+              status: "pending",
+              loan_id: p.loan_id,
+              is_penalty: false,
+              paid_amount: Number(p.paid_amount) || 0,
+              paid_at: null,
+              loans: {
+                id: p.loan_id,
+                client_id: p.client_id,
+                amount: 0,
+                total_amount: Number(p.installment_amount) * (Number(p.total_installments) || 0),
+                remaining_balance: Number(p.loan_remaining_balance) || 0,
+                installment_count: Number(p.total_installments) || 0,
+                payment_type: "",
+                clients: { id: p.client_id, name: p.client_name || "Cliente" },
+              },
+            })));
+            setSnapshotVersion(Number((snap as any).version) || 1);
             setSelectedForNotPaid(new Set());
+
             setPendingPenalties([]);
             setRescheduledInstIds(new Set());
             return; // finally ainda roda (resumo + loading off)
