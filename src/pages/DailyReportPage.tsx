@@ -158,30 +158,34 @@ export default function DailyReportPage({
     })();
   }, [selectedWorkerId, workers]);
 
-  // Fetch report data
+  // Fetch report data — SEMPRE pela fonte histórica congelada.
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // daily_events (período selecionado)
-        let eq: any = supabase.from("daily_events" as any).select("*")
-          .gte("cash_date", startDate).lte("cash_date", endDate);
-        if (selectedWorkerId) eq = eq.eq("worker_id", selectedWorkerId);
-        else if (isSuperAdmin && selectedAdminId) eq = eq.eq("admin_id", selectedAdminId).is("worker_id", null);
-        else if (isAdmin && !isSuperAdmin && myAdminId) eq = eq.eq("admin_id", myAdminId).is("worker_id", null);
-        const { data: evs } = await eq.order("created_at", { ascending: true });
-        const eventList = (evs as unknown as DailyEvent[]) || [];
-        setEvents(eventList);
+        const scopeAdminId = selectedWorkerId
+          ? null
+          : (isSuperAdmin ? selectedAdminId : (isAdmin ? myAdminId : null));
 
-        // audit_logs do período
+        const fp = await loadFrozenReportPeriod({
+          startDate,
+          endDate,
+          workerId: selectedWorkerId,
+          adminId: scopeAdminId,
+        });
+        setFrozen(fp);
+        const eventList = fp.events;
+        setEvents(eventList);
+        setDetails(fp.details);
+
+        // audit_logs do período (complemento de rastreio — não altera valores)
         const dayStart = `${startDate}T00:00:00`;
         const dayEnd = `${endDate}T23:59:59`;
         let aq: any = supabase.from("audit_logs").select("*")
           .gte("created_at", dayStart).lte("created_at", dayEnd)
           .in("entity_type", ["client", "loan", "installment", "penalty", "transfer", "payment", "cash"]);
         if (selectedWorkerId) aq = aq.eq("worker_id", selectedWorkerId);
-        else if (isSuperAdmin && selectedAdminId) aq = aq.eq("admin_id", selectedAdminId);
-        else if (isAdmin && !isSuperAdmin && myAdminId) aq = aq.eq("admin_id", myAdminId);
+        else if (scopeAdminId) aq = aq.eq("admin_id", scopeAdminId);
         const { data: audits } = await aq.order("created_at", { ascending: true });
         setAuditRows((audits as unknown as AuditRow[]) || []);
 
@@ -200,29 +204,17 @@ export default function DailyReportPage({
           setClientNames({});
         }
 
-        // daily_cash do período (dados salvos no fechamento — não recalculados)
-        let dcList: any[] = [];
-        if (selectedWorkerId) {
-          const { data: dc } = await supabase.from("daily_cash").select("*")
-            .gte("cash_date", startDate).lte("cash_date", endDate)
-            .eq("worker_id", selectedWorkerId).order("cash_date", { ascending: false });
-          dcList = dc || [];
-        } else if (isSuperAdmin && selectedAdminId) {
-          const { data: dc } = await supabase.from("daily_cash").select("*")
-            .gte("cash_date", startDate).lte("cash_date", endDate)
-            .eq("admin_id", selectedAdminId).is("worker_id", null).order("cash_date", { ascending: false });
-          dcList = dc || [];
-        }
-        setCashRows(dcList);
-
-        const dcRow: any = dcList.find((r) => r.cash_date === endDate) || null;
-        if (dcRow) {
-          setCashStatus(dcRow.status || null);
-          const opening = Number(dcRow.opening_balance || 0);
-          const expected = Number(dcRow.expected_closing_balance ?? (opening + Number(dcRow.total_in || 0) - Number(dcRow.total_out || 0)));
-          const counted = dcRow.counted_closing_balance != null ? Number(dcRow.counted_closing_balance) : null;
-          const diff = counted != null ? counted - expected : null;
-          setCashSummary({ opening, expected, counted, diff, closingObs: dcRow.closing_note || null });
+        // Situação do dia de referência (vinda do registro congelado do dia)
+        const refDay = fp.days.find((d) => d.date === endDate) || null;
+        if (refDay) {
+          setCashStatus(refDay.status === "none" ? null : refDay.status);
+          setCashSummary({
+            opening: refDay.totals.opening,
+            expected: refDay.totals.expected ?? refDay.totals.finalCash,
+            counted: refDay.totals.counted,
+            diff: refDay.totals.diff,
+            closingObs: refDay.closingObs,
+          });
         } else {
           setCashStatus(null);
           setCashSummary(null);
@@ -240,31 +232,16 @@ export default function DailyReportPage({
         } else {
           setCurrentAvailableCash(null);
         }
-
-        // Detalhamento (somente leitura) — pagamentos, empréstimos, renovações,
-        // renegociações, atrasos e clientes pendentes de registro.
-        try {
-          const det = await fetchReportDetails({
-            events: eventList,
-            startDate,
-            endDate,
-            workerId: selectedWorkerId,
-            adminId: selectedWorkerId ? null : (isSuperAdmin ? selectedAdminId : myAdminId),
-          });
-          setDetails(det);
-        } catch (detErr) {
-          console.warn("[DailyReport] detalhamento indisponível", detErr);
-          setDetails(emptyReportDetails());
-        }
-
       } catch (err: any) {
         console.error(err);
+        setFrozen(emptyFrozenPeriod(startDate, endDate));
         toast.error("Erro ao carregar relatório");
       } finally {
         setLoading(false);
       }
     })();
   }, [startDate, endDate, selectedWorkerId, selectedAdminId, isAdmin, isSuperAdmin, myAdminId]);
+
 
 
   // Build rows from events + audits
