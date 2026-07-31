@@ -518,15 +518,17 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   let overdueClients: SnapshotOverdueClient[] = [];
   let portfolioState: SnapshotPortfolioState | null = null;
   try {
-    const loansQ = applyDailyCashScope(
+    const loansQ = applyStrictScope(
       supabase.from("loans")
-        .select("id, client_id, worker_id, total_amount, remaining_balance, installment_count, status, is_imported_ongoing, initial_remaining_balance, amount_already_paid, clients:client_id(id, name)")
+        .select("id, client_id, worker_id, admin_id, total_amount, remaining_balance, installment_count, status, is_imported_ongoing, initial_remaining_balance, amount_already_paid, clients:client_id(id, name)")
         .in("status", ["open", "overdue"]),
       scope,
     );
     const { data: activeLoansData } = await loansQ;
+    assertAllInScope((activeLoansData as any[]) || [], scope, "empréstimos ativos");
     const activeLoans = ((activeLoansData as any[]) || []).filter(l => Number(l.remaining_balance) > 0.01);
     const loanById = new Map<string, any>(activeLoans.map(l => [l.id, l]));
+
 
     let instRows: any[] = [];
     if (activeLoans.length > 0) {
