@@ -559,7 +559,7 @@ export default function DailyReportPage({
         ["Renegociações", String(recordGroups.renegociacoes.length)],
         ["Clientes não pagos", String(recordGroups.naoPagos.length)],
         ["Clientes pendentes de registro", String(pendentesPeriodo.length)],
-        ["Clientes atrasados", String(details.atrasados.length)],
+        ["Clientes atrasados", String(atrasadosPeriodo.length)],
         ["Despesas", String(recordGroups.despesas.length)],
         ["Entradas e saídas", String(recordGroups.outras.length)],
         ["Estornos", String(recordGroups.estornos.length)],
@@ -572,15 +572,13 @@ export default function DailyReportPage({
     // ===== 3. Detalhamento =====
     writeBlockTitle("3. Detalhamento");
 
-    if (events.length === 0 && pendentesPeriodo.length === 0 && details.atrasados.length === 0) {
+    if (events.length === 0 && pendentesPeriodo.length === 0 && atrasadosPeriodo.length === 0) {
       writeText("Não houve movimentações no período selecionado.", 10);
 
     } else if (isMultiDay) {
       days.forEach((d) => {
         const dayLabel = format(new Date(d.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
-        const statusLabel =
-          d.status === "closed" ? (d.reopened ? "Reaberto e fechado" : "Fechado")
-          : d.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
+        const statusLabel = d.statusLabel;
         ensureSpace(18);
         const y = cursorY() + 8;
         doc.setFontSize(10);
@@ -598,11 +596,11 @@ export default function DailyReportPage({
         if (d.events.length === 0 && d.pendentes.length === 0) writeText("Sem movimentações neste dia.", 8);
         else writeRecordGroups(d.recordGroups, d.pendentes);
       });
-      writeRecordSection("Clientes atrasados (situação atual)", details.atrasados);
+      writeRecordSection("Clientes atrasados", atrasadosPeriodo);
     } else {
       if (cashSummary?.closingObs) writeText(`Obs. fechamento: ${cashSummary.closingObs}`, 8);
       if (!isMultiDay && cashStatus !== "closed") writeText("Caixa ainda aberto — valores do dia podem mudar.", 8);
-      writeRecordGroups(recordGroups, details.pendentesByDate[endDate] || [], details.atrasados);
+      writeRecordGroups(recordGroups, frozen.pendentesByDate[endDate] || [], atrasadosPeriodo);
     }
 
 
@@ -682,9 +680,10 @@ export default function DailyReportPage({
 
   const oldestDay = days.length ? days[days.length - 1] : null;
   const newestDay = days.length ? days[0] : null;
-  const periodOpening = isMultiDay ? (oldestDay?.opening ?? 0) : (cashSummary?.opening ?? 0);
-  const periodFinal = isMultiDay ? (newestDay?.finalCash ?? 0) : finalCash;
-  const periodDiffValue = isMultiDay ? periodDiff : (cashSummary?.diff ?? 0);
+  // Caixa inicial do 1º dia, caixa final do último — direto da fonte congelada.
+  const periodOpening = frozen.days.length ? frozen.totals.opening : (cashSummary?.opening ?? 0);
+  const periodFinal = frozen.days.length ? frozen.totals.finalCash : finalCash;
+  const periodDiffValue = isMultiDay ? periodDiff : (cashSummary?.diff ?? periodDiff);
 
   const PRESETS: { key: Preset; label: string }[] = [
     { key: "hoje", label: "Hoje" },
@@ -844,7 +843,7 @@ export default function DailyReportPage({
           <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
           <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
           <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
-          <CountCard label="Clientes atrasados" value={details.atrasados.length} />
+          <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
         </div>
       )}
 
@@ -861,13 +860,13 @@ export default function DailyReportPage({
             <DaySection key={d.date} day={d} />
           ))}
           <p className="text-xs font-semibold text-muted-foreground uppercase pt-2">Situação atual da carteira</p>
-          <RecordSection title="Clientes atrasados" records={details.atrasados} />
+          <RecordSection title="Clientes atrasados" records={atrasadosPeriodo} />
         </div>
       ) : (
         <RecordGroupSections
           groups={recordGroups}
-          pendentes={details.pendentesByDate[endDate] || []}
-          atrasados={details.atrasados}
+          pendentes={frozen.pendentesByDate[endDate] || []}
+          atrasados={atrasadosPeriodo}
         />
       )}
 
@@ -966,13 +965,13 @@ function DaySection({
 }: {
   day: {
     date: string; events: DailyEvent[]; groups: DayGroups; recordGroups: RecordGroups; pendentes: ReportRecord[];
-    status: string | null; reopened: boolean;
+    status: string | null; statusLabel: string; incompleteSnapshot?: boolean; reopened: boolean;
     opening: number; finalCash: number; diff: number | null; received: number; out: number; closingObs: string | null;
   };
 }) {
   const [open, setOpen] = useState(false);
   const label = format(new Date(day.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
-  const statusLabel = day.status === "closed" ? (day.reopened ? "Reaberto e fechado" : "Fechado") : day.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
+  const statusLabel = day.statusLabel;
 
   return (
     <Card>
