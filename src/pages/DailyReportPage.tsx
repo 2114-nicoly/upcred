@@ -298,27 +298,27 @@ export default function DailyReportPage({
     return [...evRows, ...auditRowsMapped].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [events, auditRows, clientNames]);
 
+  // Totais do período: SOMPRE os totais congelados (snapshot nos dias fechados).
   const totals = useMemo(() => {
     const t = computeDailyTotals(events as any, 0);
-    // Fonte única compartilhada para recebido e emprestado.
-    const core = computeCoreTotals(events as any);
+    const f = frozen.totals;
     return {
-      totalIn: t.entradas,
-      totalOut: t.saidas,
-      payments: core.recebidoPrincipal,
-      penalties: core.multasRecebidas,
-      receivedTotal: core.recebidoTotal,
-      lent: core.emprestado,
+      totalIn: f.receivedTotal + f.manualIn,
+      totalOut: f.lent + f.manualOut + f.expenses,
+      payments: f.received,
+      penalties: f.penalties,
+      receivedTotal: f.receivedTotal,
+      lent: f.lent,
       loans: t.emprestimosLiberados,
       renewals: t.renovacoes + t.renegociacoes,
-      manualIn: t.entradasManuais,
-      manualOut: t.saidasManuais,
-      expenses: t.despesas,
+      manualIn: f.manualIn,
+      manualOut: f.manualOut,
+      expenses: f.expenses,
       expensesByCategory: t.despesasPorCategoria,
-      notPaidCount: t.naoPagos,
-      balance: t.entradas - t.saidas,
+      notPaidCount: f.notPaidCount,
+      balance: (f.receivedTotal + f.manualIn) - (f.lent + f.manualOut + f.expenses),
     };
-  }, [events]);
+  }, [events, frozen]);
 
   // Agrupamento de registros por tipo (somente apresentação — não altera cálculos)
   const groups = useMemo(() => buildGroups(events), [events]);
@@ -329,64 +329,47 @@ export default function DailyReportPage({
     [events, details],
   );
 
-  /** Clientes pendentes de registro em todo o período (sem duplicar dias). */
+  /** Clientes pendentes de registro/fechamento em todo o período. */
   const pendentesPeriodo = useMemo(
-    () => Object.values(details.pendentesByDate).flat(),
-    [details],
+    () => Object.values(frozen.pendentesByDate).flat(),
+    [frozen],
   );
 
+  /** Clientes atrasados — congelados no fechamento quando o dia já foi fechado. */
+  const atrasadosPeriodo = frozen.atrasados;
 
 
 
-  const estornosTotal = useMemo(
-    () => groups.estornos.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
-    [groups.estornos]
-  );
+
+  const estornosTotal = frozen.totals.estornos;
 
   const isMultiDay = startDate !== endDate;
 
-  // Dias do período (mais recente → mais antigo), cada um com seus próprios registros
+  // Dias do período (mais recente → mais antigo), lidos da fonte congelada.
   const days = useMemo(() => {
-    const set = new Set<string>();
-    events.forEach((e) => set.add(String((e as any).cash_date)));
-    cashRows.forEach((r) => set.add(String(r.cash_date)));
-    return Array.from(set)
-      .sort((a, b) => b.localeCompare(a))
-      .map((d) => {
-        const dayEvents = events.filter((e) => String((e as any).cash_date) === d);
-        const dc = cashRows.find((r) => r.cash_date === d) || null;
-        const closed = dc?.status === "closed";
-        const reopened = !!(dc?.reopened_at || (dc?.reopen_count ?? 0) > 0);
-        const opening = dc ? Number(dc.opening_balance || 0) : 0;
-        const savedExpected = dc?.expected_closing_balance != null ? Number(dc.expected_closing_balance) : null;
-        const counted = dc?.counted_closing_balance != null ? Number(dc.counted_closing_balance) : null;
-        const t = computeDailyTotals(dayEvents as any, 0);
-        return {
-          date: d,
-          events: dayEvents,
-          groups: buildGroups(dayEvents),
-          recordGroups: buildRecordGroups(dayEvents, details.recordFor),
-          pendentes: details.pendentesByDate[d] || [],
+    return frozen.days.map((d: FrozenDay) => ({
+      date: d.date,
+      events: d.events,
+      groups: buildGroups(d.events),
+      recordGroups: buildRecordGroups(d.events, details.recordFor),
+      pendentes: d.pendentes,
+      atrasados: d.atrasados,
+      status: d.status === "none" ? null : d.status,
+      statusLabel: frozenSourceLabel(d),
+      frozenSource: d.source,
+      incompleteSnapshot: d.incompleteSnapshot,
+      reopened: d.reopened,
+      opening: d.totals.opening,
+      finalCash: d.totals.finalCash,
+      diff: d.totals.diff,
+      received: d.totals.received,
+      out: d.totals.lent,
+      closingObs: d.closingObs,
+    }));
+  }, [frozen, details]);
 
-          status: closed ? "closed" : dc ? "open" : null,
-          reopened,
-          opening,
-          // Dias fechados: valores salvos no fechamento (sem recálculo). Dias abertos: previsão do dia.
-          finalCash: closed
-            ? (counted ?? savedExpected ?? 0)
-            : (savedExpected ?? (opening + t.pagamentos + t.multas + t.entradasManuais - (t.emprestimosLiberados + t.renovacoes + t.renegociacoes) - t.saidasManuais - t.despesas)),
-          diff: closed && counted != null ? counted - (savedExpected ?? 0) : null,
-          received: closed ? Number(dc.total_in ?? t.pagamentos) : t.pagamentos,
-          out: closed ? Number(dc.total_out ?? 0) : (t.emprestimosLiberados + t.renovacoes + t.renegociacoes),
-          closingObs: dc?.closing_note || null,
-        };
-      });
-  }, [events, cashRows, details]);
+  const periodDiff = frozen.totals.diff ?? 0;
 
-  const periodDiff = useMemo(
-    () => days.reduce((s, d) => s + (d.diff ?? 0), 0),
-    [days]
-  );
 
   const dateLabel = useMemo(() => format(new Date(date + "T12:00:00"), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), [date]);
   const periodLabel = useMemo(() => {
