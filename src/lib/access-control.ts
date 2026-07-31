@@ -47,6 +47,7 @@ export type WorkerAccessPeriod = {
 
 export type AccessStatus =
   | "unconfigured"
+  | "company_paused"
   | "paused"
   | "expired"
   | "expiring"
@@ -55,6 +56,7 @@ export type AccessStatus =
 
 export const ACCESS_STATUS_LABEL: Record<AccessStatus, string> = {
   unconfigured: "Não configurado",
+  company_paused: "Empresa pausada",
   paused: "Pausado",
   expired: "Expirado",
   expiring: "Vence em breve",
@@ -68,8 +70,11 @@ export const ACCESS_STATUS_FILTERS: { value: AccessStatus | "all"; label: string
   { value: "active", label: "Ativo" },
   { value: "expiring", label: "Vence em breve" },
   { value: "expired", label: "Expirado" },
+  { value: "scheduled", label: "Agendado" },
   { value: "paused", label: "Pausado" },
+  { value: "company_paused", label: "Empresa pausada" },
 ];
+
 
 /* ---------------- datas locais (sem deslocamento de fuso) ---------------- */
 
