@@ -1024,17 +1024,19 @@ export default function DailyCashPage() {
     }
   };
 
-  const handleUndoPayment= async (loanId: string, movementId: string) => {
+  const handleUndoPayment = async (movementId: string) => {
     if (isSubmitting) return;
     if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
     if (!movementId) { toast.error("Aguarde a sincronização antes de desfazer."); refreshDataInBackground(); return; }
-    const group = paidGroups.find(g => g.loanId === loanId);
+    // Localizar SEMPRE pelo movementId: dois pagamentos do mesmo empréstimo
+    // são movimentações distintas.
+    const group = findPaidGroupByMovement(paidGroups, movementId);
     const ok = await confirm({
       title: "Desfazer pagamento?",
       description: "O valor sairá do caixa e a parcela voltará a ficar pendente.",
       affected: group ? [
-        { label: "Cliente", value: (group as any).clientName || "—" },
+        { label: "Cliente", value: group.clientName || "—" },
         { label: "Valor", value: formatCurrency(group.totalPaid) },
       ] : undefined,
       confirmText: "Desfazer", destructive: true,
@@ -1042,9 +1044,10 @@ export default function DailyCashPage() {
     if (!ok) return;
     setIsSubmitting(true);
 
-    // Optimistic: remove from paid
-    setPaidGroups(prev => prev.filter(g => g.loanId !== loanId));
-    localActionedLoanIds.current.delete(loanId);
+    // Otimista: remover SOMENTE o card desta movimentação.
+    setPaidGroups(prev => removePaidGroupByMovement(prev, movementId));
+    if (group?.loanId) localActionedLoanIds.current.delete(group.loanId);
+
 
     try {
       await reversePayment({ movementId });
