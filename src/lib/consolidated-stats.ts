@@ -306,8 +306,8 @@ export async function loadWorkersStats(
     if (s) s.emprestimosAtivos = set.size;
   });
 
-  // "Clientes atrasados" conta worker_id+client_id único com pelo menos uma parcela vencida,
-  // regular, pendente/parcial/overdue e com saldo pendente. Nunca usa loans.status sozinho.
+  // Parcelas realmente vencidas (due_date < início do período): compõem o
+  // "Valor atrasado" e a contagem de clientes atrasados (worker_id+client_id único).
   const overdueClientsByWorker = new Map<string, Set<string>>();
   (overdueInstRows as any[]).forEach((i) => {
     const loan = i.loans;
@@ -315,8 +315,10 @@ export async function loadWorkersStats(
     const clientId = loan?.client_id ?? null;
     const s = get(workerId);
     if (!s || !workerId || !clientId) return;
-    const pending = Math.max(Number(i.amount || 0) - Number(i.paid_amount || 0), 0);
-    if (pending <= 0.01) return;
+    const m = emptyCollectionMetrics();
+    accumulateOverdue(m, i);
+    if (m.valorAtrasado <= 0) return;
+    s.valorAtrasado += m.valorAtrasado;
     const key = `${workerId}|${clientId}`;
     const set = overdueClientsByWorker.get(workerId) || new Set<string>();
     set.add(key);
