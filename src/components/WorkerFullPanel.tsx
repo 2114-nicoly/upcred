@@ -123,10 +123,15 @@ export default function WorkerFullPanel({ workerId }: { workerId: string }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-bold truncate">{worker.nome}</h1>
-                {worker.active
-                  ? <Badge className="text-[10px]">Ativo</Badge>
-                  : <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
+                <AccessStatusBadge
+                  status={getEffectiveAccessStatus(
+                    accessMaps.licenseByWorker[worker.id],
+                    isCompanyPaused(worker.parent_admin_id ? accessMaps.controlByAdmin[worker.parent_admin_id] : null),
+                  )}
+                />
+                {worker.archived_at && <Badge variant="secondary" className="text-[10px]">Arquivado</Badge>}
               </div>
+
               <p className="text-xs text-muted-foreground">
                 Login <span className="font-mono">{worker.login_codigo}</span> · Criado {format(new Date(worker.created_at), "dd/MM/yyyy")}
               </p>
