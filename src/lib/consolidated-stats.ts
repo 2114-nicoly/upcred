@@ -239,26 +239,15 @@ export async function loadWorkersStats(
 
   // Previsto do período = valor original das parcelas com vencimento no período.
   // Falta receber = saldo pendente dessas mesmas parcelas (nunca negativo).
+  // O valor atrasado NÃO sai daqui: vem das parcelas vencidas antes do período.
   (insRows as any[]).forEach((i) => {
     const s = get(i.loans?.worker_id ?? null);
     if (!s) return;
-    const amount = Number(i.amount || 0);
-    const paid = Number(i.paid_amount || 0);
-    s.previsto += amount;
-    const pending = Math.max(amount - paid, 0);
-    s.faltaReceber += pending;
-    // Valor atrasado: parcela do período com vencimento ANTERIOR à data de referência
-    // (hoje ou fim do período). Parcela que vence na data de referência NÃO é atrasada.
-    const dueDate = String(i.due_date || "");
-    const loanStatus = String(i.loans?.status ?? "");
-    if (
-      pending > 0.01 &&
-      dueDate && dueDate < overdueReferenceDate &&
-      (collectibleStatuses as readonly string[]).includes(String(i.status)) &&
-      (activeLoanStatuses as readonly string[]).includes(loanStatus)
-    ) {
-      s.valorAtrasado += pending;
-    }
+    const m = emptyCollectionMetrics();
+    accumulateScheduled(m, i);
+    s.previsto += m.previsto;
+    s.faltaReceber += m.faltaReceber;
+    s.recebidoDoPrevisto += m.recebidoDoPrevisto;
   });
 
   // Cash flow from daily_events (non-reversed, active workers only)
