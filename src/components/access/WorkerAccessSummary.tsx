@@ -43,7 +43,7 @@ export default function WorkerAccessSummary({ license, lastPeriod, title = "Aces
         <div className="flex items-center gap-1">
           <AccessStatusBadge status={status} />
           {companyPaused && status !== licenseStatus && (
-            <span className="text-[9px] text-muted-foreground">Licença: {ACCESS_LABEL_FALLBACK(licenseStatus)}</span>
+            <span className="text-[9px] text-muted-foreground">Licença: {ACCESS_STATUS_LABEL[licenseStatus]}</span>
           )}
         </div>
       </div>
