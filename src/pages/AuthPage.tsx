@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { ACCESS_BLOCK_STORAGE_KEY } from "@/hooks/useAuth";
+import { checkWorkerAccess } from "@/lib/access-control";
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -34,8 +35,25 @@ export default function AuthPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
 
 
+  /**
+   * Autentica e só então executa a verificação central de acesso.
+   * Retorna null quando permitido; retorna a mensagem de bloqueio quando negado
+   * (encerrando a sessão recém-criada).
+   */
   const trySignIn = async (email: string, pwd: string) => {
     return await supabase.auth.signInWithPassword({ email, password: pwd });
+  };
+
+  const finishLogin = async (): Promise<string | null> => {
+    const { data } = await supabase.auth.getUser();
+    const uid = data.user?.id;
+    if (!uid) return "Não foi possível validar a sessão.";
+    const result = await checkWorkerAccess(uid);
+    if (result.allowed) return null;
+    await supabase.auth.signOut();
+    // Evita mensagem duplicada vinda do guard central da sessão.
+    try { sessionStorage.removeItem(ACCESS_BLOCK_STORAGE_KEY); } catch { /* ignore */ }
+    return result.reason ?? "Acesso indisponível.";
   };
 
   const resolveEmailViaFn = async (login: string): Promise<string | null> => {
@@ -47,6 +65,7 @@ export default function AuthPage() {
       return null;
     }
   };
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +96,8 @@ export default function AuthPage() {
       for (const email of candidates) {
         const { error } = await trySignIn(email, pwd);
         if (!error) {
+          const blocked = await finishLogin();
+          if (blocked) throw new Error(blocked);
           toast.success("Bem-vindo!");
           navigate("/", { replace: true });
           return;
@@ -93,6 +114,8 @@ export default function AuthPage() {
         if (resolved) {
           const { error } = await trySignIn(resolved, pwd);
           if (!error) {
+            const blocked = await finishLogin();
+            if (blocked) throw new Error(blocked);
             toast.success("Bem-vindo!");
             navigate("/", { replace: true });
             return;
@@ -100,6 +123,7 @@ export default function AuthPage() {
           lastError = error;
         }
       }
+
 
       const msg = (lastError?.message || "").toLowerCase();
       if (msg.includes("email not confirmed")) {

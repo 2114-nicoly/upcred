@@ -300,31 +300,35 @@ export type AccessCheck = {
   enforcementEnabled: boolean;
   /** Empresa vinculada com acesso pausado (informativo mesmo sem bloqueio). */
   companyPaused: boolean;
+  /** Empresa (admin_id) do próprio usuário — usada para observar só a própria empresa. */
+  adminId: string | null;
 };
+
 
 /** Mensagens exibidas ao usuário bloqueado (sem detalhes internos). */
 export const ACCESS_BLOCK_MESSAGE: Record<string, string> = {
-  paused: "Seu acesso está pausado. Entre em contato com a empresa responsável.",
-  expired: "Seu período de acesso expirou. Entre em contato com a empresa responsável.",
+  paused: "Seu acesso está pausado no momento. Em caso de dúvidas, entre em contato com a empresa responsável.",
+  expired: "Seu período de acesso venceu e precisa ser renovado. Entre em contato com a empresa responsável.",
   unconfigured: "Seu acesso ainda não foi liberado.",
   scheduled: "Seu período de acesso ainda não começou.",
 
 };
 
 export const COMPANY_PAUSED_MESSAGE =
-  "Esta empresa está com o acesso pausado. Entre em contato com o responsável pelo sistema.";
+  "Esta empresa está atualmente inativa no sistema. Em caso de dúvidas, entre em contato com o responsável.";
 
 /**
  * Situação da empresa do próprio usuário (RLS libera apenas a própria empresa).
+ * Quando `adminId` é conhecido, a consulta é restrita a ele — nunca observa outra empresa.
  * Falha de consulta nunca bloqueia: a empresa é considerada ativa.
  */
-export async function fetchOwnCompanyPaused(): Promise<boolean> {
+export async function fetchOwnCompanyPaused(adminId?: string | null): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("company_access_controls")
-      .select("manual_status")
-      .limit(1)
-      .maybeSingle();
+      .select("manual_status");
+    if (adminId) query = query.eq("admin_id", adminId);
+    const { data, error } = await query.limit(1).maybeSingle();
     if (error) {
       console.error("Falha ao consultar situação da empresa:", error);
       return false;
@@ -336,11 +340,12 @@ export async function fetchOwnCompanyPaused(): Promise<boolean> {
   }
 }
 
+
 /**
  * Verificação central de acesso.
- * SuperAdministrador sempre permitido. Administrador e trabalhador são bloqueados
- * quando o bloqueio automático está ativado e a empresa está pausada; o trabalhador
- * também depende da própria licença individual.
+ * Prioridade oficial da causa do bloqueio:
+ * 1) Empresa pausada, 2) Pausa individual, 3) Licença expirada, 4) Acesso agendado, 5) Permitido.
+ * SuperAdministrador sempre permitido. Nada aqui altera dados armazenados.
  */
 export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
   const enforcementEnabled = await fetchEnforcementEnabled();
@@ -352,24 +357,32 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
     accessEnd: null,
     enforcementEnabled,
     companyPaused: false,
+    adminId: null,
   };
   if (!userId) return base;
 
   try {
-    const [{ data: roles }, { data: workerRow }] = await Promise.all([
+    const [{ data: roles }, { data: workerRow }, { data: adminRow }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", userId),
-      supabase.from("workers").select("id").eq("auth_user_id", userId).maybeSingle(),
+      supabase.from("workers").select("id, parent_admin_id").eq("auth_user_id", userId).maybeSingle(),
+      supabase.from("admins" as any).select("id").eq("auth_user_id", userId).maybeSingle(),
     ]);
     const roleNames = ((roles as any[]) ?? []).map((r) => r.role as string);
     if (roleNames.includes("super_admin")) return base;
 
+    const adminId =
+      ((adminRow as any)?.id as string | undefined) ??
+      ((workerRow as any)?.parent_admin_id as string | undefined) ??
+      null;
+
     // Empresa sem registro em company_access_controls é considerada ativa.
-    const companyPaused = await fetchOwnCompanyPaused();
+    const companyPaused = await fetchOwnCompanyPaused(adminId);
     const companyBlocked = enforcementEnabled && companyPaused;
 
     if (roleNames.includes("admin")) {
       return {
         ...base,
+        adminId,
         companyPaused,
         allowed: !companyBlocked,
         reason: companyBlocked ? COMPANY_PAUSED_MESSAGE : null,
@@ -378,7 +391,13 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
 
     const workerId = ((workerRow as any)?.id as string | undefined) ?? null;
     if (!workerId) {
-      return { ...base, companyPaused, allowed: !companyBlocked, reason: companyBlocked ? COMPANY_PAUSED_MESSAGE : null };
+      return {
+        ...base,
+        adminId,
+        companyPaused,
+        allowed: !companyBlocked,
+        reason: companyBlocked ? COMPANY_PAUSED_MESSAGE : null,
+      };
     }
 
     const { data: licRow } = await supabase
@@ -387,29 +406,35 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
       .eq("worker_id", workerId)
       .maybeSingle();
     const license = (licRow as any as WorkerAccessLicense | null) ?? null;
+    // Status individual real (nunca sobrescrito pela pausa da empresa).
     const status = license ? getAccessStatus(license) : "unconfigured";
     const accessEnd = license?.access_end ?? null;
 
     if (!enforcementEnabled) {
-      return { ...base, status, workerId, accessEnd, companyPaused };
+      // Licença vencida continua "Expirada" apenas visualmente; sem bloqueio.
+      return { ...base, status, workerId, accessEnd, adminId, companyPaused };
     }
 
+    // 1) Empresa pausada tem prioridade sobre qualquer causa individual.
     if (companyPaused) {
-      return { ...base, status, workerId, accessEnd, companyPaused, allowed: false, reason: COMPANY_PAUSED_MESSAGE };
+      return {
+        ...base, status, workerId, accessEnd, adminId, companyPaused,
+        allowed: false, reason: COMPANY_PAUSED_MESSAGE,
+      };
     }
 
-    // Bloqueia apenas pausado, expirado ou ainda não iniciado.
+    // 2) pausa individual  3) expirado (derivado de access_end)  4) agendado.
     // Trabalhador sem licença (unconfigured) continua acessando por compatibilidade.
     const blocked = status === "paused" || status === "expired" || status === "scheduled";
     return {
       allowed: !blocked,
       reason: blocked ? (ACCESS_BLOCK_MESSAGE[status] ?? null) : null,
-
       status,
       workerId,
       accessEnd,
       enforcementEnabled,
       companyPaused,
+      adminId,
     };
   } catch (e) {
     // Falha de rede/consulta nunca bloqueia o usuário.
@@ -417,4 +442,5 @@ export async function checkWorkerAccess(userId: string): Promise<AccessCheck> {
     return base;
   }
 }
+
 
