@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AccessManagementTab from "@/components/access/AccessManagementTab";
+import {
+  CompanyAccessControl, EMPTY_ACCESS_MAPS, companyStatusLabel, isCompanyPaused, loadAccessMaps,
+} from "@/lib/access-control";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
