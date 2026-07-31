@@ -634,10 +634,10 @@ function WorkersTab() {
               <Label htmlFor="edit-notas">Observação</Label>
               <Textarea id="edit-notas" value={editNotas} onChange={(e) => setEditNotas(e.target.value)} rows={2} />
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Switch checked={editActive} onCheckedChange={setEditActive} />
-              <span>Ativo</span>
-            </label>
+            <p className="text-[11px] text-muted-foreground">
+              Pausa, vencimento e mensalidade são controlados apenas pela licença, na aba “Acessos” do SuperAdministrador.
+            </p>
+
             <DialogFooter>
               <Button type="submit" disabled={savingEdit} className="w-full">
                 {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}
