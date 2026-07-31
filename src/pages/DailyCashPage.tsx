@@ -1695,6 +1695,12 @@ export default function DailyCashPage() {
             <h2 className="text-xs font-semibold text-foreground flex items-center gap-1 uppercase tracking-wider">
               <Clock className="h-3 w-3" /> Pendentes ({pendingInstallments.length})
             </h2>
+            {isClosed && snapshotVersion !== null && snapshotVersion < 2 && (
+              <p className="text-[11px] text-warning">
+                Este dia foi fechado antes do histórico completo — a lista de clientes
+                pendentes não foi congelada e não pode ser reconstruída.
+              </p>
+            )}
             {pendingInstallments.length === 0 ? (
               <div className="flex flex-col items-center py-6">
                 <CheckCircle className="mb-2 h-8 w-8 text-success" />
