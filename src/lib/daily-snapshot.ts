@@ -395,19 +395,21 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
 
 
   // Not paid marks + installment enrichment
-  const npMarks = ((npRes.data as any[]) || []) as SnapshotNotPaidMark[];
+  const npMarks = npRows as SnapshotNotPaidMark[];
   const npInstIds = [...new Set(npMarks.map(m => m.installment_id).filter(Boolean))];
   let npInstMap: Record<string, any> = {};
   if (npInstIds.length > 0) {
-    const { data: npInstData } = await supabase
+    const npInstRes = await supabase
       .from("installments")
       .select("*, loans(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, clients(id, name))")
       .in("id", npInstIds);
-    for (const i of ((npInstData as any[]) || [])) npInstMap[i.id] = i;
+    const npInstData = requireSnapshotQuery<any[]>("installments (não pagou)", npInstRes as any) || [];
+    for (const i of npInstData) npInstMap[i.id] = i;
   }
   const enrichedNp = npMarks.map(m => ({ ...m, installment: npInstMap[m.installment_id] }));
 
-  const penaltyPaidToday = ((penaltyMovesRes.data as any[]) || []).reduce((s, m) => s + Number(m.amount || 0), 0);
+  const penaltyPaidToday = penaltyMoveRows.reduce((s: number, m: any) => s + Number(m.amount || 0), 0);
+
 
   // Expenses breakdown from events
   const expenseBreakdown: Record<string, number> = {};
