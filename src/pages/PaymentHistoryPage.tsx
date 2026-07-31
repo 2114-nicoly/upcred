@@ -28,7 +28,11 @@ type PaymentMovement = {
   loanId: string | null;
   clientId: string | null;
   clientName: string;
+  reversedAt: string | null;
+  reversesMovementId: string | null;
+  reversalReason: string | null;
 };
+
 
 function getDayLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
