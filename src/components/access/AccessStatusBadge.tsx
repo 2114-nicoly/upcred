@@ -3,6 +3,7 @@ import { AccessStatus, ACCESS_STATUS_LABEL } from "@/lib/access-control";
 
 const VARIANT: Record<AccessStatus, "default" | "secondary" | "outline" | "destructive"> = {
   unconfigured: "outline",
+  company_paused: "destructive",
   paused: "secondary",
   expired: "destructive",
   expiring: "secondary",
