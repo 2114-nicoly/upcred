@@ -136,18 +136,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Reverificação durante a sessão: mudanças na própria licença, no
-  // enforcement global, retorno do segundo plano e foco na janela.
+  // Reverificação durante a sessão: mudanças na própria licença, na própria
+  // empresa, no enforcement global, retorno do segundo plano e foco na janela.
   useEffect(() => {
-    const uid = userIdRef.current;
     if (!user?.id) return;
 
     const recheck = () => { void enforceAccess(user.id); };
 
     const channel = supabase
       .channel(`access-watch-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "access_control_settings" }, recheck)
-      .on("postgres_changes", { event: "*", schema: "public", table: "company_access_controls" }, recheck);
+      .on("postgres_changes", { event: "*", schema: "public", table: "access_control_settings" }, recheck);
+
+    // Somente a própria empresa — mudanças de outras empresas não afetam este usuário.
+    if (adminId) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "company_access_controls", filter: `admin_id=eq.${adminId}` },
+        recheck,
+      );
+    }
 
     if (workerId) {
       channel.on(
@@ -168,7 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [user?.id, workerId]);
+  }, [user?.id, workerId, adminId]);
+
 
   return (
     <AuthContext.Provider value={{ session, user, isAdmin, isSuperAdmin, workerId, adminId, loading, accessChecking, signOut }}>
