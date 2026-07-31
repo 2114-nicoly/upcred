@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentDailyCashScope, applyDailyCashScope, type ExplicitScope } from "@/lib/cash-utils";
-import { getDailyEvents, DailyEvent } from "@/lib/daily-events";
+import { DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
 import { formatProgress, formatDelta, installmentAmountOf, loanProgressAt } from "@/lib/progress-utils";
 
@@ -206,6 +206,59 @@ async function loadScopeNames(scope: { worker_id: string | null; admin_id: strin
 }
 
 
+export type SnapshotScope = { worker_id: string | null; admin_id: string | null };
+
+/**
+ * Isolamento OBRIGATÓRIO do snapshot. Não depende da RLS:
+ * - caixa de trabalhador: worker_id = scope.worker_id (+ admin_id quando existir)
+ * - caixa próprio do administrador: worker_id IS NULL + admin_id = scope.admin_id
+ */
+function applyStrictScope(query: any, scope: SnapshotScope): any {
+  let q = query;
+  if (scope.worker_id) {
+    q = q.eq("worker_id", scope.worker_id);
+    if (scope.admin_id) q = q.eq("admin_id", scope.admin_id);
+    return q;
+  }
+  q = q.is("worker_id", null);
+  if (scope.admin_id) q = q.eq("admin_id", scope.admin_id);
+  else q = q.is("admin_id", null);
+  return q;
+}
+
+/** Verdadeiro quando a linha pertence exatamente ao escopo do caixa. */
+function inScope(row: any, scope: SnapshotScope): boolean {
+  const w = row?.worker_id ?? null;
+  const a = row?.admin_id ?? null;
+  if (scope.worker_id) {
+    if (w !== scope.worker_id) return false;
+  } else if (w !== null) return false;
+  if (scope.admin_id && a !== null && a !== scope.admin_id) return false;
+  if (!scope.admin_id && scope.worker_id === null && a !== null) return false;
+  return true;
+}
+
+const OUT_OF_SCOPE_MESSAGE =
+  "Foram encontrados dados fora do escopo deste caixa. O fechamento foi cancelado.";
+
+function assertAllInScope(rows: any[] | null | undefined, scope: SnapshotScope, label: string) {
+  for (const r of rows || []) {
+    if (!inScope(r, scope)) {
+      console.error(`[daily-snapshot] registro fora do escopo em ${label}`, { id: r?.id, scope });
+      throw new Error(OUT_OF_SCOPE_MESSAGE);
+    }
+  }
+}
+
+async function fetchScopedEvents(cashDate: string, scope: SnapshotScope, includeReversed: boolean) {
+  let q: any = supabase.from("daily_events" as any).select("*").eq("cash_date", cashDate);
+  q = applyStrictScope(q, scope);
+  if (!includeReversed) q = q.is("reversed_at", null);
+  const { data, error } = await q.order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data as unknown as DailyEvent[]) || []);
+}
+
 
 async function loadDailyCollectionSummary(cashDate: string, scope: { worker_id: string | null; admin_id: string | null }) {
   try {
@@ -254,27 +307,44 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     paidMovesRes,
     penaltyMovesRes,
   ] = await Promise.all([
-    getDailyEvents(cashDate),
-    getDailyEvents(cashDate, { includeReversed: true }),
-    supabase.from("not_paid_marks").select("*").eq("mark_date", cashDate),
-    supabase.from("loans")
-      .select("id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
-      .eq("loan_date", cashDate),
-    supabase.from("cash_movements")
-      .select("id, loan_id, installment_id, amount, created_at")
-      .eq("cash_date", cashDate)
-      .eq("type", "recebimento_normal")
-      .is("reversed_at", null),
-    supabase.from("cash_movements")
-      .select("amount")
-      .eq("cash_date", cashDate)
-      .eq("type", "recebimento_multa")
-      .is("reversed_at", null),
+    fetchScopedEvents(cashDate, scope, false),
+    fetchScopedEvents(cashDate, scope, true),
+    applyStrictScope(supabase.from("not_paid_marks").select("*").eq("mark_date", cashDate), scope),
+    applyStrictScope(
+      supabase.from("loans")
+        .select("id, worker_id, admin_id, amount, total_amount, remaining_balance, status, installment_count, payment_type, loan_date, renewed_from_loan_id, clients:client_id(id, name)")
+        .eq("loan_date", cashDate),
+      scope,
+    ),
+    applyStrictScope(
+      supabase.from("cash_movements")
+        .select("id, worker_id, admin_id, loan_id, installment_id, amount, created_at")
+        .eq("cash_date", cashDate)
+        .eq("type", "recebimento_normal")
+        .is("reversed_at", null),
+      scope,
+    ),
+    applyStrictScope(
+      supabase.from("cash_movements")
+        .select("amount, worker_id, admin_id")
+        .eq("cash_date", cashDate)
+        .eq("type", "recebimento_multa")
+        .is("reversed_at", null),
+      scope,
+    ),
   ]);
+
 
   const events = (liveEvents || []) as DailyEvent[];
   const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(e => e.reversed_at != null);
   const renewalEvents = events.filter(e => e.event_type === "renovacao");
+
+  assertAllInScope(events, scope, "daily_events");
+  assertAllInScope(reversed, scope, "daily_events (estornados)");
+  assertAllInScope((npRes.data as any[]) || [], scope, "not_paid_marks");
+  assertAllInScope((newLoansRes.data as any[]) || [], scope, "loans do dia");
+  assertAllInScope((paidMovesRes.data as any[]) || [], scope, "cash_movements (pagamentos)");
+  assertAllInScope((penaltyMovesRes.data as any[]) || [], scope, "cash_movements (multas)");
 
   // client_names — for any event or paid loan
   const clientIds = new Set<string>();
@@ -282,6 +352,7 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   for (const e of reversed) if (e.client_id) clientIds.add(e.client_id);
   const newLoans = ((newLoansRes.data as any[]) || []) as SnapshotNewLoan[];
   for (const l of newLoans) if (l.clients?.id) clientIds.add(l.clients.id);
+
   const clientNames: SnapshotClientNames = {};
   if (clientIds.size > 0) {
     const { data: cs } = await supabase.from("clients").select("id, name").in("id", [...clientIds]);
@@ -455,15 +526,17 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
   let overdueClients: SnapshotOverdueClient[] = [];
   let portfolioState: SnapshotPortfolioState | null = null;
   try {
-    const loansQ = applyDailyCashScope(
+    const loansQ = applyStrictScope(
       supabase.from("loans")
-        .select("id, client_id, worker_id, total_amount, remaining_balance, installment_count, status, is_imported_ongoing, initial_remaining_balance, amount_already_paid, clients:client_id(id, name)")
+        .select("id, client_id, worker_id, admin_id, total_amount, remaining_balance, installment_count, status, is_imported_ongoing, initial_remaining_balance, amount_already_paid, clients:client_id(id, name)")
         .in("status", ["open", "overdue"]),
       scope,
     );
     const { data: activeLoansData } = await loansQ;
+    assertAllInScope((activeLoansData as any[]) || [], scope, "empréstimos ativos");
     const activeLoans = ((activeLoansData as any[]) || []).filter(l => Number(l.remaining_balance) > 0.01);
     const loanById = new Map<string, any>(activeLoans.map(l => [l.id, l]));
+
 
     let instRows: any[] = [];
     if (activeLoans.length > 0) {
@@ -566,15 +639,19 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
     }
     if (overdueByClient.size > 0) {
       const clientIdList = [...new Set([...overdueByClient.values()].map(e => e.client_id))].filter(Boolean);
-      const { data: lastPays } = await supabase
-        .from("cash_movements")
-        .select("client_id, amount, cash_date")
-        .in("client_id", clientIdList)
-        .eq("type", "recebimento_normal")
-        .is("reversed_at", null)
-        .lte("cash_date", cashDate)
+      const { data: lastPays } = await applyStrictScope(
+        supabase
+          .from("cash_movements")
+          .select("client_id, amount, cash_date, worker_id, admin_id")
+          .in("client_id", clientIdList)
+          .eq("type", "recebimento_normal")
+          .is("reversed_at", null)
+          .lte("cash_date", cashDate),
+        scope,
+      )
         .order("cash_date", { ascending: false })
         .limit(500);
+
       const seen = new Map<string, { date: string; amount: number }>();
       for (const p of ((lastPays as any[]) || [])) {
         if (!p.client_id || seen.has(p.client_id)) continue;
@@ -608,11 +685,19 @@ export async function buildDailyCashSnapshotPayload(cashDate: string, extra: {
       parcelas_vencidas: overdueInstCount,
     };
   } catch (err) {
+    if (err instanceof Error && err.message === OUT_OF_SCOPE_MESSAGE) throw err;
     console.warn("[daily-snapshot] v2 sections failed", err);
   }
 
+  // ===== Validação final de isolamento (nada fora do escopo) =====
+  assertAllInScope(events, scope, "daily_events");
+  assertAllInScope(reversed, scope, "daily_events (estornados)");
+  assertAllInScope(npMarks, scope, "not_paid_marks");
+  assertAllInScope(newLoans as any[], scope, "loans do dia");
+  assertAllInScope(paidMovements as any[], scope, "cash_movements");
 
   return {
+
     version: DAILY_SNAPSHOT_VERSION,
     cash_date: cashDate,
     scope,
