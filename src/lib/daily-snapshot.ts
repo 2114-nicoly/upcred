@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentDailyCashScope, applyDailyCashScope, type ExplicitScope } from "@/lib/cash-utils";
-import { getDailyEvents, DailyEvent } from "@/lib/daily-events";
+import { DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
 import { formatProgress, formatDelta, installmentAmountOf, loanProgressAt } from "@/lib/progress-utils";
 
