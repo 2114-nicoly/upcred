@@ -524,6 +524,8 @@ export default function DailyCashPage() {
         }
       }
 
+      setSnapshotVersion(null);
+
       const visibleNewLoans = ((newLoanData as NewLoanInfo[]) || []).filter(
         (loan: any) => isLoanActive(loan)
       );
