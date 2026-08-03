@@ -45,10 +45,8 @@ export default function CashHistoryPage() {
   const [filterClient, setFilterClient] = useState("");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
 
-  // Edit
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editAmount, setEditAmount] = useState("");
-  const [editObs, setEditObs] = useState("");
+  // Correção financeira é feita por estorno + novo lançamento (sem edição direta).
+
 
   // Reversal (estorno)
   const [reverseTarget, setReverseTarget] = useState<MovementWithClient | null>(null);
