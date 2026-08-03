@@ -131,29 +131,35 @@ export type Database = {
       auto_close_failures: {
         Row: {
           admin_id: string | null
+          attempt_count: number
           cash_date: string
           created_at: string
           daily_cash_id: string | null
           error_message: string
           id: string
+          last_attempt_at: string
           worker_id: string | null
         }
         Insert: {
           admin_id?: string | null
+          attempt_count?: number
           cash_date: string
           created_at?: string
           daily_cash_id?: string | null
           error_message: string
           id?: string
+          last_attempt_at?: string
           worker_id?: string | null
         }
         Update: {
           admin_id?: string | null
+          attempt_count?: number
           cash_date?: string
           created_at?: string
           daily_cash_id?: string | null
           error_message?: string
           id?: string
+          last_attempt_at?: string
           worker_id?: string | null
         }
         Relationships: [
@@ -165,6 +171,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      auto_close_settings: {
+        Row: {
+          created_at: string
+          enabled_from_date: string
+          id: string
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled_from_date: string
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled_from_date?: string
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       cash_balance: {
         Row: {
@@ -1967,6 +1997,10 @@ export type Database = {
         Returns: string
       }
       _daily_cash_is_empty: { Args: { p_cash_id: string }; Returns: boolean }
+      _ensure_previous_daily_cash_closed: {
+        Args: { p_admin_id: string; p_date: string; p_worker_id: string }
+        Returns: Json
+      }
       _fmt_inst_fraction: {
         Args: { p_inst_amount: number; p_paid: number }
         Returns: string
@@ -1978,6 +2012,16 @@ export type Database = {
       _fmt_units_delta: {
         Args: { p_after: number; p_before: number }
         Returns: string
+      }
+      _record_auto_close_failure: {
+        Args: {
+          p_admin: string
+          p_cash_id: string
+          p_date: string
+          p_message: string
+          p_worker: string
+        }
+        Returns: undefined
       }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_cleanup_empty_daily_cash: {
@@ -2094,6 +2138,7 @@ export type Database = {
         Args: { p_daily_event_id: string; p_receipt: Json }
         Returns: undefined
       }
+      auto_close_enabled_from: { Args: never; Returns: string }
       auto_close_previous_day: { Args: never; Returns: Json }
       build_daily_cash_snapshot_v2: {
         Args: { p_daily_cash_id: string }
