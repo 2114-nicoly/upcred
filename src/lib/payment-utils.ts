@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, markCashMovementReversed } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceForLoan, markCashMovementReversed } from "@/lib/cash-utils";
 import { createDailyEvent, markDailyEventReversed } from "@/lib/daily-events";
 import { formatCurrency } from "@/lib/loan-utils";
 import { logAction, logReversal } from "@/lib/audit-utils";
@@ -276,10 +276,10 @@ export async function registerPenaltyPayment(params: {
   } catch (err) {
     if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
     if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
-    await recalculateCashBalanceFromLedger();
+    await recalculateCashBalanceForLoan(loanId);
     throw err;
   }
-  await recalculateCashBalanceFromLedger();
+  await recalculateCashBalanceForLoan(loanId);
 }
 
 /**
@@ -429,13 +429,13 @@ export async function settleLoan(params: {
     } catch (err) {
       if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
       if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
-      await recalculateCashBalanceFromLedger();
+      await recalculateCashBalanceForLoan(loanId);
       throw err;
     }
   }
 
   await recalculateInstallments(loanId);
-  await recalculateCashBalanceFromLedger();
+  await recalculateCashBalanceForLoan(loanId);
 
   await logAction(
     "quitar_emprestimo",
@@ -588,7 +588,7 @@ export async function reversePayment(params: {
   }
 
   // 8) Caixa: única atualização, derivada do ledger (original + estorno = 0).
-  await recalculateCashBalanceFromLedger();
+  await recalculateCashBalanceForLoan(loanId);
 
   await logReversal({
     action: "desfazer_pagamento",
@@ -829,7 +829,7 @@ export async function cancelLoan(params: {
   await removeNotPaidMarks();
   await markLoanCancelled(prevStatus, prevBalance);
   await writeAuditEvent(loan.client_id);
-  await recalculateCashBalanceFromLedger();
+  await recalculateCashBalanceForLoan(loanId);
 
   await logAction(
     "excluir_emprestimo",
@@ -944,7 +944,7 @@ export async function absorbLoanBalance(params: {
   }
 
   await recalculateInstallments(loanId);
-  await recalculateCashBalanceFromLedger();
+  await recalculateCashBalanceForLoan(loanId);
 
   await logAction(
     "renovacao_absorvida",
