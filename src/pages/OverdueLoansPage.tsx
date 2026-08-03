@@ -79,13 +79,6 @@ type ClientGroup = {
 
 export default function OverdueLoansPage() {
 
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
-
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
@@ -100,6 +93,26 @@ export default function OverdueLoansPage() {
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
   const [penaltyAmount, setPenaltyAmount] = useState("");
   const [penaltyObservation, setPenaltyObservation] = useState("");
+
+  // --- Escopo por empréstimo: o caixa é sempre o do trabalhador dono ---
+  const allInstallments = groups.flatMap((g) => g.loans.flatMap((l) => l.installments));
+  const scopeOfInstallment = (instId: string | null): CashScope | null => {
+    if (!instId) return null;
+    const inst: any = allInstallments.find((i) => i.id === instId);
+    if (!inst) return null;
+    return {
+      workerId: inst.loans?.worker_id ?? null,
+      adminId: inst.loans?.admin_id ?? null,
+    };
+  };
+  const actionInstId = payDialogId ?? penaltyDialogId;
+  const scopedCash = useScopedActiveCash(scopeOfInstallment(actionInstId));
+  const opDate = scopedCash.cashDate ?? "";
+
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, actionInstId]);
+
 
   const today = format(new Date(), "yyyy-MM-dd");
 
