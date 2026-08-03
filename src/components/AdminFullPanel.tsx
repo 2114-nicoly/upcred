@@ -204,14 +204,9 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
       const rpc = action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
       const { error } = await supabase.rpc(rpc as any, { p_request_id: r.id, p_note: null } as any);
       if (error) throw error;
-      await requireAudit(
-        (action === "approve" ? "reabrir_caixa" : "ajuste_caixa") as any,
-        "cash", null,
-        { request_id: r.id, status: "pending", cash_date: r.cash_date, worker_id: r.worker_id, worker_name: r.worker_name },
-        { request_id: r.id, status: action === "approve" ? "approved" : "rejected", reviewed_at: new Date().toISOString(), cash_date: r.cash_date, worker_id: r.worker_id, worker_name: r.worker_name, reason: r.reason },
-        `${action === "approve" ? "Aprovada" : "Recusada"} solicitação de reabertura (${r.cash_date}) de ${r.worker_name ?? "trabalhador"}`,
-        r.worker_id ?? undefined,
-      );
+      // A RPC grava a auditoria no banco de forma transacional.
+      // Não registrar auditoria no frontend aqui (evita duplicidade e erros
+      // exibidos depois que a solicitação já foi processada).
       toast({ title: action === "approve" ? "Solicitação aprovada" : "Solicitação recusada" });
       await loadReopenRequests();
     } catch (e: any) {
