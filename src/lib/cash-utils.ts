@@ -412,7 +412,11 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
     adminId: admin_id,
   });
   if (cbError) throw cbError;
-  if (!current) return;
+  if (!current) {
+    throw new Error(
+      "Saldo (cash_balance) não encontrado para o escopo informado. Recálculo cancelado.",
+    );
+  }
 
   const { error: updError } = await supabase.from("cash_balance").update({
     available_cash,
