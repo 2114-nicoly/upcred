@@ -10,8 +10,12 @@ import { resolve } from "node:path";
 const MIG_DIR = resolve(process.cwd(), "supabase/migrations");
 const LATEST = (() => {
   const files = readdirSync(MIG_DIR).filter(f => f.endsWith(".sql")).sort();
-  const file = files[files.length - 1];
-  return readFileSync(resolve(MIG_DIR, file), "utf8").replace(/\s+/g, " ");
+  // regra de caixa manual: migration base (v61) + correções posteriores
+  return files
+    .slice(-2)
+    .map(f => readFileSync(resolve(MIG_DIR, f), "utf8"))
+    .join("\n")
+    .replace(/\s+/g, " ");
 })();
 
 describe("fechamento automático desativado", () => {
