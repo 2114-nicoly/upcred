@@ -3,7 +3,7 @@ import { format, differenceInCalendarDays } from "date-fns";
 import { formatCurrency } from "@/lib/loan-utils";
 import { DailyEvent } from "@/lib/daily-events";
 import { computeCoreTotals } from "@/lib/finance-totals";
-import { computeDailyTotals } from "@/lib/daily-totals";
+import { computeDailyTotals, computeReversalSummary } from "@/lib/daily-totals";
 import {
   type DailyCashSnapshotPayload,
   type SnapshotOverdueClient,
