@@ -3,20 +3,28 @@
  * Usar em CaixaPage, DailyCashPage, DailyCashHistoryPage e DailyReportPage
  * para evitar divergência entre relatório e fechamento.
  *
- * IMPORTANTE: ignora eventos estornados (reversed_at != null).
+ * REGRA DE ESTORNO (sem impacto duplo):
+ * - lançamento original estornado NÃO conta como recebido/despesa válida;
+ * - o valor estornado aparece separadamente em `estornos`;
+ * - para o impacto líquido no caixa (entradas/saídas) soma-se
+ *   original + contrapartida (resultado zero) — nunca só a contrapartida;
+ * - estorno antigo SEM contrapartida continua ignorado e sinalizado.
  */
 export type DailyEventLike = {
+  id?: string | null;
   event_type: string;
   amount_in?: number | string | null;
   amount_out?: number | string | null;
   reversed_at?: string | null;
+  reversal_event_id?: string | null;
+  reverses_event_id?: string | null;
   metadata?: Record<string, any> | null;
 };
 
 export type DailyTotals = {
-  entradas: number;          // sum amount_in (não estornados)
-  saidas: number;            // sum amount_out (não estornados)
-  pagamentos: number;        // event_type = 'pagamento'
+  entradas: number;          // impacto líquido de entradas (original + contrapartida)
+  saidas: number;            // impacto líquido de saídas (original + contrapartida)
+  pagamentos: number;        // event_type = 'pagamento' (não estornados)
   multas: number;            // event_type = 'recebimento_multa'
   emprestimosLiberados: number; // event_type = 'emprestimo_novo'
   renovacoes: number;        // event_type = 'renovacao'
@@ -29,6 +37,11 @@ export type DailyTotals = {
   naoPagos: number;          // contagem event_type = 'nao_pagou'
   emprestimosImportados: number;   // contagem event_type = 'emprestimo_importado'
   valorImportadoAReceber: number;  // soma do saldo restante adicionado ao A Receber via importações
+  /** Total estornado no dia (valor absoluto das contrapartidas). */
+  estornos: number;
+  estornosCount: number;
+  /** Estornos legados sem contrapartida (ignorados, apenas sinalizados). */
+  estornosSemContrapartida: string[];
   saldoFinalEsperado: number; // opening + entradas - saidas
 };
 
@@ -36,6 +49,8 @@ const num = (v: unknown): number => {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
 };
+
+const isReversalType = (t: string) => String(t || "").startsWith("estorno");
 
 export function computeDailyTotals(
   events: DailyEventLike[],
@@ -57,18 +72,53 @@ export function computeDailyTotals(
     naoPagos: 0,
     emprestimosImportados: 0,
     valorImportadoAReceber: 0,
+    estornos: 0,
+    estornosCount: 0,
+    estornosSemContrapartida: [],
     saldoFinalEsperado: 0,
   };
-  for (const e of events || []) {
-    if (e.reversed_at) continue; // estornado: não soma
+
+  const list = events || [];
+  const counteredIds = new Set<string>();
+  for (const e of list) {
+    if (e.reverses_event_id) counteredIds.add(String(e.reverses_event_id));
+  }
+
+  for (const e of list) {
     const ain = num(e.amount_in);
     const aout = num(e.amount_out);
-    // Empréstimo importado é informativo: não entra em entradas/saídas/pagamentos/liberados.
+
+    // Empréstimo importado é informativo: nunca entra no caixa.
     if (e.event_type === "emprestimo_importado") {
       t.emprestimosImportados += 1;
       t.valorImportadoAReceber += ain;
       continue;
     }
+
+    const hasCounter = !!e.reversal_event_id || (e.id ? counteredIds.has(String(e.id)) : false);
+
+    // Contrapartida de estorno: entra apenas no efeito líquido do caixa.
+    if (isReversalType(e.event_type)) {
+      t.entradas += ain;
+      t.saidas += aout;
+      t.estornos += ain + aout;
+      t.estornosCount += 1;
+      continue;
+    }
+
+    if (e.reversed_at) {
+      if (!hasCounter) {
+        // Padrão legado: estornado sem contrapartida — ignorar e sinalizar.
+        if (e.id) t.estornosSemContrapartida.push(String(e.id));
+        continue;
+      }
+      // Original preservado: soma no caixa para anular com a contrapartida,
+      // mas NÃO conta como recebido/despesa válida.
+      t.entradas += ain;
+      t.saidas += aout;
+      continue;
+    }
+
     t.entradas += ain;
     t.saidas += aout;
     switch (e.event_type) {
@@ -92,6 +142,7 @@ export function computeDailyTotals(
   t.saldoFinalEsperado = (openingBalance || 0) + t.entradas - t.saidas;
   return t;
 }
+
 
 // ============================================================================
 // Resumo unificado de cobranças do dia
