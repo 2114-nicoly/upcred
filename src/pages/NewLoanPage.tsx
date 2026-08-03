@@ -13,6 +13,7 @@ import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
+import { useActiveCash } from "@/hooks/useActiveCash";
 import { logAction, logLoanAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
@@ -25,6 +26,8 @@ export default function NewLoanPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const renewFromLoanId = searchParams.get("renewFrom");
+  // Data operacional: toda movimentação usa a data do caixa ABERTO, nunca "hoje".
+  const { activeCashDate, loading: activeCashLoading, scope: activeCashScope } = useActiveCash();
 
   const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
@@ -32,7 +35,7 @@ export default function NewLoanPage() {
   const [interestValue, setInterestValue] = useState("");
   const [installmentCount, setInstallmentCount] = useState("");
   const [paymentType, setPaymentType] = useState<"daily" | "weekly" | "biweekly" | "monthly" | "fixed_dates">("daily");
-  const [loanDate, setLoanDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [loanDate, setLoanDate] = useState("");
   const [firstDueDate, setFirstDueDate] = useState("");
   const [fixedDates, setFixedDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -61,7 +64,7 @@ export default function NewLoanPage() {
     setInterestValue("");
     setInstallmentCount("");
     setPaymentType("daily");
-    setLoanDate(format(new Date(), "yyyy-MM-dd"));
+    setLoanDate(activeCashDate ?? "");
     setFirstDueDate("");
     setFixedDates([]);
     setObservation("");
@@ -96,6 +99,19 @@ export default function NewLoanPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Empréstimo normal: a data é sempre a do caixa ABERTO (não editável).
+  // Importado: mantém a data histórica escolhida pelo usuário.
+  useEffect(() => {
+    if (activeCashLoading) return;
+    if (registrationType === "ongoing") {
+      if (!loanDate) setLoanDate(activeCashDate ?? "");
+      return;
+    }
+    if (activeCashDate && loanDate !== activeCashDate) setLoanDate(activeCashDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCashDate, activeCashLoading, registrationType]);
+
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -270,15 +286,20 @@ export default function NewLoanPage() {
 
     setSaving(true);
 
-    // Guard: caixa do dia do empréstimo precisa estar aberto (não exigir para importado)
-    if (!isOngoing) {
-      try {
-        await assertCashOpen(loanDate);
-      } catch (err: any) {
-        toast.error(err?.message || "Caixa fechado para esta data");
-        setSaving(false);
-        return;
-      }
+    // Guard: precisa existir caixa ABERTO no escopo.
+    // Normal: loan_date = data do caixa ativo.
+    // Importado: loan_date histórico, mas o evento usa a data do caixa ativo.
+    if (!activeCashDate) {
+      toast.error("Não há caixa aberto. Abra o caixa para registrar empréstimos.");
+      setSaving(false);
+      return;
+    }
+    try {
+      await assertCashOpen(isOngoing ? activeCashDate : loanDate, activeCashScope);
+    } catch (err: any) {
+      toast.error(err?.message || "Caixa fechado para esta data");
+      setSaving(false);
+      return;
     }
 
     // Guard: only 1 active loan per client (renewal allowed when targeting the existing active loan)
@@ -551,7 +572,7 @@ export default function NewLoanPage() {
         : calc.installmentAmount;
 
       const actorImp = await getCurrentActorIdentity();
-      const todayStr = format(new Date(), "yyyy-MM-dd");
+      const activeStr = activeCashDate!;
 
       const importedMetadata = {
         client_id: clientId,
@@ -595,10 +616,10 @@ export default function NewLoanPage() {
           `Data original do empréstimo: ${loanDate}`,
         ].filter(Boolean).join(" | ");
 
-        // Importante: cash_date = HOJE (dia em que o cadastro foi feito),
-        // não a data original do empréstimo. A data original fica em metadata.original_loan_date.
+        // Importante: cash_date = data do CAIXA ATIVO (dia operacional do cadastro),
+        // não a data original do empréstimo. A original fica em metadata.original_loan_date.
         const evt = await createDailyEvent({
-          cash_date: todayStr,
+          cash_date: activeStr,
           event_type: "emprestimo_importado",
           client_id: clientId!,
           loan_id: loan.id,
@@ -647,7 +668,7 @@ export default function NewLoanPage() {
           payment_type: paymentType,
           next_due_date: nextDueStr,
           original_loan_date: loanDate,
-          imported_cash_date: format(new Date(), "yyyy-MM-dd"),
+          imported_cash_date: activeCashDate,
           imported_at: new Date().toISOString(),
         },
         observation: `Empréstimo importado - ${clientName} - saldo restante ${formatCurrency(ongoingRemaining)} adicionado ao A Receber`,
@@ -780,8 +801,21 @@ export default function NewLoanPage() {
         </div>
 
         <div>
-          <Label>Data do Empréstimo</Label>
-          <Input type="date" value={loanDate} onChange={(e) => setLoanDate(e.target.value)} />
+          <Label>{isOngoing ? "Data original do empréstimo" : "Data do Empréstimo"}</Label>
+          <Input
+            type="date"
+            value={loanDate}
+            disabled={!isOngoing}
+            onChange={(e) => setLoanDate(e.target.value)}
+          />
+          {!isOngoing && (
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {activeCashDate
+                ? "Data do caixa aberto. Todas as movimentações são registradas nela."
+                : "Nenhum caixa aberto: abra o caixa para registrar empréstimos."}
+            </p>
+          )}
+
         </div>
 
         {paymentType !== "fixed_dates" && (

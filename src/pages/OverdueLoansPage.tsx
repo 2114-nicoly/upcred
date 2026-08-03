@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
+import { useActiveCash } from "@/hooks/useActiveCash";
+import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
 
 type InstallmentWithLoan = {
   id: string;
@@ -76,6 +78,14 @@ type ClientGroup = {
 };
 
 export default function OverdueLoansPage() {
+
+  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
+  const { activeCashDate, scope: activeCashScope } = useActiveCash();
+  const opDate = activeCashDate ?? getTodayCashDate();
+
+  useEffect(() => {
+    setPayDate((d) => d || opDate);
+  }, [opDate]);
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
@@ -86,7 +96,7 @@ export default function OverdueLoansPage() {
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
-  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payDate, setPayDate] = useState("");
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
   const [penaltyAmount, setPenaltyAmount] = useState("");
   const [penaltyObservation, setPenaltyObservation] = useState("");
@@ -189,12 +199,10 @@ export default function OverdueLoansPage() {
   useEffect(() => { fetchData(); }, []);
 
   const handlePay = async (id: string) => {
-    const { data: dc } = await applyDailyCashScope(
-      supabase.from("daily_cash").select("status").eq("cash_date", payDate),
-      await getCurrentDailyCashScope()
-    ).maybeSingle();
-    if (dc?.status === "closed") {
-      toast.error("O caixa desse dia já está fechado. Altere a data ou solicite reabertura.");
+    try {
+      await assertCashOpen(payDate, activeCashScope);
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto nesta data.");
       return;
     }
 
@@ -225,7 +233,7 @@ export default function OverdueLoansPage() {
       const paidValue = parcValue ?? instRemaining;
       if (paidValue <= 0) {
         if (multaValue > 0) {
-          setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+          setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
           fetchData(); return;
         }
         toast.error("Valor inválido"); return;
@@ -248,7 +256,7 @@ export default function OverdueLoansPage() {
       toast.error(err?.message || "Erro ao registrar pagamento");
     }
 
-    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
     fetchData();
   };
 
@@ -303,7 +311,7 @@ export default function OverdueLoansPage() {
         loan_id: inst.loan_id,
         number: maxNum + 1,
         amount,
-        due_date: format(new Date(), "yyyy-MM-dd"),
+        due_date: opDate,
         is_penalty: true,
         status: "pending",
       });
@@ -311,7 +319,7 @@ export default function OverdueLoansPage() {
 
     try {
       await createDailyEvent({
-        cash_date: format(new Date(), "yyyy-MM-dd"),
+        cash_date: opDate,
         event_type: "multa_adicionada",
         client_id: inst.loans?.client_id || null,
         loan_id: inst.loan_id,
