@@ -810,66 +810,11 @@ export async function closeDailyCashWithSnapshot(
   return { cash_id: row.cash_id ?? null, version: row.version ?? null };
 }
 
-/** @deprecated Gravação de snapshot pelo cliente foi removida. */
-export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCashSnapshotPayload): Promise<number> {
+/** @deprecated Gravação de snapshot pelo cliente foi removida. O banco é a única fonte. */
+export async function saveDailyCashSnapshot(_cashDate: string, _payload: DailyCashSnapshotPayload): Promise<number> {
   throw new Error(SNAPSHOT_CLIENT_SAVE_BLOCKED_MESSAGE);
-  // eslint-disable-next-line no-unreachable
-
-  const scope = await getCurrentDailyCashScope();
-  // Locate the daily_cash id for this date/scope
-  const { data: dcRow, error: dcErr } = await applyDailyCashScope(
-    supabase.from("daily_cash").select("id, closed_at, closed_by").eq("cash_date", cashDate),
-    scope
-  ).maybeSingle();
-  if (dcErr) throw dcErr;
-  const dailyCashId = (dcRow as any)?.id;
-  if (!dailyCashId) throw new Error("daily_cash não encontrado para snapshot");
-
-  // Compute next version for this daily_cash_id
-  const { data: last } = await supabase
-    .from("daily_cash_snapshots" as any)
-    .select("version")
-    .eq("daily_cash_id", dailyCashId)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const nextVersion = ((last as any)?.version || 0) + 1;
-
-  // Look up latest reopen reason since the previous snapshot (from audit_logs).
-  let reopenReason: string | null = null;
-  if (nextVersion > 1) {
-    try {
-      const { data: reopenLogs } = await supabase
-        .from("audit_logs")
-        .select("new_value, created_at")
-        .eq("action_type", "reabrir_caixa")
-        .order("created_at", { ascending: false })
-        .limit(10);
-      const match = (reopenLogs || []).find((l: any) => (l?.new_value?.cash_date === cashDate));
-      reopenReason = (match as any)?.new_value?.reason || null;
-    } catch { reopenReason = null; }
-  }
-
-  const versionedPayload: DailyCashSnapshotPayload = { ...payload, reopen_reason: reopenReason };
-
-  const row = {
-    daily_cash_id: dailyCashId,
-    cash_date: cashDate,
-    worker_id: scope.worker_id,
-    admin_id: scope.admin_id,
-    closed_at: payload.closed_at,
-    closed_by: payload.closed_by.id,
-    version: nextVersion,
-    reopen_reason: reopenReason,
-    payload: versionedPayload as any,
-  };
-
-  const { error } = await supabase
-    .from("daily_cash_snapshots" as any)
-    .insert(row as any);
-  if (error) throw error;
-  return nextVersion;
 }
+
 
 export const SNAPSHOT_READ_FAILED_MESSAGE =
   "Não foi possível ler o histórico congelado deste caixa.";
