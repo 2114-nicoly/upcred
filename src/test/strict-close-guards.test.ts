@@ -28,11 +28,12 @@ const STRICT = (() => {
 /** Builder do snapshot completo (pendentes congelados). */
 const BUILDER = readAll("'pending_installments', v_pending");
 
-const fnBody = (sql: string, signature: string) => {
-  const start = sql.indexOf(`FUNCTION public.${signature}`);
+/** Corpo da definição CREATE de uma função, sem os GRANT/REVOKE seguintes. */
+const fnBody = (sql: string, name: string) => {
+  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
   expect(start).toBeGreaterThan(-1);
   const rest = sql.slice(start);
-  const end = rest.indexOf(`REVOKE ALL ON FUNCTION public.${signature}`);
+  const end = rest.indexOf("REVOKE ALL ON FUNCTION");
   return end > 0 ? rest.slice(0, end) : rest;
 };
 
@@ -46,7 +47,7 @@ describe("1) data de corte", () => {
   });
 
   it("proíbe fechamento legado a partir da data de corte", () => {
-    const body = fnBody(STRICT, "_legacy_close_daily_cash(uuid)");
+    const body = fnBody(STRICT, "_legacy_close_daily_cash");
     expect(body).toContain("IF v_strict IS NOT NULL AND dc.cash_date >= v_strict THEN");
     expect(body).toContain(
       "Esta data exige fechamento completo com registro histórico. Histórico incompleto não é permitido.",
@@ -54,16 +55,16 @@ describe("1) data de corte", () => {
   });
 
   it("não altera registros anteriores à data de corte", () => {
-    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(body).toContain("IF v_strict IS NULL OR p_date < v_strict THEN");
     expect(body).toContain("'before_strict_from'");
-    const maint = fnBody(STRICT, "auto_close_cash_maintenance()");
+    const maint = fnBody(STRICT, "auto_close_cash_maintenance");
     expect(maint).toContain("v_strict IS NOT NULL AND dc.cash_date < v_strict");
   });
 });
 
 describe("2) fechamento automático obrigatório", () => {
-  const maint = fnBody(STRICT, "auto_close_cash_maintenance()");
+  const maint = fnBody(STRICT, "auto_close_cash_maintenance");
 
   it("roda no servidor a cada 5 minutos, sem usuário logado", () => {
     expect(STRICT).toContain(
@@ -83,7 +84,7 @@ describe("2) fechamento automático obrigatório", () => {
   });
 
   it("caixa aberto é fechado e caixa nunca aberto é criado e fechado", () => {
-    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(body).toContain("v_origin := 'automatic_not_opened'");
     expect(body).toContain("v_origin := 'automatic_opened'");
     expect(body).toContain("INSERT INTO public.daily_cash (cash_date, worker_id, admin_id, status, opening_balance, user_id)");
@@ -91,7 +92,7 @@ describe("2) fechamento automático obrigatório", () => {
   });
 
   it("falha no snapshot mantém o caixa aberto, registra a falha e tenta de novo", () => {
-    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(body).toContain("IF NOT public._daily_cash_snapshot_ok(v_id) THEN");
     expect(body).toContain("O fechamento não gerou o registro histórico obrigatório. O caixa continua aberto.");
     expect(maint).toContain("PERFORM public._record_auto_close_failure(d.cash_date, r.worker_id, r.admin_id, NULL, SQLERRM)");
@@ -149,7 +150,7 @@ describe("3) pendentes congelados no fechamento", () => {
   });
 
   it("manual e automático usam o mesmo núcleo de fechamento", () => {
-    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(body).toContain("public._close_daily_cash_core(");
     expect(readAll("close_daily_cash_with_snapshot")).toContain("_close_daily_cash_core");
   });
@@ -174,7 +175,7 @@ describe("4) exibição dos caixas fechados", () => {
 
 describe("5) escopo obrigatório", () => {
   it("as rotinas usam sempre cash_date + worker_id + admin_id", () => {
-    const strictFn = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const strictFn = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(strictFn).toContain(
       "WHERE cash_date = p_date AND admin_id = p_admin_id AND worker_id IS NOT DISTINCT FROM p_worker_id",
     );
@@ -184,20 +185,20 @@ describe("5) escopo obrigatório", () => {
   });
 
   it("trabalhador de outra empresa é recusado", () => {
-    const strictFn = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const strictFn = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(strictFn).toContain("IF v_worker_admin IS NULL OR v_worker_admin IS DISTINCT FROM p_admin_id THEN");
     expect(strictFn).toContain("Trabalhador não pertence a esta empresa. O fechamento foi cancelado.");
   });
 
   it("administrador não abre caixa de trabalhador de outra empresa", () => {
-    const open = fnBody(STRICT, "open_daily_cash(p_cash_date date, p_worker_id uuid DEFAULT NULL::uuid)");
+    const open = fnBody(STRICT, "open_daily_cash");
     expect(open).toContain("IF NOT v_is_super AND v_target_worker_admin IS DISTINCT FROM v_caller_admin THEN");
     expect(open).toContain("trabalhador não pertence à sua equipe");
   });
 });
 
 describe("6) abertura do caixa", () => {
-  const open = fnBody(STRICT, "open_daily_cash(p_cash_date date, p_worker_id uuid DEFAULT NULL::uuid)");
+  const open = fnBody(STRICT, "open_daily_cash");
 
   it("data futura é bloqueada e data antiga exige reabertura", () => {
     expect(open).toContain("Não é permitido abrir caixa em data futura. Abra o caixa na própria data.");
@@ -262,7 +263,7 @@ describe("8) dia fechado sem snapshot válido", () => {
   });
 
   it("sem fallback com dados atuais: o caixa volta para aberto e refaz o fechamento", () => {
-    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict(date, uuid, uuid)");
+    const body = fnBody(STRICT, "_ensure_daily_cash_closed_strict");
     expect(body).toContain("IF public._daily_cash_snapshot_ok(v_id) THEN");
     expect(body).toContain("SET status = 'open', closed_at = NULL, closed_by = NULL,");
     expect(body).toContain("v_status := 'open';");
