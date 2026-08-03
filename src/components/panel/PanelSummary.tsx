@@ -112,7 +112,7 @@ export function WorkerSummaryList({
     const today = format(new Date(), "yyyy-MM-dd");
     supabase
       .from("daily_cash")
-      .select("worker_id, status")
+      .select("worker_id, status, close_origin")
       .eq("cash_date", today)
       .in("worker_id", ids)
       .then(({ data, error }) => {
@@ -120,8 +120,18 @@ export function WorkerSummaryList({
         if (error) { console.error("[PanelSummary] falha ao carregar status do caixa", error); return; }
         const map: Record<string, CashStatus> = {};
         ((data as any[]) || []).forEach((d) => {
-          if (d.worker_id) map[d.worker_id] = d.status === "closed" ? "closed" : d.status === "open" ? "open" : "not_opened";
+          if (!d.worker_id) return;
+          if (d.status === "closed") {
+            const origin = normalizeCloseOrigin(d.close_origin);
+            map[d.worker_id] =
+              origin === "automatic_opened" ? "closed_auto"
+                : origin === "automatic_not_opened" ? "closed_auto_not_opened"
+                  : "closed";
+          } else {
+            map[d.worker_id] = d.status === "open" ? "open" : "not_opened";
+          }
         });
+
         setCash(map);
       });
     return () => { cancel = true; };
