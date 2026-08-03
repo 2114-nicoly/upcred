@@ -7,6 +7,8 @@ import { ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/loan-utils";
 import type { WorkerStats } from "@/lib/consolidated-stats";
+import { normalizeCloseOrigin } from "@/lib/close-origin";
+
 
 /* ---------- Cards base (padrão visual atual) ---------- */
 
