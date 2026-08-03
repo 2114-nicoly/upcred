@@ -34,15 +34,48 @@ export async function assertCashOpen(cashDate: string): Promise<void> {
   }
 }
 
+/** Today's date (America/Sao_Paulo) as yyyy-MM-dd — same rule as the server. */
+export function getTodayCashDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+export type CashDateKind = "today" | "past" | "future";
+
+/** Classifies a cash date against today's date in America/Sao_Paulo. */
+export function classifyCashDate(cashDate: string, now: Date = new Date()): CashDateKind {
+  const today = getTodayCashDate(now);
+  if (cashDate === today) return "today";
+  return cashDate > today ? "future" : "past";
+}
+
+/** True only when the given date may be opened (must be exactly today). */
+export function canOpenCashDate(cashDate: string, now: Date = new Date()): boolean {
+  return classifyCashDate(cashDate, now) === "today";
+}
+
+export const CASH_OPEN_FUTURE_MESSAGE =
+  "Não é permitido abrir caixa em data futura. Abra o caixa na própria data.";
+export const CASH_OPEN_PAST_MESSAGE =
+  "Não é permitido abrir um caixa antigo. Utilize o processo de solicitação de reabertura.";
+
 /**
  * Opens (or returns existing open id) the daily_cash row for the current
- * user's scope on the given date. Server-side RPC enforces scope and
- * inherits opening_balance from last closed day.
+ * user's scope on the given date. Server-side RPC enforces scope, the
+ * today-only rule and inherits the opening balance.
  */
 export async function openDailyCash(cashDate: string, workerId?: string | null): Promise<string> {
+  const kind = classifyCashDate(cashDate);
+  if (kind === "future") throw new Error(CASH_OPEN_FUTURE_MESSAGE);
+  if (kind === "past") throw new Error(CASH_OPEN_PAST_MESSAGE);
   const params: any = { p_cash_date: cashDate };
   if (workerId) params.p_worker_id = workerId;
   const { data, error } = await supabase.rpc("open_daily_cash" as any, params);
   if (error) throw error;
   return (data as unknown as string) || "";
 }
+
