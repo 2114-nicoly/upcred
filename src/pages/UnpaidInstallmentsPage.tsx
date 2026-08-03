@@ -16,6 +16,8 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { isInstallmentCollectibleStatus } from "@/lib/status-constants";
 import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, validatePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 
 type Installment = {
   id: string;
