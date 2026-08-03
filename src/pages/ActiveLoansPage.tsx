@@ -23,8 +23,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
-import { useActiveCash } from "@/hooks/useActiveCash";
-import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+
 
 type LoanWithClient = {
   id: string;
