@@ -33,10 +33,9 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
-import { assertCashOpen } from "@/lib/cash-lock";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
-import { useActiveCash } from "@/hooks/useActiveCash";
-import { getTodayCashDate } from "@/lib/cash-lock";
 
 type Loan = {
   id: string;
@@ -327,7 +326,7 @@ export default function LoanDetailPage() {
 
     setIsSubmitting(true);
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      await assertScopedCashOpen(payDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
       // Penalty payment
       if (multaValue > 0) {
         try {
@@ -413,7 +412,7 @@ export default function LoanDetailPage() {
     if (!loanActive) { toast.error("Empréstimo inativo não pode ser quitado."); return; }
     setIsSubmitting(true);
     try {
-      await assertCashOpen(quitarDate, activeCashScope);
+      await assertScopedCashOpen(quitarDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
       await settleLoan({
         loanId: loanId!, clientId: loan.client_id,
         clientName: (loan.clients?.name ?? "Cliente removido"), cashDate: quitarDate,
@@ -604,7 +603,7 @@ export default function LoanDetailPage() {
     setRenegSubmitting(true);
     try {
       // 0. Caixa do dia precisa estar aberto
-      await assertCashOpen(opDate, activeCashScope);
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
 
       // 1. Snapshot + insert renegotiation row
       const { data: renegRow, error: renegErr } = await (supabase.from("loan_renegotiations" as any).insert({
