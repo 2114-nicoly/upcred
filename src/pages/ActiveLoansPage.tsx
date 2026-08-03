@@ -258,7 +258,12 @@ export default function ActiveLoansPage() {
 
     setIsSubmitting(true);
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      const loanForScope = loans.find((l) => l.id === payLoanId);
+      await assertScopedCashOpen(payDate, {
+        workerId: loanForScope?.worker_id ?? null,
+        adminId: loanForScope?.admin_id ?? null,
+      });
+
       // Handle penalty payment
       if (multaValue > 0) {
         const loan = loans.find((l) => l.id === payLoanId);
