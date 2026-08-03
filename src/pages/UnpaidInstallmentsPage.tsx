@@ -126,9 +126,13 @@ export default function UnpaidInstallmentsPage() {
 
     const inst = installments.find((i) => i.id === id);
     if (!inst) return;
-    const parcValue = payAmount ? parseFloat(payAmount) : null;
+    const { amount: parcValue, error: amountError } = validatePaymentAmount(
+      payState,
+      Number(inst.amount),
+      Number(loan?.remaining_balance ?? 0),
+    );
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (amountError) { toast.error(amountError); return; }
 
     try {
       if (multaValue > 0 && loan) {
@@ -143,29 +147,26 @@ export default function UnpaidInstallmentsPage() {
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       }
 
-      if (parcValue !== null || !payPenaltyAmount) {
-      const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-      const paidValue = parcValue ?? instRemaining;
-        if (paidValue > 0 && loan) {
-          const { applied } = await registerPayment({
-            loanId: loanId!,
-            amount: paidValue,
-            clientId: loan.client_id,
-            clientName: (loan.clients?.name ?? "Cliente removido"),
-            cashDate: payDate,
-            origin: "parcelas_pendentes",
-            installmentId: inst.id,
-            startInstNumber: inst.number,
-          });
-          toast.success(`Parcela: ${formatCurrency(applied)} registrado!`);
-        }
+      if (parcValue > 0 && loan) {
+        const { applied } = await registerPayment({
+          loanId: loanId!,
+          amount: parcValue,
+          clientId: loan.client_id,
+          clientName: (loan.clients?.name ?? "Cliente removido"),
+          cashDate: payDate,
+          origin: "parcelas_pendentes",
+          installmentId: inst.id,
+          startInstNumber: inst.number,
+          observation: resolveObservation(payState, Number(inst.amount)),
+        });
+        toast.success(`Parcela: ${formatCurrency(applied)} registrado!`);
       }
     } catch (err: any) {
       console.error("Unpaid handlePay error:", err);
       toast.error(err?.message || "Erro ao registrar pagamento");
     }
 
-    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
+    setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
     fetchData();
   };
 
