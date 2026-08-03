@@ -276,8 +276,11 @@ export default function DailyCashPage() {
 
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>("all");
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
+  // Origem do fechamento do dia (manual ou automático pelo servidor).
+  const [closeOrigin, setCloseOrigin] = useState<string | null>(null);
   // Versão do snapshot carregado (null = dia não fechado ou sem histórico).
   const [snapshotVersion, setSnapshotVersion] = useState<number | null>(null);
+
   const [paidGroups, setPaidGroups] = useState<PaidGroup[]>([]);
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
