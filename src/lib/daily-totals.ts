@@ -243,6 +243,7 @@ export async function getDailyCollectionSummary(
   let manualOut = 0;
   let expenses = 0;
   let lent = 0;
+  let reversedToday = 0;
   try {
     let q: any = supabase.from("daily_events" as any)
       .select("event_type, amount_in, amount_out, reversed_at, worker_id, admin_id")
@@ -255,6 +256,12 @@ export async function getDailyCollectionSummary(
       if (e.event_type === "emprestimo_importado") continue;
       const ain = Number(e.amount_in) || 0;
       const aout = Number(e.amount_out) || 0;
+      // Contrapartida de estorno: o original já foi excluído (reversed_at),
+      // então a contrapartida também não entra nos buckets — apenas em "Estornos".
+      if (String(e.event_type || "").startsWith("estorno")) {
+        reversedToday += ain + aout;
+        continue;
+      }
       switch (e.event_type) {
         case "pagamento": pagamentos += ain; break;
         case "recebimento_multa": multas += ain; break;
@@ -268,6 +275,7 @@ export async function getDailyCollectionSummary(
       }
     }
     receivedToday = pagamentos + multas;
+
   } catch (err) {
     console.error("[getDailyCollectionSummary] recebido/lançamentos falhou", err);
     hasError = true;
