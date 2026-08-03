@@ -67,6 +67,57 @@ export async function resolveScope(input: {
  */
 export type ExplicitScope = { workerId?: string | null; adminId?: string | null } | null | undefined;
 
+export type FinancialScope = { worker_id: string | null; admin_id: string };
+
+export const SCOPE_ADMIN_REQUIRED_MESSAGE =
+  "Não foi possível determinar a empresa (admin) desta operação financeira. Faça login novamente ou informe o escopo.";
+
+/**
+ * Resolve um escopo financeiro COMPLETO. Nunca devolve admin_id nulo.
+ *
+ * - escopo explícito de trabalhador: worker_id informado + admin_id informado
+ *   (ou o `parent_admin_id` do próprio trabalhador quando omitido);
+ * - escopo explícito de administrador: worker_id IS NULL + admin_id informado;
+ * - sem escopo explícito: resolve pelo usuário autenticado (trabalhador ->
+ *   worker_id + parent_admin_id; admin -> worker_id NULL + admins.id).
+ *
+ * Lança erro quando o admin_id não puder ser determinado.
+ */
+export async function resolveFinancialScope(scope?: ExplicitScope): Promise<FinancialScope> {
+  if (scope?.workerId) {
+    let admin_id = scope.adminId ?? null;
+    if (!admin_id) {
+      const { data, error } = await supabase
+        .from("workers").select("parent_admin_id").eq("id", scope.workerId).maybeSingle();
+      if (error) throw error;
+      admin_id = (data as any)?.parent_admin_id ?? null;
+    }
+    if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+    return { worker_id: scope.workerId, admin_id };
+  }
+  if (scope?.adminId) return { worker_id: null, admin_id: scope.adminId };
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user?.id ?? null;
+  if (!uid) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+
+  const { data: w, error: wErr } = await supabase
+    .from("workers").select("id, parent_admin_id").eq("auth_user_id", uid).maybeSingle();
+  if (wErr) throw wErr;
+  if (w?.id) {
+    const admin_id = (w as any).parent_admin_id ?? null;
+    if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+    return { worker_id: (w as any).id as string, admin_id };
+  }
+
+  const { data: a, error: aErr } = await supabase
+    .from("admins" as any).select("id").eq("auth_user_id", uid).maybeSingle();
+  if (aErr) throw aErr;
+  const admin_id = (a as any)?.id ?? null;
+  if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+  return { worker_id: null, admin_id };
+}
+
 /**
  * Returns the daily_cash scope (worker_id/admin_id).
  * Se um escopo explícito for informado, ele prevalece sobre o usuário autenticado.
@@ -80,15 +131,19 @@ export async function getCurrentDailyCashScope(scope?: ExplicitScope): Promise<{
 
 /**
  * Apply the daily_cash scope filter to a supabase query builder.
- * - worker_id present: filter eq worker_id
- * - admin_id only:    filter worker_id IS NULL + eq admin_id
- * - neither:          filter both NULL (global row)
+ * - worker_id present: eq worker_id + eq admin_id (obrigatório)
+ * - admin_id only:     worker_id IS NULL + eq admin_id
+ * Nunca aceita worker_id sem admin_id.
  */
 export function applyDailyCashScope(query: any, scope: { worker_id: string | null; admin_id: string | null }): any {
-  if (scope.worker_id) return query.eq("worker_id", scope.worker_id);
+  if (scope.worker_id) {
+    if (!scope.admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+    return query.eq("worker_id", scope.worker_id).eq("admin_id", scope.admin_id);
+  }
   if (scope.admin_id) return query.is("worker_id", null).eq("admin_id", scope.admin_id);
-  return query.is("worker_id", null).is("admin_id", null);
+  throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
 }
+
 
 export type CashMovementType =
   | "emprestimo"
@@ -140,28 +195,24 @@ export async function getCashBalance(scope?: ExplicitScope): Promise<CashBalance
  * Leitura ESTRITA do cash_balance: devolve `{ data, error }` para que o
  * chamador possa distinguir erro de consulta de "linha inexistente".
  *
- * Quando um escopo EXPLÍCITO é informado (`workerId` e/ou `adminId`), ele é
- * usado como está — nunca substituído pelo usuário autenticado — e os dois
- * filtros são aplicados juntos. Mais de uma linha vira erro (maybeSingle).
+ * O escopo é SEMPRE completo (worker_id + admin_id, ou worker_id IS NULL +
+ * admin_id). Escopo explícito nunca é substituído pelo usuário autenticado.
+ * Sem admin_id determinável, a leitura falha — nunca cai em `limit(1)`.
  */
 export async function getCashBalanceResult(
   scope?: ExplicitScope,
 ): Promise<{ data: CashBalance | null; error: any }> {
-  const hasExplicit = !!(scope?.workerId || scope?.adminId);
-  let q = supabase.from("cash_balance").select("*");
-
-  if (hasExplicit) {
-    if (scope?.workerId) q = q.eq("worker_id", scope.workerId);
-    else q = q.is("worker_id", null);
-    if (scope?.adminId) q = q.eq("admin_id", scope.adminId);
-    const { data, error } = await q.maybeSingle();
-    return { data: (data as unknown as CashBalance) ?? null, error };
+  let resolved: FinancialScope;
+  try {
+    resolved = await resolveFinancialScope(scope);
+  } catch (error) {
+    return { data: null, error };
   }
 
-  const workerId = await getCurrentWorkerId();
-  if (workerId) q = q.eq("worker_id", workerId);
-  else q = q.is("worker_id", null);
-  const { data, error } = await q.limit(1).maybeSingle();
+  let q = supabase.from("cash_balance").select("*");
+  q = resolved.worker_id ? q.eq("worker_id", resolved.worker_id) : q.is("worker_id", null);
+  q = q.eq("admin_id", resolved.admin_id);
+  const { data, error } = await q.maybeSingle();
   return { data: (data as unknown as CashBalance) ?? null, error };
 }
 
@@ -265,34 +316,50 @@ export async function deleteCashMovement(id: string) {
 }
 
 /**
- * Recalculates cash_balance from authoritative sources, SCOPED to the
- * current user's worker_id (if logged in as worker). Admins recalculate
- * the global / their-admin scope.
+ * Recalcula o cash_balance a partir das fontes autoritativas, SEMPRE dentro de
+ * um escopo completo (worker_id + admin_id, ou worker_id IS NULL + admin_id).
  *
- * - available_cash: sum of all (non-reversed) cash_movements.amount
- * - money_lent + interest_receivable: derived from loans.remaining_balance
- * - penalty_receivable: from penalty installments (amount - paid_amount)
+ * - Trabalhador: seus próprios registros.
+ * - Administrador sem trabalhador: apenas registros worker_id IS NULL da
+ *   própria empresa.
+ * - Administrador/SuperAdmin sobre um trabalhador: escopo explícito obrigatório.
+ *
+ * Qualquer erro de consulta cancela o recálculo (nunca vira lista vazia) e
+ * apenas a linha exata do cash_balance é atualizada.
  */
-export async function recalculateCashBalanceFromLedger() {
-  const workerId = await getCurrentWorkerId();
+export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
+  const { worker_id, admin_id } = await resolveFinancialScope(scope);
 
   let movQ = supabase
     .from("cash_movements")
-    .select("id, amount, worker_id, reversed_at, reverses_movement_id, reversal_movement_id");
-  let loanQ = supabase.from("loans").select("amount, total_amount, remaining_balance, status, worker_id");
+    .select("id, amount, worker_id, admin_id, reversed_at, reverses_movement_id, reversal_movement_id")
+    .eq("admin_id", admin_id);
+  let loanQ = supabase
+    .from("loans")
+    .select("amount, total_amount, remaining_balance, status, worker_id, admin_id")
+    .eq("admin_id", admin_id);
   let instQ = supabase
     .from("installments")
-    .select("amount, paid_amount, is_penalty, loan_id, loans!inner(worker_id)");
+    .select("amount, paid_amount, is_penalty, loan_id, loans!inner(worker_id, admin_id)")
+    .eq("loans.admin_id", admin_id);
 
-  if (workerId) {
-    movQ = movQ.eq("worker_id", workerId);
-    loanQ = loanQ.eq("worker_id", workerId);
-    instQ = instQ.eq("loans.worker_id", workerId) as any;
+  if (worker_id) {
+    movQ = movQ.eq("worker_id", worker_id);
+    loanQ = loanQ.eq("worker_id", worker_id);
+    instQ = instQ.eq("loans.worker_id", worker_id) as any;
+  } else {
+    movQ = movQ.is("worker_id", null);
+    loanQ = loanQ.is("worker_id", null);
+    instQ = instQ.is("loans.worker_id", null) as any;
   }
 
-  const [{ data: movements }, { data: loans }, { data: installments }] = await Promise.all([
-    movQ, loanQ, instQ,
-  ]);
+  const [movRes, loanRes, instRes] = await Promise.all([movQ, loanQ, instQ]);
+  if (movRes.error) throw movRes.error;
+  if (loanRes.error) throw loanRes.error;
+  if (instRes.error) throw instRes.error;
+  const movements = movRes.data;
+  const loans = loanRes.data;
+  const installments = instRes.data;
 
   let money_lent = 0;
   let interest_receivable = 0;
@@ -333,17 +400,40 @@ export async function recalculateCashBalanceFromLedger() {
     0
   );
 
-  const current = await getCashBalance();
+  const { data: current, error: cbError } = await getCashBalanceResult({
+    workerId: worker_id,
+    adminId: admin_id,
+  });
+  if (cbError) throw cbError;
   if (!current) return;
 
-  await supabase.from("cash_balance").update({
+  const { error: updError } = await supabase.from("cash_balance").update({
     available_cash,
     money_lent,
     interest_receivable,
     penalty_receivable,
     updated_at: new Date().toISOString(),
   }).eq("id", current.id);
+  if (updError) throw updError;
 }
+
+/**
+ * Recalcula o caixa no escopo EXATO do empréstimo afetado (worker_id/admin_id
+ * do próprio empréstimo), nunca no escopo do usuário autenticado.
+ */
+export async function recalculateCashBalanceForLoan(loanId: string) {
+  const { data, error } = await supabase
+    .from("loans").select("worker_id, admin_id").eq("id", loanId).maybeSingle();
+  if (error) throw error;
+  const admin_id = (data as any)?.admin_id ?? null;
+  if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+  await recalculateCashBalanceFromLedger({
+    workerId: (data as any)?.worker_id ?? null,
+    adminId: admin_id,
+  });
+}
+
+
 
 export function getMovementTypeLabel(type: string): string {
   switch (type) {

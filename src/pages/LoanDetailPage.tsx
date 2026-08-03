@@ -24,7 +24,7 @@ import {
   generateDueDates,
   calculateLoanProgress,
 } from "@/lib/loan-utils";
-import { updateCashBalance, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, recalculateCashBalanceForLoan } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, editPayment, recalculateInstallments, reversePayment } from "@/lib/payment-utils";
 import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown, Plus, Calendar, Calculator, RefreshCw, AlertTriangle, History, Receipt } from "lucide-react";
@@ -689,7 +689,7 @@ export default function LoanDetailPage() {
         { new_total: renegCalc.totalAmount, new_installments: renegNumInstallments, new_loan_id: newLoan.id, reason: renegReason.trim() } as any,
       );
 
-      await recalculateCashBalanceFromLedger();
+      await recalculateCashBalanceForLoan(loan.id);
       toast.success(`Empréstimo renegociado! Novo plano: ${renegNumInstallments}x ${formatCurrency(renegCalc.installmentAmount)}`);
       setRenegOpen(false);
       navigate(`/loans/${newLoan.id}`);
