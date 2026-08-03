@@ -350,8 +350,11 @@ export type BuildSnapshotArgs = {
  */
 export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Promise<DailyCashSnapshotPayload> {
   const { cashDate, extra } = args;
-  const scope: SnapshotScope = { worker_id: args.workerId ?? null, admin_id: args.adminId ?? null };
+  const adminId = (args.adminId ?? "").trim() || null;
+  const scope: SnapshotScope = { worker_id: args.workerId ?? null, admin_id: adminId };
+  await assertScopeOwnership(scope);
   const actor = await getCurrentActorIdentity();
+
 
   const [
     liveEvents,
