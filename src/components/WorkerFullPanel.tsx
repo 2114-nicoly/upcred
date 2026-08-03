@@ -404,23 +404,13 @@ function RecentCashesSection({ workerId }: { workerId: string }) {
     if (!target || reason.trim().length < 5) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase
-        .from("daily_cash")
-        .update({ status: "open", closed_at: null })
-        .eq("id", target.id);
+      // Reabertura sempre pela RPC segura: valida escopo, mantém histórico e
+      // grava a auditoria de forma transacional no banco.
+      const { error } = await supabase.rpc("admin_reopen_daily_cash" as any, {
+        p_daily_cash_id: target.id,
+        p_reason: reason.trim(),
+      } as any);
       if (error) throw error;
-      const { data: { session } } = await supabase.auth.getSession();
-      try {
-        await supabase.from("audit_logs" as any).insert({
-          action_type: "reabrir_caixa",
-          entity_type: "daily_cash",
-          entity_id: target.id,
-          user_id: session?.user?.id,
-          observation: `Reabertura de caixa (${target.cash_date}): ${reason.trim()}`,
-        } as any);
-      } catch (err) {
-        console.warn("[audit] reabrir_caixa failed", err);
-      }
       toast.success("Caixa reaberto!");
       setTarget(null);
       setReason("");
@@ -431,6 +421,7 @@ function RecentCashesSection({ workerId }: { workerId: string }) {
       setSubmitting(false);
     }
   }
+
 
   return (
     <Card>
