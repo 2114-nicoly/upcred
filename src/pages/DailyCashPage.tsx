@@ -451,6 +451,8 @@ export default function DailyCashPage() {
         ? (dcData.status || "open")
         : "sem_caixa";
       setDailyCashStatus(status);
+      setCloseOrigin(status === "closed" ? ((dcData as any)?.close_origin ?? null) : null);
+
 
       // Dia FECHADO com snapshot → congelar a Rota exibindo apenas o snapshot.
       // Dados vivos (empréstimos, parcelas, movimentações) NÃO são mais lidos.
