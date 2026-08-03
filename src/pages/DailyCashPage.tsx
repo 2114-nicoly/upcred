@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCloseOriginLabel } from "@/lib/close-origin";
 import { format, differenceInCalendarDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1509,7 +1510,7 @@ export default function DailyCashPage() {
         {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
-              <Lock className="h-3 w-3" /> Caixa Fechado
+              <Lock className="h-3 w-3" /> {getCloseOriginLabel(closeOrigin)}
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Somente visualização. Reabra para alterar.

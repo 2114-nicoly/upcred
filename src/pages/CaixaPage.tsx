@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { getCloseOriginLabel, isAutomaticClose } from "@/lib/close-origin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -739,7 +740,9 @@ export default function CaixaPage() {
                 : "bg-success text-success-foreground"
           }
         >
-          {isClosed ? "Caixa Fechado" : isNotStarted ? "Caixa do dia ainda não iniciado" : "Caixa Aberto"}
+          {isClosed
+            ? getCloseOriginLabel((dailyCashRow as any)?.close_origin)
+            : isNotStarted ? "Caixa do dia ainda não iniciado" : "Caixa Aberto"}
         </Badge>
       </div>
 
