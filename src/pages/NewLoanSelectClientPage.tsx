@@ -30,6 +30,11 @@ type Client = {
 
 export default function NewLoanSelectClientPage() {
   const navigate = useNavigate();
+  const [pageParams] = useSearchParams();
+  // Preserva a data operacional ao navegar (inclusive após cadastrar cliente e ao renovar).
+  const dateParam = pageParams.get("date");
+  const withDate = (path: string) =>
+    dateParam ? `${path}${path.includes("?") ? "&" : "?"}date=${dateParam}` : path;
   const [searchParams] = useSearchParams();
   const showNewClient = searchParams.get("new_client") === "true";
   const { isAdmin } = useAuth();
@@ -95,7 +100,7 @@ export default function NewLoanSelectClientPage() {
       setActiveBlockDialog({ clientId: client.id, clientName: client.name, activeLoanId: active.id });
       return;
     }
-    navigate(`/clients/${client.id}/new-loan`);
+    navigate(withDate(`/clients/${client.id}/new-loan`));
   };
 
   const handleCreateClient = async (force = false) => {
@@ -171,7 +176,7 @@ export default function NewLoanSelectClientPage() {
         }
         if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
       }
-      navigate(`/clients/${createdId}/new-loan`);
+      navigate(withDate(`/clients/${createdId}/new-loan`));
     }
   };
 
@@ -189,7 +194,7 @@ export default function NewLoanSelectClientPage() {
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     setPendingAttachments([]);
     setRetryQueue(null);
-    navigate(`/clients/${retryQueue.clientId}/new-loan`);
+    navigate(withDate(`/clients/${retryQueue.clientId}/new-loan`));
   };
 
   if (newClientMode) {
@@ -316,7 +321,7 @@ export default function NewLoanSelectClientPage() {
               className="w-full"
               onClick={() => {
                 if (!activeBlockDialog) return;
-                navigate(`/clients/${activeBlockDialog.clientId}/new-loan?renewFrom=${activeBlockDialog.activeLoanId}`);
+                navigate(withDate(`/clients/${activeBlockDialog.clientId}/new-loan?renewFrom=${activeBlockDialog.activeLoanId}`));
               }}
             >
               Renovar

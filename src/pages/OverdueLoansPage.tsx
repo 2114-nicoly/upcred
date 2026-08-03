@@ -20,8 +20,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
-import { useActiveCash } from "@/hooks/useActiveCash";
-import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+
 
 type InstallmentWithLoan = {
   id: string;
@@ -79,13 +80,6 @@ type ClientGroup = {
 
 export default function OverdueLoansPage() {
 
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
-
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
@@ -100,6 +94,26 @@ export default function OverdueLoansPage() {
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
   const [penaltyAmount, setPenaltyAmount] = useState("");
   const [penaltyObservation, setPenaltyObservation] = useState("");
+
+  // --- Escopo por empréstimo: o caixa é sempre o do trabalhador dono ---
+  const allInstallments = groups.flatMap((g) => g.loans.flatMap((l) => l.installments));
+  const scopeOfInstallment = (instId: string | null): CashScope | null => {
+    if (!instId) return null;
+    const inst: any = allInstallments.find((i) => i.id === instId);
+    if (!inst) return null;
+    return {
+      workerId: inst.loans?.worker_id ?? null,
+      adminId: inst.loans?.admin_id ?? null,
+    };
+  };
+  const actionInstId = payDialogId ?? penaltyDialogId;
+  const scopedCash = useScopedActiveCash(scopeOfInstallment(actionInstId));
+  const opDate = scopedCash.cashDate ?? "";
+
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, actionInstId]);
+
 
   const today = format(new Date(), "yyyy-MM-dd");
 
@@ -200,7 +214,7 @@ export default function OverdueLoansPage() {
 
   const handlePay = async (id: string) => {
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      await assertScopedCashOpen(payDate, scopeOfInstallment(id) ?? { workerId: null, adminId: null });
     } catch (err: any) {
       toast.error(err?.message || "Não há caixa aberto nesta data.");
       return;
@@ -276,6 +290,22 @@ export default function OverdueLoansPage() {
     const amount = parseFloat(penaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
 
+    // Sem caixa aberto do trabalhador dono, nada é gravado.
+    let penaltyDate: string;
+    try {
+      const scope: CashScope = {
+        workerId: (inst as any).loans?.worker_id ?? null,
+        adminId: (inst as any).loans?.admin_id ?? null,
+      };
+      const active = await assertScopedCashOpen(scopedCash.cashDate ?? "", scope);
+      penaltyDate = active.cashDate;
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar a multa.");
+      return;
+    }
+
+
+
     const { data: { session } } = await supabase.auth.getSession();
     await supabase.from("penalties").insert({
       loan_id: inst.loan_id,
@@ -311,7 +341,7 @@ export default function OverdueLoansPage() {
         loan_id: inst.loan_id,
         number: maxNum + 1,
         amount,
-        due_date: opDate,
+        due_date: penaltyDate,
         is_penalty: true,
         status: "pending",
       });
@@ -319,7 +349,7 @@ export default function OverdueLoansPage() {
 
     try {
       await createDailyEvent({
-        cash_date: opDate,
+        cash_date: penaltyDate,
         event_type: "multa_adicionada",
         client_id: inst.loans?.client_id || null,
         loan_id: inst.loan_id,
@@ -460,11 +490,16 @@ export default function OverdueLoansPage() {
                                   </div>
                                 )}
                                 <div>
-                                  <Label>Data do pagamento</Label>
+                                  <Label>Data do pagamento (caixa do trabalhador)</Label>
                                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                                  {scopedCash.loading && <p className="text-xs text-muted-foreground">Carregando o caixa do trabalhador...</p>}
+                                  {!scopedCash.loading && !scopedCash.cashDate && (
+                                    <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                                  )}
                                 </div>
                                 <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
+                                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={!scopedCash.ready}>Confirmar Pagamento</Button>
+
                               </div>
                             </DialogContent>
                           </Dialog>
@@ -490,7 +525,11 @@ export default function OverdueLoansPage() {
                                   <Label>Observação (opcional)</Label>
                                   <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} />
                                 </div>
-                                <Button onClick={() => handleAddPenalty(inst)} className="w-full">Adicionar Multa</Button>
+                                {!scopedCash.loading && !scopedCash.cashDate && (
+                                  <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                                )}
+                                <Button onClick={() => handleAddPenalty(inst)} className="w-full" disabled={!scopedCash.ready}>Adicionar Multa</Button>
+
                               </div>
                             </DialogContent>
                           </Dialog>

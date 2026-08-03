@@ -33,10 +33,9 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
-import { assertCashOpen } from "@/lib/cash-lock";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
-import { useActiveCash } from "@/hooks/useActiveCash";
-import { getTodayCashDate } from "@/lib/cash-lock";
 
 type Loan = {
   id: string;
@@ -102,22 +101,23 @@ type PaymentHistoryEntry = {
 };
 
 export default function LoanDetailPage() {
-
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
-
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
-
-  useEffect(() => {
-    setQuitarDate((d) => d || opDate);
-  }, [opDate]);
   const { loanId } = useParams();
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [loan, setLoan] = useState<Loan | null>(null);
+
+  // Caixa do trabalhador DONO do empréstimo (nunca o caixa global/administrativo).
+  const loanScope: CashScope | null = loan
+    ? { workerId: loan.worker_id ?? null, adminId: loan.admin_id ?? null }
+    : null;
+  const scopedCash = useScopedActiveCash(loanScope);
+  const opDate = scopedCash.cashDate ?? "";
+
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+    setQuitarDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, loanId]);
+
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
@@ -326,7 +326,7 @@ export default function LoanDetailPage() {
 
     setIsSubmitting(true);
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      await assertScopedCashOpen(payDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
       // Penalty payment
       if (multaValue > 0) {
         try {
@@ -412,7 +412,7 @@ export default function LoanDetailPage() {
     if (!loanActive) { toast.error("Empréstimo inativo não pode ser quitado."); return; }
     setIsSubmitting(true);
     try {
-      await assertCashOpen(quitarDate, activeCashScope);
+      await assertScopedCashOpen(quitarDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
       await settleLoan({
         loanId: loanId!, clientId: loan.client_id,
         clientName: (loan.clients?.name ?? "Cliente removido"), cashDate: quitarDate,
@@ -436,6 +436,14 @@ export default function LoanDetailPage() {
     if (!penAmount || penAmount <= 0) { toast.error("Informe um valor válido para a multa"); return; }
     const inst = installments.find((i) => i.id === installmentId);
     if (!inst) return;
+
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
 
     const { data: { session } } = await supabase.auth.getSession();
     await supabase.from("penalties").insert({
@@ -489,6 +497,13 @@ export default function LoanDetailPage() {
     if (!newAmount || newAmount <= 0) { toast.error("Informe um valor válido"); return; }
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
     const diff = newAmount - Number(penalty.amount);
     await supabase.from("penalties").update({ amount: newAmount, observation: editPenaltyObs || penalty.observation }).eq("id", penaltyId);
     const srcInst = installments.find((i) => i.id === penalty.installment_id);
@@ -520,6 +535,13 @@ export default function LoanDetailPage() {
   const handleDeletePenalty = async (penaltyId: string) => {
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id || null;
     // Soft-cancel: preserva histórico financeiro
@@ -555,6 +577,14 @@ export default function LoanDetailPage() {
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
     const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
     if (!target) { toast.error("Nenhuma parcela disponível"); return; }
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
+
     const obs = overduePenaltyObs ? `${overduePenaltyObs} (Ref: ${overduePenaltyDate})` : `Multa ref. atraso ${overduePenaltyDate}`;
     await handleAddPenalty(target.id, amount, obs);
     setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs("");
@@ -603,7 +633,7 @@ export default function LoanDetailPage() {
     setRenegSubmitting(true);
     try {
       // 0. Caixa do dia precisa estar aberto
-      await assertCashOpen(opDate, activeCashScope);
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
 
       // 1. Snapshot + insert renegotiation row
       const { data: renegRow, error: renegErr } = await (supabase.from("loan_renegotiations" as any).insert({

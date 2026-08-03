@@ -12,8 +12,8 @@ import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, re
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
-import { assertCashOpen } from "@/lib/cash-lock";
-import { useActiveCash } from "@/hooks/useActiveCash";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { logAction, logLoanAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import { Calculator, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
@@ -26,8 +26,12 @@ export default function NewLoanPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const renewFromLoanId = searchParams.get("renewFrom");
-  // Data operacional: toda movimentação usa a data do caixa ABERTO, nunca "hoje".
-  const { activeCashDate, loading: activeCashLoading, scope: activeCashScope } = useActiveCash();
+  // O caixa é o do TRABALHADOR responsável pelo cliente, nunca o caixa global.
+  const [clientScope, setClientScope] = useState<CashScope | null>(null);
+  const scopedCash = useScopedActiveCash(clientScope);
+  const activeCashDate = scopedCash.cashDate;
+  const activeCashLoading = scopedCash.loading || !clientScope;
+  const activeCashScope = clientScope ?? { workerId: null, adminId: null };
 
   const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
@@ -115,8 +119,18 @@ export default function NewLoanPage() {
 
   useEffect(() => {
     const fetchClient = async () => {
-      const { data } = await supabase.from("clients").select("name").eq("id", clientId!).single();
-      if (data) setClientName(data.name);
+      const { data } = await supabase
+        .from("clients")
+        .select("name, worker_id, admin_id")
+        .eq("id", clientId!)
+        .single();
+      if (data) {
+        setClientName(data.name);
+        setClientScope({
+          workerId: (data as any).worker_id ?? null,
+          adminId: (data as any).admin_id ?? null,
+        });
+      }
     };
     fetchClient();
   }, [clientId]);
@@ -295,7 +309,7 @@ export default function NewLoanPage() {
       return;
     }
     try {
-      await assertCashOpen(isOngoing ? activeCashDate : loanDate, activeCashScope);
+      await assertScopedCashOpen(isOngoing ? activeCashDate : loanDate, activeCashScope);
     } catch (err: any) {
       toast.error(err?.message || "Caixa fechado para esta data");
       setSaving(false);

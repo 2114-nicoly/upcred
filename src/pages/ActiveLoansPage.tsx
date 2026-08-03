@@ -23,8 +23,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
-import { useActiveCash } from "@/hooks/useActiveCash";
-import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+
 
 type LoanWithClient = {
   id: string;
@@ -54,17 +55,8 @@ type LoanProgress = {
 
 export default function ActiveLoansPage() {
 
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
+  // Escopo por empréstimo: a data vem do caixa do trabalhador dono do empréstimo.
 
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
-
-  useEffect(() => {
-    setQuitarDate((d) => d || opDate);
-  }, [opDate]);
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
@@ -94,6 +86,23 @@ export default function ActiveLoansPage() {
   const [quitarLoanId, setQuitarLoanId] = useState<string | null>(null);
   const [quitarDate, setQuitarDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- Caixa ativo do empréstimo selecionado (nunca o caixa global) ---
+  const actionLoanId = payLoanId ?? quitarLoanId;
+  const actionLoan = loans.find((l) => l.id === actionLoanId) ?? null;
+  const actionScope: CashScope | null = actionLoan
+    ? { workerId: actionLoan.worker_id ?? null, adminId: actionLoan.admin_id ?? null }
+    : null;
+  const scopedCash = useScopedActiveCash(actionScope);
+  const opDate = scopedCash.cashDate ?? "";
+
+  // Troca de empréstimo/trabalhador: descarta a data anterior e usa a nova.
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+    setQuitarDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, actionLoanId]);
+
+
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -249,7 +258,12 @@ export default function ActiveLoansPage() {
 
     setIsSubmitting(true);
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      const loanForScope = loans.find((l) => l.id === payLoanId);
+      await assertScopedCashOpen(payDate, {
+        workerId: loanForScope?.worker_id ?? null,
+        adminId: loanForScope?.admin_id ?? null,
+      });
+
       // Handle penalty payment
       if (multaValue > 0) {
         const loan = loans.find((l) => l.id === payLoanId);
@@ -286,8 +300,9 @@ export default function ActiveLoansPage() {
           toast.success(`Parcela: ${formatCurrency(parcValue)} registrado!`);
         }
       }
-    } catch (e) {
-      toast.error("Erro ao processar pagamento");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao processar pagamento");
+
     } finally {
       setIsSubmitting(false);
       setPayLoanId(null);
@@ -307,7 +322,11 @@ export default function ActiveLoansPage() {
     if (!loan) { setIsSubmitting(false); return; }
 
     try {
-      await assertCashOpen(quitarDate, activeCashScope);
+      await assertScopedCashOpen(quitarDate, {
+        workerId: loan.worker_id ?? null,
+        adminId: loan.admin_id ?? null,
+      });
+
       await settleLoan({
         loanId: quitarLoanId,
         clientId: (loan.clients?.id ?? ""),
@@ -316,8 +335,9 @@ export default function ActiveLoansPage() {
         origin: "emprestimos_ativos",
       });
       toast.success("Empréstimo quitado!");
-    } catch {
-      toast.error("Erro ao quitar, recarregando...");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao quitar, recarregando...");
+
     } finally {
       setIsSubmitting(false);
       setQuitarLoanId(null);
@@ -687,11 +707,16 @@ export default function ActiveLoansPage() {
                   </div>
                 )}
                 <div>
-                  <Label>Data do pagamento</Label>
+                  <Label>Data do pagamento (caixa do trabalhador)</Label>
                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                  {scopedCash.loading && <p className="text-xs text-muted-foreground">Carregando o caixa do trabalhador...</p>}
+                  {!scopedCash.loading && !scopedCash.cashDate && (
+                    <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes na ordem.</p>
-                <Button onClick={handlePayFromList} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
+                <Button onClick={handlePayFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting || !scopedCash.ready}>Confirmar Pagamento</Button>
+
               </div>
             );
           })()}
@@ -741,12 +766,17 @@ export default function ActiveLoansPage() {
                   <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + penaltyPending)}</span></div>
                 </div>
                 <div>
-                  <Label>Data do pagamento</Label>
+                  <Label>Data do pagamento (caixa do trabalhador)</Label>
                   <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+                  {scopedCash.loading && <p className="text-xs text-muted-foreground">Carregando o caixa do trabalhador...</p>}
+                  {!scopedCash.loading && !scopedCash.cashDate && (
+                    <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                  )}
                 </div>
-                <Button onClick={handleQuitarFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                <Button onClick={handleQuitarFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting || !scopedCash.ready}>
                   {isSubmitting ? "Processando..." : "Confirmar Quitação"}
                 </Button>
+
               </div>
             );
           })()}
