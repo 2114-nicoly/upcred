@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCloseOriginLabel } from "@/lib/close-origin";
 import { format, differenceInCalendarDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -275,8 +276,11 @@ export default function DailyCashPage() {
 
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>("all");
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
+  // Origem do fechamento do dia (manual ou automático pelo servidor).
+  const [closeOrigin, setCloseOrigin] = useState<string | null>(null);
   // Versão do snapshot carregado (null = dia não fechado ou sem histórico).
   const [snapshotVersion, setSnapshotVersion] = useState<number | null>(null);
+
   const [paidGroups, setPaidGroups] = useState<PaidGroup[]>([]);
   const [notPaidMarks, setNotPaidMarks] = useState<(NotPaidMark & { installment?: InstallmentWithLoan })[]>([]);
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
@@ -447,6 +451,8 @@ export default function DailyCashPage() {
         ? (dcData.status || "open")
         : "sem_caixa";
       setDailyCashStatus(status);
+      setCloseOrigin(status === "closed" ? ((dcData as any)?.close_origin ?? null) : null);
+
 
       // Dia FECHADO com snapshot → congelar a Rota exibindo apenas o snapshot.
       // Dados vivos (empréstimos, parcelas, movimentações) NÃO são mais lidos.
@@ -1509,7 +1515,7 @@ export default function DailyCashPage() {
         {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
-              <Lock className="h-3 w-3" /> Caixa Fechado
+              <Lock className="h-3 w-3" /> {getCloseOriginLabel(closeOrigin)}
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Somente visualização. Reabra para alterar.

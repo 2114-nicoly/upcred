@@ -7,6 +7,8 @@ import { ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/loan-utils";
 import type { WorkerStats } from "@/lib/consolidated-stats";
+import { normalizeCloseOrigin } from "@/lib/close-origin";
+
 
 /* ---------- Cards base (padrão visual atual) ---------- */
 
@@ -82,13 +84,18 @@ export function FinancialDetails({ stats }: { stats: WorkerStats }) {
 
 /* ---------- Resumo dos trabalhadores (Admin e SuperAdmin) ---------- */
 
-type CashStatus = "open" | "closed" | "not_opened";
+type CashStatus = "open" | "closed" | "not_opened" | "closed_auto" | "closed_auto_not_opened";
 
 function statusLabel(s: CashStatus) {
   if (s === "open") return { text: "Caixa aberto", variant: "default" as const };
-  if (s === "closed") return { text: "Caixa fechado", variant: "secondary" as const };
+  if (s === "closed") return { text: "Fechado manualmente", variant: "secondary" as const };
+  if (s === "closed_auto") return { text: "Fechado automaticamente", variant: "secondary" as const };
+  if (s === "closed_auto_not_opened") {
+    return { text: "Caixa não foi aberto e foi fechado automaticamente", variant: "secondary" as const };
+  }
   return { text: "Não aberto", variant: "outline" as const };
 }
+
 
 /**
  * Card compacto por trabalhador ativo, reutilizado pelo Administrador e
@@ -107,7 +114,7 @@ export function WorkerSummaryList({
     const today = format(new Date(), "yyyy-MM-dd");
     supabase
       .from("daily_cash")
-      .select("worker_id, status")
+      .select("worker_id, status, close_origin")
       .eq("cash_date", today)
       .in("worker_id", ids)
       .then(({ data, error }) => {
@@ -115,8 +122,18 @@ export function WorkerSummaryList({
         if (error) { console.error("[PanelSummary] falha ao carregar status do caixa", error); return; }
         const map: Record<string, CashStatus> = {};
         ((data as any[]) || []).forEach((d) => {
-          if (d.worker_id) map[d.worker_id] = d.status === "closed" ? "closed" : d.status === "open" ? "open" : "not_opened";
+          if (!d.worker_id) return;
+          if (d.status === "closed") {
+            const origin = normalizeCloseOrigin(d.close_origin);
+            map[d.worker_id] =
+              origin === "automatic_opened" ? "closed_auto"
+                : origin === "automatic_not_opened" ? "closed_auto_not_opened"
+                  : "closed";
+          } else {
+            map[d.worker_id] = d.status === "open" ? "open" : "not_opened";
+          }
         });
+
         setCash(map);
       });
     return () => { cancel = true; };

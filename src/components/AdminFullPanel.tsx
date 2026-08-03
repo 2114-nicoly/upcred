@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { getCloseOriginLabel, normalizeCloseOrigin } from "@/lib/close-origin";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,7 @@ import { format } from "date-fns";
 
 type WorkerToday = {
   cashStatus: "open" | "closed" | "not_opened";
+  closeOrigin: string | null;
   availableCash: number;
   receivedToday: number;
   receivedPrincipalToday: number;
@@ -104,7 +106,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     if (wList.length === 0) { setWorkerToday({}); return; }
     const wIds = wList.map((w) => w.id);
     const [dcRes, cbRes, evTodayRes, lastCloseRes, lastEvRes] = await Promise.all([
-      supabase.from("daily_cash").select("worker_id, status, opening_balance, expected_closing_balance, counted_closing_balance, closing_difference").eq("cash_date", today).in("worker_id", wIds),
+      supabase.from("daily_cash").select("worker_id, status, close_origin, opening_balance, expected_closing_balance, counted_closing_balance, closing_difference").eq("cash_date", today).in("worker_id", wIds),
       supabase.from("cash_balance").select("worker_id, available_cash").in("worker_id", wIds),
       supabase.from("daily_events" as any).select("worker_id, event_type, amount_in, amount_out, reversed_at").eq("cash_date", today).in("worker_id", wIds),
       supabase.from("daily_cash").select("worker_id, closing_difference, cash_date").eq("status", "closed").in("worker_id", wIds).order("cash_date", { ascending: false }).limit(200),
@@ -112,11 +114,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     ]);
     const map: Record<string, WorkerToday> = {};
     for (const w of wList) {
-      map[w.id] = { cashStatus: "not_opened", availableCash: 0, receivedToday: 0, receivedPrincipalToday: 0, penaltiesToday: 0, lentToday: 0, lastClosingDifference: null, lastActivity: null };
+      map[w.id] = { cashStatus: "not_opened", closeOrigin: null, availableCash: 0, receivedToday: 0, receivedPrincipalToday: 0, penaltiesToday: 0, lentToday: 0, lastClosingDifference: null, lastActivity: null };
     }
     for (const dc of (dcRes.data as any[]) || []) {
       const wid = dc.worker_id; if (!wid || !map[wid]) continue;
       map[wid].cashStatus = dc.status === "closed" ? "closed" : dc.status === "open" ? "open" : "not_opened";
+      map[wid].closeOrigin = dc.status === "closed" ? normalizeCloseOrigin(dc.close_origin) : null;
     }
     for (const cb of (cbRes.data as any[]) || []) {
       const wid = cb.worker_id; if (!wid || !map[wid]) continue;
@@ -492,7 +495,11 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
 
               const wt = workerToday[w.id];
-              const cashLabel = wt?.cashStatus === "open" ? "Aberto" : wt?.cashStatus === "closed" ? "Fechado" : "Não aberto";
+              const cashLabel = wt?.cashStatus === "open"
+                ? "Aberto"
+                : wt?.cashStatus === "closed"
+                  ? getCloseOriginLabel(wt?.closeOrigin)
+                  : "Não aberto";
               const cashVariant: "default" | "secondary" | "outline" = wt?.cashStatus === "open" ? "default" : wt?.cashStatus === "closed" ? "secondary" : "outline";
               return (
                 <Card key={w.id} className={isArchived ? "opacity-70" : ""}>
