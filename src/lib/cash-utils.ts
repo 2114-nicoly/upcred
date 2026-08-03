@@ -316,34 +316,50 @@ export async function deleteCashMovement(id: string) {
 }
 
 /**
- * Recalculates cash_balance from authoritative sources, SCOPED to the
- * current user's worker_id (if logged in as worker). Admins recalculate
- * the global / their-admin scope.
+ * Recalcula o cash_balance a partir das fontes autoritativas, SEMPRE dentro de
+ * um escopo completo (worker_id + admin_id, ou worker_id IS NULL + admin_id).
  *
- * - available_cash: sum of all (non-reversed) cash_movements.amount
- * - money_lent + interest_receivable: derived from loans.remaining_balance
- * - penalty_receivable: from penalty installments (amount - paid_amount)
+ * - Trabalhador: seus próprios registros.
+ * - Administrador sem trabalhador: apenas registros worker_id IS NULL da
+ *   própria empresa.
+ * - Administrador/SuperAdmin sobre um trabalhador: escopo explícito obrigatório.
+ *
+ * Qualquer erro de consulta cancela o recálculo (nunca vira lista vazia) e
+ * apenas a linha exata do cash_balance é atualizada.
  */
-export async function recalculateCashBalanceFromLedger() {
-  const workerId = await getCurrentWorkerId();
+export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
+  const { worker_id, admin_id } = await resolveFinancialScope(scope);
 
   let movQ = supabase
     .from("cash_movements")
-    .select("id, amount, worker_id, reversed_at, reverses_movement_id, reversal_movement_id");
-  let loanQ = supabase.from("loans").select("amount, total_amount, remaining_balance, status, worker_id");
+    .select("id, amount, worker_id, admin_id, reversed_at, reverses_movement_id, reversal_movement_id")
+    .eq("admin_id", admin_id);
+  let loanQ = supabase
+    .from("loans")
+    .select("amount, total_amount, remaining_balance, status, worker_id, admin_id")
+    .eq("admin_id", admin_id);
   let instQ = supabase
     .from("installments")
-    .select("amount, paid_amount, is_penalty, loan_id, loans!inner(worker_id)");
+    .select("amount, paid_amount, is_penalty, loan_id, loans!inner(worker_id, admin_id)")
+    .eq("loans.admin_id", admin_id);
 
-  if (workerId) {
-    movQ = movQ.eq("worker_id", workerId);
-    loanQ = loanQ.eq("worker_id", workerId);
-    instQ = instQ.eq("loans.worker_id", workerId) as any;
+  if (worker_id) {
+    movQ = movQ.eq("worker_id", worker_id);
+    loanQ = loanQ.eq("worker_id", worker_id);
+    instQ = instQ.eq("loans.worker_id", worker_id) as any;
+  } else {
+    movQ = movQ.is("worker_id", null);
+    loanQ = loanQ.is("worker_id", null);
+    instQ = instQ.is("loans.worker_id", null) as any;
   }
 
-  const [{ data: movements }, { data: loans }, { data: installments }] = await Promise.all([
-    movQ, loanQ, instQ,
-  ]);
+  const [movRes, loanRes, instRes] = await Promise.all([movQ, loanQ, instQ]);
+  if (movRes.error) throw movRes.error;
+  if (loanRes.error) throw loanRes.error;
+  if (instRes.error) throw instRes.error;
+  const movements = movRes.data;
+  const loans = loanRes.data;
+  const installments = instRes.data;
 
   let money_lent = 0;
   let interest_receivable = 0;
@@ -384,16 +400,21 @@ export async function recalculateCashBalanceFromLedger() {
     0
   );
 
-  const current = await getCashBalance();
+  const { data: current, error: cbError } = await getCashBalanceResult({
+    workerId: worker_id,
+    adminId: admin_id,
+  });
+  if (cbError) throw cbError;
   if (!current) return;
 
-  await supabase.from("cash_balance").update({
+  const { error: updError } = await supabase.from("cash_balance").update({
     available_cash,
     money_lent,
     interest_receivable,
     penalty_receivable,
     updated_at: new Date().toISOString(),
   }).eq("id", current.id);
+  if (updError) throw updError;
 }
 
 export function getMovementTypeLabel(type: string): string {
