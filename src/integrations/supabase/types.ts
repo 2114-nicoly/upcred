@@ -128,6 +128,44 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_close_failures: {
+        Row: {
+          admin_id: string | null
+          cash_date: string
+          created_at: string
+          daily_cash_id: string | null
+          error_message: string
+          id: string
+          worker_id: string | null
+        }
+        Insert: {
+          admin_id?: string | null
+          cash_date: string
+          created_at?: string
+          daily_cash_id?: string | null
+          error_message: string
+          id?: string
+          worker_id?: string | null
+        }
+        Update: {
+          admin_id?: string | null
+          cash_date?: string
+          created_at?: string
+          daily_cash_id?: string | null
+          error_message?: string
+          id?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_close_failures_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_balance: {
         Row: {
           admin_id: string | null
@@ -548,6 +586,7 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           cash_date: string
+          close_origin: string | null
           closed_at: string | null
           closed_by: string | null
           closing_difference: number | null
@@ -583,6 +622,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           cash_date: string
+          close_origin?: string | null
           closed_at?: string | null
           closed_by?: string | null
           closing_difference?: number | null
@@ -618,6 +658,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           cash_date?: string
+          close_origin?: string | null
           closed_at?: string | null
           closed_by?: string | null
           closing_difference?: number | null
@@ -1911,6 +1952,16 @@ export type Database = {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
       }
+      _close_daily_cash_core: {
+        Args: {
+          p_actor: string
+          p_counted: number
+          p_daily_cash_id: string
+          p_note: string
+          p_origin: string
+        }
+        Returns: Json
+      }
       _daily_cash_emptiness_reason: {
         Args: { p_cash_id: string }
         Returns: string
@@ -2043,6 +2094,7 @@ export type Database = {
         Args: { p_daily_event_id: string; p_receipt: Json }
         Returns: undefined
       }
+      auto_close_previous_day: { Args: never; Returns: Json }
       build_daily_cash_snapshot_v2: {
         Args: { p_daily_cash_id: string }
         Returns: Json
