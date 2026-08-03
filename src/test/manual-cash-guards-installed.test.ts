@@ -10,7 +10,8 @@ import { resolve } from "node:path";
 const MIG_DIR = resolve(process.cwd(), "supabase/migrations");
 const FIX = (() => {
   const files = readdirSync(MIG_DIR).filter(f => f.endsWith(".sql")).sort();
-  return readFileSync(resolve(MIG_DIR, files[files.length - 1]), "utf8").replace(/\s+/g, " ");
+  const file = files.find(f => f.startsWith("20260803200043"))!;
+  return readFileSync(resolve(MIG_DIR, file), "utf8").replace(/\s+/g, " ");
 })();
 
 describe("triggers dos guards criados", () => {
