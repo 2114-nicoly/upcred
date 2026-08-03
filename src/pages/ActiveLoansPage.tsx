@@ -321,7 +321,11 @@ export default function ActiveLoansPage() {
     if (!loan) { setIsSubmitting(false); return; }
 
     try {
-      await assertCashOpen(quitarDate, activeCashScope);
+      await assertScopedCashOpen(quitarDate, {
+        workerId: loan.worker_id ?? null,
+        adminId: loan.admin_id ?? null,
+      });
+
       await settleLoan({
         loanId: quitarLoanId,
         clientId: (loan.clients?.id ?? ""),
