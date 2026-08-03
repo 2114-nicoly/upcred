@@ -1405,6 +1405,32 @@ export default function CaixaPage() {
         </Card>
       )}
 
+      {/* Estornos do dia (impacto líquido zero no caixa) */}
+      {estornosEventos.length > 0 && (
+        <Card className="border-warning/40">
+          <CardHeader className="pb-1.5 pt-3 px-3">
+            <CardTitle className="text-xs flex items-center justify-between">
+              <span className="flex items-center gap-1"><Undo2 className="h-3.5 w-3.5 text-warning" /> Estornos Hoje ({estornosEventos.length})</span>
+              <span className="text-sm font-bold text-warning tabular-nums">{formatCurrency(estornosTotal)}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-1">
+            <p className="text-[10px] text-muted-foreground">
+              Valores estornados não contam como recebido. O lançamento original é preservado.
+            </p>
+            {estornosEventos.slice(0, 5).map(ev => (
+              <div key={ev.id} className="flex items-center justify-between rounded-md bg-accent/40 px-2 py-1">
+                <p className="text-[11px] truncate flex-1 min-w-0">{ev.observation || "Estorno"}</p>
+                <span className="text-xs font-bold text-warning tabular-nums">
+                  {formatCurrency(Number(ev.amount_in || 0) + Number(ev.amount_out || 0))}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+
       {/* Action buttons */}
       <div className={`grid gap-2 ${showAjuste ? "grid-cols-4" : "grid-cols-3"}`}>
         <Button disabled={cashLocked || submitting} variant="outline" className="text-success border-success/50 text-xs h-9" onClick={() => setManualType("entrada_manual")}>
