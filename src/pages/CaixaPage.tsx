@@ -19,7 +19,12 @@ import {
   applyDailyCashScope,
 } from "@/lib/cash-utils";
 import { getDailyEvents, createDailyEvent, undoDailyEvent, getEventTypeLabel, getEventTypeColor, isFinancialEvent, isReversalEvent, DailyEvent, EXPENSE_CATEGORIES, type ExpenseCategory } from "@/lib/daily-events";
-import { assertCashOpen } from "@/lib/cash-lock";
+import { assertCashOpen, getTodayCashDate } from "@/lib/cash-lock";
+import { useOperationalDate } from "@/hooks/useActiveCash";
+import { fetchActiveCash } from "@/lib/active-cash";
+
+import ActiveCashNotice from "@/components/ActiveCashNotice";
+
 import { logAction, getCurrentActorIdentity } from "@/lib/audit-utils";
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Plus, Minus, Settings,
@@ -53,8 +58,21 @@ export default function CaixaPage() {
   // desta tela usam o worker_id dele (nunca o usuário autenticado).
   const { effectiveWorkerId, effectiveAdminId, viewingAsWorker, readOnly } = useEffectiveScope();
   const scopeArg = useMemo(() => ({ workerId: effectiveWorkerId, adminId: effectiveAdminId }), [effectiveWorkerId, effectiveAdminId]);
-  const today = format(new Date(), "yyyy-MM-dd");
-  const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
+  // Data operacional: ?date= respeita a consulta histórica; sem ?date=, espera
+  // a resolução do caixa ativo (abre a data dele, mesmo antiga) e só então
+  // recorre à data atual de São Paulo.
+  const {
+    date: operationalDate,
+    ready: dateReady,
+    setDate: setOperationalDate,
+    activeCashDate,
+    refreshActiveCash,
+    backToActiveCash,
+    viewingOtherDate,
+  } = useOperationalDate();
+  const today = getTodayCashDate();
+  const selectedDate = operationalDate ?? today;
+
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [events, setEvents] = useState<DailyEvent[]>([]);
   /** Inclui os originais estornados — usado SOMENTE para o efeito líquido. */
@@ -103,17 +121,10 @@ export default function CaixaPage() {
   const [countedAmount, setCountedAmount] = useState("");
   const [closeNote, setCloseNote] = useState("");
 
-  // sync URL ↔ state
-  useEffect(() => {
-    const urlDate = searchParams.get("date") || today;
-    setSelectedDate((current) => (current === urlDate ? current : urlDate));
-  }, [searchParams, today]);
-
   const handleDateChange = (newDate: string) => {
-    setSelectedDate(newDate);
-    if (newDate === today) setSearchParams({});
-    else setSearchParams({ date: newDate });
+    setOperationalDate(newDate);
   };
+
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -212,15 +223,17 @@ export default function CaixaPage() {
     }
   }, [selectedDate, effectiveWorkerId, effectiveAdminId, scopeArg]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (dateReady) fetchData(); }, [fetchData, dateReady]);
 
 
   const cashState: "sem_caixa" | "open" | "closed" =
     dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
   const isClosed = cashState === "closed";
   const isNotStarted = cashState === "sem_caixa";
-  // Block financial actions when closed OR not yet opened.
-  const cashLocked = isClosed || isNotStarted || readOnly;
+  // Bloqueia ações quando fechado, não iniciado, em modo visualização OU
+  // quando a data consultada não é a do caixa aberto.
+  const cashLocked = isClosed || isNotStarted || readOnly || viewingOtherDate;
+
   const workerIsClosed = !isAdmin && !isSuperAdmin && isClosed;
 
   // Apply hierarchical scope filter to events list
@@ -323,6 +336,9 @@ export default function CaixaPage() {
 
     setSubmitting(true);
     try {
+      // Toda movimentação usa a data do caixa ATIVO, nunca "hoje" automático.
+      await assertCashOpen(selectedDate, scopeArg);
+
       // RPC transacional única: saldo + movimentação + evento + auditoria.
       // Se qualquer etapa falhar, NADA fica registrado.
       const { error: rpcErr } = await supabase.rpc("register_manual_movement" as any, {
@@ -379,6 +395,9 @@ export default function CaixaPage() {
 
     setSubmitting(true);
     try {
+      // Despesa sempre na data do caixa ativo.
+      await assertCashOpen(cashDate, scopeArg);
+
       // 1) atomic RPC: cash_movement + daily_event + balance + audit (all-or-nothing for financials)
       const { data: rpcData, error: rpcErr } = await supabase.rpc("register_expense" as any, {
         p_cash_date: cashDate,
@@ -475,6 +494,13 @@ export default function CaixaPage() {
       // transação do fechamento. O navegador nunca envia payload pronto:
       // se qualquer etapa falhar, o caixa permanece aberto.
       await closeDailyCashWithSnapshot(selectedDate, counted, closeNote.trim() || null);
+      // Após fechar: reconsulta o caixa ativo. Se existir outro aberto (legado),
+      // abre a data dele; caso contrário volta para a data atual.
+      await refreshActiveCash();
+      const nextCash = await fetchActiveCash(scopeArg);
+      setOperationalDate(nextCash?.cashDate ?? getTodayCashDate());
+
+
 
       try {
         await logAction(
@@ -752,9 +778,18 @@ export default function CaixaPage() {
         </Card>
       )}
 
-      {isNotStarted && !readOnly && (
-        <OpenCashBanner cashDate={selectedDate} onOpened={fetchData} />
+      {activeCashDate && (
+        <ActiveCashNotice
+          activeCashDate={activeCashDate}
+          currentDate={selectedDate}
+          onBack={backToActiveCash}
+        />
       )}
+
+      {isNotStarted && !readOnly && (
+        <OpenCashBanner cashDate={selectedDate} onOpened={async () => { await refreshActiveCash(); await fetchData(); }} activeCashDate={activeCashDate} />
+      )}
+
 
       {/* Global balance cards */}
       {balance && (

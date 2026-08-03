@@ -2280,6 +2280,17 @@ export type Database = {
           worker_id: string
         }[]
       }
+      get_active_daily_cash_for_scope: {
+        Args: { p_admin_id?: string; p_worker_id?: string }
+        Returns: {
+          admin_id: string
+          cash_date: string
+          id: string
+          opening_balance: number
+          status: string
+          worker_id: string
+        }[]
+      }
       get_admin_id: { Args: { _user_id: string }; Returns: string }
       get_latest_credential: {
         Args: { p_kind: string; p_target_id: string }

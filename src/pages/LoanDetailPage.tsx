@@ -35,6 +35,8 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
 import { assertCashOpen } from "@/lib/cash-lock";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
+import { useActiveCash } from "@/hooks/useActiveCash";
+import { getTodayCashDate } from "@/lib/cash-lock";
 
 type Loan = {
   id: string;
@@ -100,6 +102,18 @@ type PaymentHistoryEntry = {
 };
 
 export default function LoanDetailPage() {
+
+  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
+  const { activeCashDate, scope: activeCashScope } = useActiveCash();
+  const opDate = activeCashDate ?? getTodayCashDate();
+
+  useEffect(() => {
+    setPayDate((d) => d || opDate);
+  }, [opDate]);
+
+  useEffect(() => {
+    setQuitarDate((d) => d || opDate);
+  }, [opDate]);
   const { loanId } = useParams();
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -113,7 +127,7 @@ export default function LoanDetailPage() {
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
-  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payDate, setPayDate] = useState("");
 
   // Penalty dialog
   const [penaltyDetailOpen, setPenaltyDetailOpen] = useState(false);
@@ -125,7 +139,7 @@ export default function LoanDetailPage() {
 
   // Quitar
   const [quitarOpen, setQuitarOpen] = useState(false);
-  const [quitarDate, setQuitarDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [quitarDate, setQuitarDate] = useState("");
 
   // Overdue dates
   const [overdueDatesOpen, setOverdueDatesOpen] = useState(false);
@@ -312,6 +326,7 @@ export default function LoanDetailPage() {
 
     setIsSubmitting(true);
     try {
+      await assertCashOpen(payDate, activeCashScope);
       // Penalty payment
       if (multaValue > 0) {
         try {
@@ -341,7 +356,7 @@ export default function LoanDetailPage() {
 
     setPayAmount("");
     setPayPenaltyAmount("");
-    setPayDate(format(new Date(), "yyyy-MM-dd"));
+    setPayDate(opDate);
     setPayOpen(false);
     setIsSubmitting(false);
     fetchData();
@@ -397,6 +412,7 @@ export default function LoanDetailPage() {
     if (!loanActive) { toast.error("Empréstimo inativo não pode ser quitado."); return; }
     setIsSubmitting(true);
     try {
+      await assertCashOpen(quitarDate, activeCashScope);
       await settleLoan({
         loanId: loanId!, clientId: loan.client_id,
         clientName: (loan.clients?.name ?? "Cliente removido"), cashDate: quitarDate,
@@ -408,7 +424,7 @@ export default function LoanDetailPage() {
     }
     setIsSubmitting(false);
     setQuitarOpen(false);
-    setQuitarDate(format(new Date(), "yyyy-MM-dd"));
+    setQuitarDate(opDate);
     fetchData();
   };
 
@@ -437,14 +453,14 @@ export default function LoanDetailPage() {
       const maxNumber = Math.max(...installments.map((i) => i.number));
       await supabase.from("installments").insert({
         loan_id: loanId!, number: maxNumber + 1, amount: penAmount,
-        due_date: format(new Date(), "yyyy-MM-dd"), is_penalty: true, status: "pending",
+        due_date: opDate, is_penalty: true, status: "pending",
       });
     }
 
     await updateCashBalance({ penalty_receivable: penAmount });
     try {
       await createDailyEvent({
-        cash_date: format(new Date(), "yyyy-MM-dd"),
+        cash_date: opDate,
         event_type: "multa_adicionada",
         client_id: loan?.client_id || null,
         loan_id: loanId!,
@@ -587,8 +603,7 @@ export default function LoanDetailPage() {
     setRenegSubmitting(true);
     try {
       // 0. Caixa do dia precisa estar aberto
-      const today = format(new Date(), "yyyy-MM-dd");
-      await assertCashOpen(today);
+      await assertCashOpen(opDate, activeCashScope);
 
       // 1. Snapshot + insert renegotiation row
       const { data: renegRow, error: renegErr } = await (supabase.from("loan_renegotiations" as any).insert({
@@ -639,7 +654,7 @@ export default function LoanDetailPage() {
         remaining_balance: renegCalc.totalAmount,
         installment_count: renegNumInstallments,
         payment_type: renegPaymentType,
-        loan_date: today,
+        loan_date: opDate,
         first_due_date: renegFirstDueDate || null,
         status: "open",
         is_cravo: loan.is_cravo,
@@ -670,7 +685,7 @@ export default function LoanDetailPage() {
 
       // 6. Daily event (sem movimento de caixa — renegociação não move dinheiro)
       await createDailyEvent({
-        cash_date: today,
+        cash_date: opDate,
         event_type: "renegociacao",
         client_id: loan.client_id,
         loan_id: newLoan.id,
@@ -1571,7 +1586,7 @@ export default function LoanDetailPage() {
       </Dialog>
 
       {/* Quitar Dialog */}
-      <Dialog open={quitarOpen} onOpenChange={(o) => { if (!o) { setQuitarOpen(false); setQuitarDate(format(new Date(), "yyyy-MM-dd")); } }}>
+      <Dialog open={quitarOpen} onOpenChange={(o) => { if (!o) { setQuitarOpen(false); setQuitarDate(opDate); } }}>
         <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Quitar Empréstimo</DialogTitle></DialogHeader>
           <div className="space-y-3">

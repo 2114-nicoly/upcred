@@ -23,6 +23,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
+import { useActiveCash } from "@/hooks/useActiveCash";
+import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
 
 type LoanWithClient = {
   id: string;
@@ -51,6 +53,18 @@ type LoanProgress = {
 };
 
 export default function ActiveLoansPage() {
+
+  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
+  const { activeCashDate, scope: activeCashScope } = useActiveCash();
+  const opDate = activeCashDate ?? getTodayCashDate();
+
+  useEffect(() => {
+    setPayDate((d) => d || opDate);
+  }, [opDate]);
+
+  useEffect(() => {
+    setQuitarDate((d) => d || opDate);
+  }, [opDate]);
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
@@ -74,11 +88,11 @@ export default function ActiveLoansPage() {
   const [payLoanId, setPayLoanId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
-  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payDate, setPayDate] = useState("");
 
   // Quitar dialog state
   const [quitarLoanId, setQuitarLoanId] = useState<string | null>(null);
-  const [quitarDate, setQuitarDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [quitarDate, setQuitarDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const toggleSelect = (id: string) => {
@@ -235,6 +249,7 @@ export default function ActiveLoansPage() {
 
     setIsSubmitting(true);
     try {
+      await assertCashOpen(payDate, activeCashScope);
       // Handle penalty payment
       if (multaValue > 0) {
         const loan = loans.find((l) => l.id === payLoanId);
@@ -278,7 +293,7 @@ export default function ActiveLoansPage() {
       setPayLoanId(null);
       setPayAmount("");
       setPayPenaltyAmount("");
-      setPayDate(format(new Date(), "yyyy-MM-dd"));
+      setPayDate(opDate);
       fetchData();
     }
   };
@@ -292,6 +307,7 @@ export default function ActiveLoansPage() {
     if (!loan) { setIsSubmitting(false); return; }
 
     try {
+      await assertCashOpen(quitarDate, activeCashScope);
       await settleLoan({
         loanId: quitarLoanId,
         clientId: (loan.clients?.id ?? ""),
@@ -305,7 +321,7 @@ export default function ActiveLoansPage() {
     } finally {
       setIsSubmitting(false);
       setQuitarLoanId(null);
-      setQuitarDate(format(new Date(), "yyyy-MM-dd"));
+      setQuitarDate(opDate);
       fetchData();
     }
   };
@@ -704,7 +720,7 @@ export default function ActiveLoansPage() {
       </Dialog>
 
       {/* Quitar Dialog */}
-      <Dialog open={!!quitarLoanId} onOpenChange={(o) => { if (!o) { setQuitarLoanId(null); setQuitarDate(format(new Date(), "yyyy-MM-dd")); } }}>
+      <Dialog open={!!quitarLoanId} onOpenChange={(o) => { if (!o) { setQuitarLoanId(null); setQuitarDate(opDate); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Quitar Empréstimo</DialogTitle>

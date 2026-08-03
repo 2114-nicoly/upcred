@@ -14,6 +14,8 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { isInstallmentCollectibleStatus } from "@/lib/status-constants";
+import { useActiveCash } from "@/hooks/useActiveCash";
+import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
 
 type Installment = {
   id: string;
@@ -39,6 +41,14 @@ type Loan = {
 };
 
 export default function LoanOverdueDetailPage() {
+
+  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
+  const { activeCashDate, scope: activeCashScope } = useActiveCash();
+  const opDate = activeCashDate ?? getTodayCashDate();
+
+  useEffect(() => {
+    setPayDate((d) => d || opDate);
+  }, [opDate]);
   const { loanId } = useParams();
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -48,7 +58,7 @@ export default function LoanOverdueDetailPage() {
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
-  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payDate, setPayDate] = useState("");
   const [editInstId, setEditInstId] = useState<string | null>(null);
   const [editInstAmount, setEditInstAmount] = useState("");
   const [editInstDueDate, setEditInstDueDate] = useState("");
@@ -98,6 +108,12 @@ export default function LoanOverdueDetailPage() {
   };
 
   const handlePay = async (id: string) => {
+    try {
+      await assertCashOpen(payDate, activeCashScope);
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto nesta data.");
+      return;
+    }
     const inst = installments.find((i) => i.id === id);
     if (!inst || !loan) return;
     const parcValue = payAmount ? parseFloat(payAmount) : null;
@@ -135,7 +151,7 @@ export default function LoanOverdueDetailPage() {
     }
 
     await updateLoanStatus();
-    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(format(new Date(), "yyyy-MM-dd")); setPayDialogId(null);
+    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
     fetchData();
   };
 

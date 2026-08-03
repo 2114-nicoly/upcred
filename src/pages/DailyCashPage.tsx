@@ -30,7 +30,11 @@ import {
 
 import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
 import { logAction } from "@/lib/audit-utils";
-import { isCashClosed } from "@/lib/cash-lock";
+import { isCashClosed, getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
+import { useOperationalDate } from "@/hooks/useActiveCash";
+import { fetchActiveCash } from "@/lib/active-cash";
+import ActiveCashNotice from "@/components/ActiveCashNotice";
+
 import { isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -271,8 +275,21 @@ export default function DailyCashPage() {
   }, [effectiveWorkerId, effectiveAdminId]);
   const [searchParams, setSearchParams] = useSearchParams();
   const dateParam = searchParams.get("date");
-  const [selectedDate, setSelectedDate] = useState(dateParam || format(new Date(), "yyyy-MM-dd"));
-  const today = format(new Date(), "yyyy-MM-dd");
+  // Data operacional compartilhada com o Caixa do Dia: respeita ?date=,
+  // senão espera o caixa ativo e usa a data dele (mesmo antiga).
+  const {
+    date: operationalDate,
+    ready: dateReady,
+    setDate: setOperationalDate,
+    activeCashDate,
+    refreshActiveCash,
+    backToActiveCash,
+    viewingOtherDate,
+    scope: activeCashScope,
+  } = useOperationalDate();
+  const today = getTodayCashDate();
+  const selectedDate = operationalDate ?? today;
+
 
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>("all");
   const [pendingInstallments, setPendingInstallments] = useState<InstallmentWithLoan[]>([]);
@@ -340,21 +357,12 @@ export default function DailyCashPage() {
     };
   }, []);
 
-  useEffect(() => {
-    const urlDate = dateParam || today;
-    setSelectedDate((current) => current === urlDate ? current : urlDate);
-  }, [dateParam, today]);
-
   useEffect(() => { setPayDate(selectedDate); setQuitarDate(selectedDate); localActionedLoanIds.current = new Set(); }, [selectedDate]);
 
   const handleDateChange = (newDate: string) => {
-    setSelectedDate(newDate);
-    if (newDate === today) {
-      setSearchParams({});
-    } else {
-      setSearchParams({ date: newDate });
-    }
+    setOperationalDate(newDate);
   };
+
 
   const changeDate = (offset: number) => {
     const d = new Date(selectedDate + "T12:00:00");
@@ -364,15 +372,19 @@ export default function DailyCashPage() {
 
   const isNotStarted = dailyCashStatus === "sem_caixa";
   // readOnly = admin/super admin visualizando um trabalhador: nada pode ser registrado.
-  const isClosed = dailyCashStatus === "closed" || isNotStarted || readOnly;
+  // viewingOtherDate = consultando data diferente do caixa aberto: ações bloqueadas.
+  const isClosed = dailyCashStatus === "closed" || isNotStarted || readOnly || viewingOtherDate;
   const isReallyClosed = dailyCashStatus === "closed";
   const actionsBlockedTitle = readOnly
     ? "Modo visualização: ações bloqueadas"
+    : viewingOtherDate
+    ? `Caixa aberto é de outra data (${activeCashDate})`
     : isNotStarted
     ? "Abra o caixa para registrar"
     : isReallyClosed
     ? "Caixa fechado: somente visualização"
     : "";
+
 
   const getOverdueDays = useCallback((inst: InstallmentWithLoan) => {
     const due = parseLocalNoonDate(inst.due_date);
@@ -722,7 +734,7 @@ export default function DailyCashPage() {
     }
   }, [selectedDate, effectiveWorkerId, effectiveAdminId, scopeArg, scopeRows]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (dateReady) fetchData(); }, [fetchData, dateReady]);
 
   const refreshDataInBackground = useCallback(() => {
     if (!isMountedRef.current) return;
@@ -795,7 +807,10 @@ export default function DailyCashPage() {
 
     setIsSubmitting(true);
     try {
+      // Pagamento sempre na data do caixa ATIVO.
+      await assertCashOpen(payDate, activeCashScope);
       if (multaValue > 0) {
+
         try {
           await registerPenaltyPayment({
             loanId: inst.loan_id, amount: multaValue,
@@ -848,7 +863,10 @@ export default function DailyCashPage() {
     const obs = composeNotPaidObservation(notPaidReason, notPaidObs);
     setIsSubmitting(true);
     try {
+      // Marcação de não pagamento sempre na data do caixa ATIVO.
+      await assertCashOpen(selectedDate, activeCashScope);
       const { data: { session } } = await supabase.auth.getSession();
+
       // Evita duplicidade: se já existe marcação para esta parcela no dia, não repete o evento.
       const { data: existingMark } = await supabase
         .from("not_paid_marks")
@@ -1124,7 +1142,10 @@ export default function DailyCashPage() {
 
     setIsSubmitting(true);
     try {
+      // Quitação sempre na data do caixa ATIVO.
+      await assertCashOpen(quitarDate, activeCashScope);
       await settleLoan({
+
         loanId: inst.loan_id,
         clientId: getInstClientId(inst)!,
         clientName: getInstClientName(inst),
@@ -1258,7 +1279,7 @@ export default function DailyCashPage() {
               <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; setQuitarDialogId(inst.id); }} title={actionsBlockedTitle || undefined}>
                 <DollarSign className="mr-2 h-4 w-4" /> Quitar Empréstimo
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${clientId}/new-loan?renewFrom=${inst.loan_id}`); }} title={actionsBlockedTitle || undefined}>
+              <DropdownMenuItem disabled={isClosed} onClick={() => { if (isClosed) return; navigate(`/clients/${clientId}/new-loan?renewFrom=${inst.loan_id}&date=${selectedDate}`); }} title={actionsBlockedTitle || undefined}>
                 <Plus className="mr-2 h-4 w-4" /> Renovar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate(`/loans/${inst.loan_id}`)}>
@@ -1509,9 +1530,20 @@ export default function DailyCashPage() {
         </div>
       )}
 
+      {activeCashDate && (
+        <div className="mb-3">
+          <ActiveCashNotice
+            activeCashDate={activeCashDate}
+            currentDate={selectedDate}
+            onBack={backToActiveCash}
+          />
+        </div>
+      )}
+
       {/* Date navigation */}
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
+
         {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
@@ -1533,7 +1565,7 @@ export default function DailyCashPage() {
               </p>
             </div>
             <div className="mt-2">
-              <OpenCashBanner cashDate={selectedDate} onOpened={() => fetchData({ silent: true })} />
+              <OpenCashBanner cashDate={selectedDate} activeCashDate={activeCashDate} onOpened={async () => { await refreshActiveCash(); void fetchData({ silent: true }); }} />
             </div>
           </>
         )}
@@ -1964,10 +1996,10 @@ export default function DailyCashPage() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="mb-2">
-          <DropdownMenuItem onClick={() => navigate("/new-loan")}>
+          <DropdownMenuItem onClick={() => navigate(`/new-loan?date=${selectedDate}`)}>
             Cliente existente
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => navigate("/new-loan?new_client=true")}>
+          <DropdownMenuItem onClick={() => navigate(`/new-loan?new_client=true&date=${selectedDate}`)}>
             Cadastrar novo cliente
           </DropdownMenuItem>
         </DropdownMenuContent>

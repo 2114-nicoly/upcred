@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Unlock, AlertTriangle, CalendarClock, Lock } from "lucide-react";
 import { useState } from "react";
 import { openDailyCash, classifyCashDate } from "@/lib/cash-lock";
+import { formatCashDate, openCashNoticeMessage } from "@/lib/active-cash";
 import { toast } from "sonner";
 
 type Props = {
@@ -11,19 +12,23 @@ type Props = {
   onOpened?: () => void;
   disabled?: boolean;
   compact?: boolean;
+  /** Data do caixa aberto do escopo — impede abrir outro caixa. */
+  activeCashDate?: string | null;
 };
 
 /**
  * Banner shown when the day has no daily_cash row yet (neutral state).
- * Opening is only allowed on the current date (America/Sao_Paulo).
+ * Opening is only allowed on the current date (America/Sao_Paulo) and only
+ * when there is no other cash already open for the scope.
  */
-export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact }: Props) {
+export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact, activeCashDate }: Props) {
   const [loading, setLoading] = useState(false);
   const kind = classifyCashDate(cashDate);
   const padding = compact ? "p-3 space-y-2" : "p-4 space-y-3";
+  const blockedByOpenCash = !!activeCashDate && activeCashDate !== cashDate;
 
   const handleOpen = async () => {
-    if (loading || kind !== "today") return;
+    if (loading || kind !== "today" || blockedByOpenCash) return;
     setLoading(true);
     try {
       await openDailyCash(cashDate, workerId ?? undefined);
@@ -36,6 +41,25 @@ export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled,
       setLoading(false);
     }
   };
+
+  if (blockedByOpenCash) {
+    return (
+      <Card className="border-warning/40 bg-warning/5">
+        <CardContent className={padding}>
+          <div className="flex items-start gap-2">
+            <CalendarClock className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Já existe um caixa aberto</p>
+              <p className="text-[11px] text-muted-foreground">
+                {openCashNoticeMessage(activeCashDate!)} Feche o caixa de {formatCashDate(activeCashDate!)} antes de abrir outro.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
 
   if (kind === "past") {
     return (

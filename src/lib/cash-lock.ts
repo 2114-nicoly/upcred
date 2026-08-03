@@ -22,17 +22,17 @@ export async function isCashClosed(cashDate: string): Promise<boolean> {
 }
 
 /**
- * Throws if the cash for the given date is closed.
- * Use at the start of any handler that mutates financial data for that date.
+ * Exige que exista um caixa ABERTO no escopo e que a operação esteja
+ * exatamente na data desse caixa. Não basta a data "não estar fechada".
  */
-export async function assertCashOpen(cashDate: string): Promise<void> {
-  const closed = await isCashClosed(cashDate);
-  if (closed) {
-    throw new Error(
-      "Caixa do dia já está fechado. Reabra o caixa antes de registrar essa operação."
-    );
-  }
+export async function assertCashOpen(
+  cashDate: string,
+  scope: { workerId?: string | null; adminId?: string | null } = {}
+): Promise<void> {
+  const { assertOperationDate } = await import("@/lib/active-cash");
+  await assertOperationDate(cashDate, scope);
 }
+
 
 /** Today's date (America/Sao_Paulo) as yyyy-MM-dd — same rule as the server. */
 export function getTodayCashDate(now: Date = new Date()): string {
