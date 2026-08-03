@@ -102,22 +102,23 @@ type PaymentHistoryEntry = {
 };
 
 export default function LoanDetailPage() {
-
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
-
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
-
-  useEffect(() => {
-    setQuitarDate((d) => d || opDate);
-  }, [opDate]);
   const { loanId } = useParams();
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [loan, setLoan] = useState<Loan | null>(null);
+
+  // Caixa do trabalhador DONO do empréstimo (nunca o caixa global/administrativo).
+  const loanScope: CashScope | null = loan
+    ? { workerId: loan.worker_id ?? null, adminId: loan.admin_id ?? null }
+    : null;
+  const scopedCash = useScopedActiveCash(loanScope);
+  const opDate = scopedCash.cashDate ?? "";
+
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+    setQuitarDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, loanId]);
+
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
