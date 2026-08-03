@@ -13,6 +13,7 @@ import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import { useMovementDays, MovementDay } from "@/hooks/useMovementDays";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import { toast } from "sonner";
+import { getCloseOriginLabel } from "@/lib/close-origin";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -66,7 +67,7 @@ export default function DailyCashHistoryPage() {
       doc.setFontSize(14);
       doc.text(`UpCred — Dia ${day.date}`, 14, 16);
       doc.setFontSize(10);
-      doc.text(`Status: ${day.status === "closed" ? "Fechado" : day.status === "open" ? "Aberto" : "—"}`, 14, 24);
+      doc.text(`Status: ${day.status === "closed" ? getCloseOriginLabel(day.closeOrigin) : day.status === "open" ? "Aberto" : "—"}`, 14, 24);
       autoTable(doc, {
         startY: 30,
         body: [
@@ -143,7 +144,7 @@ export default function DailyCashHistoryPage() {
                       <p className="text-[10px] text-muted-foreground">{day.date}</p>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> Fechado</Badge>}
+                      {day.status === "closed" && <Badge variant="secondary" className="text-[9px] h-4 gap-0.5"><Lock className="h-2.5 w-2.5" /> {getCloseOriginLabel(day.closeOrigin)}</Badge>}
                       {day.status === "open" && <Badge className="bg-success text-success-foreground text-[9px] h-4">Aberto</Badge>}
                       {day.status === "cancelled" && <Badge className="bg-orange-200 text-orange-900 text-[9px] h-4">Cancelado vazio</Badge>}
                       {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
