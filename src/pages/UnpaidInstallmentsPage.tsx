@@ -50,7 +50,7 @@ export default function UnpaidInstallmentsPage() {
   const [loan, setLoan] = useState<Loan | null>(null);
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
-  const [payAmount, setPayAmount] = useState("");
+  const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState("");
   const [editInstId, setEditInstId] = useState<string | null>(null);
