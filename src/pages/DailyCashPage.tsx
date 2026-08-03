@@ -50,7 +50,7 @@ import EmptyState from "@/components/EmptyState";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
+import { getDailyCollectionSummary, HISTORICAL_UNAVAILABLE_LABEL, type DailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
 import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
 
@@ -1577,9 +1577,15 @@ export default function DailyCashPage() {
               Não foi possível carregar os totais.
             </div>
           )}
+          {dailySummary.historicalIncomplete && (
+            <div className="text-[11px] text-warning font-medium">
+              Fechado automaticamente — histórico antigo incompleto. Previsto, atrasado e falta receber
+              não foram congelados neste dia.
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Previsto do dia</span>
-            <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(dailySummary.expectedToReceiveToday)}</span>
+            <span className="text-sm font-bold tabular-nums text-warning">{dailySummary.historicalIncomplete ? HISTORICAL_UNAVAILABLE_LABEL : formatCurrency(dailySummary.expectedToReceiveToday)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Recebido Hoje (total)</span>
@@ -1588,13 +1594,13 @@ export default function DailyCashPage() {
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Valor atrasado (dias anteriores)</span>
             <span className={`text-sm font-bold tabular-nums ${dailySummary.overdueAmount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-              {formatCurrency(dailySummary.overdueAmount)}
+              {dailySummary.historicalIncomplete ? HISTORICAL_UNAVAILABLE_LABEL : formatCurrency(dailySummary.overdueAmount)}
             </span>
           </div>
           <div className="flex items-center justify-between border-t border-border pt-2">
             <span className="text-xs font-bold">Falta Receber do dia</span>
             <span className={`text-base font-extrabold tabular-nums ${dailySummary.pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-              {formatCurrency(dailySummary.pendingToReceiveToday)}
+              {dailySummary.historicalIncomplete ? HISTORICAL_UNAVAILABLE_LABEL : formatCurrency(dailySummary.pendingToReceiveToday)}
             </span>
           </div>
 
