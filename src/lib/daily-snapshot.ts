@@ -4,6 +4,7 @@ import { DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
 import { loanProgressAt } from "@/lib/progress-utils";
 import { buildPaidGroupsFromFrozenEvents, type PaidGroup } from "@/lib/paid-groups";
+import { computeReversalSummary } from "@/lib/daily-totals";
 
 
 /**
