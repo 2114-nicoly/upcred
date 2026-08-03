@@ -8,16 +8,25 @@
  * Fechamentos automáticos são sempre somente leitura: para alterar o dia é
  * obrigatório o fluxo de solicitação de reabertura.
  */
-export type CloseOrigin = "manual" | "automatic_opened" | "automatic_not_opened";
+export type CloseOrigin =
+  | "manual"
+  | "automatic_opened"
+  | "automatic_not_opened"
+  | "legacy_auto_reconciliation";
 
 export const CLOSE_ORIGIN_LABEL: Record<CloseOrigin, string> = {
   manual: "Fechado manualmente",
   automatic_opened: "Fechado automaticamente",
   automatic_not_opened: "Caixa não foi aberto e foi fechado automaticamente",
+  legacy_auto_reconciliation: "Fechado automaticamente — histórico antigo incompleto",
 };
 
 export function normalizeCloseOrigin(value?: string | null): CloseOrigin {
-  return value === "automatic_opened" || value === "automatic_not_opened" ? value : "manual";
+  return value === "automatic_opened" ||
+    value === "automatic_not_opened" ||
+    value === "legacy_auto_reconciliation"
+    ? value
+    : "manual";
 }
 
 /** Rótulo exibível da origem do fechamento (padrão: manual). */
@@ -29,3 +38,9 @@ export function getCloseOriginLabel(value?: string | null): string {
 export function isAutomaticClose(value?: string | null): boolean {
   return normalizeCloseOrigin(value) !== "manual";
 }
+
+/** Dias antigos reconciliados não possuem histórico congelado completo. */
+export function isLegacyIncompleteClose(value?: string | null): boolean {
+  return normalizeCloseOrigin(value) === "legacy_auto_reconciliation";
+}
+

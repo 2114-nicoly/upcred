@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { getCloseOriginLabel, isAutomaticClose } from "@/lib/close-origin";
+import { getCloseOriginLabel, isAutomaticClose, isLegacyIncompleteClose } from "@/lib/close-origin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -718,15 +718,26 @@ export default function CaixaPage() {
         <Card className="border-warning/40 bg-warning/5">
           <CardContent className="p-2.5">
             <p className="text-[11px] text-warning font-medium">
-              Este caixa foi fechado automaticamente pelo sistema no fim do dia
-              {(dailyCashRow as any)?.close_origin === "automatic_not_opened"
-                ? " (o caixa não chegou a ser aberto)"
-                : ""}.
-              Ele não pode ser editado: para qualquer alteração é necessário solicitar a reabertura.
+              {isLegacyIncompleteClose((dailyCashRow as any)?.close_origin) ? (
+                <>
+                  Fechado automaticamente — histórico antigo incompleto. Este dia foi regularizado pelo
+                  sistema usando apenas os registros originais da data e não possui histórico congelado
+                  completo. Ele fica somente para visualização: qualquer alteração exige solicitar a reabertura.
+                </>
+              ) : (
+                <>
+                  Este caixa foi fechado automaticamente pelo sistema no fim do dia
+                  {(dailyCashRow as any)?.close_origin === "automatic_not_opened"
+                    ? " (o caixa não chegou a ser aberto)"
+                    : ""}
+                  . Ele não pode ser editado: para qualquer alteração é necessário solicitar a reabertura.
+                </>
+              )}
             </p>
           </CardContent>
         </Card>
       )}
+
 
 
 
