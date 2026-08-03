@@ -2045,6 +2045,10 @@ export type Database = {
         Args: { p_daily_cash_id: string }
         Returns: Json
       }
+      _legacy_snapshot_payload: {
+        Args: { p_daily_cash_id: string }
+        Returns: Json
+      }
       _record_auto_close_failure: {
         Args: {
           p_admin: string
@@ -2230,6 +2234,7 @@ export type Database = {
         Args: { p_worker_id: string }
         Returns: undefined
       }
+      fix_legacy_snapshots: { Args: { p_limit?: number }; Returns: Json }
       generate_admin_login_codigo: { Args: never; Returns: string }
       generate_worker_login_codigo: { Args: never; Returns: string }
       get_admin_id: { Args: { _user_id: string }; Returns: string }
