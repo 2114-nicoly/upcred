@@ -64,7 +64,7 @@ export default function CaixaPage() {
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [snapshot, setSnapshot] = useState<DailyCashSnapshotPayload | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [collectionSummary, setCollectionSummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false });
+  const [collectionSummary, setCollectionSummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, reversedToday: 0, hasError: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
   const receivedToday = collectionSummary.receivedToday;
