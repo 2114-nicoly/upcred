@@ -203,7 +203,7 @@ export async function getDailyCollectionSummary(
           ) || 0,
           pendingToReceiveToday: Number(ds.pendingToReceiveToday) || 0,
           overdueAmount: Number(ds.overdueAmount ?? 0) || 0,
-          reversedToday: Number(ds.reversedToday ?? 0) || 0,
+          reversedToday: Number((ds as any).reversedToday ?? 0) || 0,
 
           cashExpectedForClosing: Number(ds.cashExpectedForClosing) || 0,
           hasError: false,
