@@ -341,7 +341,7 @@ export default function OverdueLoansPage() {
         loan_id: inst.loan_id,
         number: maxNum + 1,
         amount,
-        due_date: opDate,
+        due_date: penaltyDate,
         is_penalty: true,
         status: "pending",
       });
@@ -349,7 +349,7 @@ export default function OverdueLoansPage() {
 
     try {
       await createDailyEvent({
-        cash_date: opDate,
+        cash_date: penaltyDate,
         event_type: "multa_adicionada",
         client_id: inst.loans?.client_id || null,
         loan_id: inst.loan_id,
