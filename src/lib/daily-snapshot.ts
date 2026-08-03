@@ -629,11 +629,20 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
       adminId: scope.admin_id,
     });
     const cb = requireSnapshotQuery<any>("cash_balance", cbRes as any);
-    const availableCash = Number((cb as any)?.available_cash);
-    if (!cb || !Number.isFinite(availableCash)) {
+    const rawCash = (cb as any)?.available_cash;
+    const availableCash = typeof rawCash === "string" && rawCash.trim() !== "" ? Number(rawCash) : rawCash;
+    if (!cb || typeof availableCash !== "number" || !Number.isFinite(availableCash)) {
       console.error("[daily-snapshot] cash_balance ausente ou inválido", scope);
       throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
     }
+    if (
+      ((cb as any).worker_id !== undefined && ((cb as any).worker_id ?? null) !== scope.worker_id) ||
+      ((cb as any).admin_id !== undefined && ((cb as any).admin_id ?? null) !== scope.admin_id)
+    ) {
+      console.error("[daily-snapshot] cash_balance de outro escopo", scope);
+      throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
+    }
+
 
 
     portfolioState = {
