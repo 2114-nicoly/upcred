@@ -290,6 +290,22 @@ export default function OverdueLoansPage() {
     const amount = parseFloat(penaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
 
+    // Sem caixa aberto do trabalhador dono, nada é gravado.
+    let penaltyDate: string;
+    try {
+      const scope: CashScope = {
+        workerId: (inst as any).loans?.worker_id ?? null,
+        adminId: (inst as any).loans?.admin_id ?? null,
+      };
+      const active = await assertScopedCashOpen(scopedCash.cashDate ?? "", scope);
+      penaltyDate = active.cashDate;
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar a multa.");
+      return;
+    }
+
+
+
     const { data: { session } } = await supabase.auth.getSession();
     await supabase.from("penalties").insert({
       loan_id: inst.loan_id,
