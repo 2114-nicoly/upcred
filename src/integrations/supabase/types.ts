@@ -2005,6 +2005,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _assert_active_cash_date: {
+        Args: { p_admin: string; p_cash_date: string; p_worker: string }
+        Returns: undefined
+      }
       _cash_is_closed_for: {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
@@ -2086,6 +2090,17 @@ export type Database = {
       _scope_oldest_open_cash_date: {
         Args: { p_admin: string; p_before: string; p_worker: string }
         Returns: string
+      }
+      _scope_open_cash: {
+        Args: { p_admin: string; p_worker: string }
+        Returns: {
+          admin_id: string
+          cash_date: string
+          id: string
+          opening_balance: number
+          status: string
+          worker_id: string
+        }[]
       }
       _scope_pending_cash_dates: {
         Args: { p_admin: string; p_before: string; p_worker: string }
@@ -2254,6 +2269,17 @@ export type Database = {
       fix_legacy_snapshots: { Args: { p_limit?: number }; Returns: Json }
       generate_admin_login_codigo: { Args: never; Returns: string }
       generate_worker_login_codigo: { Args: never; Returns: string }
+      get_active_daily_cash: {
+        Args: { p_worker_id?: string }
+        Returns: {
+          admin_id: string
+          cash_date: string
+          id: string
+          opening_balance: number
+          status: string
+          worker_id: string
+        }[]
+      }
       get_admin_id: { Args: { _user_id: string }; Returns: string }
       get_latest_credential: {
         Args: { p_kind: string; p_target_id: string }
