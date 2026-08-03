@@ -300,8 +300,9 @@ export default function ActiveLoansPage() {
           toast.success(`Parcela: ${formatCurrency(parcValue)} registrado!`);
         }
       }
-    } catch (e) {
-      toast.error("Erro ao processar pagamento");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao processar pagamento");
+
     } finally {
       setIsSubmitting(false);
       setPayLoanId(null);
