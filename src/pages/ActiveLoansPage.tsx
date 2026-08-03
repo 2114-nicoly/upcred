@@ -87,6 +87,23 @@ export default function ActiveLoansPage() {
   const [quitarDate, setQuitarDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // --- Caixa ativo do empréstimo selecionado (nunca o caixa global) ---
+  const actionLoanId = payLoanId ?? quitarLoanId;
+  const actionLoan = loans.find((l) => l.id === actionLoanId) ?? null;
+  const actionScope: CashScope | null = actionLoan
+    ? { workerId: actionLoan.worker_id ?? null, adminId: actionLoan.admin_id ?? null }
+    : null;
+  const scopedCash = useScopedActiveCash(actionScope);
+  const opDate = scopedCash.cashDate ?? "";
+
+  // Troca de empréstimo/trabalhador: descarta a data anterior e usa a nova.
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+    setQuitarDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, actionLoanId]);
+
+
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
