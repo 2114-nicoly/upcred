@@ -335,8 +335,9 @@ export default function ActiveLoansPage() {
         origin: "emprestimos_ativos",
       });
       toast.success("Empréstimo quitado!");
-    } catch {
-      toast.error("Erro ao quitar, recarregando...");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao quitar, recarregando...");
+
     } finally {
       setIsSubmitting(false);
       setQuitarLoanId(null);
