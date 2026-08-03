@@ -437,6 +437,14 @@ export default function LoanDetailPage() {
     const inst = installments.find((i) => i.id === installmentId);
     if (!inst) return;
 
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     await supabase.from("penalties").insert({
       loan_id: loanId!, installment_id: installmentId,
@@ -489,6 +497,13 @@ export default function LoanDetailPage() {
     if (!newAmount || newAmount <= 0) { toast.error("Informe um valor válido"); return; }
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
     const diff = newAmount - Number(penalty.amount);
     await supabase.from("penalties").update({ amount: newAmount, observation: editPenaltyObs || penalty.observation }).eq("id", penaltyId);
     const srcInst = installments.find((i) => i.id === penalty.installment_id);
@@ -520,6 +535,13 @@ export default function LoanDetailPage() {
   const handleDeletePenalty = async (penaltyId: string) => {
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id || null;
     // Soft-cancel: preserva histórico financeiro
@@ -555,6 +577,14 @@ export default function LoanDetailPage() {
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
     const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
     if (!target) { toast.error("Nenhuma parcela disponível"); return; }
+    // Nada é gravado sem o caixa aberto do trabalhador dono do empréstimo.
+    try {
+      await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
+    } catch (err: any) {
+      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      return;
+    }
+
     const obs = overduePenaltyObs ? `${overduePenaltyObs} (Ref: ${overduePenaltyDate})` : `Multa ref. atraso ${overduePenaltyDate}`;
     await handleAddPenalty(target.id, amount, obs);
     setOverduePenaltyDate(null); setOverduePenaltyAmount(""); setOverduePenaltyObs("");
