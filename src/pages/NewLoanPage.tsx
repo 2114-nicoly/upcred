@@ -143,7 +143,7 @@ export default function NewLoanPage() {
     const fetchRenewalLoan = async () => {
       const { data } = await supabase
         .from("loans")
-        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance, installment_amount, total_amount")
+        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance, total_amount")
         .eq("id", renewFromLoanId)
         .single();
       if (data) {
@@ -154,8 +154,7 @@ export default function NewLoanPage() {
         setInstallmentCount(String(data.installment_count));
         setRenewOldRemaining(Number(data.remaining_balance) || 0);
         setRenewOldInstAmount(
-          Number((data as any).installment_amount ?? 0) ||
-          (Number((data as any).total_amount ?? 0) / Math.max(1, Number(data.installment_count) || 1)),
+          Number((data as any).total_amount ?? 0) / Math.max(1, Number(data.installment_count) || 1),
         );
       }
     };
