@@ -196,26 +196,66 @@ export function requireSnapshotQuery<T = any>(
   return (result.data ?? ([] as unknown as T)) as T;
 }
 
+export const SNAPSHOT_SCOPE_INVALID_MESSAGE =
+  "Não foi possível validar a empresa e o trabalhador deste caixa. O fechamento foi cancelado.";
+
+/**
+ * Valida o vínculo empresa/trabalhador ANTES de montar qualquer parte do
+ * snapshot. Administrador é obrigatório; trabalhador (quando informado) deve
+ * pertencer exatamente àquela empresa.
+ */
+async function assertScopeOwnership(scope: SnapshotScope): Promise<void> {
+  const adminId = (scope.admin_id ?? "").trim();
+  if (!adminId) {
+    console.error("[daily-snapshot] adminId obrigatório ausente", scope);
+    throw new Error(SNAPSHOT_SCOPE_INVALID_MESSAGE);
+  }
+  if (scope.worker_id) {
+    const { data, error } = await supabase
+      .from("workers")
+      .select("id, parent_admin_id")
+      .eq("id", scope.worker_id)
+      .eq("parent_admin_id", adminId)
+      .maybeSingle();
+    if (error || !data || (data as any).parent_admin_id !== adminId) {
+      console.error("[daily-snapshot] trabalhador não pertence à empresa", { scope, error });
+      throw new Error(SNAPSHOT_SCOPE_INVALID_MESSAGE);
+    }
+  }
+}
+
 /** Nomes congelados do escopo (trabalhador / empresa-administrador). */
 async function loadScopeNames(scope: SnapshotScope) {
   let workerName: string | null = null;
   let adminName: string | null = null;
   if (scope.worker_id) {
-    const res = await supabase.from("workers").select("nome").eq("id", scope.worker_id).maybeSingle();
+    const res = await supabase
+      .from("workers")
+      .select("nome, parent_admin_id")
+      .eq("id", scope.worker_id)
+      .eq("parent_admin_id", scope.admin_id as string)
+      .maybeSingle();
     const row = requireSnapshotQuery<any>("workers (nome do trabalhador)", res as any);
     workerName = (row as any)?.nome ?? null;
-    if (!workerName) {
+    if (!row || !workerName) {
       console.error("[daily-snapshot] nome do trabalhador não encontrado", scope);
       throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
     }
   }
-  if (scope.admin_id) {
-    const res = await supabase.from("admins").select("nome").eq("id", scope.admin_id).maybeSingle();
-    const row = requireSnapshotQuery<any>("admins (nome da empresa)", res as any);
-    adminName = (row as any)?.nome ?? null;
+  const resA = await supabase
+    .from("admins")
+    .select("nome")
+    .eq("id", scope.admin_id as string)
+    .maybeSingle();
+  const rowA = requireSnapshotQuery<any>("admins (nome da empresa)", resA as any);
+  adminName = (rowA as any)?.nome ?? null;
+  if (!rowA || !adminName) {
+    console.error("[daily-snapshot] nome da empresa não encontrado", scope);
+    throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
   }
   return { worker_name: workerName, admin_name: adminName };
 }
+
 
 /**
  * Isolamento OBRIGATÓRIO do snapshot. Não depende da RLS:
