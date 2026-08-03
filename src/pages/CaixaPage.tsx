@@ -57,6 +57,8 @@ export default function CaixaPage() {
   const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [events, setEvents] = useState<DailyEvent[]>([]);
+  /** Inclui os originais estornados — usado SOMENTE para o efeito líquido. */
+  const [allEvents, setAllEvents] = useState<DailyEvent[]>([]);
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
@@ -116,9 +118,10 @@ export default function CaixaPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [bal, dayEvents, dcRes] = await Promise.all([
+      const [bal, dayEvents, dayEventsAll, dcRes] = await Promise.all([
         getCashBalance(scopeArg),
         getDailyEvents(selectedDate, { workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+        getDailyEvents(selectedDate, { includeReversed: true, workerId: effectiveWorkerId, adminId: effectiveAdminId }),
         applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope(scopeArg)).maybeSingle(),
       ]);
       setBalance(bal);
@@ -167,6 +170,17 @@ export default function CaixaPage() {
 
       const effectiveEvents = snap?.events ?? dayEvents;
       setEvents(effectiveEvents);
+      // Efeito líquido do caixa exige o PAR completo (original + contrapartida).
+      const effectiveAll = snap
+        ? (() => {
+            const byId = new Map<string, DailyEvent>();
+            for (const e of [...(snap.events || []), ...((snap.reversed_events || []) as DailyEvent[])]) {
+              if (e?.id) byId.set(e.id, e);
+            }
+            return [...byId.values()];
+          })()
+        : dayEventsAll;
+      setAllEvents(effectiveAll);
 
       // Fetch client names for all events
       const namesFromSnapshot: Record<string, string> = { ...(snap?.client_names || {}) };
@@ -214,8 +228,13 @@ export default function CaixaPage() {
   if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
   if (isAdmin && selectedWorkerId) scopedEvents = scopedEvents.filter((e: any) => e.worker_id === selectedWorkerId);
 
+  let scopedAllEvents = allEvents;
+  if (isAdmin && selectedAdminId) scopedAllEvents = scopedAllEvents.filter((e: any) => e.admin_id === selectedAdminId);
+  if (isAdmin && selectedWorkerId) scopedAllEvents = scopedAllEvents.filter((e: any) => e.worker_id === selectedWorkerId);
+
   // Unified totals from daily_events (live, used when not yet closed).
-  const liveTotals = computeDailyTotals(scopedEvents as any, 0);
+  // Usa o par completo: original estornado + contrapartida => efeito líquido zero.
+  const liveTotals = computeDailyTotals(scopedAllEvents as any, 0);
   const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
   // Summary: quando fechado, usa valores gravados no fechamento (snapshot imutável).
