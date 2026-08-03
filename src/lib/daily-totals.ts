@@ -52,6 +52,26 @@ const num = (v: unknown): number => {
 
 const isReversalType = (t: string) => String(t || "").startsWith("estorno");
 
+/**
+ * Estornos do período: SEMPRE o valor absoluto das contrapartidas
+ * (`reverses_event_id` preenchido ou event_type `estorno_*`), contado UMA vez.
+ * O lançamento original estornado nunca é somado aqui.
+ */
+export function computeReversalSummary(
+  events: DailyEventLike[] | null | undefined
+): { total: number; count: number } {
+  let total = 0;
+  let count = 0;
+  for (const e of events || []) {
+    if (!e) continue;
+    const isCounter = !!e.reverses_event_id || isReversalType(e.event_type);
+    if (!isCounter) continue;
+    total += Math.abs(num(e.amount_in)) + Math.abs(num(e.amount_out));
+    count += 1;
+  }
+  return { total, count };
+}
+
 export function computeDailyTotals(
   events: DailyEventLike[],
   openingBalance = 0

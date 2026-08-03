@@ -199,8 +199,8 @@ function totalsFromSnapshot(payload: DailyCashSnapshotPayload, cashRow: any): Fr
     manualIn: Number(t.manual_in || 0),
     manualOut: Number(t.manual_out || 0),
     expenses: Number(t.expenses || 0),
-    estornos: reversed.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
-    estornosCount: reversed.length,
+    estornos: t.estornos != null ? Number(t.estornos) : computeReversalSummary(reversed as any).total,
+    estornosCount: t.estornos_count != null ? Number(t.estornos_count) : computeReversalSummary(reversed as any).count,
     notPaidCount: Number(t.not_paid_count || 0),
     eventsCount: Number(t.events_count ?? events.length),
   };
@@ -213,7 +213,7 @@ function totalsFromEvents(events: DailyEvent[], cashRow: any): FrozenDayTotals {
   const counted = cashRow?.counted_closing_balance != null ? Number(cashRow.counted_closing_balance) : null;
   const expected = cashRow?.expected_closing_balance != null ? Number(cashRow.expected_closing_balance) : null;
   const previsto = opening + core.recebidoTotal + t.entradasManuais - core.emprestado - t.saidasManuais - t.despesas;
-  const reversedEvents = events.filter((e) => e.reversed_at);
+  const reversalSummary = computeReversalSummary(events as any);
   return {
     opening,
     finalCash: counted ?? expected ?? previsto,
@@ -229,8 +229,8 @@ function totalsFromEvents(events: DailyEvent[], cashRow: any): FrozenDayTotals {
     manualIn: t.entradasManuais,
     manualOut: t.saidasManuais,
     expenses: t.despesas,
-    estornos: reversedEvents.reduce((s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0),
-    estornosCount: reversedEvents.length,
+    estornos: reversalSummary.total,
+    estornosCount: reversalSummary.count,
     notPaidCount: t.naoPagos,
     eventsCount: events.filter((e) => !e.reversed_at).length,
   };
