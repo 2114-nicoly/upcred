@@ -10,9 +10,9 @@ import { resolve } from "node:path";
 const MIG_DIR = resolve(process.cwd(), "supabase/migrations");
 const LATEST = (() => {
   const files = readdirSync(MIG_DIR).filter(f => f.endsWith(".sql")).sort();
-  // regra de caixa manual: migration base (v61) + correções posteriores
+  // regra de caixa manual: migration base (v61) + correção dos guards
   return files
-    .slice(-2)
+    .filter(f => f.startsWith("20260803194921") || f.startsWith("20260803200043"))
     .map(f => readFileSync(resolve(MIG_DIR, f), "utf8"))
     .join("\n")
     .replace(/\s+/g, " ");
