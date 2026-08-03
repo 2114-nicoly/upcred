@@ -45,10 +45,11 @@ const baseDB = (): Record<string, Row[]> => ({
     { id: "c9", name: "Cliente 9" },
   ],
   workers: [
-    { id: W1, nome: "Trabalhador 1" },
-    { id: W2, nome: "Trabalhador 2" },
-    { id: W3, nome: "Trabalhador 3" },
+    { id: W1, nome: "Trabalhador 1", parent_admin_id: ADMIN_A },
+    { id: W2, nome: "Trabalhador 2", parent_admin_id: ADMIN_A },
+    { id: W3, nome: "Trabalhador 3", parent_admin_id: ADMIN_B },
   ],
+
   admins: [
     { id: ADMIN_A, nome: "Empresa A" },
     { id: ADMIN_B, nome: "Empresa B" },
