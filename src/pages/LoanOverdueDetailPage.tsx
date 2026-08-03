@@ -16,6 +16,8 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { isInstallmentCollectibleStatus } from "@/lib/status-constants";
 import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, validatePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 
 type Installment = {
   id: string;
@@ -49,7 +51,7 @@ export default function LoanOverdueDetailPage() {
   const [loan, setLoan] = useState<Loan | null>(null);
   const [loading, setLoading] = useState(true);
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
-  const [payAmount, setPayAmount] = useState("");
+  const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState("");
   const [editInstId, setEditInstId] = useState<string | null>(null);
@@ -121,9 +123,13 @@ export default function LoanOverdueDetailPage() {
     }
     const inst = installments.find((i) => i.id === id);
     if (!inst || !loan) return;
-    const parcValue = payAmount ? parseFloat(payAmount) : null;
+    const { amount: parcValue, error: amountError } = validatePaymentAmount(
+      payState,
+      Number(inst.amount),
+      Number(loan.remaining_balance ?? 0),
+    );
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (amountError) { toast.error(amountError); return; }
 
     try {
       if (multaValue > 0) {
@@ -137,26 +143,22 @@ export default function LoanOverdueDetailPage() {
         } catch { toast.error("Nenhuma multa registrada para abater"); }
       }
 
-      if (parcValue !== null || !payPenaltyAmount) {
-        const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-        const paidValue = parcValue ?? instRemaining;
-
-        if (paidValue > 0) {
-          await registerPayment({
-            loanId: loanId!, amount: paidValue,
-            clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
-            cashDate: payDate, origin: "detalhe_atrasados",
-            installmentId: inst.id, startInstNumber: inst.number,
-          });
-          toast.success(`Parcela: ${formatCurrency(paidValue)} registrado!`);
-        }
+      if (parcValue > 0) {
+        await registerPayment({
+          loanId: loanId!, amount: parcValue,
+          clientId: loan.client_id, clientName: (loan.clients?.name ?? "Cliente removido"),
+          cashDate: payDate, origin: "detalhe_atrasados",
+          installmentId: inst.id, startInstNumber: inst.number,
+          observation: resolveObservation(payState, Number(inst.amount)),
+        });
+        toast.success(`Parcela: ${formatCurrency(parcValue)} registrado!`);
       }
     } catch {
       toast.error("Erro ao processar pagamento");
     }
 
     await updateLoanStatus();
-    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
+    setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
     fetchData();
   };
 
@@ -257,7 +259,7 @@ export default function LoanOverdueDetailPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
+                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); } }}>
                       <DialogTrigger asChild>
                         <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
                           <Plus className="mr-1 h-3 w-3" /> Pagamento
@@ -268,10 +270,12 @@ export default function LoanOverdueDetailPage() {
                         <div className="space-y-3">
                           <p className="text-sm text-muted-foreground">{(loan?.clients?.name ?? "Cliente removido")} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}</p>
                           {Number(inst.paid_amount) > 0 && <p className="text-sm">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
-                          <div>
-                            <Label>Valor da parcela recebido</Label>
-                            <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                          </div>
+                          <PaymentAmountSelector
+                            installmentAmount={Number(inst.amount)}
+                            remainingBalance={Number(loan?.remaining_balance ?? 0)}
+                            state={payState}
+                            onChange={setPayState}
+                          />
                           <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                             <Label>Valor destinado à multa (opcional)</Label>
                             <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
