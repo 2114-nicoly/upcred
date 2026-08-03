@@ -72,30 +72,36 @@ export type FinancialScope = { worker_id: string | null; admin_id: string };
 export const SCOPE_ADMIN_REQUIRED_MESSAGE =
   "Não foi possível determinar a empresa (admin) desta operação financeira. Faça login novamente ou informe o escopo.";
 
+export const SCOPE_WORKER_ADMIN_MISMATCH_MESSAGE =
+  "O trabalhador informado não pertence à empresa (admin) informada nesta operação financeira.";
+
 /**
  * Resolve um escopo financeiro COMPLETO. Nunca devolve admin_id nulo.
  *
- * - escopo explícito de trabalhador: worker_id informado + admin_id informado
- *   (ou o `parent_admin_id` do próprio trabalhador quando omitido);
- * - escopo explícito de administrador: worker_id IS NULL + admin_id informado;
- * - sem escopo explícito: resolve pelo usuário autenticado (trabalhador ->
- *   worker_id + parent_admin_id; admin -> worker_id NULL + admins.id).
+ * Regra: se um OBJETO de escopo for informado, ele é EXPLÍCITO — mesmo com
+ * campos nulos. Nesse caso o adminId é obrigatório, nunca é inferido pelo
+ * trabalhador e nunca é substituído pelo usuário autenticado. Quando há
+ * workerId, o vínculo `workers.parent_admin_id = adminId` é validado.
  *
- * Lança erro quando o admin_id não puder ser determinado.
+ * Somente quando NENHUM objeto de escopo é informado o escopo é resolvido
+ * pelo usuário autenticado.
  */
 export async function resolveFinancialScope(scope?: ExplicitScope): Promise<FinancialScope> {
-  if (scope?.workerId) {
-    let admin_id = scope.adminId ?? null;
-    if (!admin_id) {
-      const { data, error } = await supabase
-        .from("workers").select("parent_admin_id").eq("id", scope.workerId).maybeSingle();
-      if (error) throw error;
-      admin_id = (data as any)?.parent_admin_id ?? null;
-    }
+  if (scope !== undefined && scope !== null) {
+    const admin_id = scope.adminId ?? null;
     if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
-    return { worker_id: scope.workerId, admin_id };
+    const worker_id = scope.workerId ?? null;
+    if (worker_id) {
+      const { data, error } = await supabase
+        .from("workers").select("id, parent_admin_id").eq("id", worker_id).maybeSingle();
+      if (error) throw error;
+      if (!data || (data as any).parent_admin_id !== admin_id) {
+        throw new Error(SCOPE_WORKER_ADMIN_MISMATCH_MESSAGE);
+      }
+      return { worker_id, admin_id };
+    }
+    return { worker_id: null, admin_id };
   }
-  if (scope?.adminId) return { worker_id: null, admin_id: scope.adminId };
 
   const { data: { session } } = await supabase.auth.getSession();
   const uid = session?.user?.id ?? null;
@@ -117,6 +123,7 @@ export async function resolveFinancialScope(scope?: ExplicitScope): Promise<Fina
   if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
   return { worker_id: null, admin_id };
 }
+
 
 /**
  * Returns the daily_cash scope (worker_id/admin_id).
