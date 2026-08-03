@@ -38,7 +38,7 @@ import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals, getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
-import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
+import { loadDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
@@ -520,7 +520,7 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
-      toast.error(err?.message || "Erro ao fechar caixa");
+      toast.error((err?.message || "Erro ao fechar caixa") + " O caixa permaneceu aberto.");
     } finally {
       setSubmitting(false);
     }
