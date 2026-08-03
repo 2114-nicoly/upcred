@@ -375,6 +375,7 @@ export async function getDailyCollectionSummary(
     reversedToday,
 
     hasError,
+    historicalIncomplete: false,
   };
 }
 
