@@ -82,13 +82,18 @@ export function FinancialDetails({ stats }: { stats: WorkerStats }) {
 
 /* ---------- Resumo dos trabalhadores (Admin e SuperAdmin) ---------- */
 
-type CashStatus = "open" | "closed" | "not_opened";
+type CashStatus = "open" | "closed" | "not_opened" | "closed_auto" | "closed_auto_not_opened";
 
 function statusLabel(s: CashStatus) {
   if (s === "open") return { text: "Caixa aberto", variant: "default" as const };
-  if (s === "closed") return { text: "Caixa fechado", variant: "secondary" as const };
+  if (s === "closed") return { text: "Fechado manualmente", variant: "secondary" as const };
+  if (s === "closed_auto") return { text: "Fechado automaticamente", variant: "secondary" as const };
+  if (s === "closed_auto_not_opened") {
+    return { text: "Caixa não foi aberto e foi fechado automaticamente", variant: "secondary" as const };
+  }
   return { text: "Não aberto", variant: "outline" as const };
 }
+
 
 /**
  * Card compacto por trabalhador ativo, reutilizado pelo Administrador e
