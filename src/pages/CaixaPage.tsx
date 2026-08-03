@@ -38,7 +38,7 @@ import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
-import { computeDailyTotals, getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
+import { computeDailyTotals, getDailyCollectionSummary, HISTORICAL_UNAVAILABLE_LABEL, type DailyCollectionSummary } from "@/lib/daily-totals";
 import { loadDailyCashSnapshot, closeDailyCashWithSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
@@ -66,7 +66,7 @@ export default function CaixaPage() {
   const [dailyCashRow, setDailyCashRow] = useState<any | null>(null);
   const [snapshot, setSnapshot] = useState<DailyCashSnapshotPayload | null>(null);
   const [inheritedOpening, setInheritedOpening] = useState<number>(0);
-  const [collectionSummary, setCollectionSummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, reversedToday: 0, hasError: false });
+  const [collectionSummary, setCollectionSummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, reversedToday: 0, hasError: false, historicalIncomplete: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   const expectedToReceiveToday = collectionSummary.expectedToReceiveToday;
   const receivedToday = collectionSummary.receivedToday;
@@ -803,9 +803,15 @@ export default function CaixaPage() {
             {collectionSummary.hasError && (
               <p className="text-[11px] text-destructive font-medium">Não foi possível carregar os totais.</p>
             )}
+            {collectionSummary.historicalIncomplete && (
+              <p className="text-[11px] text-warning font-medium">
+                Fechado automaticamente — histórico antigo incompleto. Previsto, atrasado e falta receber
+                não foram congelados neste dia.
+              </p>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Previsto do dia</span>
-              <span className="text-sm font-bold tabular-nums text-warning">{formatCurrency(expectedToReceiveToday)}</span>
+              <span className="text-sm font-bold tabular-nums text-warning">{collectionSummary.historicalIncomplete ? HISTORICAL_UNAVAILABLE_LABEL : formatCurrency(expectedToReceiveToday)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Recebido Hoje (total)</span>
@@ -814,13 +820,13 @@ export default function CaixaPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Valor atrasado (dias anteriores)</span>
               <span className={`text-sm font-bold tabular-nums ${collectionSummary.overdueAmount > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                {formatCurrency(collectionSummary.overdueAmount)}
+                {collectionSummary.historicalIncomplete ? HISTORICAL_UNAVAILABLE_LABEL : formatCurrency(collectionSummary.overdueAmount)}
               </span>
             </div>
             <div className="flex items-center justify-between border-t pt-1.5">
               <span className="text-xs font-semibold">Falta Receber do dia</span>
               <span className={`text-sm font-bold tabular-nums ${pendingToReceiveToday > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                {formatCurrency(pendingToReceiveToday)}
+                {collectionSummary.historicalIncomplete ? HISTORICAL_UNAVAILABLE_LABEL : formatCurrency(pendingToReceiveToday)}
               </span>
             </div>
           </CardContent>

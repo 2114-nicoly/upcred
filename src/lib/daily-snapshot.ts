@@ -106,6 +106,13 @@ export type SnapshotPortfolioState = {
 export type DailyCashSnapshotPayload = {
 
   version: number;
+  /** Revisão do formato (snapshots legados corrigidos usam 2). */
+  format_revision?: number;
+  /** false = fechamento antigo reconciliado, sem histórico congelado completo. */
+  historical_complete?: boolean;
+  snapshot_kind?: "complete" | "legacy_incomplete";
+  warning?: string | null;
+  close_origin?: string | null;
   cash_date: string;
   scope: { worker_id: string | null; admin_id: string | null };
   closed_at: string;
@@ -406,9 +413,12 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
   const penaltyMoveRows = requireSnapshotQuery<any[]>("cash_movements (multas)", penaltyMovesRes) || [];
 
   const events = (liveEvents || []) as DailyEvent[];
-  // Par completo: original estornado + contrapartida (com os vínculos preservados).
+  // SOMENTE o lançamento original estornado. A contrapartida permanece em
+  // `events` (não estornada) — nunca pode aparecer duas vezes.
   const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(
-    e => e.reversed_at != null || (e as any).reverses_event_id != null
+    e => e.reversed_at != null
+      && (e as any).reverses_event_id == null
+      && !String(e.event_type || "").startsWith("estorno"),
   );
   const renewalEvents = events.filter(e => e.event_type === "renovacao");
 
