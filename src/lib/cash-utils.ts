@@ -417,6 +417,24 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
   if (updError) throw updError;
 }
 
+/**
+ * Recalcula o caixa no escopo EXATO do empréstimo afetado (worker_id/admin_id
+ * do próprio empréstimo), nunca no escopo do usuário autenticado.
+ */
+export async function recalculateCashBalanceForLoan(loanId: string) {
+  const { data, error } = await supabase
+    .from("loans").select("worker_id, admin_id").eq("id", loanId).maybeSingle();
+  if (error) throw error;
+  const admin_id = (data as any)?.admin_id ?? null;
+  if (!admin_id) throw new Error(SCOPE_ADMIN_REQUIRED_MESSAGE);
+  await recalculateCashBalanceFromLedger({
+    workerId: (data as any)?.worker_id ?? null,
+    adminId: admin_id,
+  });
+}
+
+
+
 export function getMovementTypeLabel(type: string): string {
   switch (type) {
     case "emprestimo": return "Empréstimo";
