@@ -304,47 +304,16 @@ export default function CaixaPage() {
 
     setSubmitting(true);
     try {
-      await assertCashOpen(selectedDate);
+      // RPC transacional única: saldo + movimentação + evento + auditoria.
+      // Se qualquer etapa falhar, NADA fica registrado.
+      const { error: rpcErr } = await supabase.rpc("register_manual_movement" as any, {
+        p_cash_date: selectedDate,
+        p_type: manualType,
+        p_amount: amount,
+        p_observation: manualObs || null,
+      } as any);
+      if (rpcErr) throw rpcErr;
 
-      if (manualType === "ajuste_manual") {
-        const current = await getCashBalance(scopeArg);
-        if (!current) { toast.error("Erro ao obter saldo"); return; }
-        const diff = amount - Number(current.available_cash);
-        await updateCashBalance({ available_cash: diff });
-        await createCashMovement({
-          type: "ajuste_manual",
-          amount: diff,
-          observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
-          cash_date: selectedDate,
-        });
-        await createDailyEvent({
-          cash_date: selectedDate,
-          event_type: "ajuste_manual",
-          amount_in: diff >= 0 ? diff : 0,
-          amount_out: diff < 0 ? Math.abs(diff) : 0,
-          observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
-          origin: "geral",
-        });
-        await logAction("ajuste_caixa", "cash", null, null, { amount, diff }, manualObs || null);
-      } else {
-        const cashChange = manualType === "saida_manual" ? -amount : amount;
-        await updateCashBalance({ available_cash: cashChange });
-        await createCashMovement({
-          type: manualType,
-          amount: manualType === "saida_manual" ? -amount : amount,
-          observation: manualObs || null,
-          cash_date: selectedDate,
-        });
-        await createDailyEvent({
-          cash_date: selectedDate,
-          event_type: manualType,
-          amount_in: manualType === "entrada_manual" ? amount : 0,
-          amount_out: manualType === "saida_manual" ? amount : 0,
-          observation: manualObs || null,
-          origin: "geral",
-        });
-        await logAction(manualType === "entrada_manual" ? "aporte" : "retirada", "cash", null, null, { amount }, manualObs || null);
-      }
 
       toast.success("Movimentação registrada!");
       setManualType(null);
