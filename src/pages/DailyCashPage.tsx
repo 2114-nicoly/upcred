@@ -45,6 +45,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CardSkeleton, SummarySkeleton } from "@/components/LoadingSkeleton";
 import { toast } from "sonner";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, validatePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 import { useConfirm } from "@/hooks/useConfirm";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffectiveScope } from "@/hooks/useEffectiveScope";
@@ -311,7 +313,7 @@ export default function DailyCashPage() {
   const [dailyCashStatus, setDailyCashStatus] = useState<string>("open");
 
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
-  const [payAmount, setPayAmount] = useState("");
+  const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState(selectedDate);
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
@@ -797,13 +799,16 @@ export default function DailyCashPage() {
     const safeClientId = getInstClientId(inst)!;
     const safeClientName = getInstClientName(inst);
 
-    const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
-    const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-    const paidValue = parcValue ?? instRemaining;
+    const fullInstAmount = Number(inst.amount);
+    const { amount: paidValue, error: amountError } = validatePaymentAmount(
+      payState,
+      fullInstAmount,
+      Number((inst as any).loans?.remaining_balance ?? (inst as any).remaining_balance ?? 0),
+    );
+    if (amountError) { toast.error(amountError); return; }
 
     setIsSubmitting(true);
     try {
@@ -828,6 +833,7 @@ export default function DailyCashPage() {
           clientId: safeClientId, clientName: safeClientName,
           cashDate: payDate, origin: "rota",
           installmentId: inst.id, startInstNumber: inst.number,
+          observation: resolveObservation(payState, fullInstAmount),
         });
         toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
@@ -843,7 +849,7 @@ export default function DailyCashPage() {
 
 
   const resetPayDialog = () => {
-    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
+    setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
   };
 
   const handleNotPaid= async (id: string) => {
@@ -1306,10 +1312,12 @@ export default function DailyCashPage() {
                 <p className="text-sm text-muted-foreground">
                   {clientName} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
-                <div>
-                  <Label>Valor recebido</Label>
-                  <Input type="number" placeholder={`Padrão: ${instAmount.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                </div>
+                <PaymentAmountSelector
+                  installmentAmount={instAmount}
+                  remainingBalance={remainingBalance}
+                  state={payState}
+                  onChange={setPayState}
+                />
                 <div>
                   <Label>Multa a cobrar hoje (R$)</Label>
                   <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />

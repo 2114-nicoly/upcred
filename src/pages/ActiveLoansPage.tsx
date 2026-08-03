@@ -20,6 +20,8 @@ import { registerPayment, registerPenaltyPayment, settleLoan, cancelLoan } from 
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, validatePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
@@ -78,7 +80,7 @@ export default function ActiveLoansPage() {
 
   // Payment dialog state
   const [payLoanId, setPayLoanId] = useState<string | null>(null);
-  const [payAmount, setPayAmount] = useState("");
+  const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState("");
 
@@ -251,9 +253,16 @@ export default function ActiveLoansPage() {
   // --- Payment from list (centralized) ---
   const handlePayFromList = async () => {
     if (!payLoanId) return;
-    const parcValue = payAmount ? parseFloat(payAmount) : null;
+    const loanForAmount = loans.find((l) => l.id === payLoanId);
+    const fullInstAmount = Number((loanForAmount as any)?.installment_amount ?? 0)
+      || (loanForAmount ? Number(loanForAmount.total_amount) / Math.max(1, loanForAmount.installment_count) : 0);
+    const { amount: parcValue, error: amountError } = validatePaymentAmount(
+      payState,
+      fullInstAmount,
+      Number(loanForAmount?.remaining_balance ?? 0),
+    );
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) { toast.error("Valor inválido"); return; }
+    if (amountError) { toast.error(amountError); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
     setIsSubmitting(true);
@@ -280,7 +289,7 @@ export default function ActiveLoansPage() {
       }
 
       // Handle regular payment
-      if (parcValue !== null && parcValue > 0) {
+      if (parcValue > 0) {
         const loan = loans.find((l) => l.id === payLoanId);
         if (loan) {
           // Get first unpaid installment for reference
@@ -296,6 +305,7 @@ export default function ActiveLoansPage() {
             cashDate: payDate, origin: "emprestimos_ativos",
             installmentId: firstUnpaid?.id,
             startInstNumber: firstUnpaid?.number,
+            observation: resolveObservation(payState, fullInstAmount),
           });
           toast.success(`Parcela: ${formatCurrency(parcValue)} registrado!`);
         }
@@ -306,7 +316,7 @@ export default function ActiveLoansPage() {
     } finally {
       setIsSubmitting(false);
       setPayLoanId(null);
-      setPayAmount("");
+      setPayState(createPaymentAmountState());
       setPayPenaltyAmount("");
       setPayDate(opDate);
       fetchData();
@@ -676,7 +686,7 @@ export default function ActiveLoansPage() {
       )}
 
       {/* Payment Dialog */}
-      <Dialog open={!!payLoanId} onOpenChange={(o) => { if (!o) { setPayLoanId(null); setPayAmount(""); setPayPenaltyAmount(""); } }}>
+      <Dialog open={!!payLoanId} onOpenChange={(o) => { if (!o) { setPayLoanId(null); setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Adicionar Pagamento</DialogTitle>
@@ -695,10 +705,12 @@ export default function ActiveLoansPage() {
                     )}
                   </div>
                 )}
-                <div>
-                  <Label>Valor recebido (parcelas)</Label>
-                  <Input type="number" placeholder="Valor para abater parcelas" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                </div>
+                <PaymentAmountSelector
+                  installmentAmount={Number((loan as any)?.installment_amount ?? 0) || (loan ? Number(loan.total_amount) / Math.max(1, loan.installment_count) : 0)}
+                  remainingBalance={Number(loan?.remaining_balance ?? 0)}
+                  state={payState}
+                  onChange={setPayState}
+                />
                 {lp && lp.penaltyTotal - lp.penaltyPaid > 0.01 && (
                   <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                     <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</p>

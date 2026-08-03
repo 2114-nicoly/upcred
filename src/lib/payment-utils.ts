@@ -126,8 +126,10 @@ export async function registerPayment(params: {
   installmentId?: string;
   /** Starting installment number for overflow */
   startInstNumber?: number;
+  /** Observação livre gravada no movimento/evento do pagamento. */
+  observation?: string;
 }) {
-  const { loanId, amount, clientId, cashDate, origin, installmentId } = params;
+  const { loanId, amount, clientId, cashDate, origin, installmentId, observation } = params;
   if (amount <= 0) return { applied: 0, newBalance: 0 };
 
   const { data, error } = await supabase.rpc("register_payment_tx" as any, {
@@ -137,6 +139,7 @@ export async function registerPayment(params: {
     p_cash_date: cashDate,
     p_origin: origin,
     p_installment_id: installmentId || null,
+    p_observation: observation?.trim() ? observation.trim() : null,
   } as any);
   if (error) throw error;
 

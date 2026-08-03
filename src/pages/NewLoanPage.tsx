@@ -11,6 +11,8 @@ import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-util
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, recalculateCashBalanceForLoan } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, computePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
 import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
@@ -51,13 +53,14 @@ export default function NewLoanPage() {
 
   // Renewal data
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
-  const [renewPaidAmount, setRenewPaidAmount] = useState<string>("");
+  const [renewOldInstAmount, setRenewOldInstAmount] = useState<number>(0);
+  const [renewPayState, setRenewPayState] = useState<PaymentAmountState>(createPaymentAmountState());
 
   const confirm = useConfirm();
   const draftKey = renewFromLoanId ? `renew:${renewFromLoanId}` : `new-loan:${clientId ?? "x"}`;
   const draftValue = {
     amount, interestType, interestValue, installmentCount, paymentType,
-    loanDate, firstDueDate, fixedDates, observation, renewPaidAmount,
+    loanDate, firstDueDate, fixedDates, observation,
     registrationType, amountAlreadyPaid,
   };
   const draft = useFormDraft(draftKey, draftValue);
@@ -74,7 +77,7 @@ export default function NewLoanPage() {
     setObservation("");
     setRegistrationType("new");
     setAmountAlreadyPaid("");
-    setRenewPaidAmount("");
+    setRenewPayState(createPaymentAmountState());
   };
   useEffect(() => {
     if (restoredRef.current) return;
@@ -91,7 +94,6 @@ export default function NewLoanPage() {
         if (typeof saved.firstDueDate === "string") setFirstDueDate(saved.firstDueDate);
         if (Array.isArray(saved.fixedDates)) setFixedDates(saved.fixedDates);
         if (typeof saved.observation === "string") setObservation(saved.observation);
-        if (typeof saved.renewPaidAmount === "string") setRenewPaidAmount(saved.renewPaidAmount);
         if (saved.registrationType === "new" || saved.registrationType === "ongoing") setRegistrationType(saved.registrationType);
         if (typeof saved.amountAlreadyPaid === "string") setAmountAlreadyPaid(saved.amountAlreadyPaid);
         toast.info("Rascunho restaurado", {
@@ -141,7 +143,7 @@ export default function NewLoanPage() {
     const fetchRenewalLoan = async () => {
       const { data } = await supabase
         .from("loans")
-        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance")
+        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance, total_amount")
         .eq("id", renewFromLoanId)
         .single();
       if (data) {
@@ -151,6 +153,9 @@ export default function NewLoanPage() {
         setPaymentType(data.payment_type as typeof paymentType);
         setInstallmentCount(String(data.installment_count));
         setRenewOldRemaining(Number(data.remaining_balance) || 0);
+        setRenewOldInstAmount(
+          Number((data as any).total_amount ?? 0) / Math.max(1, Number(data.installment_count) || 1),
+        );
       }
     };
     fetchRenewalLoan();
@@ -216,7 +221,7 @@ export default function NewLoanPage() {
   }, [datesNeeded, paymentType]);
 
   // Renewal computed values
-  const renewPaid = parseFloat(renewPaidAmount) || 0;
+  const renewPaid = renewFromLoanId ? Math.min(computePaymentAmount(renewPayState, renewOldInstAmount), renewOldRemaining) : 0;
   const faltaQuitar = renewOldRemaining;
   const absorvidoDoNovo = renewFromLoanId ? Math.max(0, faltaQuitar - renewPaid) : 0;
   const valorLiberado = renewFromLoanId ? Math.max(0, numAmount - absorvidoDoNovo) : numAmount;
@@ -536,6 +541,7 @@ export default function NewLoanPage() {
           clientName: clientName,
           cashDate: loanDate,
           origin: "renovacao",
+          observation: resolveObservation(renewPayState, renewOldInstAmount),
         });
       } catch (err: any) {
         console.error("Erro ao registrar pagamento da renovação:", err);
@@ -870,12 +876,11 @@ export default function NewLoanPage() {
                 <span className="font-bold">{formatCurrency(faltaQuitar)}</span>
               </div>
               <div>
-                <Label>Valor pago na renovação (R$)</Label>
-                <Input
-                  type="number"
-                  value={renewPaidAmount}
-                  onChange={(e) => setRenewPaidAmount(e.target.value)}
-                  placeholder="0,00"
+                <PaymentAmountSelector
+                  installmentAmount={renewOldInstAmount}
+                  remainingBalance={renewOldRemaining}
+                  state={renewPayState}
+                  onChange={setRenewPayState}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
                   Quanto o cliente está pagando agora para abater o empréstimo atual.
