@@ -213,7 +213,7 @@ export default function OverdueLoansPage() {
 
   const handlePay = async (id: string) => {
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      await assertScopedCashOpen(payDate, scopeOfInstallment(id) ?? { workerId: null, adminId: null });
     } catch (err: any) {
       toast.error(err?.message || "Não há caixa aberto nesta data.");
       return;
