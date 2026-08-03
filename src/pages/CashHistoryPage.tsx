@@ -227,13 +227,6 @@ export default function CashHistoryPage() {
                         <span className={`text-sm font-bold ${Number(mov.amount) >= 0 ? "text-success" : "text-destructive"}`}>
                           {Number(mov.amount) >= 0 ? "+" : ""}{formatCurrency(Number(mov.amount))}
                         </span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                          setEditId(mov.id);
-                          setEditAmount(String(Math.abs(Number(mov.amount))));
-                          setEditObs(mov.observation || "");
-                        }}>
-                          <Pencil className="h-3 w-3" />
-                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Estornar movimentação" onClick={() => openReverseDialog(mov)}>
                           <RotateCcw className="h-3 w-3" />
                         </Button>
