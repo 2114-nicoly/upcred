@@ -199,8 +199,14 @@ function totalsFromSnapshot(payload: DailyCashSnapshotPayload, cashRow: any): Fr
     manualIn: Number(t.manual_in || 0),
     manualOut: Number(t.manual_out || 0),
     expenses: Number(t.expenses || 0),
-    estornos: t.estornos != null ? Number(t.estornos) : computeReversalSummary(reversed as any).total,
-    estornosCount: t.estornos_count != null ? Number(t.estornos_count) : computeReversalSummary(reversed as any).count,
+    // Estornos: valor absoluto das CONTRAPARTIDAS, contado uma única vez.
+    // As contrapartidas vivem em `events` (não estornadas), nunca em reversed_events.
+    estornos: t.estornos != null
+      ? Number(t.estornos)
+      : computeReversalSummary([...(events as any), ...(reversed as any)]).total,
+    estornosCount: t.estornos_count != null
+      ? Number(t.estornos_count)
+      : computeReversalSummary([...(events as any), ...(reversed as any)]).count,
     notPaidCount: Number(t.not_paid_count || 0),
     eventsCount: Number(t.events_count ?? events.length),
   };
@@ -363,8 +369,9 @@ export async function loadFrozenReportPeriod(scope: FrozenScope): Promise<Frozen
     if (payload) {
       events = [...((payload.events || []) as DailyEvent[]), ...((payload.reversed_events || []) as DailyEvent[])];
       totals = totalsFromSnapshot(payload, cash);
-      const snapPending = payload.pending_installments;
-      const snapOverdue = payload.overdue_clients;
+      const legacyIncomplete = (payload as any).historical_complete === false;
+      const snapPending = legacyIncomplete ? undefined : payload.pending_installments;
+      const snapOverdue = legacyIncomplete ? undefined : payload.overdue_clients;
       if (snapPending || snapOverdue) {
         pendentes = (snapPending || []).map((p) => pendingRecordFromSnapshot(p, date));
         atrasados = (snapOverdue || []).map((o) => overdueRecordFromSnapshot(o, date));
@@ -374,9 +381,10 @@ export async function loadFrozenReportPeriod(scope: FrozenScope): Promise<Frozen
         incompleteSnapshot = true;
         pendentes = [];
         atrasados = [];
+        source = "incomplete";
         warnings.push(`Dia ${dt(date)}: este fechamento antigo não possui histórico congelado completo — pendentes e atrasados: informação histórica indisponível.`);
       }
-      portfolio = payload.portfolio_state || null;
+      portfolio = legacyIncomplete ? null : (payload.portfolio_state || null);
     } else {
       events = dayLive;
       totals = totalsFromEvents(dayLive, cash);
