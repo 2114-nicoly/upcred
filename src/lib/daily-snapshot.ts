@@ -4,7 +4,6 @@ import { DailyEvent } from "@/lib/daily-events";
 import { getCurrentActorIdentity } from "@/lib/audit-utils";
 import { loanProgressAt } from "@/lib/progress-utils";
 import { buildPaidGroupsFromFrozenEvents, type PaidGroup } from "@/lib/paid-groups";
-import { computeReversalSummary } from "@/lib/daily-totals";
 
 
 /**
@@ -681,8 +680,16 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
   assertAllInScope(newLoans as any[], scope, "loans do dia");
   assertAllInScope(paidMovements as any[], scope, "cash_movements");
 
-  const reversalSummary = computeReversalSummary(
-    ((allEventsIncReversed || []) as DailyEvent[]) as any
+  // Estornos do dia: contadas SOMENTE as contrapartidas (valor absoluto, uma vez).
+  const reversalSummary = ((allEventsIncReversed || []) as DailyEvent[]).reduce(
+    (acc, e: any) => {
+      const isCounter = !!e?.reverses_event_id || String(e?.event_type || "").startsWith("estorno");
+      if (!isCounter) return acc;
+      acc.total += Math.abs(Number(e.amount_in || 0)) + Math.abs(Number(e.amount_out || 0));
+      acc.count += 1;
+      return acc;
+    },
+    { total: 0, count: 0 }
   );
 
   const payload: DailyCashSnapshotPayload = {
