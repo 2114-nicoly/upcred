@@ -450,173 +450,31 @@ export async function settleLoan(params: {
 }
 
 /**
- * Desfaz um pagamento (regra única de estorno).
- * - original preservado e marcado como "Estornada";
- * - contrapartida financeira de valor oposto vinculada ao original;
- * - restauração do saldo/parcelas pelo metadata imutável do pagamento;
- * - idempotente: nunca cria dois estornos para a mesma movimentação.
+ * Desfaz um pagamento/multa — REGRA ÚNICA E TRANSACIONAL.
+ *
+ * Toda a lógica (validação de escopo, caixa aberto, contrapartida, parcelas,
+ * saldo do caixa e auditoria) roda dentro da RPC `reverse_cash_movement_tx`,
+ * em uma única transação. Qualquer falha faz rollback total.
+ *
+ * O frontend NÃO grava cash_balance, reversed_at nem auditoria.
  */
 export async function reversePayment(params: {
   movementId: string;
   reason?: string;
 }) {
-  const { movementId, reason } = params;
+  const { movementId } = params;
+  const reason = (params.reason || "").trim() || "Estorno solicitado pelo operador";
 
-  // 1) Guardas de idempotência (existe, não é estorno, ainda não estornado).
-  const { movement } = await assertReversible(movementId);
-  if (!(movement as any).loan_id) throw new Error("Lançamento de pagamento não encontrado");
+  const { data, error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
+    p_movement_id: movementId,
+    p_reason: reason,
+  } as any);
+  if (error) throw error;
 
-  const loanId = (movement as any).loan_id as string;
-  const totalReversed = Number((movement as any).amount);
-  const cashDate = (movement as any).cash_date || new Date().toISOString().slice(0, 10);
-
-  // 2) Dia fechado exige reabertura oficial (snapshot nunca é sobrescrito).
-  await assertCashDateOpenForReversal(cashDate, {
-    workerId: (movement as any).worker_id ?? null,
-    adminId: (movement as any).admin_id ?? null,
-  });
-
-  // 3) Eventos vinculados + metadata imutável do pagamento original.
-  const linkedEventIds = new Set<string>();
-  if ((movement as any).daily_event_id) linkedEventIds.add((movement as any).daily_event_id);
-  const { data: linkedEvents } = await (supabase.from("daily_events" as any)
-    .select("id, metadata").eq("cash_movement_id", movementId) as any);
-  for (const e of (linkedEvents || []) as any[]) linkedEventIds.add(e.id);
-
-  let originalMetadata: any = ((linkedEvents || []) as any[]).find((e) => e.metadata)?.metadata ?? null;
-  if (!originalMetadata && (movement as any).daily_event_id) {
-    const { data: ev } = await (supabase.from("daily_events" as any)
-      .select("metadata").eq("id", (movement as any).daily_event_id).maybeSingle() as any);
-    originalMetadata = (ev as any)?.metadata ?? null;
-  }
-
-  // 4) Restauração do saldo do empréstimo / parcelas de multa.
-  if ((movement as any).type === "recebimento_normal" && totalReversed > 0) {
-    await supabase.rpc("reverse_loan_payment", { p_loan_id: loanId, p_amount: totalReversed });
-  } else if ((movement as any).type === "recebimento_multa" && totalReversed > 0) {
-    const { data: penaltyInsts } = await supabase
-      .from("installments")
-      .select("id, amount, paid_amount, due_date, paid_at")
-      .eq("loan_id", loanId)
-      .eq("is_penalty", true)
-      .order("number");
-    let remainingToReverse = totalReversed;
-    for (const inst of (penaltyInsts || [])) {
-      if (remainingToReverse <= 0.01) break;
-      const currentPaid = Number(inst.paid_amount);
-      const subtracting = Math.min(currentPaid, remainingToReverse);
-      const newPaid = Math.max(0, currentPaid - subtracting);
-      await supabase.from("installments").update({
-        paid_amount: newPaid,
-        status: newPaid >= Number(inst.amount) - 0.01 ? "paid" : newPaid > 0.01 ? "partial" : (inst.due_date < new Date().toISOString().split("T")[0] ? "overdue" : "pending"),
-        paid_at: newPaid >= Number(inst.amount) - 0.01 ? inst.paid_at : null,
-      }).eq("id", inst.id);
-      remainingToReverse -= subtracting;
-    }
-  } else {
-    throw new Error("Tipo de lançamento não pode ser desfeito automaticamente");
-  }
-
-  const reasonSuffix = reason ? ` — Motivo: ${reason}` : "";
-  const label = (movement as any).type === "recebimento_multa" ? "multa" : "pagamento";
-
-  // 5) Contrapartida financeira (valor oposto) vinculada ao original.
-  const reversalMovement = await createCashMovement({
-    type: "estorno_pagamento",
-    amount: -totalReversed,
-    client_id: (movement as any).client_id || null,
-    loan_id: loanId,
-    installment_id: (movement as any).installment_id || null,
-    observation: `Estorno de ${label}${reasonSuffix}`,
-    cash_date: cashDate,
-    reverses_movement_id: movementId,
-    reversal_reason: reason ?? null,
-  }) as any;
-
-  const originalEventId = ((movement as any).daily_event_id as string | null) ?? (Array.from(linkedEventIds)[0] ?? null);
-  const reversalEvent = await createDailyEvent({
-    cash_date: cashDate,
-    event_type: "estorno_pagamento" as any,
-    client_id: (movement as any).client_id || null,
-    loan_id: loanId,
-    installment_id: (movement as any).installment_id || null,
-    amount_in: 0,
-    amount_out: totalReversed,
-    observation: `Estorno de ${label}${reasonSuffix}`,
-    origin: "estorno",
-    cash_movement_id: reversalMovement?.id || null,
-    metadata: {
-      reverses_movement_id: movementId,
-      reverses_event_id: originalEventId,
-      original_amount: totalReversed,
-      reversal_amount: -totalReversed,
-      net_effect: 0,
-      reversal_reason: reason ?? null,
-      original_metadata: originalMetadata ?? null,
-    },
-  } as any) as any;
-  if (reversalMovement?.id && reversalEvent?.id) {
-    await linkCashMovementToDailyEvent(reversalMovement.id, reversalEvent.id);
-    await supabase
-      .from("daily_events" as any)
-      .update({ reverses_event_id: originalEventId, reversal_reason: reason ?? null } as any)
-      .eq("id", reversalEvent.id);
-  }
-
-  // 6) Marca original (movimento + eventos) como estornado, com vínculo.
-  await linkReversal({ originalMovementId: movementId, reversalMovementId: reversalMovement?.id ?? null, reason });
-  for (const eid of linkedEventIds) {
-    await linkEventReversal({ originalEventId: eid, reversalEventId: reversalEvent?.id ?? null, reason });
-  }
-
-  // 7) Restaura parcelas: prioriza o estado "antes" salvo no metadata.
-  const affected = Array.isArray(originalMetadata?.affected_installments)
-    ? originalMetadata.affected_installments
-    : null;
-  if ((movement as any).type === "recebimento_normal" && affected && affected.length > 0) {
-    for (const a of affected) {
-      if (!a?.installment_id) continue;
-      const paidBefore = Number(a.paid_amount_before) || 0;
-      await supabase.from("installments").update({
-        paid_amount: paidBefore,
-        status: a.status_before || (paidBefore > 0.01 ? "partial" : "pending"),
-        paid_at: paidBefore > 0.01 ? undefined : null,
-      } as any).eq("id", a.installment_id);
-    }
-  } else if ((movement as any).type === "recebimento_normal") {
-    await recalculateInstallments(loanId);
-  }
-
-  // 8) Caixa: única atualização, derivada do ledger (original + estorno = 0).
-  await recalculateCashBalanceForLoan(loanId);
-
-  await logReversal({
-    action: "desfazer_pagamento",
-    entity: "payment",
-    original_movement_id: movementId,
-    original_event_id: originalEventId,
-    reversal_movement_id: reversalMovement?.id ?? null,
-    reversal_event_id: reversalEvent?.id ?? null,
-    original_type: (movement as any).type ?? null,
-    original_amount: totalReversed,
-    reversal_amount: -totalReversed,
-    reversal_reason: reason ?? null,
-    client_id: (movement as any).client_id ?? null,
-    loan_id: loanId,
-    cash_date: cashDate,
-    observation: reason ? `Pagamento estornado: ${reason}` : "Pagamento estornado",
-    beforeSnapshot: {
-      type: (movement as any).type,
-      amount: totalReversed,
-      cash_date: cashDate,
-      installment_id: (movement as any).installment_id ?? null,
-      remaining_balance_before: originalMetadata?.remaining_balance_before ?? null,
-      remaining_balance_after: originalMetadata?.remaining_balance_after ?? null,
-    },
-  });
-
-  return totalReversed;
+  const result = (data as any) || {};
+  return Math.abs(Number(result.original_amount) || 0);
 }
+
 
 
 /**
