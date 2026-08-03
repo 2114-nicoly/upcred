@@ -196,26 +196,66 @@ export function requireSnapshotQuery<T = any>(
   return (result.data ?? ([] as unknown as T)) as T;
 }
 
+export const SNAPSHOT_SCOPE_INVALID_MESSAGE =
+  "Não foi possível validar a empresa e o trabalhador deste caixa. O fechamento foi cancelado.";
+
+/**
+ * Valida o vínculo empresa/trabalhador ANTES de montar qualquer parte do
+ * snapshot. Administrador é obrigatório; trabalhador (quando informado) deve
+ * pertencer exatamente àquela empresa.
+ */
+async function assertScopeOwnership(scope: SnapshotScope): Promise<void> {
+  const adminId = (scope.admin_id ?? "").trim();
+  if (!adminId) {
+    console.error("[daily-snapshot] adminId obrigatório ausente", scope);
+    throw new Error(SNAPSHOT_SCOPE_INVALID_MESSAGE);
+  }
+  if (scope.worker_id) {
+    const { data, error } = await supabase
+      .from("workers")
+      .select("id, parent_admin_id")
+      .eq("id", scope.worker_id)
+      .eq("parent_admin_id", adminId)
+      .maybeSingle();
+    if (error || !data || (data as any).parent_admin_id !== adminId) {
+      console.error("[daily-snapshot] trabalhador não pertence à empresa", { scope, error });
+      throw new Error(SNAPSHOT_SCOPE_INVALID_MESSAGE);
+    }
+  }
+}
+
 /** Nomes congelados do escopo (trabalhador / empresa-administrador). */
 async function loadScopeNames(scope: SnapshotScope) {
   let workerName: string | null = null;
   let adminName: string | null = null;
   if (scope.worker_id) {
-    const res = await supabase.from("workers").select("nome").eq("id", scope.worker_id).maybeSingle();
+    const res = await supabase
+      .from("workers")
+      .select("nome, parent_admin_id")
+      .eq("id", scope.worker_id)
+      .eq("parent_admin_id", scope.admin_id as string)
+      .maybeSingle();
     const row = requireSnapshotQuery<any>("workers (nome do trabalhador)", res as any);
     workerName = (row as any)?.nome ?? null;
-    if (!workerName) {
+    if (!row || !workerName) {
       console.error("[daily-snapshot] nome do trabalhador não encontrado", scope);
       throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
     }
   }
-  if (scope.admin_id) {
-    const res = await supabase.from("admins").select("nome").eq("id", scope.admin_id).maybeSingle();
-    const row = requireSnapshotQuery<any>("admins (nome da empresa)", res as any);
-    adminName = (row as any)?.nome ?? null;
+  const resA = await supabase
+    .from("admins")
+    .select("nome")
+    .eq("id", scope.admin_id as string)
+    .maybeSingle();
+  const rowA = requireSnapshotQuery<any>("admins (nome da empresa)", resA as any);
+  adminName = (rowA as any)?.nome ?? null;
+  if (!rowA || !adminName) {
+    console.error("[daily-snapshot] nome da empresa não encontrado", scope);
+    throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
   }
   return { worker_name: workerName, admin_name: adminName };
 }
+
 
 /**
  * Isolamento OBRIGATÓRIO do snapshot. Não depende da RLS:
@@ -310,8 +350,11 @@ export type BuildSnapshotArgs = {
  */
 export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Promise<DailyCashSnapshotPayload> {
   const { cashDate, extra } = args;
-  const scope: SnapshotScope = { worker_id: args.workerId ?? null, admin_id: args.adminId ?? null };
+  const adminId = (args.adminId ?? "").trim() || null;
+  const scope: SnapshotScope = { worker_id: args.workerId ?? null, admin_id: adminId };
+  await assertScopeOwnership(scope);
   const actor = await getCurrentActorIdentity();
+
 
   const [
     liveEvents,
@@ -586,11 +629,20 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
       adminId: scope.admin_id,
     });
     const cb = requireSnapshotQuery<any>("cash_balance", cbRes as any);
-    const availableCash = Number((cb as any)?.available_cash);
-    if (!cb || !Number.isFinite(availableCash)) {
+    const rawCash = (cb as any)?.available_cash;
+    const availableCash = typeof rawCash === "string" && rawCash.trim() !== "" ? Number(rawCash) : rawCash;
+    if (!cb || typeof availableCash !== "number" || !Number.isFinite(availableCash)) {
       console.error("[daily-snapshot] cash_balance ausente ou inválido", scope);
       throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
     }
+    if (
+      ((cb as any).worker_id !== undefined && ((cb as any).worker_id ?? null) !== scope.worker_id) ||
+      ((cb as any).admin_id !== undefined && ((cb as any).admin_id ?? null) !== scope.admin_id)
+    ) {
+      console.error("[daily-snapshot] cash_balance de outro escopo", scope);
+      throw new Error(SNAPSHOT_INCOMPLETE_MESSAGE);
+    }
+
 
 
     portfolioState = {
@@ -685,14 +737,23 @@ function assertSnapshotComplete(
   if (payload.cash_date !== ctx.cashDate) fail("data divergente");
   if (payload.scope.worker_id !== ctx.scope.worker_id) fail("worker_id divergente");
   if (payload.scope.admin_id !== ctx.scope.admin_id) fail("admin_id divergente");
+  /** Número real e finito — null/undefined/""/NaN/Infinity/strings são rejeitados. */
+  const isStrictNumber = (v: any) => typeof v === "number" && Number.isFinite(v);
   if (!payload.daily_summary || ctx.summaryHasError) fail("resumo diário indisponível");
   if (!payload.portfolio_state) fail("situação da carteira ausente");
-  if (!Number.isFinite(Number(payload.portfolio_state?.available_cash))) fail("caixa disponível inválido");
   if (!payload.scope_names) fail("nomes do escopo ausentes");
+  if (!payload.scope_names.admin_name) fail("nome da empresa ausente");
   if (ctx.scope.worker_id && !payload.scope_names.worker_name) fail("nome do trabalhador ausente");
   for (const [k, v] of Object.entries(payload.totals)) {
-    if (!Number.isFinite(Number(v))) fail(`total inválido: ${k}`);
+    if (!isStrictNumber(v)) fail(`total inválido: ${k}`);
   }
+  for (const [k, v] of Object.entries(payload.daily_summary || {})) {
+    if (!isStrictNumber(v)) fail(`resumo diário inválido: ${k}`);
+  }
+  for (const [k, v] of Object.entries(payload.portfolio_state || {})) {
+    if (!isStrictNumber(v)) fail(`situação da carteira inválida: ${k}`);
+  }
+
   const arrays: Array<[string, any]> = [
     ["events", payload.events],
     ["reversed_events", payload.reversed_events],

@@ -45,10 +45,11 @@ const baseDB = (): Record<string, Row[]> => ({
     { id: "c9", name: "Cliente 9" },
   ],
   workers: [
-    { id: W1, nome: "Trabalhador 1" },
-    { id: W2, nome: "Trabalhador 2" },
-    { id: W3, nome: "Trabalhador 3" },
+    { id: W1, nome: "Trabalhador 1", parent_admin_id: ADMIN_A },
+    { id: W2, nome: "Trabalhador 2", parent_admin_id: ADMIN_A },
+    { id: W3, nome: "Trabalhador 3", parent_admin_id: ADMIN_B },
   ],
+
   admins: [
     { id: ADMIN_A, nome: "Empresa A" },
     { id: ADMIN_B, nome: "Empresa B" },
@@ -104,10 +105,16 @@ vi.mock("@/lib/cash-utils", () => ({
   },
   applyDailyCashScope: (q: any) => q,
   getCashBalance: async () => ({ available_cash: 0 }),
-  getCashBalanceResult: async () => cashBalanceResult,
+  getCashBalanceResult: async (s: any) =>
+    cashBalanceResult ?? {
+      data: { available_cash: 1000, worker_id: s?.workerId ?? null, admin_id: s?.adminId ?? null },
+      error: null,
+    },
 }));
 
-let cashBalanceResult: any = { data: { available_cash: 1000 }, error: null };
+/** null = comportamento padrão (linha do escopo solicitado). */
+let cashBalanceResult: any = null;
+
 
 vi.mock("@/lib/audit-utils", () => ({
   getCurrentActorIdentity: async () => ({ id: "u1", name: "Tester", role: "admin" }),
@@ -138,7 +145,7 @@ beforeEach(() => {
   DB = baseDB();
   failing = new Set();
   queriedTables.length = 0;
-  cashBalanceResult = { data: { available_cash: 1000 }, error: null };
+  cashBalanceResult = null;
   summary = {
     expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0,
     pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false,
@@ -192,8 +199,94 @@ describe("buildDailyCashSnapshotPayload — escopo explícito e isolamento", () 
   });
 });
 
+const MSG = "Não foi possível congelar todas as informações. O caixa continua aberto.";
+const SCOPE_MSG =
+  "Não foi possível validar a empresa e o trabalhador deste caixa. O fechamento foi cancelado.";
+
+describe("buildDailyCashSnapshotPayload — vínculo empresa/trabalhador", () => {
+  it("trabalhador da Empresa A com adminId da Empresa B é rejeitado", async () => {
+    await expect(build(W1, ADMIN_B)).rejects.toThrow(SCOPE_MSG);
+  });
+
+  it("adminId null é rejeitado", async () => {
+    await expect(build(W1, null)).rejects.toThrow(SCOPE_MSG);
+  });
+
+  it("adminId vazio é rejeitado", async () => {
+    await expect(build(null, "   ")).rejects.toThrow(SCOPE_MSG);
+  });
+
+  it("trabalhador sem vínculo com administrador é rejeitado", async () => {
+    DB.workers = [{ id: W1, nome: "Trabalhador 1", parent_admin_id: null }];
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(SCOPE_MSG);
+  });
+
+  it("administrador inexistente é rejeitado", async () => {
+    DB.admins = [{ id: ADMIN_B, nome: "Empresa B" }];
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+  });
+
+  it("admin_name ausente é rejeitado", async () => {
+    DB.admins = [{ id: ADMIN_A, nome: null }, { id: ADMIN_B, nome: "Empresa B" }];
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+  });
+
+  it("combinação correta continua criando o snapshot", async () => {
+    const p = await build(W1, ADMIN_A);
+    expect(p.scope).toEqual({ worker_id: W1, admin_id: ADMIN_A });
+    expect(p.scope_names).toEqual({ worker_name: "Trabalhador 1", admin_name: "Empresa A" });
+  });
+});
+
+describe("buildDailyCashSnapshotPayload — cash_balance isolado", () => {
+  it("cash_balance de outra empresa é rejeitado", async () => {
+    cashBalanceResult = { data: { available_cash: 500, worker_id: W1, admin_id: ADMIN_B }, error: null };
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+  });
+
+  it("cash_balance de outro trabalhador da mesma empresa é rejeitado", async () => {
+    cashBalanceResult = { data: { available_cash: 500, worker_id: W2, admin_id: ADMIN_A }, error: null };
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+  });
+
+  it("available_cash inválido é rejeitado", async () => {
+    for (const bad of [null, undefined, "", NaN, Infinity, "abc"]) {
+      cashBalanceResult = { data: { available_cash: bad, worker_id: W1, admin_id: ADMIN_A }, error: null };
+      await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+    }
+  });
+});
+
+describe("buildDailyCashSnapshotPayload — validação numérica estrita", () => {
+  const invalids: any[] = [null, undefined, "", NaN, Infinity, "10"];
+
+  it("totais inválidos são rejeitados", async () => {
+    const { buildDailyCashSnapshotPayload } = await import("@/lib/daily-snapshot");
+    for (const bad of invalids) {
+      await expect(
+        buildDailyCashSnapshotPayload({
+          cashDate: DATE, workerId: W1, adminId: ADMIN_A,
+          extra: { ...EXTRA, received: bad } as any,
+        }),
+      ).rejects.toThrow(MSG);
+    }
+  });
+
+  it("valores inválidos em daily_summary são rejeitados", async () => {
+    for (const bad of invalids) {
+      summary = { ...summary, receivedToday: bad };
+      await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+    }
+  });
+
+  it("valores inválidos em portfolio_state são rejeitados", async () => {
+    cashBalanceResult = { data: { available_cash: "abc", worker_id: W1, admin_id: ADMIN_A }, error: null };
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+  });
+});
+
 describe("buildDailyCashSnapshotPayload — falhas obrigatórias", () => {
-  const MSG = "Não foi possível congelar todas as informações. O caixa continua aberto.";
+
 
   it("falha em daily_events rejeita o snapshot", async () => {
     failing.add("daily_events");
@@ -215,10 +308,11 @@ describe("buildDailyCashSnapshotPayload — falhas obrigatórias", () => {
     await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
   });
 
-  it("falha no nome do trabalhador rejeita o snapshot", async () => {
+  it("falha na consulta de workers rejeita o snapshot", async () => {
     failing.add("workers");
-    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(SCOPE_MSG);
   });
+
 
   it("cash_balance ausente rejeita o snapshot", async () => {
     cashBalanceResult = { data: null, error: null };

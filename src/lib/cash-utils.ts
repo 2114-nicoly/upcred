@@ -139,19 +139,32 @@ export async function getCashBalance(scope?: ExplicitScope): Promise<CashBalance
 /**
  * Leitura ESTRITA do cash_balance: devolve `{ data, error }` para que o
  * chamador possa distinguir erro de consulta de "linha inexistente".
+ *
+ * Quando um escopo EXPLÍCITO é informado (`workerId` e/ou `adminId`), ele é
+ * usado como está — nunca substituído pelo usuário autenticado — e os dois
+ * filtros são aplicados juntos. Mais de uma linha vira erro (maybeSingle).
  */
 export async function getCashBalanceResult(
   scope?: ExplicitScope,
 ): Promise<{ data: CashBalance | null; error: any }> {
-  const explicitWorker = scope?.workerId ?? null;
-  const workerId = explicitWorker ?? (await getCurrentWorkerId());
+  const hasExplicit = !!(scope?.workerId || scope?.adminId);
   let q = supabase.from("cash_balance").select("*");
+
+  if (hasExplicit) {
+    if (scope?.workerId) q = q.eq("worker_id", scope.workerId);
+    else q = q.is("worker_id", null);
+    if (scope?.adminId) q = q.eq("admin_id", scope.adminId);
+    const { data, error } = await q.maybeSingle();
+    return { data: (data as unknown as CashBalance) ?? null, error };
+  }
+
+  const workerId = await getCurrentWorkerId();
   if (workerId) q = q.eq("worker_id", workerId);
-  else if (scope?.adminId) q = q.is("worker_id", null).eq("admin_id", scope.adminId);
   else q = q.is("worker_id", null);
   const { data, error } = await q.limit(1).maybeSingle();
   return { data: (data as unknown as CashBalance) ?? null, error };
 }
+
 
 
 
