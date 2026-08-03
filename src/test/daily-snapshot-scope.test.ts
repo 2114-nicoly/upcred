@@ -145,7 +145,7 @@ beforeEach(() => {
   DB = baseDB();
   failing = new Set();
   queriedTables.length = 0;
-  cashBalanceResult = { data: { available_cash: 1000, worker_id: W1, admin_id: ADMIN_A }, error: null };
+  cashBalanceResult = null;
   summary = {
     expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0,
     pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, hasError: false,
