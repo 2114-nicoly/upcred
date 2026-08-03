@@ -27,8 +27,10 @@ describe("reverse_cash_movement_tx — RPC transacional", () => {
   });
 
   it("exige motivo com no mínimo 3 caracteres", () => {
-    expect(reversalMigration).toMatch(/length\(\s*(btrim|trim)\(\s*coalesce\(p_reason[^)]*\)\s*\)\s*\)\s*<\s*3/i);
+    expect(reversalMigration).toMatch(/btrim\(\s*COALESCE\(p_reason/i);
+    expect(reversalMigration).toMatch(/length\(v_reason\)\s*<\s*3/i);
   });
+
 
   it("exige caixa aberto para o dia da movimentação", () => {
     expect(reversalMigration.toLowerCase()).toContain("daily_cash");
