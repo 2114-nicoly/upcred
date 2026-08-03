@@ -62,9 +62,14 @@ describe("reverse_cash_movement_tx — RPC transacional", () => {
   });
 
   it("é restrita a usuários autenticados", () => {
-    expect(reversalMigration).toMatch(/revoke\s+execute[\s\S]*reverse_cash_movement_tx[\s\S]*(public|anon)/i);
-    expect(reversalMigration).toMatch(/grant\s+execute[\s\S]*reverse_cash_movement_tx[\s\S]*authenticated/i);
+    expect(reversalMigration).toMatch(
+      /REVOKE ALL ON FUNCTION public\.reverse_cash_movement_tx\(uuid, text\) FROM PUBLIC, anon;/
+    );
+    expect(reversalMigration).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.reverse_cash_movement_tx\(uuid, text\) TO authenticated;/
+    );
   });
+
 });
 
 describe("Frontend usa somente a RPC transacional", () => {
