@@ -269,6 +269,13 @@ export default function CaixaPage() {
     acc[cat] = (acc[cat] || 0) + Number(e.amount_out || 0);
     return acc;
   }, {});
+  // Estornos do dia: contrapartidas registradas pela RPC transacional.
+  // Nunca contam como recebido — aparecem em bloco próprio.
+  const estornosEventos = scopedEvents.filter(e => String(e.event_type || "").startsWith("estorno"));
+  const estornosTotal = estornosEventos.reduce(
+    (s, e) => s + Number(e.amount_in || 0) + Number(e.amount_out || 0), 0
+  );
+
 
   const handleManualMovement = async () => {
     if (!manualType || submitting) return;
