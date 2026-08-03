@@ -81,6 +81,8 @@ export function sumCoreTotals(list: CoreTotals[]): CoreTotals {
     t.recebidoPrincipal += s.recebidoPrincipal;
     t.multasRecebidas += s.multasRecebidas;
     t.emprestado += s.emprestado;
+    t.estornos += s.estornos || 0;
+
   }
   t.recebidoTotal = t.recebidoPrincipal + t.multasRecebidas;
   return t;
