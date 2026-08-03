@@ -22,6 +22,8 @@ import { useWorkerFilter } from "@/hooks/useWorkerFilter";
 import WorkerFilterSelect from "@/components/WorkerFilterSelect";
 import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, validatePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 
 
 type InstallmentWithLoan = {
@@ -88,7 +90,7 @@ export default function OverdueLoansPage() {
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
 
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
-  const [payAmount, setPayAmount] = useState("");
+  const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState("");
   const [penaltyDialogId, setPenaltyDialogId] = useState<string | null>(null);
@@ -123,7 +125,7 @@ export default function OverdueLoansPage() {
       const activeLoanStatuses = [...LOAN_ACTIVE_STATUSES];
       let q = supabase
         .from("installments")
-        .select("*, loans!inner(id, client_id, amount, total_amount, installment_count, payment_type, worker_id, admin_id, status, clients(id, name))")
+        .select("*, loans!inner(id, client_id, amount, total_amount, remaining_balance, installment_count, payment_type, worker_id, admin_id, status, clients(id, name))")
         .lt("due_date", today)
         .in("status", collectibleStatuses)
         .in("loans.status", activeLoanStatuses)
@@ -224,9 +226,13 @@ export default function OverdueLoansPage() {
     const inst = allInsts.find((i) => i.id === id);
     if (!inst) return;
 
-    const parcValue = payAmount ? parseFloat(payAmount) : null;
+    const { amount: parcValue, error: amountError } = validatePaymentAmount(
+      payState,
+      Number(inst.amount),
+      Number((inst as any).loans?.remaining_balance ?? 0),
+    );
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payAmount && (parcValue === null || isNaN(parcValue) || parcValue <= 0)) { toast.error("Valor inválido"); return; }
+    if (amountError) { toast.error(amountError); return; }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
 
     try {
@@ -242,26 +248,17 @@ export default function OverdueLoansPage() {
         toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
       }
 
-      if (parcValue !== null || !payPenaltyAmount) {
-      const instRemaining = Number(inst.amount) - Number(inst.paid_amount);
-      const paidValue = parcValue ?? instRemaining;
-      if (paidValue <= 0) {
-        if (multaValue > 0) {
-          setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
-          fetchData(); return;
-        }
-        toast.error("Valor inválido"); return;
-      }
-
+      if (parcValue > 0) {
         const { applied } = await registerPayment({
           loanId: inst.loan_id,
-          amount: paidValue,
+          amount: parcValue,
           clientId: inst.loans.client_id,
           clientName: (inst.loans?.clients?.name ?? "Cliente removido"),
           cashDate: payDate,
           origin: "atrasadas",
           installmentId: inst.id,
           startInstNumber: inst.number,
+          observation: resolveObservation(payState, Number(inst.amount)),
         });
         toast.success(`Parcela: ${formatCurrency(applied)} registrado!`);
       }
@@ -270,7 +267,7 @@ export default function OverdueLoansPage() {
       toast.error(err?.message || "Erro ao registrar pagamento");
     }
 
-    setPayAmount(""); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
+    setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
     fetchData();
   };
 
@@ -465,7 +462,7 @@ export default function OverdueLoansPage() {
                           <Badge className={getStatusColor("overdue")}>{getStatusLabel("overdue")}</Badge>
                         </div>
                         <div className="flex gap-2">
-                          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
+                          <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); } }}>
                             <DialogTrigger asChild>
                               <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
                                 <Plus className="mr-1 h-3 w-3" /> Pagamento
@@ -478,10 +475,12 @@ export default function OverdueLoansPage() {
                                   {group.clientName} — Parcela {inst.number} — {formatCurrency(Number(inst.amount))}
                                 </p>
                                 {Number(inst.paid_amount) > 0 && <p className="text-sm text-partial">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
-                                <div>
-                                  <Label>Valor da parcela recebido</Label>
-                                  <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                                </div>
+                                <PaymentAmountSelector
+                                  installmentAmount={Number(inst.amount)}
+                                  remainingBalance={Number((inst as any).loans?.remaining_balance ?? 0)}
+                                  state={payState}
+                                  onChange={setPayState}
+                                />
                                 {penaltyPending > 0.01 && (
                                   <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                                     <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(penaltyPending)}</p>
