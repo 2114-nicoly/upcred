@@ -169,7 +169,10 @@ export type DailyCollectionSummary = {
   /** Saldo pendente de parcelas vencidas ANTES da data (nunca da própria data). */
   overdueAmount: number;
   cashExpectedForClosing: number;
+  /** Total estornado no dia (não conta como recebido). */
+  reversedToday: number;
   hasError: boolean;
+
 };
 
 export async function getDailyCollectionSummary(
