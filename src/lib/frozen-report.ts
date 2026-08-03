@@ -514,7 +514,7 @@ export async function loadFrozenReportPeriod(scope: FrozenScope): Promise<Frozen
 /** Rótulo curto da origem do dia (tela e PDF usam o mesmo texto). */
 export function frozenSourceLabel(day: FrozenDay): string {
   if (day.source === "snapshot") return day.reopened ? "Reaberto e fechado (registro congelado)" : "Fechado (registro congelado)";
-  if (day.source === "incomplete") return "Fechado (registro congelado indisponível)";
+  if (day.source === "incomplete") return "Fechado automaticamente — histórico antigo incompleto";
   return day.status === "open" ? "Caixa ainda aberto" : "Sem caixa";
 }
 
