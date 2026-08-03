@@ -138,6 +138,8 @@ export type Database = {
           error_message: string
           id: string
           last_attempt_at: string
+          next_retry_at: string
+          resolved_at: string | null
           worker_id: string | null
         }
         Insert: {
@@ -149,6 +151,8 @@ export type Database = {
           error_message: string
           id?: string
           last_attempt_at?: string
+          next_retry_at?: string
+          resolved_at?: string | null
           worker_id?: string | null
         }
         Update: {
@@ -160,6 +164,8 @@ export type Database = {
           error_message?: string
           id?: string
           last_attempt_at?: string
+          next_retry_at?: string
+          resolved_at?: string | null
           worker_id?: string | null
         }
         Relationships: [
@@ -177,6 +183,10 @@ export type Database = {
           created_at: string
           enabled_from_date: string
           id: string
+          last_closed_count: number
+          last_failed_count: number
+          last_run_at: string | null
+          last_success_at: string | null
           singleton: boolean
           updated_at: string
         }
@@ -184,6 +194,10 @@ export type Database = {
           created_at?: string
           enabled_from_date: string
           id?: string
+          last_closed_count?: number
+          last_failed_count?: number
+          last_run_at?: string | null
+          last_success_at?: string | null
           singleton?: boolean
           updated_at?: string
         }
@@ -191,6 +205,10 @@ export type Database = {
           created_at?: string
           enabled_from_date?: string
           id?: string
+          last_closed_count?: number
+          last_failed_count?: number
+          last_run_at?: string | null
+          last_success_at?: string | null
           singleton?: boolean
           updated_at?: string
         }
@@ -2023,6 +2041,10 @@ export type Database = {
         Args: { p_after: number; p_before: number }
         Returns: string
       }
+      _legacy_close_daily_cash: {
+        Args: { p_daily_cash_id: string }
+        Returns: Json
+      }
       _record_auto_close_failure: {
         Args: {
           p_admin: string
@@ -2040,6 +2062,14 @@ export type Database = {
           p_reason: string
           p_request_id: string
         }
+        Returns: string
+      }
+      _resolve_auto_close_failure: {
+        Args: { p_admin: string; p_date: string; p_worker: string }
+        Returns: boolean
+      }
+      _scope_oldest_open_cash_date: {
+        Args: { p_admin: string; p_before: string; p_worker: string }
         Returns: string
       }
       admin_assign_client_codes: { Args: never; Returns: number }
@@ -2161,6 +2191,7 @@ export type Database = {
         Args: { p_daily_event_id: string; p_receipt: Json }
         Returns: undefined
       }
+      auto_close_cash_maintenance: { Args: never; Returns: Json }
       auto_close_enabled_from: { Args: never; Returns: string }
       auto_close_previous_day: { Args: never; Returns: Json }
       build_daily_cash_snapshot_v2: {
@@ -2299,6 +2330,7 @@ export type Database = {
         Args: { p_cash_date: string; p_worker_id?: string }
         Returns: string
       }
+      reconcile_legacy_open_cash: { Args: { p_limit?: number }; Returns: Json }
       redact_old_credentials_log: { Args: never; Returns: number }
       register_expense: {
         Args: {
