@@ -108,7 +108,7 @@ vi.mock("@/lib/cash-utils", () => ({
   getCashBalanceResult: async () => cashBalanceResult,
 }));
 
-let cashBalanceResult: any = { data: { available_cash: 1000 }, error: null };
+let cashBalanceResult: any = { data: { available_cash: 1000, worker_id: W1, admin_id: ADMIN_A }, error: null };
 
 vi.mock("@/lib/audit-utils", () => ({
   getCurrentActorIdentity: async () => ({ id: "u1", name: "Tester", role: "admin" }),
