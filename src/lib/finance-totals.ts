@@ -27,6 +27,8 @@ export type CoreTotals = {
   recebidoTotal: number;
   /** Dinheiro realmente entregue ao cliente no período. */
   emprestado: number;
+  /** Total estornado no período (nunca somado como recebido). */
+  estornos: number;
 };
 
 const num = (v: unknown) => {
@@ -43,18 +45,26 @@ const num = (v: unknown) => {
 const LENDING_EVENT_TYPES = new Set(["emprestimo_novo", "renovacao", "renegociacao"]);
 
 export function emptyCoreTotals(): CoreTotals {
-  return { recebidoPrincipal: 0, multasRecebidas: 0, recebidoTotal: 0, emprestado: 0 };
+  return { recebidoPrincipal: 0, multasRecebidas: 0, recebidoTotal: 0, emprestado: 0, estornos: 0 };
 }
 
 /**
  * Calcula recebido (principal/multas) e emprestado a partir dos daily_events.
- * Ignora eventos estornados, informativos e marcações de "não pagou".
- * Cada valor é contado uma única vez — sempre pelo evento financeiro.
+ *
+ * REGRA DE ESTORNO: o lançamento original estornado (`reversed_at`) NUNCA conta
+ * como recebido válido e sua contrapartida (`estorno_*`) também não é somada
+ * nos buckets — o valor aparece apenas em `estornos`. Assim não existe impacto
+ * duplo nem valor negativo escondido no "Recebido".
  */
 export function computeCoreTotals(events: CoreEventLike[] | null | undefined): CoreTotals {
   const t = emptyCoreTotals();
   for (const e of events || []) {
-    if (!e || e.reversed_at) continue;
+    if (!e) continue;
+    if (String(e.event_type || "").startsWith("estorno")) {
+      t.estornos += num(e.amount_in) + num(e.amount_out);
+      continue;
+    }
+    if (e.reversed_at) continue;
     if (e.event_type === "pagamento") t.recebidoPrincipal += num(e.amount_in);
     else if (e.event_type === "recebimento_multa") t.multasRecebidas += num(e.amount_in);
     else if (LENDING_EVENT_TYPES.has(e.event_type)) t.emprestado += num(e.amount_out);
@@ -62,6 +72,7 @@ export function computeCoreTotals(events: CoreEventLike[] | null | undefined): C
   t.recebidoTotal = t.recebidoPrincipal + t.multasRecebidas;
   return t;
 }
+
 
 /** Soma totais já calculados (equipe = soma dos trabalhadores). */
 export function sumCoreTotals(list: CoreTotals[]): CoreTotals {
