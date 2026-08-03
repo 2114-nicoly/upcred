@@ -263,7 +263,7 @@ export default function UnpaidInstallmentsPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
+                    <Dialog open={payDialogId === inst.id} onOpenChange={(o) => { setPayDialogId(o ? inst.id : null); if (!o) { setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); } }}>
                       <DialogTrigger asChild>
                         <Button size="sm" className="flex-1 bg-success hover:bg-success/90">
                           <Plus className="mr-1 h-3 w-3" /> Pagamento
@@ -274,10 +274,13 @@ export default function UnpaidInstallmentsPage() {
                         <div className="space-y-3">
                           <p className="text-sm text-muted-foreground">Parcela {inst.number} — {formatCurrency(Number(inst.amount))}</p>
                           {Number(inst.paid_amount) > 0 && <p className="text-sm">Já pago: {formatCurrency(Number(inst.paid_amount))} — Resta: {formatCurrency(instRemaining)}</p>}
-                          <div>
-                            <Label>Valor da parcela recebido</Label>
-                            <Input type="number" placeholder={`Padrão: ${instRemaining.toFixed(2)}`} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                          </div>
+                          <PaymentAmountSelector
+                            installmentAmount={Number(inst.amount)}
+                            remainingBalance={Number(loan?.remaining_balance ?? 0)}
+                            state={payState}
+                            onChange={setPayState}
+                          />
+
                           <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                             <Label>Valor destinado à multa (opcional)</Label>
                             <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
