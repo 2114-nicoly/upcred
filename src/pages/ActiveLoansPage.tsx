@@ -766,12 +766,17 @@ export default function ActiveLoansPage() {
                   <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency((lp?.remaining ?? 0) + penaltyPending)}</span></div>
                 </div>
                 <div>
-                  <Label>Data do pagamento</Label>
+                  <Label>Data do pagamento (caixa do trabalhador)</Label>
                   <Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} />
+                  {scopedCash.loading && <p className="text-xs text-muted-foreground">Carregando o caixa do trabalhador...</p>}
+                  {!scopedCash.loading && !scopedCash.cashDate && (
+                    <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                  )}
                 </div>
-                <Button onClick={handleQuitarFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                <Button onClick={handleQuitarFromList} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting || !scopedCash.ready}>
                   {isSubmitting ? "Processando..." : "Confirmar Quitação"}
                 </Button>
+
               </div>
             );
           })()}
