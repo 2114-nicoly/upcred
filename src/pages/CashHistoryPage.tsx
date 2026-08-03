@@ -10,14 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
-  updateCashBalance,
-  reverseCashMovement,
   getMovementTypeLabel,
   getMovementTypeColor,
   CashMovement,
 } from "@/lib/cash-utils";
-import { logReversal } from "@/lib/audit-utils";
-import { ArrowLeft, Pencil, RotateCcw } from "lucide-react";
+import { ArrowLeft, RotateCcw } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
