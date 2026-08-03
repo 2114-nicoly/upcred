@@ -728,14 +728,23 @@ function assertSnapshotComplete(
   if (payload.cash_date !== ctx.cashDate) fail("data divergente");
   if (payload.scope.worker_id !== ctx.scope.worker_id) fail("worker_id divergente");
   if (payload.scope.admin_id !== ctx.scope.admin_id) fail("admin_id divergente");
+  /** Número real e finito — null/undefined/""/NaN/Infinity/strings são rejeitados. */
+  const isStrictNumber = (v: any) => typeof v === "number" && Number.isFinite(v);
   if (!payload.daily_summary || ctx.summaryHasError) fail("resumo diário indisponível");
   if (!payload.portfolio_state) fail("situação da carteira ausente");
-  if (!Number.isFinite(Number(payload.portfolio_state?.available_cash))) fail("caixa disponível inválido");
   if (!payload.scope_names) fail("nomes do escopo ausentes");
+  if (!payload.scope_names.admin_name) fail("nome da empresa ausente");
   if (ctx.scope.worker_id && !payload.scope_names.worker_name) fail("nome do trabalhador ausente");
   for (const [k, v] of Object.entries(payload.totals)) {
-    if (!Number.isFinite(Number(v))) fail(`total inválido: ${k}`);
+    if (!isStrictNumber(v)) fail(`total inválido: ${k}`);
   }
+  for (const [k, v] of Object.entries(payload.daily_summary || {})) {
+    if (!isStrictNumber(v)) fail(`resumo diário inválido: ${k}`);
+  }
+  for (const [k, v] of Object.entries(payload.portfolio_state || {})) {
+    if (!isStrictNumber(v)) fail(`situação da carteira inválida: ${k}`);
+  }
+
   const arrays: Array<[string, any]> = [
     ["events", payload.events],
     ["reversed_events", payload.reversed_events],
