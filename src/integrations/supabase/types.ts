@@ -355,6 +355,7 @@ export type Database = {
           admin_id: string | null
           cash_date: string
           created_at: string
+          daily_cash_id: string | null
           id: string
           reason: string
           requested_at: string
@@ -371,6 +372,7 @@ export type Database = {
           admin_id?: string | null
           cash_date: string
           created_at?: string
+          daily_cash_id?: string | null
           id?: string
           reason: string
           requested_at?: string
@@ -387,6 +389,7 @@ export type Database = {
           admin_id?: string | null
           cash_date?: string
           created_at?: string
+          daily_cash_id?: string | null
           id?: string
           reason?: string
           requested_at?: string
@@ -400,6 +403,13 @@ export type Database = {
           worker_name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cash_reopen_requests_daily_cash_id_fkey"
+            columns: ["daily_cash_id"]
+            isOneToOne: false
+            referencedRelation: "daily_cash"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cash_reopen_requests_worker_id_fkey"
             columns: ["worker_id"]
@@ -2023,6 +2033,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      _reopen_daily_cash_core: {
+        Args: {
+          p_actor_id: string
+          p_daily_cash_id: string
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: string
+      }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_cleanup_empty_daily_cash: {
         Args: {
@@ -2112,6 +2131,10 @@ export type Database = {
           p_notas?: string
           p_synthetic_email: string
         }
+        Returns: string
+      }
+      admin_reopen_daily_cash: {
+        Args: { p_daily_cash_id: string; p_reason: string }
         Returns: string
       }
       admin_transfer_client: {
@@ -2304,6 +2327,10 @@ export type Database = {
       }
       reopen_daily_cash: {
         Args: { p_cash_date: string; p_reason: string }
+        Returns: string
+      }
+      request_cash_reopen: {
+        Args: { p_daily_cash_id: string; p_reason: string }
         Returns: string
       }
       reverse_loan_payment: {
