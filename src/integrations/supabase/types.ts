@@ -2333,6 +2333,10 @@ export type Database = {
         Args: { p_daily_cash_id: string; p_reason: string }
         Returns: string
       }
+      reverse_cash_movement_tx: {
+        Args: { p_movement_id: string; p_reason: string }
+        Returns: Json
+      }
       reverse_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number

@@ -188,12 +188,15 @@ export async function markDailyEventReversed(id: string) {
 }
 
 /**
- * Undo a daily event:
- * - pagamento/recebimento_multa: reversePayment (mark as reversed + counter-entry)
- * - nao_pagou: removes not_paid_mark (operational, not financial)
- * - entrada_manual/saida_manual/ajuste_manual: mark original movement+event as
- *   reversed and create counter-entries (estorno_manual)
- * - emprestimo_novo/renovacao: BLOCKED — must be undone manually
+ * Undo a daily event.
+ *
+ * Eventos financeiros (pagamento, multa, entrada/saída/ajuste manual e despesa)
+ * são estornados EXCLUSIVAMENTE pela RPC transacional
+ * `reverse_cash_movement_tx` — nenhuma gravação de saldo, `reversed_at` ou
+ * auditoria acontece no frontend.
+ *
+ * - nao_pagou: operação não financeira (remove a marcação).
+ * - emprestimo_novo/renovacao/renegociacao: BLOQUEADO nesta etapa.
  */
 export async function undoDailyEvent(event: DailyEvent, reason?: string) {
   if (event.event_type === "emprestimo_novo") {
@@ -207,17 +210,6 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
     );
   }
 
-  const { recalculateCashBalanceFromLedger, createCashMovement, markCashMovementReversed, linkCashMovementToDailyEvent } = await import("@/lib/cash-utils");
-  const { reversePayment } = await import("@/lib/payment-utils");
-
-  if (event.event_type === "pagamento" || event.event_type === "recebimento_multa") {
-    if (!event.cash_movement_id) {
-      throw new Error("Este lançamento antigo não tem ID financeiro vinculado e não pode ser desfeito automaticamente com segurança.");
-    }
-    await reversePayment({ movementId: event.cash_movement_id, reason });
-    return;
-  }
-
   if (event.event_type === "nao_pagou") {
     if (event.installment_id) {
       await supabase.from("not_paid_marks").delete()
@@ -228,139 +220,36 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
     return;
   }
 
-  if (
-    event.event_type === "entrada_manual" ||
-    event.event_type === "saida_manual" ||
-    event.event_type === "ajuste_manual" ||
-    event.event_type === "despesa"
-  ) {
-    const {
-      assertReversible,
-      assertCashDateOpenForReversal,
-      linkReversal,
-      linkEventReversal,
-    } = await import("@/lib/reversal");
+  const FINANCIAL_EVENTS = [
+    "pagamento",
+    "recebimento_multa",
+    "entrada_manual",
+    "saida_manual",
+    "ajuste_manual",
+    "despesa",
+  ];
 
+  if (FINANCIAL_EVENTS.includes(event.event_type)) {
     if ((event as any).reversed_at) {
       throw new Error("Este lançamento já foi estornado.");
     }
-    await assertCashDateOpenForReversal(event.cash_date, {
-      workerId: (event as any).worker_id ?? null,
-      adminId: (event as any).admin_id ?? null,
-    });
-
-    // Locate the original cash_movement (prefer linked id; else match by type+date)
-    let movementId = event.cash_movement_id || null;
-    let originalAmount = Number(event.amount_in) - Number(event.amount_out);
-    if (!movementId) {
-      const { data: candidates } = await supabase
-        .from("cash_movements")
-        .select("id, amount, reversed_at")
-        .eq("type", event.event_type)
-        .eq("cash_date", event.cash_date)
-        .is("reversed_at", null)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      const original = (candidates || [])[0] as any;
-      if (original) {
-        movementId = original.id;
-        originalAmount = Number(original.amount);
-      }
-    } else {
-      const { movement } = await assertReversible(movementId);
-      originalAmount = Number((movement as any).amount);
+    if (!event.cash_movement_id) {
+      throw new Error(
+        "Este lançamento não tem movimentação financeira vinculada e não pode ser estornado automaticamente com segurança."
+      );
     }
-
-    // Counter movement and event (negative amount, opposite in/out)
-    const reasonSuffix = reason ? ` — Motivo: ${reason}` : "";
-    const reversalMovement = await createCashMovement({
-      type: "estorno_manual" as any,
-      amount: -originalAmount,
-      observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
-      cash_date: event.cash_date,
-      reverses_movement_id: movementId,
-      reversal_reason: reason ?? null,
-    }) as any;
-    const reversalEvent = await createDailyEvent({
-      cash_date: event.cash_date,
-      event_type: "estorno_manual",
-      amount_in: Number(event.amount_out) || 0,
-      amount_out: Number(event.amount_in) || 0,
-      observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
-      origin: "estorno",
-      cash_movement_id: reversalMovement?.id || null,
-      metadata: {
-        reverses_movement_id: movementId,
-        reverses_event_id: event.id,
-        original_amount: originalAmount,
-        reversal_amount: -originalAmount,
-        net_effect: 0,
-        reversal_reason: reason ?? null,
-        original_metadata: (event as any).metadata ?? null,
-      },
-    } as any) as any;
-    if (reversalMovement?.id && reversalEvent?.id) {
-      await linkCashMovementToDailyEvent(reversalMovement.id, reversalEvent.id);
-      await supabase
-        .from("daily_events" as any)
-        .update({ reverses_event_id: event.id, reversal_reason: reason ?? null } as any)
-        .eq("id", reversalEvent.id);
-    }
-
-    if (movementId) {
-      await linkReversal({
-        originalMovementId: movementId,
-        reversalMovementId: reversalMovement?.id ?? null,
-        reason,
-      });
-    }
-    await linkEventReversal({
-      originalEventId: event.id,
-      reversalEventId: reversalEvent?.id ?? null,
-      reason,
-    });
-
-
-    // Structured audit metadata for the reversal
-    try {
-      const { logReversal } = await import("@/lib/audit-utils");
-      await logReversal({
-        action: "estorno_manual",
-        entity: "cash",
-        original_movement_id: movementId,
-        original_event_id: event.id,
-        reversal_movement_id: reversalMovement?.id ?? null,
-        reversal_event_id: reversalEvent?.id ?? null,
-        original_type: event.event_type,
-        original_amount: originalAmount,
-        reversal_amount: -originalAmount,
-        reversal_reason: reason ?? null,
-        client_id: event.client_id,
-        loan_id: event.loan_id,
-        cash_date: event.cash_date,
-        observation: `Estorno: ${getEventTypeLabel(event.event_type)}${reasonSuffix}`,
-        beforeSnapshot: {
-          event_type: event.event_type,
-          amount_in: Number(event.amount_in) || 0,
-          amount_out: Number(event.amount_out) || 0,
-          observation: event.observation,
-          cash_date: event.cash_date,
-        },
-      });
-    } catch (err) {
-      console.warn("[daily-events] logReversal failed", err);
-    }
-
-    await recalculateCashBalanceFromLedger({
-      workerId: (event as any).worker_id ?? null,
-      adminId: (event as any).admin_id ?? null,
-    });
+    const { error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
+      p_movement_id: event.cash_movement_id,
+      p_reason: (reason || "").trim() || "Estorno solicitado pelo operador",
+    } as any);
+    if (error) throw error;
     return;
   }
 
   // Fallback: just mark event as reversed
   await markDailyEventReversed(event.id);
 }
+
 
 export async function getDailyEventsByType(
   cashDate: string,

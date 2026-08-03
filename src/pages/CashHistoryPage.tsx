@@ -10,14 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/loan-utils";
 import {
-  updateCashBalance,
-  reverseCashMovement,
   getMovementTypeLabel,
   getMovementTypeColor,
   CashMovement,
 } from "@/lib/cash-utils";
-import { logReversal } from "@/lib/audit-utils";
-import { ArrowLeft, Pencil, RotateCcw } from "lucide-react";
+import { ArrowLeft, RotateCcw } from "lucide-react";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -48,10 +45,8 @@ export default function CashHistoryPage() {
   const [filterClient, setFilterClient] = useState("");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
 
-  // Edit
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editAmount, setEditAmount] = useState("");
-  const [editObs, setEditObs] = useState("");
+  // Correção financeira é feita por estorno + novo lançamento (sem edição direta).
+
 
   // Reversal (estorno)
   const [reverseTarget, setReverseTarget] = useState<MovementWithClient | null>(null);
@@ -113,39 +108,13 @@ export default function CashHistoryPage() {
     setReverseSaving(true);
     const mov = reverseTarget;
     try {
-      const reverseMap: Record<string, any> = {
-        emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
-        recebimento_normal: { available_cash: -Number(mov.amount) },
-        recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
-        entrada_manual: { available_cash: -Number(mov.amount) },
-        saida_manual: { available_cash: -Number(mov.amount) },
-        ajuste_manual: { available_cash: -Number(mov.amount) },
-      };
-      await updateCashBalance(reverseMap[mov.type] || {});
-      await reverseCashMovement(mov.id, { reason });
-      // Structured audit metadata (preserves history; no physical delete)
-      await logReversal({
-        action: "estorno_manual",
-        entity: "cash",
-        original_movement_id: mov.id,
-        original_event_id: (mov as any).daily_event_id ?? null,
-        original_type: mov.type,
-        original_amount: Number(mov.amount),
-        reversal_amount: -Number(mov.amount),
-        reversal_reason: reason,
-        client_id: mov.client_id,
-        loan_id: mov.loan_id,
-        cash_date: (mov as any).cash_date ?? null,
-        observation: `Estorno de ${getMovementTypeLabel(mov.type)} (${formatCurrency(Math.abs(Number(mov.amount)))}) — ${reason}`,
-        beforeSnapshot: {
-          type: mov.type,
-          amount: Number(mov.amount),
-          observation: mov.observation,
-          cash_date: mov.cash_date,
-          client_id: mov.client_id,
-          loan_id: mov.loan_id,
-        },
-      });
+      // Estorno 100% transacional no banco: contrapartida, parcelas, saldo e
+      // auditoria em uma única transação. Nada é gravado direto por esta tela.
+      const { error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
+        p_movement_id: mov.id,
+        p_reason: reason,
+      } as any);
+      if (error) throw error;
       toast.success("Movimentação estornada!");
       setReverseTarget(null);
       setReverseReason("");
@@ -158,25 +127,6 @@ export default function CashHistoryPage() {
     }
   };
 
-  const handleEdit = async () => {
-    if (!editId) return;
-    const newAmount = parseFloat(editAmount);
-    if (isNaN(newAmount)) { toast.error("Valor inválido"); return; }
-    const mov = movements.find(m => m.id === editId);
-    if (!mov) return;
-    const diff = newAmount - Number(mov.amount);
-    if (mov.type === "emprestimo") {
-      await updateCashBalance({ available_cash: -diff, money_lent: diff });
-    } else if (mov.type === "recebimento_multa") {
-      await updateCashBalance({ available_cash: diff, penalty_receivable: -diff });
-    } else {
-      await updateCashBalance({ available_cash: diff });
-    }
-    await supabase.from("cash_movements").update({ amount: newAmount, observation: editObs || mov.observation }).eq("id", editId);
-    toast.success("Movimentação atualizada!");
-    setEditId(null);
-    fetchData();
-  };
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -212,23 +162,8 @@ export default function CashHistoryPage() {
         </div>
       </div>
 
-      {/* Edit dialog */}
-      <Dialog open={editId !== null} onOpenChange={(o) => { if (!o) setEditId(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Movimentação</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Valor (R$)</Label>
-              <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
-            </div>
-            <div>
-              <Label>Observação</Label>
-              <Textarea value={editObs} onChange={(e) => setEditObs(e.target.value)} />
-            </div>
-            <Button onClick={handleEdit} className="w-full">Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+
+
 
       {/* Reverse (estorno) dialog */}
       <Dialog open={reverseTarget !== null} onOpenChange={(o) => { if (!o && !reverseSaving) { setReverseTarget(null); setReverseReason(""); } }}>
@@ -292,13 +227,6 @@ export default function CashHistoryPage() {
                         <span className={`text-sm font-bold ${Number(mov.amount) >= 0 ? "text-success" : "text-destructive"}`}>
                           {Number(mov.amount) >= 0 ? "+" : ""}{formatCurrency(Number(mov.amount))}
                         </span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                          setEditId(mov.id);
-                          setEditAmount(String(Math.abs(Number(mov.amount))));
-                          setEditObs(mov.observation || "");
-                        }}>
-                          <Pencil className="h-3 w-3" />
-                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Estornar movimentação" onClick={() => openReverseDialog(mov)}>
                           <RotateCcw className="h-3 w-3" />
                         </Button>
