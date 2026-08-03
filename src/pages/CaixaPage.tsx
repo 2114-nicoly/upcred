@@ -746,6 +746,22 @@ export default function CaixaPage() {
         </Badge>
       </div>
 
+      {isClosed && isAutomaticClose((dailyCashRow as any)?.close_origin) && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="p-2.5">
+            <p className="text-[11px] text-warning font-medium">
+              Este caixa foi fechado automaticamente pelo sistema no fim do dia
+              {(dailyCashRow as any)?.close_origin === "automatic_not_opened"
+                ? " (o caixa não chegou a ser aberto)"
+                : ""}.
+              Ele não pode ser editado: para qualquer alteração é necessário solicitar a reabertura.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+
+
       {viewingAsWorker && (
         <Card className="border-warning/40 bg-warning/5">
           <CardContent className="p-2.5">
