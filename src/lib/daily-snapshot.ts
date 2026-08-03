@@ -130,6 +130,9 @@ export type DailyCashSnapshotPayload = {
     not_paid_count: number;
     events_count: number;
     penalty_paid_today: number;
+    /** Valor estornado no dia (contrapartidas, contado uma vez). */
+    estornos?: number;
+    estornos_count?: number;
   };
   daily_summary: {
     expectedToReceiveToday: number;
@@ -137,6 +140,7 @@ export type DailyCashSnapshotPayload = {
     receivedFromExpected?: number;
     pendingToReceiveToday: number;
     overdueAmount?: number;
+    reversedToday?: number;
     cashExpectedForClosing: number;
   } | null;
   events: DailyEvent[];              // non-reversed
@@ -402,7 +406,10 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
   const penaltyMoveRows = requireSnapshotQuery<any[]>("cash_movements (multas)", penaltyMovesRes) || [];
 
   const events = (liveEvents || []) as DailyEvent[];
-  const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(e => e.reversed_at != null);
+  // Par completo: original estornado + contrapartida (com os vínculos preservados).
+  const reversed = ((allEventsIncReversed || []) as DailyEvent[]).filter(
+    e => e.reversed_at != null || (e as any).reverses_event_id != null
+  );
   const renewalEvents = events.filter(e => e.event_type === "renovacao");
 
   assertAllInScope(events, scope, "daily_events");
@@ -673,6 +680,18 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
   assertAllInScope(newLoans as any[], scope, "loans do dia");
   assertAllInScope(paidMovements as any[], scope, "cash_movements");
 
+  // Estornos do dia: contadas SOMENTE as contrapartidas (valor absoluto, uma vez).
+  const reversalSummary = ((allEventsIncReversed || []) as DailyEvent[]).reduce(
+    (acc, e: any) => {
+      const isCounter = !!e?.reverses_event_id || String(e?.event_type || "").startsWith("estorno");
+      if (!isCounter) return acc;
+      acc.total += Math.abs(Number(e.amount_in || 0)) + Math.abs(Number(e.amount_out || 0));
+      acc.count += 1;
+      return acc;
+    },
+    { total: 0, count: 0 }
+  );
+
   const payload: DailyCashSnapshotPayload = {
 
     version: DAILY_SNAPSHOT_VERSION,
@@ -699,6 +718,8 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
       not_paid_count: extra.not_paid_count,
       events_count: extra.events_count,
       penalty_paid_today: penaltyPaidToday,
+      estornos: reversalSummary.total,
+      estornos_count: reversalSummary.count,
     },
     daily_summary: dailySummary
       ? {
@@ -707,6 +728,7 @@ export async function buildDailyCashSnapshotPayload(args: BuildSnapshotArgs): Pr
           receivedFromExpected: dailySummary.receivedFromExpected,
           pendingToReceiveToday: dailySummary.pendingToReceiveToday,
           overdueAmount: dailySummary.overdueAmount,
+          reversedToday: reversalSummary.total,
           cashExpectedForClosing: dailySummary.cashExpectedForClosing,
         }
       : null,

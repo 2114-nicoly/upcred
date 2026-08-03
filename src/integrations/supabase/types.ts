@@ -2167,6 +2167,10 @@ export type Database = {
         Args: { p_daily_cash_id: string }
         Returns: Json
       }
+      build_daily_cash_snapshot_v2_legacy: {
+        Args: { p_daily_cash_id: string }
+        Returns: Json
+      }
       bulk_archive_clients: { Args: { p_client_ids: string[] }; Returns: Json }
       bulk_unarchive_clients: {
         Args: { p_client_ids: string[] }
@@ -2302,6 +2306,16 @@ export type Database = {
           p_cash_date: string
           p_category: string
           p_description: string
+        }
+        Returns: Json
+      }
+      register_manual_movement: {
+        Args: {
+          p_amount: number
+          p_cash_date: string
+          p_category?: string
+          p_observation?: string
+          p_type: string
         }
         Returns: Json
       }

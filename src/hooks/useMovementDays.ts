@@ -17,11 +17,15 @@ export type MovementDay = {
 };
 
 type EventLike = {
+  id: string;
   cash_date: string;
   event_type: string;
   amount_in: number | string;
   amount_out: number | string;
   reversed_at: string | null;
+  reversal_event_id: string | null;
+  reverses_event_id: string | null;
+  metadata?: Record<string, any> | null;
   worker_id: string | null;
   admin_id: string | null;
 };
@@ -67,7 +71,7 @@ export function useMovementDays(opts: UseMovementDaysOpts = {}) {
     try {
       let evQ: any = supabase
         .from("daily_events" as any)
-        .select("cash_date,event_type,amount_in,amount_out,reversed_at,worker_id,admin_id")
+        .select("id,cash_date,event_type,amount_in,amount_out,reversed_at,reversal_event_id,reverses_event_id,metadata,worker_id,admin_id")
         .gte("cash_date", fromDate)
         .lte("cash_date", toDate)
         .limit(5000);

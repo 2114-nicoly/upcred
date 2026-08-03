@@ -57,6 +57,8 @@ export default function CaixaPage() {
   const [selectedDate, setSelectedDate] = useState(searchParams.get("date") || today);
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [events, setEvents] = useState<DailyEvent[]>([]);
+  /** Inclui os originais estornados — usado SOMENTE para o efeito líquido. */
+  const [allEvents, setAllEvents] = useState<DailyEvent[]>([]);
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<ActiveSection>("resumo");
@@ -116,9 +118,10 @@ export default function CaixaPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [bal, dayEvents, dcRes] = await Promise.all([
+      const [bal, dayEvents, dayEventsAll, dcRes] = await Promise.all([
         getCashBalance(scopeArg),
         getDailyEvents(selectedDate, { workerId: effectiveWorkerId, adminId: effectiveAdminId }),
+        getDailyEvents(selectedDate, { includeReversed: true, workerId: effectiveWorkerId, adminId: effectiveAdminId }),
         applyDailyCashScope(supabase.from("daily_cash").select("*").eq("cash_date", selectedDate), await getCurrentDailyCashScope(scopeArg)).maybeSingle(),
       ]);
       setBalance(bal);
@@ -167,6 +170,17 @@ export default function CaixaPage() {
 
       const effectiveEvents = snap?.events ?? dayEvents;
       setEvents(effectiveEvents);
+      // Efeito líquido do caixa exige o PAR completo (original + contrapartida).
+      const effectiveAll = snap
+        ? (() => {
+            const byId = new Map<string, DailyEvent>();
+            for (const e of [...(snap.events || []), ...((snap.reversed_events || []) as DailyEvent[])]) {
+              if (e?.id) byId.set(e.id, e);
+            }
+            return [...byId.values()];
+          })()
+        : dayEventsAll;
+      setAllEvents(effectiveAll);
 
       // Fetch client names for all events
       const namesFromSnapshot: Record<string, string> = { ...(snap?.client_names || {}) };
@@ -214,8 +228,13 @@ export default function CaixaPage() {
   if (isAdmin && selectedAdminId) scopedEvents = scopedEvents.filter((e: any) => e.admin_id === selectedAdminId);
   if (isAdmin && selectedWorkerId) scopedEvents = scopedEvents.filter((e: any) => e.worker_id === selectedWorkerId);
 
+  let scopedAllEvents = allEvents;
+  if (isAdmin && selectedAdminId) scopedAllEvents = scopedAllEvents.filter((e: any) => e.admin_id === selectedAdminId);
+  if (isAdmin && selectedWorkerId) scopedAllEvents = scopedAllEvents.filter((e: any) => e.worker_id === selectedWorkerId);
+
   // Unified totals from daily_events (live, used when not yet closed).
-  const liveTotals = computeDailyTotals(scopedEvents as any, 0);
+  // Usa o par completo: original estornado + contrapartida => efeito líquido zero.
+  const liveTotals = computeDailyTotals(scopedAllEvents as any, 0);
   const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
   // Summary: quando fechado, usa valores gravados no fechamento (snapshot imutável).
@@ -304,47 +323,16 @@ export default function CaixaPage() {
 
     setSubmitting(true);
     try {
-      await assertCashOpen(selectedDate);
+      // RPC transacional única: saldo + movimentação + evento + auditoria.
+      // Se qualquer etapa falhar, NADA fica registrado.
+      const { error: rpcErr } = await supabase.rpc("register_manual_movement" as any, {
+        p_cash_date: selectedDate,
+        p_type: manualType,
+        p_amount: amount,
+        p_observation: manualObs || null,
+      } as any);
+      if (rpcErr) throw rpcErr;
 
-      if (manualType === "ajuste_manual") {
-        const current = await getCashBalance(scopeArg);
-        if (!current) { toast.error("Erro ao obter saldo"); return; }
-        const diff = amount - Number(current.available_cash);
-        await updateCashBalance({ available_cash: diff });
-        await createCashMovement({
-          type: "ajuste_manual",
-          amount: diff,
-          observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
-          cash_date: selectedDate,
-        });
-        await createDailyEvent({
-          cash_date: selectedDate,
-          event_type: "ajuste_manual",
-          amount_in: diff >= 0 ? diff : 0,
-          amount_out: diff < 0 ? Math.abs(diff) : 0,
-          observation: manualObs || `Ajuste: saldo definido para ${amount.toFixed(2)}`,
-          origin: "geral",
-        });
-        await logAction("ajuste_caixa", "cash", null, null, { amount, diff }, manualObs || null);
-      } else {
-        const cashChange = manualType === "saida_manual" ? -amount : amount;
-        await updateCashBalance({ available_cash: cashChange });
-        await createCashMovement({
-          type: manualType,
-          amount: manualType === "saida_manual" ? -amount : amount,
-          observation: manualObs || null,
-          cash_date: selectedDate,
-        });
-        await createDailyEvent({
-          cash_date: selectedDate,
-          event_type: manualType,
-          amount_in: manualType === "entrada_manual" ? amount : 0,
-          amount_out: manualType === "saida_manual" ? amount : 0,
-          observation: manualObs || null,
-          origin: "geral",
-        });
-        await logAction(manualType === "entrada_manual" ? "aporte" : "retirada", "cash", null, null, { amount }, manualObs || null);
-      }
 
       toast.success("Movimentação registrada!");
       setManualType(null);
