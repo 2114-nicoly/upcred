@@ -14,6 +14,8 @@ export type MovementDay = {
   expected: number;
   countedClosing: number | null;
   closingDifference: number | null;
+  /** Origem do fechamento (manual / automático), congelada no caixa. */
+  closeOrigin: string | null;
 };
 
 type EventLike = {
