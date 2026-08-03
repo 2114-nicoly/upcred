@@ -188,6 +188,7 @@ export type Database = {
           last_run_at: string | null
           last_success_at: string | null
           singleton: boolean
+          strict_snapshot_from_date: string | null
           updated_at: string
         }
         Insert: {
@@ -199,6 +200,7 @@ export type Database = {
           last_run_at?: string | null
           last_success_at?: string | null
           singleton?: boolean
+          strict_snapshot_from_date?: string | null
           updated_at?: string
         }
         Update: {
@@ -210,6 +212,7 @@ export type Database = {
           last_run_at?: string | null
           last_success_at?: string | null
           singleton?: boolean
+          strict_snapshot_from_date?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2025,6 +2028,14 @@ export type Database = {
         Returns: string
       }
       _daily_cash_is_empty: { Args: { p_cash_id: string }; Returns: boolean }
+      _daily_cash_snapshot_ok: {
+        Args: { p_daily_cash_id: string }
+        Returns: boolean
+      }
+      _ensure_daily_cash_closed_strict: {
+        Args: { p_admin_id: string; p_date: string; p_worker_id: string }
+        Returns: Json
+      }
       _ensure_previous_daily_cash_closed: {
         Args: { p_admin_id: string; p_date: string; p_worker_id: string }
         Returns: Json
@@ -2075,6 +2086,12 @@ export type Database = {
       _scope_oldest_open_cash_date: {
         Args: { p_admin: string; p_before: string; p_worker: string }
         Returns: string
+      }
+      _scope_pending_cash_dates: {
+        Args: { p_admin: string; p_before: string; p_worker: string }
+        Returns: {
+          cash_date: string
+        }[]
       }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_cleanup_empty_daily_cash: {
@@ -2396,6 +2413,7 @@ export type Database = {
         Args: { p_active: boolean; p_worker_id: string }
         Returns: undefined
       }
+      strict_snapshot_from: { Args: never; Returns: string }
       super_admin_list_admins: {
         Args: never
         Returns: {
