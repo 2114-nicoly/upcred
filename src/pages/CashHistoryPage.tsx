@@ -108,39 +108,13 @@ export default function CashHistoryPage() {
     setReverseSaving(true);
     const mov = reverseTarget;
     try {
-      const reverseMap: Record<string, any> = {
-        emprestimo: { available_cash: Number(mov.amount), money_lent: -Number(mov.amount) },
-        recebimento_normal: { available_cash: -Number(mov.amount) },
-        recebimento_multa: { available_cash: -Number(mov.amount), penalty_receivable: Number(mov.amount) },
-        entrada_manual: { available_cash: -Number(mov.amount) },
-        saida_manual: { available_cash: -Number(mov.amount) },
-        ajuste_manual: { available_cash: -Number(mov.amount) },
-      };
-      await updateCashBalance(reverseMap[mov.type] || {});
-      await reverseCashMovement(mov.id, { reason });
-      // Structured audit metadata (preserves history; no physical delete)
-      await logReversal({
-        action: "estorno_manual",
-        entity: "cash",
-        original_movement_id: mov.id,
-        original_event_id: (mov as any).daily_event_id ?? null,
-        original_type: mov.type,
-        original_amount: Number(mov.amount),
-        reversal_amount: -Number(mov.amount),
-        reversal_reason: reason,
-        client_id: mov.client_id,
-        loan_id: mov.loan_id,
-        cash_date: (mov as any).cash_date ?? null,
-        observation: `Estorno de ${getMovementTypeLabel(mov.type)} (${formatCurrency(Math.abs(Number(mov.amount)))}) — ${reason}`,
-        beforeSnapshot: {
-          type: mov.type,
-          amount: Number(mov.amount),
-          observation: mov.observation,
-          cash_date: mov.cash_date,
-          client_id: mov.client_id,
-          loan_id: mov.loan_id,
-        },
-      });
+      // Estorno 100% transacional no banco: contrapartida, parcelas, saldo e
+      // auditoria em uma única transação. Nada é gravado direto por esta tela.
+      const { error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
+        p_movement_id: mov.id,
+        p_reason: reason,
+      } as any);
+      if (error) throw error;
       toast.success("Movimentação estornada!");
       setReverseTarget(null);
       setReverseReason("");
@@ -153,25 +127,6 @@ export default function CashHistoryPage() {
     }
   };
 
-  const handleEdit = async () => {
-    if (!editId) return;
-    const newAmount = parseFloat(editAmount);
-    if (isNaN(newAmount)) { toast.error("Valor inválido"); return; }
-    const mov = movements.find(m => m.id === editId);
-    if (!mov) return;
-    const diff = newAmount - Number(mov.amount);
-    if (mov.type === "emprestimo") {
-      await updateCashBalance({ available_cash: -diff, money_lent: diff });
-    } else if (mov.type === "recebimento_multa") {
-      await updateCashBalance({ available_cash: diff, penalty_receivable: -diff });
-    } else {
-      await updateCashBalance({ available_cash: diff });
-    }
-    await supabase.from("cash_movements").update({ amount: newAmount, observation: editObs || mov.observation }).eq("id", editId);
-    toast.success("Movimentação atualizada!");
-    setEditId(null);
-    fetchData();
-  };
 
   return (
     <div className="mx-auto max-w-lg p-4">
