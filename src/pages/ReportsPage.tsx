@@ -372,7 +372,7 @@ export default function ReportsPage() {
             worker: { id: d.workerId || "-", nome: d.workerName } as WorkerRow,
             isOpen: d.status === "open",
             statusLabel: d.status === "closed"
-              ? (d.incompleteSnapshot ? "Fechado (registro congelado indisponível)" : "Fechado")
+              ? (d.incompleteSnapshot ? "Fechado automaticamente — histórico antigo incompleto" : "Fechado")
               : d.status === "open" ? "Caixa ainda aberto" : "Não aberto",
             totals: {
               caixaInicial: d.totals.opening,
