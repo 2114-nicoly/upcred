@@ -55,17 +55,8 @@ type LoanProgress = {
 
 export default function ActiveLoansPage() {
 
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
+  // Escopo por empréstimo: a data vem do caixa do trabalhador dono do empréstimo.
 
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
-
-  useEffect(() => {
-    setQuitarDate((d) => d || opDate);
-  }, [opDate]);
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin, workerId } = useAuth();
   const { selectedAdminId, selectedWorkerId, workers, admins } = useWorkerFilter();
