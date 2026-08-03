@@ -197,3 +197,48 @@ describe("snapshots preservados e versionados", () => {
     expect(versionSql).toContain("al.action_type = 'reabrir_caixa'");
   });
 });
+
+describe("concorrência e permissões explícitas", () => {
+  const ALL_SQL = (() => {
+    const files = readdirSync(MIG_DIR).filter((f) => f.endsWith(".sql")).sort();
+    return norm(files.map((f) => readFileSync(resolve(MIG_DIR, f), "utf8")).join("\n"));
+  })();
+
+  const lastRequestFn = (() => {
+    const marker = "CREATE OR REPLACE FUNCTION public.request_cash_reopen(p_daily_cash_id uuid, p_reason text)";
+    const start = ALL_SQL.lastIndexOf(marker);
+    return ALL_SQL.slice(start, start + 3000);
+  })();
+
+  it("request_cash_reopen bloqueia a linha do caixa com FOR UPDATE", () => {
+    expect(lastRequestFn).toContain("FROM public.daily_cash WHERE id = p_daily_cash_id FOR UPDATE");
+    const lockAt = lastRequestFn.indexOf("FOR UPDATE");
+    const insertAt = lastRequestFn.indexOf("INSERT INTO public.cash_reopen_requests");
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(insertAt).toBeGreaterThan(lockAt);
+  });
+
+  it("as quatro RPCs públicas têm permissões explícitas", () => {
+    for (const sig of [
+      "public.request_cash_reopen(uuid, text)",
+      "public.approve_cash_reopen_request(uuid, text)",
+      "public.reject_cash_reopen_request(uuid, text)",
+      "public.admin_reopen_daily_cash(uuid, text)",
+    ]) {
+      expect(ALL_SQL).toContain(`REVOKE ALL ON FUNCTION ${sig} FROM PUBLIC, anon`);
+      expect(ALL_SQL).toContain(`GRANT EXECUTE ON FUNCTION ${sig} TO authenticated`);
+    }
+  });
+
+  it("handleReopenReview não grava auditoria no frontend", () => {
+    const src = readFileSync(resolve(SRC_DIR, "components/AdminFullPanel.tsx"), "utf8");
+    const start = src.indexOf("async function handleReopenReview");
+    const body = src.slice(start, src.indexOf("\n  }", start));
+    expect(start).toBeGreaterThan(-1);
+    expect(body).not.toContain("requireAudit(");
+    expect(body).not.toContain("logAction(");
+    expect(body).toContain("loadReopenRequests()");
+    // outras funções continuam auditando
+    expect(src).toContain("requireAudit(");
+  });
+});
