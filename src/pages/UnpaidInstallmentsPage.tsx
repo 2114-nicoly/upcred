@@ -14,8 +14,8 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { isInstallmentCollectibleStatus } from "@/lib/status-constants";
-import { useActiveCash } from "@/hooks/useActiveCash";
-import { getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
+import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
+import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
 
 type Installment = {
   id: string;
@@ -41,13 +41,6 @@ type Loan = {
 
 export default function UnpaidInstallmentsPage() {
 
-  // Data operacional: todas as ações financeiras usam a data do caixa ABERTO.
-  const { activeCashDate, scope: activeCashScope } = useActiveCash();
-  const opDate = activeCashDate ?? getTodayCashDate();
-
-  useEffect(() => {
-    setPayDate((d) => d || opDate);
-  }, [opDate]);
   const { loanId } = useParams();
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -62,10 +55,22 @@ export default function UnpaidInstallmentsPage() {
   const [editInstAmount, setEditInstAmount] = useState("");
   const [editInstDueDate, setEditInstDueDate] = useState("");
 
+  // Caixa do trabalhador DONO do empréstimo (nunca o caixa global/administrativo).
+  const loanScope: CashScope | null = loan
+    ? { workerId: (loan as any).worker_id ?? null, adminId: (loan as any).admin_id ?? null }
+    : null;
+  const scopedCash = useScopedActiveCash(loanScope);
+  const opDate = scopedCash.cashDate ?? "";
+
+  useEffect(() => {
+    setPayDate(scopedCash.cashDate ?? "");
+  }, [scopedCash.cashDate, loanId]);
+
+
   const fetchData = async () => {
     const { data: l } = await supabase
       .from("loans")
-      .select("id, client_id, total_amount, remaining_balance, status, clients(name)")
+      .select("id, client_id, total_amount, remaining_balance, status, worker_id, admin_id, clients(name)")
       .eq("id", loanId!)
       .not("status", "in", "(paid,cancelled,renegotiated)")
       .gt("remaining_balance", 0.01)
@@ -111,7 +116,7 @@ export default function UnpaidInstallmentsPage() {
 
   const handlePay = async (id: string) => {
     try {
-      await assertCashOpen(payDate, activeCashScope);
+      await assertScopedCashOpen(payDate, { workerId: (loan as any)?.worker_id ?? null, adminId: (loan as any)?.admin_id ?? null });
     } catch (err: any) {
       toast.error(err?.message || "Não há caixa aberto nesta data.");
       return;
@@ -275,10 +280,14 @@ export default function UnpaidInstallmentsPage() {
                             <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
                           </div>
                           <div>
-                            <Label>Data do pagamento</Label>
+                            <Label>Data do pagamento (caixa do trabalhador)</Label>
                             <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                            {scopedCash.loading && <p className="text-xs text-muted-foreground">Carregando o caixa do trabalhador...</p>}
+                            {!scopedCash.loading && !scopedCash.cashDate && (
+                              <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                            )}
                           </div>
-                          <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90">Confirmar Pagamento</Button>
+                          <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={!scopedCash.ready}>Confirmar Pagamento</Button>
                         </div>
                       </DialogContent>
                     </Dialog>
