@@ -325,6 +325,8 @@ export async function getDailyCollectionSummary(
     pendingToReceiveToday,
     overdueAmount,
     cashExpectedForClosing,
+    reversedToday,
+
     hasError,
   };
 }
