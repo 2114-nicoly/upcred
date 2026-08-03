@@ -38,7 +38,7 @@ import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals, getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
-import { loadDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
+import { loadDailyCashSnapshot, closeDailyCashWithSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
@@ -478,15 +478,7 @@ export default function CaixaPage() {
       // O snapshot é construído, validado e gravado PELO BANCO, na mesma
       // transação do fechamento. O navegador nunca envia payload pronto:
       // se qualquer etapa falhar, o caixa permanece aberto.
-      const { error } = await supabase.rpc(
-        "close_daily_cash_with_snapshot" as any,
-        {
-          p_cash_date: selectedDate,
-          p_counted: counted,
-          p_note: closeNote.trim() || null,
-        } as any
-      );
-      if (error) throw error;
+      await closeDailyCashWithSnapshot(selectedDate, counted, closeNote.trim() || null);
 
       try {
         await logAction(
