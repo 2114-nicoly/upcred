@@ -39,6 +39,7 @@ type CashLike = {
   expected_closing_balance: number | string | null;
   counted_closing_balance: number | string | null;
   closing_difference: number | string | null;
+  close_origin: string | null;
   worker_id: string | null;
   admin_id: string | null;
 };
@@ -82,7 +83,7 @@ export function useMovementDays(opts: UseMovementDaysOpts = {}) {
 
       let cashQ: any = supabase
         .from("daily_cash")
-        .select("cash_date,status,opening_balance,expected_closing_balance,counted_closing_balance,closing_difference,worker_id,admin_id")
+        .select("cash_date,status,opening_balance,expected_closing_balance,counted_closing_balance,closing_difference,close_origin,worker_id,admin_id")
         .gte("cash_date", fromDate)
         .lte("cash_date", toDate);
       if (workerId) cashQ = cashQ.eq("worker_id", workerId);
@@ -132,6 +133,7 @@ export function useMovementDays(opts: UseMovementDaysOpts = {}) {
           expected: cash?.expected_closing_balance != null ? Number(cash.expected_closing_balance) : t.saldoFinalEsperado,
           countedClosing: counted,
           closingDifference: diff,
+          closeOrigin: cash?.close_origin ?? null,
         });
       }
       out.sort((a, b) => b.date.localeCompare(a.date));
