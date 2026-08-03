@@ -351,7 +351,10 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
       console.warn("[daily-events] logReversal failed", err);
     }
 
-    await recalculateCashBalanceFromLedger();
+    await recalculateCashBalanceFromLedger({
+      workerId: (event as any).worker_id ?? null,
+      adminId: (event as any).admin_id ?? null,
+    });
     return;
   }
 

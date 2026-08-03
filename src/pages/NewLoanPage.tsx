@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, recalculateCashBalanceForLoan } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
@@ -343,7 +343,10 @@ export default function NewLoanPage() {
         if (createdMovementIds.length > 0) await supabase.from("cash_movements").delete().in("id", createdMovementIds);
         await supabase.from("installments").delete().eq("loan_id", loan.id);
         await supabase.from("loans").delete().eq("id", loan.id);
-        await recalculateCashBalanceFromLedger();
+        await recalculateCashBalanceFromLedger({
+          workerId: (loan as any).worker_id ?? null,
+          adminId: (loan as any).admin_id ?? null,
+        });
       } catch (e) {
         console.error("[NewLoan] rollback falhou:", e);
       }
@@ -616,7 +619,7 @@ export default function NewLoanPage() {
       }
 
       // Safety net: garante consistência total de A Receber a partir do ledger.
-      try { await recalculateCashBalanceFromLedger(); } catch (e) { console.warn("[NewLoan] recalc ledger falhou:", e); }
+      try { await recalculateCashBalanceForLoan(loan.id); } catch (e) { console.warn("[NewLoan] recalc ledger falhou:", e); }
 
       // Audit: ação específica de empréstimo importado, com Antes (não existia) e Depois (estado completo).
       await logLoanAction({

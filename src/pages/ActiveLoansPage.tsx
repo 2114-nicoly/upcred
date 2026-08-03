@@ -14,7 +14,7 @@ import { formatCurrency, getLoanStatusColor, getStatusLabel, getPaymentTypeLabel
 import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
-import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, cancelLoan } from "@/lib/payment-utils";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
@@ -104,8 +104,7 @@ export default function ActiveLoansPage() {
         toast.error(`Falha ao cancelar: ${err?.message || "erro"}`);
       }
     }
-    // Recalculate cash balance after bulk deletion
-    await recalculateCashBalanceFromLedger();
+    // cancelLoan() já recalcula o caixa no escopo exato de cada empréstimo.
     if (cancelledCount > 0) toast.success(`${cancelledCount} empréstimo(s) cancelado(s)!`);
     setSelectedIds(new Set());
     setSelectMode(false);
