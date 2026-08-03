@@ -162,23 +162,8 @@ export default function CashHistoryPage() {
         </div>
       </div>
 
-      {/* Edit dialog */}
-      <Dialog open={editId !== null} onOpenChange={(o) => { if (!o) setEditId(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Movimentação</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Valor (R$)</Label>
-              <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
-            </div>
-            <div>
-              <Label>Observação</Label>
-              <Textarea value={editObs} onChange={(e) => setEditObs(e.target.value)} />
-            </div>
-            <Button onClick={handleEdit} className="w-full">Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+
+
 
       {/* Reverse (estorno) dialog */}
       <Dialog open={reverseTarget !== null} onOpenChange={(o) => { if (!o && !reverseSaving) { setReverseTarget(null); setReverseReason(""); } }}>
