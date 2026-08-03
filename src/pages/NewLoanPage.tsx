@@ -77,7 +77,7 @@ export default function NewLoanPage() {
     setObservation("");
     setRegistrationType("new");
     setAmountAlreadyPaid("");
-    setRenewPaidAmount("");
+    setRenewPayState(createPaymentAmountState());
   };
   useEffect(() => {
     if (restoredRef.current) return;
