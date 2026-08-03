@@ -525,7 +525,11 @@ export default function OverdueLoansPage() {
                                   <Label>Observação (opcional)</Label>
                                   <Textarea placeholder="Motivo da multa..." value={penaltyObservation} onChange={(e) => setPenaltyObservation(e.target.value)} />
                                 </div>
-                                <Button onClick={() => handleAddPenalty(inst)} className="w-full">Adicionar Multa</Button>
+                                {!scopedCash.loading && !scopedCash.cashDate && (
+                                  <p className="text-xs text-destructive">O trabalhador responsável não possui caixa aberto.</p>
+                                )}
+                                <Button onClick={() => handleAddPenalty(inst)} className="w-full" disabled={!scopedCash.ready}>Adicionar Multa</Button>
+
                               </div>
                             </DialogContent>
                           </Dialog>
