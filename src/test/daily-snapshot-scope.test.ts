@@ -105,10 +105,16 @@ vi.mock("@/lib/cash-utils", () => ({
   },
   applyDailyCashScope: (q: any) => q,
   getCashBalance: async () => ({ available_cash: 0 }),
-  getCashBalanceResult: async () => cashBalanceResult,
+  getCashBalanceResult: async (s: any) =>
+    cashBalanceResult ?? {
+      data: { available_cash: 1000, worker_id: s?.workerId ?? null, admin_id: s?.adminId ?? null },
+      error: null,
+    },
 }));
 
-let cashBalanceResult: any = { data: { available_cash: 1000, worker_id: W1, admin_id: ADMIN_A }, error: null };
+/** null = comportamento padrão (linha do escopo solicitado). */
+let cashBalanceResult: any = null;
+
 
 vi.mock("@/lib/audit-utils", () => ({
   getCurrentActorIdentity: async () => ({ id: "u1", name: "Tester", role: "admin" }),
