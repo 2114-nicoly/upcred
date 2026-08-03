@@ -1924,6 +1924,10 @@ export type Database = {
         Args: { p_count: number; p_inst_amount: number; p_paid: number }
         Returns: string
       }
+      _fmt_units_delta: {
+        Args: { p_after: number; p_before: number }
+        Returns: string
+      }
       admin_assign_client_codes: { Args: never; Returns: number }
       admin_cleanup_empty_daily_cash: {
         Args: {
@@ -2039,6 +2043,10 @@ export type Database = {
         Args: { p_daily_event_id: string; p_receipt: Json }
         Returns: undefined
       }
+      build_daily_cash_snapshot_v2: {
+        Args: { p_daily_cash_id: string }
+        Returns: Json
+      }
       bulk_archive_clients: { Args: { p_client_ids: string[] }; Returns: Json }
       bulk_unarchive_clients: {
         Args: { p_client_ids: string[] }
@@ -2049,15 +2057,20 @@ export type Database = {
         Args: { p_cash_date: string; p_counted: number; p_note?: string }
         Returns: string
       }
-      close_daily_cash_with_snapshot: {
-        Args: {
-          p_cash_date: string
-          p_counted: number
-          p_note?: string
-          p_payload?: Json
-        }
-        Returns: Json
-      }
+      close_daily_cash_with_snapshot:
+        | {
+            Args: { p_cash_date: string; p_counted: number; p_note?: string }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_cash_date: string
+              p_counted: number
+              p_note?: string
+              p_payload?: Json
+            }
+            Returns: Json
+          }
       delete_worker_if_empty: {
         Args: { p_worker_id: string }
         Returns: undefined

@@ -38,7 +38,7 @@ import DateNavigator from "@/components/DateNavigator";
 import NoMovementHint from "@/components/NoMovementHint";
 import OpenCashBanner from "@/components/OpenCashBanner";
 import { computeDailyTotals, getDailyCollectionSummary, type DailyCollectionSummary } from "@/lib/daily-totals";
-import { loadDailyCashSnapshot, buildDailyCashSnapshotPayload, saveDailyCashSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
+import { loadDailyCashSnapshot, closeDailyCashWithSnapshot, listDailyCashSnapshotVersions, type DailyCashSnapshotPayload, type DailyCashSnapshotVersion } from "@/lib/daily-snapshot";
 
 type ActiveSection = "resumo" | "pagos" | "naopagos" | "novos" | "importados" | "movimentos";
 
@@ -475,47 +475,10 @@ export default function CaixaPage() {
     }
     setSubmitting(true);
     try {
-      // 1) Monta o snapshot ANTES de fechar (estado vivo do dia), com o MESMO
-      //    escopo efetivo usado para carregar o caixa selecionado.
-      const closeScope = await getCurrentDailyCashScope(scopeArg);
-      const payload = await buildDailyCashSnapshotPayload({
-        cashDate: selectedDate,
-        workerId: closeScope.worker_id,
-        adminId: closeScope.admin_id,
-        extra: {
-          opening_balance: Number(summary.opening.toFixed(2)),
-          expected_worker_cash: expected,
-          counted_cash: counted,
-          final_cash: Number(summary.finalCash.toFixed(2)),
-          received: Number(summary.received.toFixed(2)),
-          penalty: Number(summary.penalty.toFixed(2)),
-          manual_in: Number(summary.manualIn.toFixed(2)),
-          manual_out: Number(summary.manualOut.toFixed(2)),
-          expenses: Number(summary.expenses.toFixed(2)),
-          new_loans: Number(summary.newLoans.toFixed(2)),
-          renewals: Number(summary.renewals.toFixed(2)),
-          lent: Number(summary.lent.toFixed(2)),
-          total_in: Number(summary.totalIn.toFixed(2)),
-          total_out: Number(summary.totalOut.toFixed(2)),
-          not_paid_count: Number(summary.notPaidCount || 0),
-          events_count: Number(summary.eventsCount || 0),
-          observation: closeNote.trim() || null,
-        },
-      });
-
-
-      // 2) Fecha o caixa e grava o histórico na MESMA transação:
-      //    se o snapshot falhar, o caixa NÃO fecha.
-      const { error } = await supabase.rpc(
-        "close_daily_cash_with_snapshot" as any,
-        {
-          p_cash_date: selectedDate,
-          p_counted: counted,
-          p_note: closeNote.trim() || null,
-          p_payload: payload as any,
-        } as any
-      );
-      if (error) throw error;
+      // O snapshot é construído, validado e gravado PELO BANCO, na mesma
+      // transação do fechamento. O navegador nunca envia payload pronto:
+      // se qualquer etapa falhar, o caixa permanece aberto.
+      await closeDailyCashWithSnapshot(selectedDate, counted, closeNote.trim() || null);
 
       try {
         await logAction(
@@ -549,7 +512,7 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
-      toast.error(err?.message || "Erro ao fechar caixa");
+      toast.error((err?.message || "Erro ao fechar caixa") + " O caixa permaneceu aberto.");
     } finally {
       setSubmitting(false);
     }

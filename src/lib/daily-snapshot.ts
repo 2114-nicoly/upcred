@@ -344,6 +344,11 @@ export type BuildSnapshotArgs = {
 };
 
 /**
+ * SOMENTE VISUALIZAÇÃO de um dia ABERTO. O snapshot autoritativo do
+ * fechamento é construído, validado e gravado pelo BANCO
+ * (`close_daily_cash_with_snapshot`). Este builder nunca deve ser usado
+ * para fechar o caixa nem para salvar histórico.
+ *
  * Build the payload from live data, com escopo EXPLÍCITO (nunca inferido
  * silenciosamente pelo usuário autenticado). Call this at close time, BEFORE
  * any further mutation can happen.
@@ -783,7 +788,33 @@ function assertSnapshotComplete(
  * creates a NEW row (version = last + 1). Old versions are preserved.
  * Returns the new version number.
  */
+export const SNAPSHOT_CLIENT_SAVE_BLOCKED_MESSAGE =
+  "O histórico do fechamento é criado pelo banco. Use o fechamento oficial do caixa.";
+
+/**
+ * Fecha o caixa do dia. O snapshot é construído e validado NO BANCO, na mesma
+ * transação: o navegador não envia payload. Falha => caixa continua aberto.
+ */
+export async function closeDailyCashWithSnapshot(
+  cashDate: string,
+  counted: number,
+  note: string | null,
+): Promise<{ cash_id: string | null; version: number | null }> {
+  const { data, error } = await supabase.rpc("close_daily_cash_with_snapshot" as any, {
+    p_cash_date: cashDate,
+    p_counted: counted,
+    p_note: note,
+  } as any);
+  if (error) throw error;
+  const row = (data ?? {}) as any;
+  return { cash_id: row.cash_id ?? null, version: row.version ?? null };
+}
+
+/** @deprecated Gravação de snapshot pelo cliente foi removida. */
 export async function saveDailyCashSnapshot(cashDate: string, payload: DailyCashSnapshotPayload): Promise<number> {
+  throw new Error(SNAPSHOT_CLIENT_SAVE_BLOCKED_MESSAGE);
+  // eslint-disable-next-line no-unreachable
+
   const scope = await getCurrentDailyCashScope();
   // Locate the daily_cash id for this date/scope
   const { data: dcRow, error: dcErr } = await applyDailyCashScope(
