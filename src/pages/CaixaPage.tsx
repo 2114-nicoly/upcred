@@ -520,33 +520,23 @@ export default function CaixaPage() {
   };
 
 
+  // Admin/SuperAdmin: reabertura direta via RPC segura (auditoria é transacional no banco).
   const handleReopenCash = async () => {
     if (submitting) return;
     if (!isAdmin && !isSuperAdmin) { toast.error("Apenas administradores podem reabrir o caixa."); return; }
     if (reopenReason.trim().length < 3) { toast.error("Informe o motivo da reabertura."); return; }
+    if (!dailyCashRow?.id) { toast.error("Caixa não encontrado para esta data."); return; }
     setSubmitting(true);
     try {
-      const { error } = await supabase.rpc("reopen_daily_cash" as any, { p_cash_date: selectedDate, p_reason: reopenReason.trim() } as any);
+      const { error } = await supabase.rpc("admin_reopen_daily_cash" as any, {
+        p_daily_cash_id: dailyCashRow.id,
+        p_reason: reopenReason.trim(),
+      } as any);
       if (error) throw error;
-      const actor = await getCurrentActorIdentity();
-      await logAction(
-        "reabrir_caixa",
-        "cash",
-        null,
-        null,
-        {
-          cash_date: selectedDate,
-          reopened_by: actor.id,
-          reopened_by_name: actor.name,
-          reopened_by_role: actor.role,
-          reason: reopenReason.trim(),
-          reopened_at: new Date().toISOString(),
-        },
-        `Reabertura de caixa (${selectedDate}): ${reopenReason.trim()}`,
-      );
       toast.success("Caixa reaberto!");
       setReopenOpen(false);
       setReopenReason("");
+      await fetchReopenRequests();
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] reopen failed", err);
@@ -567,36 +557,18 @@ export default function CaixaPage() {
   }, [isAdmin, isSuperAdmin]);
   useEffect(() => { void fetchReopenRequests(); }, [fetchReopenRequests, dailyCashStatus, selectedDate]);
 
-  // Worker: submit reopen request (creates a row in cash_reopen_requests).
+  // Trabalhador: solicita reabertura via RPC segura (escopo derivado no banco).
   const submitReopenRequest = async () => {
     if (submitting) return;
     if (reopenReason.trim().length < 3) { toast.error("Informe o motivo (mínimo 3 caracteres)."); return; }
+    if (!dailyCashRow?.id) { toast.error("Caixa não encontrado para esta data."); return; }
     setSubmitting(true);
     try {
-      const { data: { session: s } } = await supabase.auth.getSession();
-      const uid = s?.user?.id ?? null;
-      let workerName: string | null = null;
-      let workerId: string | null = null;
-      let adminId: string | null = null;
-      if (uid) {
-        const { data: w } = await supabase.from("workers").select("id, nome, parent_admin_id").eq("auth_user_id", uid).maybeSingle();
-        if (w) { workerId = (w as any).id ?? null; workerName = (w as any).nome ?? null; adminId = (w as any).parent_admin_id ?? null; }
-      }
-      const { error } = await supabase.from("cash_reopen_requests" as any).insert({
-        cash_date: selectedDate,
-        worker_id: workerId,
-        worker_name: workerName,
-        admin_id: adminId,
-        reason: reopenReason.trim(),
-        status: "pending",
-        requested_by: uid,
+      const { error } = await supabase.rpc("request_cash_reopen" as any, {
+        p_daily_cash_id: dailyCashRow.id,
+        p_reason: reopenReason.trim(),
       } as any);
       if (error) throw error;
-      await logAction(
-        "solicitar_reabertura_caixa" as any, "cash", null, null,
-        { cash_date: selectedDate, worker_id: workerId, worker_name: workerName, reason: reopenReason.trim(), status: "pending", requested_at: new Date().toISOString() },
-        `Solicitação de reabertura (${selectedDate}): ${reopenReason.trim()}`, workerId ?? undefined,
-      );
       toast.success("Solicitação enviada ao administrador");
       setReopenOpen(false);
       setReopenReason("");
@@ -607,6 +579,7 @@ export default function CaixaPage() {
       setSubmitting(false);
     }
   };
+
 
   // Snapshot versions: open modal + hydrate selected version.
   const openVersionsDialog = async () => {
