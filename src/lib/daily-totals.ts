@@ -192,8 +192,16 @@ export type DailyCollectionSummary = {
   /** Total estornado no dia (não conta como recebido). */
   reversedToday: number;
   hasError: boolean;
-
+  /**
+   * Dia fechado com histórico congelado INCOMPLETO (fechamento antigo
+   * reconciliado). Previsto, falta receber e atrasado NÃO existem para esse dia
+   * e nunca podem ser recalculados com as parcelas atuais.
+   */
+  historicalIncomplete: boolean;
 };
+
+/** Texto único para valores que nunca foram congelados. */
+export const HISTORICAL_UNAVAILABLE_LABEL = "Informação histórica indisponível";
 
 export async function getDailyCollectionSummary(
   cashDate: string,
@@ -213,6 +221,23 @@ export async function getDailyCollectionSummary(
     if ((dc0 as any)?.status === "closed") {
       const { loadDailyCashSnapshot } = await import("@/lib/daily-snapshot");
       const snap = await loadDailyCashSnapshot(cashDate, { workerId, adminId });
+
+      // Histórico incompleto: PROIBIDO consultar parcelas/empréstimos atuais.
+      if (snap && (snap as any).historical_complete === false) {
+        const t: any = (snap as any).totals || {};
+        return {
+          expectedToReceiveToday: 0,
+          receivedToday: (Number(t.received) || 0) + (Number(t.penalty) || 0),
+          receivedFromExpected: 0,
+          pendingToReceiveToday: 0,
+          overdueAmount: 0,
+          reversedToday: Number(t.estornos) || 0,
+          cashExpectedForClosing: Number(t.expected_worker_cash) || 0,
+          hasError: false,
+          historicalIncomplete: true,
+        };
+      }
+
       const ds = snap?.daily_summary;
       if (ds) {
         return {
@@ -227,12 +252,14 @@ export async function getDailyCollectionSummary(
 
           cashExpectedForClosing: Number(ds.cashExpectedForClosing) || 0,
           hasError: false,
+          historicalIncomplete: false,
         };
       }
     }
   } catch (err) {
     console.warn("[getDailyCollectionSummary] snapshot indisponível, usando dados atuais", err);
   }
+
 
 
   // 1) Previsto / falta receber / atrasado — fonte única compartilhada.
