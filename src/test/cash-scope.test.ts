@@ -92,6 +92,7 @@ import {
   resolveFinancialScope,
   recalculateCashBalanceFromLedger,
   SCOPE_ADMIN_REQUIRED_MESSAGE,
+  SCOPE_WORKER_ADMIN_MISMATCH_MESSAGE,
 } from "@/lib/cash-utils";
 
 beforeEach(() => {
@@ -126,9 +127,25 @@ describe("resolveFinancialScope", () => {
       .toEqual({ worker_id: W1, admin_id: ADMIN_A });
   });
 
-  it("completa o admin pelo parent_admin_id quando omitido", async () => {
-    expect(await resolveFinancialScope({ workerId: W2 }))
-      .toEqual({ worker_id: W2, admin_id: ADMIN_B });
+  it("rejeita escopo explícito de trabalhador sem adminId", async () => {
+    await expect(resolveFinancialScope({ workerId: W2 }))
+      .rejects.toThrow(SCOPE_ADMIN_REQUIRED_MESSAGE);
+  });
+
+  it("rejeita { workerId: null, adminId: null } mesmo com usuário autenticado", async () => {
+    session = { user: { id: "uid-a" } };
+    await expect(resolveFinancialScope({ workerId: null, adminId: null }))
+      .rejects.toThrow(SCOPE_ADMIN_REQUIRED_MESSAGE);
+  });
+
+  it("rejeita trabalhador da empresa A com adminId da empresa B", async () => {
+    await expect(resolveFinancialScope({ workerId: W1, adminId: ADMIN_B }))
+      .rejects.toThrow(SCOPE_WORKER_ADMIN_MISMATCH_MESSAGE);
+  });
+
+  it("rejeita trabalhador inexistente", async () => {
+    await expect(resolveFinancialScope({ workerId: "fantasma", adminId: ADMIN_A }))
+      .rejects.toThrow(SCOPE_WORKER_ADMIN_MISMATCH_MESSAGE);
   });
 
   it("aborta quando o admin_id não pode ser determinado", async () => {
@@ -218,6 +235,20 @@ describe("recalculateCashBalanceFromLedger", () => {
   it("aborta sem admin_id", async () => {
     await expect(recalculateCashBalanceFromLedger()).rejects.toThrow(SCOPE_ADMIN_REQUIRED_MESSAGE);
     expect(updates).toHaveLength(0);
+  });
+
+  it("cash_balance inexistente faz o recálculo falhar", async () => {
+    db.cash_balance = db.cash_balance.filter((r) => r.id !== "cb-w1");
+    await expect(recalculateCashBalanceFromLedger({ workerId: W1, adminId: ADMIN_A }))
+      .rejects.toThrow(/cash_balance/);
+    expect(updates).toHaveLength(0);
+  });
+
+  it("nenhuma linha de outra empresa é atualizada", async () => {
+    await recalculateCashBalanceFromLedger({ workerId: W1, adminId: ADMIN_A });
+    await recalculateCashBalanceFromLedger({ adminId: ADMIN_A });
+    const touched = updates.flatMap((u) => u.filters.filter((f: any) => f.col === "id").map((f: any) => f.val));
+    expect(touched).toEqual(["cb-w1", "cb-admin-a"]);
   });
 
   it("erro de consulta cancela o recálculo (nunca vira lista vazia)", async () => {
