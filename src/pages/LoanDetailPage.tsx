@@ -31,6 +31,8 @@ import { ArrowLeft, CheckCircle, DollarSign, Undo2, Pencil, Trash2, ChevronDown,
 import { EmptyState } from "@/components/LoadingSkeleton";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import PaymentAmountSelector from "@/components/PaymentAmountSelector";
+import { PaymentAmountState, createPaymentAmountState, validatePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 import { useConfirm } from "@/hooks/useConfirm";
 import { logAction } from "@/lib/audit-utils";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
@@ -125,7 +127,7 @@ export default function LoanDetailPage() {
 
   // Payment dialog
   const [payOpen, setPayOpen] = useState(false);
-  const [payAmount, setPayAmount] = useState("");
+  const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payDate, setPayDate] = useState("");
 
@@ -305,13 +307,8 @@ export default function LoanDetailPage() {
   const handleRegisterPayment = async () => {
     if (isSubmitting || !loan) return;
     if (!loanActive) { toast.error("Empréstimo inativo não permite pagamento."); return; }
-    const parcValue = payAmount ? parseFloat(payAmount) : null;
     const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
 
-    if (payAmount && (isNaN(parcValue!) || parcValue! <= 0)) {
-      toast.error("Valor inválido");
-      return;
-    }
     if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) {
       toast.error("Valor de multa inválido");
       return;
@@ -319,10 +316,13 @@ export default function LoanDetailPage() {
 
     // Same rule as Rota: if no amount typed, default to remaining of next installment
     const firstUnpaid = pendingInstallments.slice().sort((a, b) => a.number - b.number)[0];
-    const instRemaining = firstUnpaid
-      ? Math.max(0, Number(firstUnpaid.amount) - Number(firstUnpaid.paid_amount))
-      : 0;
-    const paidValue = parcValue ?? instRemaining;
+    const fullInstAmount = firstUnpaid ? Number(firstUnpaid.amount) : 0;
+    const { amount: paidValue, error: amountError } = validatePaymentAmount(
+      payState,
+      fullInstAmount,
+      Number(loan?.remaining_balance ?? 0),
+    );
+    if (amountError) { toast.error(amountError); return; }
 
     setIsSubmitting(true);
     try {
@@ -347,6 +347,7 @@ export default function LoanDetailPage() {
           cashDate: payDate, origin: "detalhe_emprestimo",
           installmentId: firstUnpaid.id,
           startInstNumber: firstUnpaid.number,
+          observation: resolveObservation(payState, fullInstAmount),
         });
         toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
       }
@@ -354,7 +355,7 @@ export default function LoanDetailPage() {
       toast.error("Erro ao processar pagamento");
     }
 
-    setPayAmount("");
+    setPayState(createPaymentAmountState());
     setPayPenaltyAmount("");
     setPayDate(opDate);
     setPayOpen(false);
@@ -916,6 +917,7 @@ export default function LoanDetailPage() {
   const remainingLoan = Number(loan.remaining_balance);
   const nextInstallment = pendingInstallments.sort((a, b) => a.number - b.number)[0];
   const nextInstValue = nextInstallment ? Number(nextInstallment.amount) - Number(nextInstallment.paid_amount) : 0;
+  const nextInstFullValue = nextInstallment ? Number(nextInstallment.amount) : 0;
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -1289,7 +1291,7 @@ export default function LoanDetailPage() {
       {/* ======= DIALOGS ======= */}
 
       {/* Register Payment Dialog */}
-      <Dialog open={payOpen} onOpenChange={(o) => { setPayOpen(o); if (!o) { setPayAmount(""); setPayPenaltyAmount(""); } }}>
+      <Dialog open={payOpen} onOpenChange={(o) => { setPayOpen(o); if (!o) { setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
           <div className="space-y-3">
@@ -1301,13 +1303,12 @@ export default function LoanDetailPage() {
               <div className="flex justify-between"><span>Progresso:</span><span>{loanProgress.progressFormatted}</span></div>
             </div>
 
-            <div>
-              <Label>Valor do pagamento</Label>
-              <Input type="number" placeholder={nextInstValue > 0 ? `Padrão: ${nextInstValue.toFixed(2)}` : "Valor"} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-              <p className="text-xs text-muted-foreground mt-1">
-                💡 Em branco = paga o valor da próxima parcela. Sobra avança automaticamente para as próximas.
-              </p>
-            </div>
+            <PaymentAmountSelector
+              installmentAmount={nextInstFullValue}
+              remainingBalance={Number(loan?.remaining_balance ?? 0)}
+              state={payState}
+              onChange={setPayState}
+            />
 
             {penaltyInst && (penaltyTotal - penaltyPaid) > 0.01 && (
               <div className="rounded-lg border border-warning/50 p-3 space-y-2">
