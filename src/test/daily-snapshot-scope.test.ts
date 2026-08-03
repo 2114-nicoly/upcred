@@ -222,10 +222,11 @@ describe("buildDailyCashSnapshotPayload — falhas obrigatórias", () => {
     await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
   });
 
-  it("falha no nome do trabalhador rejeita o snapshot", async () => {
+  it("falha na consulta de workers rejeita o snapshot", async () => {
     failing.add("workers");
-    await expect(build(W1, ADMIN_A)).rejects.toThrow(MSG);
+    await expect(build(W1, ADMIN_A)).rejects.toThrow(SCOPE_MSG);
   });
+
 
   it("cash_balance ausente rejeita o snapshot", async () => {
     cashBalanceResult = { data: null, error: null };
