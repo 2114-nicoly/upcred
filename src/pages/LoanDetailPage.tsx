@@ -38,6 +38,8 @@ import { logAction } from "@/lib/audit-utils";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
 import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
+import { resolveInstallmentPaidDate, formatPaidDateLabel, PaidDateEvent } from "@/lib/installment-paid-date";
+
 
 type Loan = {
   id: string;
