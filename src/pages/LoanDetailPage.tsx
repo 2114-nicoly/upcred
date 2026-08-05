@@ -1137,9 +1137,13 @@ export default function LoanDetailPage() {
                         <span className="font-semibold">Parcela {inst.number}</span>
                         <Badge className={getStatusColor("paid")}>{getStatusLabel("paid")}</Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
+                      <p className="text-xs text-muted-foreground">
+                        Vencimento: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
                       </p>
+                      <p className="text-sm font-medium">
+                        Pago em: {formatPaidDateLabel(resolveInstallmentPaidDate(inst, paymentEvents))}
+                      </p>
+
                       <p className="text-sm text-success">
                         Pago: {formatCurrency(Number(inst.paid_amount))} de {formatCurrency(Number(inst.amount))}
                       </p>
