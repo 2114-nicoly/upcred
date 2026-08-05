@@ -2248,20 +2248,10 @@ export type Database = {
         Args: { p_cash_date: string; p_counted: number; p_note?: string }
         Returns: string
       }
-      close_daily_cash_with_snapshot:
-        | {
-            Args: { p_cash_date: string; p_counted: number; p_note?: string }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_cash_date: string
-              p_counted: number
-              p_note?: string
-              p_payload?: Json
-            }
-            Returns: Json
-          }
+      close_daily_cash_with_snapshot: {
+        Args: { p_cash_date: string; p_counted: number; p_note?: string }
+        Returns: Json
+      }
       delete_worker_if_empty: {
         Args: { p_worker_id: string }
         Returns: undefined

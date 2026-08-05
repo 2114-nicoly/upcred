@@ -17,16 +17,16 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const MIG_DIR = resolve(process.cwd(), "supabase/migrations");
-const migration = (() => {
-  const files = readdirSync(MIG_DIR).filter(f => f.endsWith(".sql")).sort();
-  const withGuard = files
-    .map(f => readFileSync(resolve(MIG_DIR, f), "utf8"))
-    .filter(sql => sql.includes("daily_cash_require_snapshot"));
-  return withGuard.join("\n");
-})();
+const allMigrations = readdirSync(MIG_DIR)
+  .filter(f => f.endsWith(".sql"))
+  .sort()
+  .map(f => readFileSync(resolve(MIG_DIR, f), "utf8"));
+
+const migration = allMigrations.filter(sql => sql.includes("daily_cash_require_snapshot")).join("\n");
 
 const norm = (s: string) => s.replace(/\s+/g, " ");
 const SQL = norm(migration);
+const ALL_SQL = norm(allMigrations.join("\n"));
 
 describe("funções antigas de fechamento não são executáveis pelo cliente", () => {
   it("revoga EXECUTE de close_daily_cash(date)", () => {
@@ -39,11 +39,25 @@ describe("funções antigas de fechamento não são executáveis pelo cliente", 
     );
   });
 
-  it("revoga EXECUTE da versão com p_payload", () => {
-    expect(SQL).toContain(
-      "REVOKE EXECUTE ON FUNCTION public.close_daily_cash_with_snapshot(date, numeric, text, jsonb) FROM PUBLIC, anon, authenticated",
+  const DROP_JSONB = "DROP FUNCTION IF EXISTS public.close_daily_cash_with_snapshot(date, numeric, text, jsonb)";
+
+  it("a sobrecarga com p_payload é REMOVIDA do banco (DROP), não apenas revogada", () => {
+    expect(ALL_SQL).toContain(DROP_JSONB);
+  });
+
+  it("a sobrecarga com p_payload não é recriada depois do DROP", () => {
+    const dropIdx = ALL_SQL.lastIndexOf(DROP_JSONB);
+    expect(dropIdx).toBeGreaterThan(0);
+    expect(ALL_SQL.slice(dropIdx)).not.toContain("p_payload jsonb");
+  });
+
+  it("a assinatura oficial de 3 parâmetros continua liberada para authenticated", () => {
+    expect(ALL_SQL).toContain(
+      "GRANT EXECUTE ON FUNCTION public.close_daily_cash_with_snapshot(date, numeric, text) TO authenticated, service_role",
     );
   });
+
+
 
   it("somente a função oficial fica liberada para authenticated", () => {
     expect(SQL).toContain(
@@ -148,5 +162,18 @@ describe("saldo devedor dos atrasados por empréstimo", () => {
     ];
     const perLoan = new Map(rows.map(r => [r.loan_id, r.remaining_balance]));
     expect([...perLoan.values()].reduce((a, b) => a + b, 0)).toBe(1000);
+  });
+});
+
+describe("frontend usa somente a assinatura de 3 parâmetros", () => {
+  it("daily-snapshot.ts envia apenas p_cash_date, p_counted e p_note", () => {
+    const src = readFileSync(resolve(process.cwd(), "src/lib/daily-snapshot.ts"), "utf8");
+    const idx = src.indexOf('rpc("close_daily_cash_with_snapshot"');
+    expect(idx).toBeGreaterThan(0);
+    const call = src.slice(idx, idx + 400);
+    expect(call).toContain("p_cash_date");
+    expect(call).toContain("p_counted");
+    expect(call).toContain("p_note");
+    expect(src).not.toContain("p_payload");
   });
 });
