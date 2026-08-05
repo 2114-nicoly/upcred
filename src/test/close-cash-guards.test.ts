@@ -39,26 +39,24 @@ describe("funções antigas de fechamento não são executáveis pelo cliente", 
     );
   });
 
+  const DROP_JSONB = "DROP FUNCTION IF EXISTS public.close_daily_cash_with_snapshot(date, numeric, text, jsonb)";
+
   it("a sobrecarga com p_payload é REMOVIDA do banco (DROP), não apenas revogada", () => {
-    expect(ALL_SQL).toContain(
-      "DROP FUNCTION IF EXISTS public.close_daily_cash_with_snapshot( date, numeric, text, jsonb )".replace(/\s+/g, " "),
-    );
+    expect(ALL_SQL).toContain(DROP_JSONB);
   });
 
   it("a sobrecarga com p_payload não é recriada depois do DROP", () => {
-    const dropIdx = ALL_SQL.lastIndexOf("DROP FUNCTION IF EXISTS public.close_daily_cash_with_snapshot( date, numeric, text, jsonb )");
+    const dropIdx = ALL_SQL.lastIndexOf(DROP_JSONB);
     expect(dropIdx).toBeGreaterThan(0);
     expect(ALL_SQL.slice(dropIdx)).not.toContain("p_payload jsonb");
   });
 
   it("a assinatura oficial de 3 parâmetros continua liberada para authenticated", () => {
     expect(ALL_SQL).toContain(
-      "GRANT EXECUTE ON FUNCTION public.close_daily_cash_with_snapshot( date, numeric, text ) TO authenticated, service_role".replace(
-        /\s+/g,
-        " ",
-      ),
+      "GRANT EXECUTE ON FUNCTION public.close_daily_cash_with_snapshot(date, numeric, text) TO authenticated, service_role",
     );
   });
+
 
 
   it("somente a função oficial fica liberada para authenticated", () => {
