@@ -123,6 +123,8 @@ export default function LoanDetailPage() {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
+  const [paymentEvents, setPaymentEvents] = useState<PaidDateEvent[]>([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Payment dialog
