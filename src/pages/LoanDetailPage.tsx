@@ -219,10 +219,12 @@ export default function LoanDetailPage() {
         .order("cash_date", { ascending: false });
 
       const { data: events } = await (supabase.from("daily_events" as any)
-        .select("id, cash_date, amount_in, observation, cash_movement_id")
+        .select("id, cash_date, amount_in, observation, cash_movement_id, metadata, reversed_at, created_at")
         .eq("loan_id", loanId!)
         .eq("event_type", "pagamento")
         .order("cash_date", { ascending: false }) as any);
+      setPaymentEvents((events as any[]) || []);
+
 
       // Match movements with events by the unique financial movement id.
       const history: PaymentHistoryEntry[] = (movs || []).map((m: any) => {
