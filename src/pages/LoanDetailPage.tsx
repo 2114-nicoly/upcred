@@ -38,6 +38,8 @@ import { logAction } from "@/lib/audit-utils";
 import { assertScopedCashOpen, CashScope } from "@/lib/loan-cash";
 import { useScopedActiveCash } from "@/hooks/useScopedActiveCash";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
+import { resolveInstallmentPaidDate, formatPaidDateLabel, PaidDateEvent } from "@/lib/installment-paid-date";
+
 
 type Loan = {
   id: string;
@@ -123,6 +125,8 @@ export default function LoanDetailPage() {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
+  const [paymentEvents, setPaymentEvents] = useState<PaidDateEvent[]>([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Payment dialog
@@ -219,10 +223,12 @@ export default function LoanDetailPage() {
         .order("cash_date", { ascending: false });
 
       const { data: events } = await (supabase.from("daily_events" as any)
-        .select("id, cash_date, amount_in, observation, cash_movement_id")
+        .select("id, cash_date, amount_in, observation, cash_movement_id, metadata, reversed_at, created_at")
         .eq("loan_id", loanId!)
         .eq("event_type", "pagamento")
         .order("cash_date", { ascending: false }) as any);
+      setPaymentEvents((events as any[]) || []);
+
 
       // Match movements with events by the unique financial movement id.
       const history: PaymentHistoryEntry[] = (movs || []).map((m: any) => {
@@ -1131,9 +1137,13 @@ export default function LoanDetailPage() {
                         <span className="font-semibold">Parcela {inst.number}</span>
                         <Badge className={getStatusColor("paid")}>{getStatusLabel("paid")}</Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
+                      <p className="text-xs text-muted-foreground">
+                        Vencimento: {format(new Date(inst.due_date + "T12:00:00"), "dd/MM/yyyy")}
                       </p>
+                      <p className="text-sm font-medium">
+                        Pago em: {formatPaidDateLabel(resolveInstallmentPaidDate(inst, paymentEvents))}
+                      </p>
+
                       <p className="text-sm text-success">
                         Pago: {formatCurrency(Number(inst.paid_amount))} de {formatCurrency(Number(inst.amount))}
                       </p>
