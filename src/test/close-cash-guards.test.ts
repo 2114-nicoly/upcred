@@ -166,3 +166,16 @@ describe("saldo devedor dos atrasados por empréstimo", () => {
     expect([...perLoan.values()].reduce((a, b) => a + b, 0)).toBe(1000);
   });
 });
+
+describe("frontend usa somente a assinatura de 3 parâmetros", () => {
+  it("daily-snapshot.ts envia apenas p_cash_date, p_counted e p_note", () => {
+    const src = readFileSync(resolve(process.cwd(), "src/lib/daily-snapshot.ts"), "utf8");
+    const idx = src.indexOf('rpc("close_daily_cash_with_snapshot"');
+    expect(idx).toBeGreaterThan(0);
+    const call = src.slice(idx, idx + 400);
+    expect(call).toContain("p_cash_date");
+    expect(call).toContain("p_counted");
+    expect(call).toContain("p_note");
+    expect(src).not.toContain("p_payload");
+  });
+});
