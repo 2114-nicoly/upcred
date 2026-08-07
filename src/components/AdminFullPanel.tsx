@@ -31,6 +31,7 @@ import {
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+import CashReopenRequestsPanel, { useCashReopenRequests } from "@/components/CashReopenRequestsPanel";
 
 type WorkerToday = {
   cashStatus: "open" | "closed" | "not_opened";
@@ -42,11 +43,6 @@ type WorkerToday = {
   lentToday: number;
   lastClosingDifference: number | null;
   lastActivity: string | null;
-};
-
-type ReopenReq = {
-  id: string; cash_date: string; reason: string;
-  requested_at: string; worker_id: string | null; worker_name: string | null;
 };
 
 type Admin = {
@@ -86,21 +82,10 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   // Acesso/mensalidade: somente leitura aqui (gerenciado na aba "Acessos").
   const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
   const companyPaused = isCompanyPaused(accessMaps.controlByAdmin[adminId]);
-  const [reopenReqs, setReopenReqs] = useState<ReopenReq[]>([]);
-  const [reopenBusy, setReopenBusy] = useState<string | null>(null);
+  const reopen = useCashReopenRequests({ adminId });
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
-
-  async function loadReopenRequests() {
-    const { data } = await supabase
-      .from("cash_reopen_requests" as any)
-      .select("id, cash_date, reason, requested_at, worker_id, worker_name, status, admin_id")
-      .eq("status", "pending")
-      .eq("admin_id", adminId)
-      .order("requested_at", { ascending: false });
-    setReopenReqs(((data as any[]) || []) as ReopenReq[]);
-  }
 
   async function loadWorkerToday(wList: Worker[]) {
     if (wList.length === 0) { setWorkerToday({}); return; }
@@ -183,7 +168,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     setClients((cs.data as ClientRow[]) || []);
     setLoans((ls.data as any) || []);
     setEvents((evs.data as any) || []);
-    await Promise.all([loadWorkerToday(wList), loadReopenRequests()]);
+    await loadWorkerToday(wList);
     } catch (err) {
       console.error("[AdminFullPanel] falha ao carregar dados da empresa", err);
       if (!signal?.cancel) setLoadError(true);
