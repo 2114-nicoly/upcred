@@ -25,7 +25,7 @@ type Props = {
  * Opening is only allowed on the current date (America/Sao_Paulo) and only
  * when there is no other cash already open for the scope.
  */
-export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact, activeCashDate }: Props) {
+export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact, activeCashDate, onRequestMissedOpen, missedRequestPending }: Props) {
   const [loading, setLoading] = useState(false);
   const kind = classifyCashDate(cashDate);
   const padding = compact ? "p-3 space-y-2" : "p-4 space-y-3";
