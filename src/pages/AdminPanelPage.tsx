@@ -29,6 +29,7 @@ import {
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
+import CashReopenRequestsPanel, { useCashReopenRequests } from "@/components/CashReopenRequestsPanel";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
