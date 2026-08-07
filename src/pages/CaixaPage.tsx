@@ -100,6 +100,7 @@ export default function CaixaPage() {
   const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
   const [undoReason, setUndoReason] = useState("");
   const [reopenRequests, setReopenRequests] = useState<any[]>([]);
+  const [pendingReopenForCash, setPendingReopenForCash] = useState<any | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ req: any; action: "approve" | "reject" } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
 
