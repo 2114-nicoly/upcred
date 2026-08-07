@@ -14,6 +14,10 @@ type Props = {
   compact?: boolean;
   /** Data do caixa aberto do escopo — impede abrir outro caixa. */
   activeCashDate?: string | null;
+  /** Data passada sem daily_cash: abre o fluxo de solicitação de reabertura. */
+  onRequestMissedOpen?: () => void;
+  /** Já existe solicitação pendente para essa data. */
+  missedRequestPending?: boolean;
 };
 
 /**
