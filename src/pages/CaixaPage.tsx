@@ -600,6 +600,49 @@ export default function CaixaPage() {
   }, [dailyCashRow?.id]);
   useEffect(() => { void fetchPendingReopenForCash(); }, [fetchPendingReopenForCash, dailyCashStatus]);
 
+  // Data passada SEM daily_cash: solicitação pendente do tipo "open_missed".
+  const fetchPendingMissedRequest = useCallback(async () => {
+    if (dailyCashRow?.id || !effectiveWorkerId || !effectiveAdminId || selectedDate >= getTodayCashDate()) {
+      setPendingMissedRequest(null);
+      return;
+    }
+    const { data } = await supabase
+      .from("cash_reopen_requests" as any)
+      .select("*")
+      .eq("cash_date", selectedDate)
+      .eq("worker_id", effectiveWorkerId)
+      .eq("admin_id", effectiveAdminId)
+      .eq("request_type", "open_missed")
+      .eq("status", "pending")
+      .maybeSingle();
+    setPendingMissedRequest((data as any) || null);
+  }, [dailyCashRow?.id, effectiveWorkerId, effectiveAdminId, selectedDate]);
+  useEffect(() => { void fetchPendingMissedRequest(); }, [fetchPendingMissedRequest, dailyCashStatus]);
+
+  // Trabalhador: solicita a abertura de um dia antigo que nunca teve caixa.
+  const submitMissedOpenRequest = async () => {
+    if (submitting) return;
+    if (reopenReason.trim().length < 3) { toast.error("Informe o motivo (mínimo 3 caracteres)."); return; }
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("request_missed_cash_open" as any, {
+        p_cash_date: selectedDate,
+        p_reason: reopenReason.trim(),
+      } as any);
+      if (error) throw error;
+      toast.success("Solicitação enviada ao administrador");
+      setReopenOpen(false);
+      setReopenReason("");
+      await fetchPendingMissedRequest();
+    } catch (err: any) {
+      console.error("[caixa] missed open request failed", err);
+      toast.error(err?.message || "Erro ao enviar solicitação");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
   // Trabalhador: solicita reabertura via RPC segura (escopo derivado no banco).
   const submitReopenRequest = async () => {
     if (submitting) return;
