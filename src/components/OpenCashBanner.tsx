@@ -79,8 +79,24 @@ export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled,
               </p>
             </div>
           </div>
+          {missedRequestPending ? (
+            <p className="text-[11px] text-warning font-medium text-center">
+              Reabertura solicitada — aguardando aprovação
+            </p>
+          ) : onRequestMissedOpen ? (
+            <Button
+              onClick={onRequestMissedOpen}
+              disabled={disabled}
+              variant="outline"
+              className="w-full text-xs h-9 border-warning/40 text-warning"
+            >
+              <Unlock className="mr-1.5 h-3.5 w-3.5" />
+              Solicitar reabertura
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
+
     );
   }
 
