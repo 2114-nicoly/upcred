@@ -786,7 +786,28 @@ export default function CaixaPage() {
         </Card>
       )}
 
-
+      {/* Reabertura: qualquer caixa existente com status "closed", sem exceção de origem. */}
+      {canReopenCash && (
+        pendingReopenForCash && !isAdmin && !isSuperAdmin ? (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardContent className="p-2.5">
+              <p className="text-[11px] text-warning font-medium text-center">
+                Reabertura solicitada — aguardando aprovação
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Button
+            onClick={() => setReopenOpen(true)}
+            disabled={submitting}
+            variant="outline"
+            className="w-full text-xs h-9 border-warning/40 text-warning"
+          >
+            <Unlock className="mr-1.5 h-3.5 w-3.5" />
+            {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
+          </Button>
+        )
+      )}
 
 
       {viewingAsWorker && (
