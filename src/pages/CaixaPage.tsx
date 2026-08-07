@@ -100,6 +100,7 @@ export default function CaixaPage() {
   const [undoTarget, setUndoTarget] = useState<DailyEvent | null>(null);
   const [undoReason, setUndoReason] = useState("");
   const [reopenRequests, setReopenRequests] = useState<any[]>([]);
+  const [pendingReopenForCash, setPendingReopenForCash] = useState<any | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ req: any; action: "approve" | "reject" } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
 
@@ -226,10 +227,16 @@ export default function CaixaPage() {
   useEffect(() => { if (dateReady) fetchData(); }, [fetchData, dateReady]);
 
 
+  // Um registro real de daily_cash com status "closed" é SEMPRE um caixa fechado,
+  // inclusive quando nunca chegou a ser aberto (close_origin = automatic_not_opened).
   const cashState: "sem_caixa" | "open" | "closed" =
-    dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
+    dailyCashRow?.status === "closed" || dailyCashStatus === "closed"
+      ? "closed"
+      : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
   const isClosed = cashState === "closed";
   const isNotStarted = cashState === "sem_caixa";
+  /** Única regra de reabertura: existe o caixa e ele está fechado. */
+  const canReopenCash = !!dailyCashRow?.id && dailyCashRow?.status === "closed";
   // Bloqueia ações quando fechado, não iniciado, em modo visualização OU
   // quando a data consultada não é a do caixa aberto.
   const cashLocked = isClosed || isNotStarted || readOnly || viewingOtherDate;
@@ -578,6 +585,20 @@ export default function CaixaPage() {
   }, [isAdmin, isSuperAdmin]);
   useEffect(() => { void fetchReopenRequests(); }, [fetchReopenRequests, dailyCashStatus, selectedDate]);
 
+  // Solicitação pendente deste caixa (qualquer papel) — evita pedido duplicado.
+  const fetchPendingReopenForCash = useCallback(async () => {
+    const cashId = dailyCashRow?.id;
+    if (!cashId) { setPendingReopenForCash(null); return; }
+    const { data } = await supabase
+      .from("cash_reopen_requests" as any)
+      .select("*")
+      .eq("daily_cash_id", cashId)
+      .eq("status", "pending")
+      .maybeSingle();
+    setPendingReopenForCash((data as any) || null);
+  }, [dailyCashRow?.id]);
+  useEffect(() => { void fetchPendingReopenForCash(); }, [fetchPendingReopenForCash, dailyCashStatus]);
+
   // Trabalhador: solicita reabertura via RPC segura (escopo derivado no banco).
   const submitReopenRequest = async () => {
     if (submitting) return;
@@ -590,9 +611,10 @@ export default function CaixaPage() {
         p_reason: reopenReason.trim(),
       } as any);
       if (error) throw error;
-      toast.success("Solicitação enviada ao administrador");
+      toast.success("Solicitação de reabertura enviada");
       setReopenOpen(false);
       setReopenReason("");
+      await fetchPendingReopenForCash();
     } catch (err: any) {
       console.error("[caixa] submit reopen request failed", err);
       toast.error(err?.message || "Erro ao enviar solicitação");
@@ -764,7 +786,28 @@ export default function CaixaPage() {
         </Card>
       )}
 
-
+      {/* Reabertura: qualquer caixa existente com status "closed", sem exceção de origem. */}
+      {canReopenCash && (
+        pendingReopenForCash && !isAdmin && !isSuperAdmin ? (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardContent className="p-2.5">
+              <p className="text-[11px] text-warning font-medium text-center">
+                Reabertura solicitada — aguardando aprovação
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Button
+            onClick={() => setReopenOpen(true)}
+            disabled={submitting}
+            variant="outline"
+            className="w-full text-xs h-9 border-warning/40 text-warning"
+          >
+            <Unlock className="mr-1.5 h-3.5 w-3.5" />
+            {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
+          </Button>
+        )
+      )}
 
 
       {viewingAsWorker && (
@@ -1009,19 +1052,9 @@ export default function CaixaPage() {
 
 
 
-      {/* Reopen / Versions actions (Close button moved to bottom of page) */}
-      {!isNotStarted && isClosed && (
+      {/* Versões do fechamento (a reabertura fica logo abaixo do status, no topo) */}
+      {isClosed && (
         <div className="grid grid-cols-2 gap-2">
-          {!readOnly && (
-            <Button
-              onClick={() => setReopenOpen(true)}
-              disabled={submitting}
-              variant="outline"
-              className="text-xs h-9 col-span-2 border-warning/40 text-warning"
-            >
-              <Unlock className="mr-1.5 h-3.5 w-3.5" /> {(!isAdmin && !isSuperAdmin) ? "Solicitar reabertura" : "Reabrir caixa"}
-            </Button>
-          )}
           <Button
             onClick={openVersionsDialog}
             variant="ghost"
