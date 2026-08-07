@@ -230,14 +230,15 @@ describe("concorrência e permissões explícitas", () => {
     }
   });
 
-  it("handleReopenReview não grava auditoria no frontend", () => {
+  it("a revisão de solicitações não grava auditoria no frontend", () => {
+    const panel = readFileSync(resolve(SRC_DIR, "components/CashReopenRequestsPanel.tsx"), "utf8");
+    expect(panel).toContain("approve_cash_reopen_request");
+    expect(panel).toContain("reject_cash_reopen_request");
+    expect(panel).not.toContain("requireAudit(");
+    expect(panel).not.toContain("logAction(");
     const src = readFileSync(resolve(SRC_DIR, "components/AdminFullPanel.tsx"), "utf8");
-    const start = src.indexOf("async function handleReopenReview");
-    const body = src.slice(start, src.indexOf("\n  }", start));
-    expect(start).toBeGreaterThan(-1);
-    expect(body).not.toContain("requireAudit(");
-    expect(body).not.toContain("logAction(");
-    expect(body).toContain("loadReopenRequests()");
+    expect(src).toContain("CashReopenRequestsPanel");
+
     // outras funções continuam auditando
     expect(src).toContain("requireAudit(");
   });
