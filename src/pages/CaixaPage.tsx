@@ -226,10 +226,16 @@ export default function CaixaPage() {
   useEffect(() => { if (dateReady) fetchData(); }, [fetchData, dateReady]);
 
 
+  // Um registro real de daily_cash com status "closed" é SEMPRE um caixa fechado,
+  // inclusive quando nunca chegou a ser aberto (close_origin = automatic_not_opened).
   const cashState: "sem_caixa" | "open" | "closed" =
-    dailyCashStatus === "closed" ? "closed" : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
+    dailyCashRow?.status === "closed" || dailyCashStatus === "closed"
+      ? "closed"
+      : dailyCashStatus === "sem_caixa" || !dailyCashRow ? "sem_caixa" : "open";
   const isClosed = cashState === "closed";
   const isNotStarted = cashState === "sem_caixa";
+  /** Única regra de reabertura: existe o caixa e ele está fechado. */
+  const canReopenCash = !!dailyCashRow?.id && dailyCashRow?.status === "closed";
   // Bloqueia ações quando fechado, não iniciado, em modo visualização OU
   // quando a data consultada não é a do caixa aberto.
   const cashLocked = isClosed || isNotStarted || readOnly || viewingOtherDate;
