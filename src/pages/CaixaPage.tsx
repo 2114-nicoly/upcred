@@ -874,7 +874,17 @@ export default function CaixaPage() {
       )}
 
       {isNotStarted && !readOnly && (
-        <OpenCashBanner cashDate={selectedDate} onOpened={async () => { await refreshActiveCash(); await fetchData(); }} activeCashDate={activeCashDate} />
+        <OpenCashBanner
+          cashDate={selectedDate}
+          onOpened={async () => { await refreshActiveCash(); await fetchData(); }}
+          activeCashDate={activeCashDate}
+          missedRequestPending={!!pendingMissedRequest}
+          onRequestMissedOpen={
+            !isAdmin && !isSuperAdmin && !dailyCashRow && selectedDate < getTodayCashDate()
+              ? () => { setReopenReason(""); setReopenOpen(true); }
+              : undefined
+          }
+        />
       )}
 
 
