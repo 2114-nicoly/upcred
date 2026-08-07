@@ -29,6 +29,7 @@ import {
 import { logAction, requireAudit, getCurrentActorIdentity, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
 import RemindersAdminList from "@/components/RemindersAdminList";
+import CashReopenRequestsPanel, { useCashReopenRequests } from "@/components/CashReopenRequestsPanel";
 import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSummary";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
@@ -53,7 +54,8 @@ type CredsToShow = { nome: string; login: string; password: string };
 
 export default function AdminPanelPage() {
   const navigate = useNavigate();
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, adminId, loading: authLoading } = useAuth();
+  const reopen = useCashReopenRequests({ adminId, enabled: !!adminId });
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate("/");
@@ -69,7 +71,9 @@ export default function AdminPanelPage() {
         <TabsList className="grid grid-cols-4 w-full">
           <TabsTrigger value="painel" className="text-[10px]">Painel</TabsTrigger>
           <TabsTrigger value="equipe" className="text-[10px]">Equipe</TabsTrigger>
-          <TabsTrigger value="caixa" className="text-[10px]">Caixa</TabsTrigger>
+          <TabsTrigger value="caixa" className="text-[10px]">
+            Caixa{reopen.count > 0 ? ` (${reopen.count})` : ""}
+          </TabsTrigger>
           <TabsTrigger value="audit" className="text-[10px]">Auditoria</TabsTrigger>
         </TabsList>
 
@@ -79,7 +83,14 @@ export default function AdminPanelPage() {
         <TabsContent value="equipe" className="mt-3">
           <WorkersTab />
         </TabsContent>
-        <TabsContent value="caixa" className="mt-3">
+        <TabsContent value="caixa" className="mt-3 space-y-3">
+          <CashReopenRequestsPanel
+            requests={reopen.requests}
+            loading={reopen.loading}
+            busyId={reopen.busyId}
+            onRefresh={reopen.refresh}
+            onReview={reopen.review}
+          />
           <CaixaTab />
         </TabsContent>
         <TabsContent value="audit" className="mt-3 space-y-3">

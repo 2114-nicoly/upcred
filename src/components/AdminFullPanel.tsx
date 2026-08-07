@@ -31,6 +31,7 @@ import {
 import { CredentialsDialog, GeneratedCreds } from "@/components/CredentialsDialog";
 import { KeyRound, DoorOpen, Check, X, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+import CashReopenRequestsPanel, { useCashReopenRequests } from "@/components/CashReopenRequestsPanel";
 
 type WorkerToday = {
   cashStatus: "open" | "closed" | "not_opened";
@@ -42,11 +43,6 @@ type WorkerToday = {
   lentToday: number;
   lastClosingDifference: number | null;
   lastActivity: string | null;
-};
-
-type ReopenReq = {
-  id: string; cash_date: string; reason: string;
-  requested_at: string; worker_id: string | null; worker_name: string | null;
 };
 
 type Admin = {
@@ -86,21 +82,10 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   // Acesso/mensalidade: somente leitura aqui (gerenciado na aba "Acessos").
   const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
   const companyPaused = isCompanyPaused(accessMaps.controlByAdmin[adminId]);
-  const [reopenReqs, setReopenReqs] = useState<ReopenReq[]>([]);
-  const [reopenBusy, setReopenBusy] = useState<string | null>(null);
+  const reopen = useCashReopenRequests({ adminId });
 
   const range = useMemo(() => getPeriodRange(mode), [mode]);
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
-
-  async function loadReopenRequests() {
-    const { data } = await supabase
-      .from("cash_reopen_requests" as any)
-      .select("id, cash_date, reason, requested_at, worker_id, worker_name, status, admin_id")
-      .eq("status", "pending")
-      .eq("admin_id", adminId)
-      .order("requested_at", { ascending: false });
-    setReopenReqs(((data as any[]) || []) as ReopenReq[]);
-  }
 
   async function loadWorkerToday(wList: Worker[]) {
     if (wList.length === 0) { setWorkerToday({}); return; }
@@ -183,7 +168,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     setClients((cs.data as ClientRow[]) || []);
     setLoans((ls.data as any) || []);
     setEvents((evs.data as any) || []);
-    await Promise.all([loadWorkerToday(wList), loadReopenRequests()]);
+    await loadWorkerToday(wList);
     } catch (err) {
       console.error("[AdminFullPanel] falha ao carregar dados da empresa", err);
       if (!signal?.cancel) setLoadError(true);
@@ -198,27 +183,6 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId, range]);
 
-  async function handleReopenReview(r: ReopenReq, action: "approve" | "reject") {
-    setReopenBusy(r.id);
-    try {
-      const rpc = action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
-      const { error } = await supabase.rpc(rpc as any, { p_request_id: r.id, p_note: null } as any);
-      if (error) throw error;
-      // A RPC grava a auditoria no banco de forma transacional.
-      // Não registrar auditoria no frontend aqui (evita duplicidade e erros
-      // exibidos depois que a solicitação já foi processada).
-      toast({ title: action === "approve" ? "Solicitação aprovada" : "Solicitação recusada" });
-      await loadReopenRequests();
-    } catch (e: any) {
-      if (e instanceof AuditRequiredError) {
-        toast({ title: "Auditoria obrigatória", description: e.message, variant: "destructive" });
-      } else {
-        toast({ title: "Erro", description: e?.message || "Falha", variant: "destructive" });
-      }
-    } finally {
-      setReopenBusy(null);
-    }
-  }
 
 
   // Ativar/desativar trabalhador (workers.active) foi removido: liberar ou
@@ -416,39 +380,13 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
           </div>
 
 
-          {reopenReqs.length > 0 && (
-            <Card className="border-warning">
-              <CardHeader className="p-3 pb-1">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <DoorOpen className="h-4 w-4" /> Solicitações Pendentes de Reabertura ({reopenReqs.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 pt-1 space-y-2">
-                {reopenReqs.map((r) => (
-                  <div key={r.id} className="rounded border p-2 space-y-1">
-                    <p className="text-sm font-medium">
-                      {r.worker_name ?? "Trabalhador"}
-                      {(r as any).request_type === "open_missed" && (
-                        <span className="ml-1 text-[11px] font-normal text-warning">· Caixa não foi aberto</span>
-                      )}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Caixa {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy")} · Solicitado {format(new Date(r.requested_at), "dd/MM/yyyy HH:mm")}
-                    </p>
-                    <p className="text-[11px]"><span className="text-muted-foreground">Motivo:</span> {r.reason}</p>
-                    <div className="flex gap-1">
-                      <Button size="sm" className="flex-1 h-7 text-xs" disabled={reopenBusy === r.id} onClick={() => handleReopenReview(r, "approve")}>
-                        {reopenBusy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Check className="h-3 w-3 mr-1" /> Aprovar</>}
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" disabled={reopenBusy === r.id} onClick={() => handleReopenReview(r, "reject")}>
-                        <X className="h-3 w-3 mr-1" /> Recusar
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          <CashReopenRequestsPanel
+            requests={reopen.requests}
+            loading={reopen.loading}
+            busyId={reopen.busyId}
+            onRefresh={reopen.refresh}
+            onReview={reopen.review}
+          />
 
 
 

@@ -19,6 +19,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Plus, Copy, RefreshCw, ArrowUpDown, Eye, Users, BarChart3, KeyRound, Wrench, ExternalLink } from "lucide-react";
 import EmptyCashCleanup from "@/components/EmptyCashCleanup";
+import CashReopenRequestsPanel, { useCashReopenRequests } from "@/components/CashReopenRequestsPanel";
 import { Card as CardUI, CardContent as CardContentUI, CardHeader as CardHeaderUI, CardTitle as CardTitleUI } from "@/components/ui/card";
 
 function SuperMaintenanceTab() {
@@ -126,6 +127,7 @@ function DashboardTab() {
   const [rows, setRows] = useState<WorkerStats[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const reopen = useCashReopenRequests({ superAdmin: true });
 
   const range = useMemo(() => getPeriodRange(mode, customStart, customEnd), [mode, customStart, customEnd]);
 
@@ -188,6 +190,17 @@ function DashboardTab() {
 
   return (
     <div>
+      <div className="mb-3">
+        <CashReopenRequestsPanel
+          requests={reopen.requests}
+          loading={reopen.loading}
+          busyId={reopen.busyId}
+          onRefresh={reopen.refresh}
+          onReview={reopen.review}
+          groupByCompany
+          adminNames={reopen.adminNames}
+        />
+      </div>
       <Tabs value={mode} onValueChange={(v) => setMode(v as PeriodMode)} className="mb-3">
         <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="day" className="text-xs">Hoje</TabsTrigger>
