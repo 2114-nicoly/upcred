@@ -585,6 +585,20 @@ export default function CaixaPage() {
   }, [isAdmin, isSuperAdmin]);
   useEffect(() => { void fetchReopenRequests(); }, [fetchReopenRequests, dailyCashStatus, selectedDate]);
 
+  // Solicitação pendente deste caixa (qualquer papel) — evita pedido duplicado.
+  const fetchPendingReopenForCash = useCallback(async () => {
+    const cashId = dailyCashRow?.id;
+    if (!cashId) { setPendingReopenForCash(null); return; }
+    const { data } = await supabase
+      .from("cash_reopen_requests" as any)
+      .select("*")
+      .eq("daily_cash_id", cashId)
+      .eq("status", "pending")
+      .maybeSingle();
+    setPendingReopenForCash((data as any) || null);
+  }, [dailyCashRow?.id]);
+  useEffect(() => { void fetchPendingReopenForCash(); }, [fetchPendingReopenForCash, dailyCashStatus]);
+
   // Trabalhador: solicita reabertura via RPC segura (escopo derivado no banco).
   const submitReopenRequest = async () => {
     if (submitting) return;
@@ -597,9 +611,10 @@ export default function CaixaPage() {
         p_reason: reopenReason.trim(),
       } as any);
       if (error) throw error;
-      toast.success("Solicitação enviada ao administrador");
+      toast.success("Solicitação de reabertura enviada");
       setReopenOpen(false);
       setReopenReason("");
+      await fetchPendingReopenForCash();
     } catch (err: any) {
       console.error("[caixa] submit reopen request failed", err);
       toast.error(err?.message || "Erro ao enviar solicitação");
