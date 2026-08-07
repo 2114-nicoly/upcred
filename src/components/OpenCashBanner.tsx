@@ -14,6 +14,10 @@ type Props = {
   compact?: boolean;
   /** Data do caixa aberto do escopo — impede abrir outro caixa. */
   activeCashDate?: string | null;
+  /** Data passada sem daily_cash: abre o fluxo de solicitação de reabertura. */
+  onRequestMissedOpen?: () => void;
+  /** Já existe solicitação pendente para essa data. */
+  missedRequestPending?: boolean;
 };
 
 /**
@@ -21,7 +25,7 @@ type Props = {
  * Opening is only allowed on the current date (America/Sao_Paulo) and only
  * when there is no other cash already open for the scope.
  */
-export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact, activeCashDate }: Props) {
+export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled, compact, activeCashDate, onRequestMissedOpen, missedRequestPending }: Props) {
   const [loading, setLoading] = useState(false);
   const kind = classifyCashDate(cashDate);
   const padding = compact ? "p-3 space-y-2" : "p-4 space-y-3";
@@ -75,8 +79,24 @@ export default function OpenCashBanner({ cashDate, workerId, onOpened, disabled,
               </p>
             </div>
           </div>
+          {missedRequestPending ? (
+            <p className="text-[11px] text-warning font-medium text-center">
+              Reabertura solicitada — aguardando aprovação
+            </p>
+          ) : onRequestMissedOpen ? (
+            <Button
+              onClick={onRequestMissedOpen}
+              disabled={disabled}
+              variant="outline"
+              className="w-full text-xs h-9 border-warning/40 text-warning"
+            >
+              <Unlock className="mr-1.5 h-3.5 w-3.5" />
+              Solicitar reabertura
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
+
     );
   }
 

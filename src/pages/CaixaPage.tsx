@@ -101,6 +101,7 @@ export default function CaixaPage() {
   const [undoReason, setUndoReason] = useState("");
   const [reopenRequests, setReopenRequests] = useState<any[]>([]);
   const [pendingReopenForCash, setPendingReopenForCash] = useState<any | null>(null);
+  const [pendingMissedRequest, setPendingMissedRequest] = useState<any | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ req: any; action: "approve" | "reject" } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
 
@@ -599,6 +600,49 @@ export default function CaixaPage() {
   }, [dailyCashRow?.id]);
   useEffect(() => { void fetchPendingReopenForCash(); }, [fetchPendingReopenForCash, dailyCashStatus]);
 
+  // Data passada SEM daily_cash: solicitação pendente do tipo "open_missed".
+  const fetchPendingMissedRequest = useCallback(async () => {
+    if (dailyCashRow?.id || !effectiveWorkerId || !effectiveAdminId || selectedDate >= getTodayCashDate()) {
+      setPendingMissedRequest(null);
+      return;
+    }
+    const { data } = await supabase
+      .from("cash_reopen_requests" as any)
+      .select("*")
+      .eq("cash_date", selectedDate)
+      .eq("worker_id", effectiveWorkerId)
+      .eq("admin_id", effectiveAdminId)
+      .eq("request_type", "open_missed")
+      .eq("status", "pending")
+      .maybeSingle();
+    setPendingMissedRequest((data as any) || null);
+  }, [dailyCashRow?.id, effectiveWorkerId, effectiveAdminId, selectedDate]);
+  useEffect(() => { void fetchPendingMissedRequest(); }, [fetchPendingMissedRequest, dailyCashStatus]);
+
+  // Trabalhador: solicita a abertura de um dia antigo que nunca teve caixa.
+  const submitMissedOpenRequest = async () => {
+    if (submitting) return;
+    if (reopenReason.trim().length < 3) { toast.error("Informe o motivo (mínimo 3 caracteres)."); return; }
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("request_missed_cash_open" as any, {
+        p_cash_date: selectedDate,
+        p_reason: reopenReason.trim(),
+      } as any);
+      if (error) throw error;
+      toast.success("Solicitação enviada ao administrador");
+      setReopenOpen(false);
+      setReopenReason("");
+      await fetchPendingMissedRequest();
+    } catch (err: any) {
+      console.error("[caixa] missed open request failed", err);
+      toast.error(err?.message || "Erro ao enviar solicitação");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
   // Trabalhador: solicita reabertura via RPC segura (escopo derivado no banco).
   const submitReopenRequest = async () => {
     if (submitting) return;
@@ -830,7 +874,17 @@ export default function CaixaPage() {
       )}
 
       {isNotStarted && !readOnly && (
-        <OpenCashBanner cashDate={selectedDate} onOpened={async () => { await refreshActiveCash(); await fetchData(); }} activeCashDate={activeCashDate} />
+        <OpenCashBanner
+          cashDate={selectedDate}
+          onOpened={async () => { await refreshActiveCash(); await fetchData(); }}
+          activeCashDate={activeCashDate}
+          missedRequestPending={!!pendingMissedRequest}
+          onRequestMissedOpen={
+            !isAdmin && !isSuperAdmin && !dailyCashRow && selectedDate < getTodayCashDate()
+              ? () => { setReopenReason(""); setReopenOpen(true); }
+              : undefined
+          }
+        />
       )}
 
 
@@ -1077,7 +1131,12 @@ export default function CaixaPage() {
                 <div key={r.id} className="rounded-md border bg-background p-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{r.worker_name || "—"}</p>
+                      <p className="text-xs font-medium truncate">
+                        {r.worker_name || "—"}
+                        {r.request_type === "open_missed" && (
+                          <span className="ml-1 text-[10px] font-normal text-warning">· Caixa não foi aberto</span>
+                        )}
+                      </p>
                       <p className="text-[10px] text-muted-foreground">
                         Caixa de {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
                         {" · "}Solicitado {format(new Date(r.requested_at), "dd/MM HH:mm", { locale: ptBR })}
@@ -1637,7 +1696,7 @@ export default function CaixaPage() {
               <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="Ex.: ajuste de pagamento recebido após fechamento" />
             </div>
             <Button
-              onClick={(isAdmin || isSuperAdmin) ? handleReopenCash : submitReopenRequest}
+              onClick={(isAdmin || isSuperAdmin) ? handleReopenCash : (dailyCashRow?.id ? submitReopenRequest : submitMissedOpenRequest)}
               disabled={submitting || reopenReason.trim().length < 3}
               className="w-full"
             >

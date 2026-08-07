@@ -426,7 +426,12 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
               <CardContent className="p-3 pt-1 space-y-2">
                 {reopenReqs.map((r) => (
                   <div key={r.id} className="rounded border p-2 space-y-1">
-                    <p className="text-sm font-medium">{r.worker_name ?? "Trabalhador"}</p>
+                    <p className="text-sm font-medium">
+                      {r.worker_name ?? "Trabalhador"}
+                      {(r as any).request_type === "open_missed" && (
+                        <span className="ml-1 text-[11px] font-normal text-warning">· Caixa não foi aberto</span>
+                      )}
+                    </p>
                     <p className="text-[11px] text-muted-foreground">
                       Caixa {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy")} · Solicitado {format(new Date(r.requested_at), "dd/MM/yyyy HH:mm")}
                     </p>
