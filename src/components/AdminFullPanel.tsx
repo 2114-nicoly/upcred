@@ -198,27 +198,6 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId, range]);
 
-  async function handleReopenReview(r: ReopenReq, action: "approve" | "reject") {
-    setReopenBusy(r.id);
-    try {
-      const rpc = action === "approve" ? "approve_cash_reopen_request" : "reject_cash_reopen_request";
-      const { error } = await supabase.rpc(rpc as any, { p_request_id: r.id, p_note: null } as any);
-      if (error) throw error;
-      // A RPC grava a auditoria no banco de forma transacional.
-      // Não registrar auditoria no frontend aqui (evita duplicidade e erros
-      // exibidos depois que a solicitação já foi processada).
-      toast({ title: action === "approve" ? "Solicitação aprovada" : "Solicitação recusada" });
-      await loadReopenRequests();
-    } catch (e: any) {
-      if (e instanceof AuditRequiredError) {
-        toast({ title: "Auditoria obrigatória", description: e.message, variant: "destructive" });
-      } else {
-        toast({ title: "Erro", description: e?.message || "Falha", variant: "destructive" });
-      }
-    } finally {
-      setReopenBusy(null);
-    }
-  }
 
 
   // Ativar/desativar trabalhador (workers.active) foi removido: liberar ou
