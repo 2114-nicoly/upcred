@@ -1691,7 +1691,7 @@ export default function CaixaPage() {
               <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="Ex.: ajuste de pagamento recebido após fechamento" />
             </div>
             <Button
-              onClick={(isAdmin || isSuperAdmin) ? handleReopenCash : submitReopenRequest}
+              onClick={(isAdmin || isSuperAdmin) ? handleReopenCash : (dailyCashRow?.id ? submitReopenRequest : submitMissedOpenRequest)}
               disabled={submitting || reopenReason.trim().length < 3}
               className="w-full"
             >
