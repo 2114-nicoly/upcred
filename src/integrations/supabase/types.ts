@@ -379,6 +379,7 @@ export type Database = {
           daily_cash_id: string | null
           id: string
           reason: string
+          request_type: string
           requested_at: string
           requested_by: string | null
           review_note: string | null
@@ -396,6 +397,7 @@ export type Database = {
           daily_cash_id?: string | null
           id?: string
           reason: string
+          request_type?: string
           requested_at?: string
           requested_by?: string | null
           review_note?: string | null
@@ -413,6 +415,7 @@ export type Database = {
           daily_cash_id?: string | null
           id?: string
           reason?: string
+          request_type?: string
           requested_at?: string
           requested_by?: string | null
           review_note?: string | null
@@ -2056,6 +2059,10 @@ export type Database = {
         Args: { p_after: number; p_before: number }
         Returns: string
       }
+      _historic_opening_balance: {
+        Args: { p_admin: string; p_cash_date: string; p_worker: string }
+        Returns: number
+      }
       _legacy_close_daily_cash: {
         Args: { p_daily_cash_id: string }
         Returns: Json
@@ -2426,6 +2433,10 @@ export type Database = {
       }
       request_cash_reopen: {
         Args: { p_daily_cash_id: string; p_reason: string }
+        Returns: string
+      }
+      request_missed_cash_open: {
+        Args: { p_cash_date: string; p_reason: string }
         Returns: string
       }
       reverse_cash_movement_tx: {
