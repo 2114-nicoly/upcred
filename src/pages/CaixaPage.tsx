@@ -1131,7 +1131,12 @@ export default function CaixaPage() {
                 <div key={r.id} className="rounded-md border bg-background p-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{r.worker_name || "—"}</p>
+                      <p className="text-xs font-medium truncate">
+                        {r.worker_name || "—"}
+                        {r.request_type === "open_missed" && (
+                          <span className="ml-1 text-[10px] font-normal text-warning">· Caixa não foi aberto</span>
+                        )}
+                      </p>
                       <p className="text-[10px] text-muted-foreground">
                         Caixa de {format(new Date(r.cash_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
                         {" · "}Solicitado {format(new Date(r.requested_at), "dd/MM HH:mm", { locale: ptBR })}
