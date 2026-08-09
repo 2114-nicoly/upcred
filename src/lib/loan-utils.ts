@@ -1,4 +1,6 @@
 import { addDays, addWeeks, addMonths } from "date-fns";
+import { normalizeMoney } from "@/lib/money";
+
 
 const weekdayNames: Record<number, string> = {
   0: "Domingo", 1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado",
