@@ -1,4 +1,6 @@
 import { addDays, addWeeks, addMonths } from "date-fns";
+import { normalizeMoney } from "@/lib/money";
+
 
 const weekdayNames: Record<number, string> = {
   0: "Domingo", 1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado",
@@ -68,8 +70,12 @@ export function generateDueDates(
 }
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  // Fonte oficial é o banco: aqui apenas normalizamos a exibição
+  // (nunca "-R$ 0,00", "R$ -0,00" ou "-0"; negativo real é preservado).
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+    .format(normalizeMoney(value));
 }
+
 
 /**
  * Calculate fractional installment progress from remaining_balance (single source of truth).

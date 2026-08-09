@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -118,7 +119,7 @@ export default function LoanOverdueDetailPage() {
     try {
       await assertScopedCashOpen(payDate, { workerId: (loan as any)?.worker_id ?? null, adminId: (loan as any)?.admin_id ?? null });
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto nesta data.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto nesta data.");
       return;
     }
     const inst = installments.find((i) => i.id === id);

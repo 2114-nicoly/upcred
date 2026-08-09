@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -99,7 +100,7 @@ export default function PaymentHistoryPage() {
       setPaymentsByDay(grouped);
     } catch (err: any) {
       console.error("PaymentHistoryPage fetchData error:", err);
-      toast.error(err?.message || "Erro ao carregar histórico");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao carregar histórico");
     } finally {
       setLoading(false);
     }
@@ -127,7 +128,7 @@ export default function PaymentHistoryPage() {
       await fetchData();
     } catch (err: any) {
       console.error("handleUndoPayment error:", err);
-      toast.error(err?.message || "Erro ao desfazer pagamento");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao desfazer pagamento");
     } finally {
       setIsSubmitting(false);
     }
@@ -164,7 +165,7 @@ export default function PaymentHistoryPage() {
       await fetchData();
     } catch (err: any) {
       console.error("handleEditPayment error:", err);
-      toast.error(err?.message || "Erro ao editar pagamento");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao editar pagamento");
     } finally {
       setIsSubmitting(false);
     }
