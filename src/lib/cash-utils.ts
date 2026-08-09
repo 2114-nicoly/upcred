@@ -181,11 +181,14 @@ export type CashMovement = {
 export type CashBalance = {
   id: string;
   available_cash: number;
+  /** Saldo-base oficial: Caixa Disponível = ledger_base_amount + soma líquida do ledger. */
+  ledger_base_amount?: number;
   money_lent: number;
   interest_receivable: number;
   penalty_receivable: number;
   updated_at: string;
 };
+
 
 /**
  * Returns the cash_balance row.
