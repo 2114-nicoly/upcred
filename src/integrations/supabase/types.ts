@@ -223,6 +223,7 @@ export type Database = {
           available_cash: number
           id: string
           interest_receivable: number
+          ledger_base_amount: number
           money_lent: number
           penalty_receivable: number
           updated_at: string
@@ -233,6 +234,7 @@ export type Database = {
           available_cash?: number
           id?: string
           interest_receivable?: number
+          ledger_base_amount?: number
           money_lent?: number
           penalty_receivable?: number
           updated_at?: string
@@ -243,6 +245,7 @@ export type Database = {
           available_cash?: number
           id?: string
           interest_receivable?: number
+          ledger_base_amount?: number
           money_lent?: number
           penalty_receivable?: number
           updated_at?: string
@@ -2008,8 +2011,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _apply_cash_movement_tx: {
+        Args: {
+          p_amount: number
+          p_cash_date: string
+          p_client_id?: string
+          p_event_type: string
+          p_installment_id?: string
+          p_loan_id?: string
+          p_metadata?: Json
+          p_observation?: string
+          p_origin?: string
+          p_reverses_movement_id?: string
+          p_type: string
+        }
+        Returns: Json
+      }
       _assert_active_cash_date: {
         Args: { p_admin: string; p_cash_date: string; p_worker: string }
+        Returns: undefined
+      }
+      _assert_closing_consistency: {
+        Args: {
+          p_admin: string
+          p_cash_date: string
+          p_opening: number
+          p_worker: string
+        }
         Returns: undefined
       }
       _cash_is_closed_for: {
@@ -2019,6 +2047,10 @@ export type Database = {
       _cash_is_open_for: {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
+      }
+      _cash_ledger_net: {
+        Args: { p_admin: string; p_worker: string }
+        Returns: number
       }
       _close_daily_cash_core: {
         Args: {

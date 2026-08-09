@@ -181,11 +181,14 @@ export type CashMovement = {
 export type CashBalance = {
   id: string;
   available_cash: number;
+  /** Saldo-base oficial: Caixa Disponível = ledger_base_amount + soma líquida do ledger. */
+  ledger_base_amount?: number;
   money_lent: number;
   interest_receivable: number;
   penalty_receivable: number;
   updated_at: string;
 };
+
 
 /**
  * Returns the cash_balance row.
@@ -374,7 +377,7 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
 
   // REGRA ÚNICA: soma original + contrapartida (efeito líquido zero).
   // Estornos legados (marcados sem contrapartida) são ignorados e sinalizados.
-  const { total: available_cash, legacyReversedWithoutCounter } = sumLedgerMovements(
+  const { total: ledgerNet, legacyReversedWithoutCounter } = sumLedgerMovements(
     (movements || []) as any[],
   );
   if (legacyReversedWithoutCounter.length > 0) {
@@ -383,6 +386,7 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
       legacyReversedWithoutCounter,
     );
   }
+
 
 
   for (const loan of (loans || []) as any[]) {
@@ -418,15 +422,21 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
     );
   }
 
+  // FÓRMULA OFICIAL: Caixa Disponível = saldo-base + soma líquida do ledger.
+  // Nunca substituir available_cash apenas pela soma das movimentações.
+  const ledgerBase = Number((current as any).ledger_base_amount ?? 0);
+  const available_cash = Math.round((ledgerBase + ledgerNet) * 100) / 100;
+
   const { error: updError } = await supabase.from("cash_balance").update({
     available_cash,
     money_lent,
     interest_receivable,
     penalty_receivable,
     updated_at: new Date().toISOString(),
-  }).eq("id", current.id);
+  } as any).eq("id", current.id);
   if (updError) throw updError;
 }
+
 
 /**
  * Recalcula o caixa no escopo EXATO do empréstimo afetado (worker_id/admin_id
