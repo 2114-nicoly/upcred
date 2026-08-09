@@ -543,7 +543,15 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
-      toast.error((err?.message || "Erro ao fechar caixa") + " O caixa permaneceu aberto.");
+      const msg = String(err?.message || "");
+      if (/Fechamento cancelado: saldo de abertura/i.test(msg)) {
+        toast.error(
+          "Não foi possível fechar o caixa porque o saldo das movimentações não corresponde ao Caixa Disponível. O caixa continua aberto para conferência.",
+        );
+      } else if (!reportFinancialError(err)) {
+        toast.error((msg || "Erro ao fechar caixa") + " O caixa permaneceu aberto.");
+      }
+
     } finally {
       setSubmitting(false);
     }
