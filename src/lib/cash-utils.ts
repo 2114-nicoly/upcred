@@ -419,15 +419,21 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
     );
   }
 
+  // FÓRMULA OFICIAL: Caixa Disponível = saldo-base + soma líquida do ledger.
+  // Nunca substituir available_cash apenas pela soma das movimentações.
+  const ledgerBase = Number((current as any).ledger_base_amount ?? 0);
+  const available_cash = Math.round((ledgerBase + ledgerNet) * 100) / 100;
+
   const { error: updError } = await supabase.from("cash_balance").update({
     available_cash,
     money_lent,
     interest_receivable,
     penalty_receivable,
     updated_at: new Date().toISOString(),
-  }).eq("id", current.id);
+  } as any).eq("id", current.id);
   if (updError) throw updError;
 }
+
 
 /**
  * Recalcula o caixa no escopo EXATO do empréstimo afetado (worker_id/admin_id
