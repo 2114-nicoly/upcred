@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -316,7 +317,7 @@ export default function NewLoanPage() {
     try {
       await assertScopedCashOpen(isOngoing ? activeCashDate : loanDate, activeCashScope);
     } catch (err: any) {
-      toast.error(err?.message || "Caixa fechado para esta data");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Caixa fechado para esta data");
       setSaving(false);
       return;
     }

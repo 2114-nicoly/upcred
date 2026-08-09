@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -365,7 +366,7 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] manual movement failed", err);
-      toast.error(err?.message || "Erro ao registrar movimentação");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao registrar movimentação");
     } finally {
       setSubmitting(false);
     }
@@ -472,7 +473,7 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] expense failed", err);
-      toast.error(err?.message || "Erro ao registrar despesa");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao registrar despesa");
     } finally {
       setSubmitting(false);
     }
@@ -569,7 +570,7 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] reopen failed", err);
-      toast.error(err?.message || "Erro ao reabrir caixa");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao reabrir caixa");
     } finally {
       setSubmitting(false);
     }
@@ -636,7 +637,7 @@ export default function CaixaPage() {
       await fetchPendingMissedRequest();
     } catch (err: any) {
       console.error("[caixa] missed open request failed", err);
-      toast.error(err?.message || "Erro ao enviar solicitação");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao enviar solicitação");
     } finally {
       setSubmitting(false);
     }
@@ -661,7 +662,7 @@ export default function CaixaPage() {
       await fetchPendingReopenForCash();
     } catch (err: any) {
       console.error("[caixa] submit reopen request failed", err);
-      toast.error(err?.message || "Erro ao enviar solicitação");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao enviar solicitação");
     } finally {
       setSubmitting(false);
     }
@@ -679,7 +680,7 @@ export default function CaixaPage() {
       setSelectedVersionId((prev) => prev ?? latestId);
     } catch (err: any) {
       console.error("[caixa] list versions failed", err);
-      toast.error(err?.message || "Erro ao carregar versões");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao carregar versões");
     } finally {
       setVersionsLoading(false);
     }
@@ -716,7 +717,7 @@ export default function CaixaPage() {
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] review request failed", err);
-      toast.error(err?.message || "Erro ao processar solicitação");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao processar solicitação");
     } finally {
       setSubmitting(false);
     }
@@ -752,7 +753,7 @@ export default function CaixaPage() {
       setUndoReason("");
       await fetchData();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao desfazer lançamento");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao desfazer lançamento");
     } finally {
       setSubmitting(false);
     }

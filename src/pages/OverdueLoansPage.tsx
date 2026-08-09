@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -218,7 +219,7 @@ export default function OverdueLoansPage() {
     try {
       await assertScopedCashOpen(payDate, scopeOfInstallment(id) ?? { workerId: null, adminId: null });
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto nesta data.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto nesta data.");
       return;
     }
 
@@ -264,7 +265,7 @@ export default function OverdueLoansPage() {
       }
     } catch (err: any) {
       console.error("Overdue handlePay error:", err);
-      toast.error(err?.message || "Erro ao registrar pagamento");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao registrar pagamento");
     }
 
     setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(opDate); setPayDialogId(null);
@@ -297,7 +298,7 @@ export default function OverdueLoansPage() {
       const active = await assertScopedCashOpen(scopedCash.cashDate ?? "", scope);
       penaltyDate = active.cashDate;
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto para registrar a multa.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto para registrar a multa.");
       return;
     }
 

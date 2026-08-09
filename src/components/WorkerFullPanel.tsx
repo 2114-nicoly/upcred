@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -416,7 +417,7 @@ function RecentCashesSection({ workerId }: { workerId: string }) {
       setReason("");
       load();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao reabrir caixa");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao reabrir caixa");
     } finally {
       setSubmitting(false);
     }

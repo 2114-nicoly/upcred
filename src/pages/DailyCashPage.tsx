@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getCloseOriginLabel } from "@/lib/close-origin";
@@ -841,7 +842,7 @@ export default function DailyCashPage() {
       await fetchData({ silent: true });
     } catch (err: any) {
       console.error("[handlePay] failed", err);
-      toast.error(err?.message || "Erro ao registrar pagamento. O cliente continua em pendentes.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao registrar pagamento. O cliente continua em pendentes.");
     } finally {
       setIsSubmitting(false);
     }
@@ -913,7 +914,7 @@ export default function DailyCashPage() {
       await fetchData({ silent: true });
     } catch (err: any) {
       console.error("[handleNotPaid] failed", err);
-      toast.error(err?.message || "Erro ao marcar como 'Não Pagou'.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao marcar como 'Não Pagou'.");
     } finally {
       setIsSubmitting(false);
     }
@@ -965,7 +966,7 @@ export default function DailyCashPage() {
       await fetchData({ silent: true });
     } catch (err: any) {
       console.error("[handleBatchNotPaid] failed", err);
-      toast.error(err?.message || "Erro ao marcar parcelas.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao marcar parcelas.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1164,7 +1165,7 @@ export default function DailyCashPage() {
       await fetchData({ silent: true });
     } catch (err: any) {
       console.error("[handleQuitarEmprestimo] failed", err);
-      toast.error(err?.message || "Erro ao quitar empréstimo.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao quitar empréstimo.");
     } finally {
       setIsSubmitting(false);
     }

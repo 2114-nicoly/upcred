@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -448,7 +449,7 @@ export default function LoanDetailPage() {
     try {
       await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
       return;
     }
 
@@ -508,7 +509,7 @@ export default function LoanDetailPage() {
     try {
       await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
       return;
     }
     const diff = newAmount - Number(penalty.amount);
@@ -546,7 +547,7 @@ export default function LoanDetailPage() {
     try {
       await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
       return;
     }
     const { data: { session } } = await supabase.auth.getSession();
@@ -588,7 +589,7 @@ export default function LoanDetailPage() {
     try {
       await assertScopedCashOpen(opDate, { workerId: loan?.worker_id ?? null, adminId: loan?.admin_id ?? null });
     } catch (err: any) {
-      toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não há caixa aberto para registrar esta operação.");
       return;
     }
 

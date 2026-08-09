@@ -1,3 +1,4 @@
+import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -311,7 +312,7 @@ export default function ActiveLoansPage() {
         }
       }
     } catch (e: any) {
-      toast.error(e?.message || "Erro ao processar pagamento");
+      if (!reportFinancialError(e)) toast.error(e?.message || "Erro ao processar pagamento");
 
     } finally {
       setIsSubmitting(false);
@@ -346,7 +347,7 @@ export default function ActiveLoansPage() {
       });
       toast.success("Empréstimo quitado!");
     } catch (e: any) {
-      toast.error(e?.message || "Erro ao quitar, recarregando...");
+      if (!reportFinancialError(e)) toast.error(e?.message || "Erro ao quitar, recarregando...");
 
     } finally {
       setIsSubmitting(false);
