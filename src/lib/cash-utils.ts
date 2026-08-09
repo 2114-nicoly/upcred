@@ -374,7 +374,7 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
 
   // REGRA ÚNICA: soma original + contrapartida (efeito líquido zero).
   // Estornos legados (marcados sem contrapartida) são ignorados e sinalizados.
-  const { total: available_cash, legacyReversedWithoutCounter } = sumLedgerMovements(
+  const { total: ledgerNet, legacyReversedWithoutCounter } = sumLedgerMovements(
     (movements || []) as any[],
   );
   if (legacyReversedWithoutCounter.length > 0) {
@@ -383,6 +383,7 @@ export async function recalculateCashBalanceFromLedger(scope?: ExplicitScope) {
       legacyReversedWithoutCounter,
     );
   }
+
 
 
   for (const loan of (loans || []) as any[]) {
