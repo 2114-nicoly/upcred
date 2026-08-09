@@ -53,7 +53,7 @@ export function parseCashInsufficient(error: any): CashInsufficient | null {
   // Fallback: extrai os três valores da mensagem padronizada do banco.
   const nums = message.match(/R\$\s*(-?[\d.]+,?\d*)/g) || [];
   const toNumber = (s: string) => {
-    const raw = s.replace(/R\$\s*/, "").trim();
+    const raw = s.replace(/R\$\s*/, "").trim().replace(/[^\d,.-]+$/, "").replace(/[.,]$/, "");
     // pt-BR ("1.234,56") ou formato simples do Postgres ("1234.56")
     const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
     return normalizeMoney(normalized);
