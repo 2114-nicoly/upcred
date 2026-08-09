@@ -13,7 +13,7 @@ export function normalizeMoney(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!isFinite(n)) return 0;
   if (Math.abs(n) < 0.005) return 0;
-  const rounded = Math.round(n * 100) / 100;
+  const rounded = (Math.sign(n) * Math.round(Math.abs(n) * 100)) / 100;
   if (rounded === 0) return 0; // remove -0
   return rounded;
 }
