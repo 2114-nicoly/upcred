@@ -68,8 +68,12 @@ export function generateDueDates(
 }
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  // Fonte oficial é o banco: aqui apenas normalizamos a exibição
+  // (nunca "-R$ 0,00", "R$ -0,00" ou "-0"; negativo real é preservado).
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+    .format(normalizeMoney(value));
 }
+
 
 /**
  * Calculate fractional installment progress from remaining_balance (single source of truth).

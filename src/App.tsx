@@ -37,6 +37,8 @@ import DailyReportPage from "@/pages/DailyReportPage";
 import { WorkerFilterProvider } from "@/hooks/useWorkerFilter";
 import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { ConfirmProvider } from "@/hooks/useConfirm";
+import { CashGuardProvider } from "@/components/CashGuardProvider";
+
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -194,8 +196,11 @@ const App = () => (
           <AuthProvider>
             <WorkerFilterProvider>
               <ConfirmProvider>
-                <AppRoutes />
+                <CashGuardProvider>
+                  <AppRoutes />
+                </CashGuardProvider>
               </ConfirmProvider>
+
             </WorkerFilterProvider>
           </AuthProvider>
         </ErrorBoundary>
