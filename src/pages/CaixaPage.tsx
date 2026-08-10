@@ -1,4 +1,5 @@
 import { reportFinancialError } from "@/lib/cash-guard";
+import { formatClosingMismatch } from "@/lib/closing-mismatch";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
