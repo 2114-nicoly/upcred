@@ -260,42 +260,54 @@ export default function CaixaPage() {
   const liveTotals = computeDailyTotals(scopedAllEvents as any, 0);
   const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
-  // Summary: quando fechado, usa valores gravados no fechamento (snapshot imutável).
-  // Detalhamentos (novos vs renovações) são derivados dos eventos, que também são imutáveis.
+  // Summary: quando fechado, usa PRIMEIRO os valores congelados do snapshot
+  // (snapshot.totals) e só recorre a daily_cash como fallback do próprio
+  // fechamento. Nunca reconstrói um dia fechado com movimentações atuais.
   const summary = (() => {
     const useSnapshot = isClosed && !!dailyCashRow;
-    const opening = useSnapshot ? Number(dailyCashRow.opening_balance || 0) : inheritedOpening;
-    const received = useSnapshot ? Number(dailyCashRow.total_received || 0) : liveTotals.pagamentos;
-    const penalty = useSnapshot ? Number(dailyCashRow.total_penalty_received || 0) : liveTotals.multas;
-    const manualIn = useSnapshot ? Number(dailyCashRow.total_manual_in || 0) : liveTotals.entradasManuais;
-    const manualOut = useSnapshot ? Number(dailyCashRow.total_manual_out || 0) : liveTotals.saidasManuais;
-    const expenses = useSnapshot ? Number((dailyCashRow as any).total_expenses || 0) : liveTotals.despesas;
-    // Split (novo vs renovação) sempre a partir dos eventos — histórico imutável.
-    const newLoans = liveTotals.emprestimosLiberados;
-    const renewals = liveTotals.renovacoes + liveTotals.renegociacoes;
-    const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
+    const st: any = (snapshot as any)?.totals || null;
+    const froz = (key: string, fallback: number) => {
+      const v = st ? Number(st[key]) : NaN;
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const opening = useSnapshot ? froz("opening_balance", Number(dailyCashRow.opening_balance || 0)) : inheritedOpening;
+    const received = useSnapshot ? froz("received", Number(dailyCashRow.total_received || 0)) : liveTotals.pagamentos;
+    const penalty = useSnapshot ? froz("penalty", Number(dailyCashRow.total_penalty_received || 0)) : liveTotals.multas;
+    const manualIn = useSnapshot ? froz("manual_in", Number(dailyCashRow.total_manual_in || 0)) : liveTotals.entradasManuais;
+    const manualOut = useSnapshot ? froz("manual_out", Number(dailyCashRow.total_manual_out || 0)) : liveTotals.saidasManuais;
+    const expenses = useSnapshot ? froz("expenses", Number((dailyCashRow as any).total_expenses || 0)) : liveTotals.despesas;
+    const newLoans = useSnapshot ? froz("new_loans", liveTotals.emprestimosLiberados) : liveTotals.emprestimosLiberados;
+    const liveRenewals = liveTotals.renovacoes + liveTotals.renegociacoes;
+    const renewals = useSnapshot ? froz("renewals", liveRenewals) : liveRenewals;
+    const lent = useSnapshot ? froz("lent", Number(dailyCashRow.total_lent || 0)) : (newLoans + renewals);
     const totalIn = received + penalty + manualIn;
-    const totalOut = lent + manualOut + expenses;
-    // Dinheiro do trabalhador esperado = totalIn - totalOut (calculado automaticamente).
-    const expected = totalIn - totalOut;
-    // Dinheiro contado no caixa = valor digitado pelo trabalhador ao fechar. Quando aberto,
-    // por padrão é igual ao esperado (o input do modal pré-preenche com esse valor).
+    // Saídas operacionais: empréstimos liberados + despesas (NÃO inclui saídas manuais).
+    const operationalOut = lent + expenses;
+    // Total geral de saídas (apenas exibição/conferência).
+    const totalOut = operationalOut + manualOut;
+    // Dinheiro do trabalhador esperado: saídas manuais NÃO reduzem este indicador.
+    const workerExpected = totalIn - operationalOut;
+    // Valor líquido do dia após as saídas manuais.
+    const netAfterManualOut = workerExpected - manualOut;
+    // Caixa Disponível no Final do Dia = inicial + líquido após saídas manuais.
+    const finalCash = opening + netAfterManualOut;
+    // Dinheiro contado = valor digitado no fechamento; padrão = líquido após saídas manuais.
     const counted = useSnapshot
-      ? Number(dailyCashRow.counted_closing_balance ?? expected)
-      : expected;
-    // Caixa Disponível no Final do Dia = Caixa disponível inicial + esperado (auto).
-    const finalCash = opening + expected;
+      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? netAfterManualOut)
+      : netAfterManualOut;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
-      totalIn, totalOut,
-      expected,
+      totalIn, operationalOut, totalOut,
+      workerExpected,
+      netAfterManualOut,
       counted,
       finalCash,
-      notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
-      eventsCount: useSnapshot ? Number(dailyCashRow.total_events_count || scopedEvents.length) : scopedEvents.length,
+      notPaidCount: useSnapshot ? froz("not_paid_count", Number(dailyCashRow.total_not_paid_count || 0)) : liveTotals.naoPagos,
+      eventsCount: useSnapshot ? froz("events_count", Number(dailyCashRow.total_events_count || scopedEvents.length)) : scopedEvents.length,
     };
   })();
+
   const availableNow = Number(balance?.available_cash ?? 0);
 
 
@@ -483,17 +495,19 @@ export default function CaixaPage() {
   const openCloseDialog = () => {
     if (isClosed) return;
     setCloseNote("");
-    setCountedAmount(summary.expected.toFixed(2));
+    setCountedAmount(summary.netAfterManualOut.toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    const expected = Number(summary.expected.toFixed(2));
+    // Comparação é sempre contra o líquido após saídas manuais (nunca workerExpected).
+    const netExpected = Number(summary.netAfterManualOut.toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
     if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
     const counted = Number(parsed.toFixed(2));
-    const differs = Math.abs(counted - expected) > 0.005;
+    const differs = Math.abs(counted - netExpected) > 0.005;
+
     if (differs && closeNote.trim().length < 3) {
       toast.error("O valor contado difere do esperado. Observação é obrigatória.");
       return;
@@ -530,10 +544,13 @@ export default function CaixaPage() {
             despesas: Number(summary.expenses.toFixed(2)),
             saidas_manuais: Number(summary.manualOut.toFixed(2)),
             total_saidas: Number(summary.totalOut.toFixed(2)),
-            dinheiro_trabalhador_esperado: expected,
+            saidas_operacionais: Number(summary.operationalOut.toFixed(2)),
+            dinheiro_trabalhador_esperado: Number(summary.workerExpected.toFixed(2)),
+            liquido_apos_saidas_manuais: netExpected,
             dinheiro_contado: counted,
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
+
           closeNote.trim() || null,
         );
       } catch (e) { console.warn("[caixa] audit log failed", e); }
@@ -1022,9 +1039,9 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Saídas */}
+            {/* Saídas operacionais (não inclui saídas manuais) */}
             <div className="pt-1.5 border-t space-y-0.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas operacionais</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground pl-2">Novos empréstimos liberados</span>
                 <span className="text-xs font-medium text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span>
@@ -1037,33 +1054,60 @@ export default function CaixaPage() {
                 <span className="text-xs text-muted-foreground pl-2">Despesas</span>
                 <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
               </div>
+              <div className="flex items-center justify-between border-t pt-1 mt-1">
+                <span className="text-xs font-semibold">Total de saídas operacionais</span>
+                <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.operationalOut)}</span>
+              </div>
+            </div>
+
+            {/* Dinheiro do trabalhador esperado = totalIn - saídas operacionais */}
+            <div className="pt-1.5 border-t">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Valor esperado com o trabalhador</span>
+                <span className={`text-base font-bold tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>
+                  {summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}
+                </span>
+              </div>
+            </div>
+
+            {/* Movimentações manuais do caixa */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Movimentações manuais do caixa</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground pl-2">Saídas manuais</span>
                 <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
               </div>
-              <div className="flex items-center justify-between border-t pt-1 mt-1">
-                <span className="text-xs font-semibold">Total de saídas</span>
-                <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
+              <p className="text-[10px] text-muted-foreground">
+                Valor exibido para conferência. Não reduz o indicador do trabalhador, mas reduz o caixa disponível.
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">Total geral de saídas</span>
+                <span className="text-[11px] font-medium text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
               </div>
             </div>
 
-            {/* Dinheiro do trabalhador esperado (auto = totalIn - totalOut) */}
-            <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Dinheiro do trabalhador esperado</span>
-              <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>
-                {summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}
-              </span>
+            {/* Resultado da conferência */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Valor líquido do dia após saídas manuais</span>
+                <span className={`text-sm font-bold tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>
+                  {summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}
+                </span>
+              </div>
             </div>
 
             {/* Dinheiro contado no caixa (input do trabalhador — só após fechar) */}
             {isClosed && dailyCashRow && (
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
+                <span className="text-xs font-semibold">Dinheiro contado após movimentações manuais</span>
                 <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
                   {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
                 </span>
               </div>
             )}
+
 
             {/* Caixa Disponível no Final do Dia */}
             <div className="flex items-center justify-between border-t pt-1.5">
@@ -1762,24 +1806,35 @@ export default function CaixaPage() {
                 <div className="flex justify-between font-semibold"><span>Total de entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
               </div>
               <div className="pt-1 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas operacionais</p>
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Novos empréstimos liberados</span><span className="text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Dinheiro adicional em renovações</span><span className="text-primary tabular-nums">-{formatCurrency(summary.renewals)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
-                <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total de saídas operacionais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.operationalOut)}</span></div>
               </div>
-              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro do trabalhador esperado</span><span className={`tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>{summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
-              
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
+                <div className="flex justify-between font-semibold"><span>Valor esperado com o trabalhador</span><span className={`tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>{summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}</span></div>
+              </div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Movimentações manuais do caixa</p>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
+                <p className="text-[10px] text-muted-foreground">Valor exibido para conferência. Não reduz o indicador do trabalhador, mas reduz o caixa disponível.</p>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total geral de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+              </div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
+                <div className="flex justify-between font-semibold"><span>Valor líquido do dia após saídas manuais</span><span className={`tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>{summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
+              </div>
             </div>
             {(() => {
               const parsed = parseFloat((countedAmount || "").replace(",", "."));
-              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.expected.toFixed(2))) > 0.005;
+              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.netAfterManualOut.toFixed(2))) > 0.005;
               return (
                 <>
                   <div>
-                    <Label>Dinheiro contado no caixa <span className="text-destructive">*</span></Label>
+                    <Label>Dinheiro contado após movimentações manuais <span className="text-destructive">*</span></Label>
                     <Input
                       type="number" inputMode="decimal" step="0.01"
                       value={countedAmount}
@@ -1787,9 +1842,10 @@ export default function CaixaPage() {
                       placeholder="0,00"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Pré-preenchido com o esperado. Ajuste conforme o dinheiro real em mãos.
+                      Compare com o valor líquido esperado após as saídas manuais.
                     </p>
                   </div>
+
                   <div>
                     <Label>
                       Observação {differs ? <span className="text-destructive">* (obrigatória)</span> : <span className="text-muted-foreground">(opcional)</span>}
