@@ -1599,6 +1599,19 @@ export default function DailyCashPage() {
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
 
+        {/* Busca global da Rota: sempre visível, qualquer status do caixa */}
+        <div className="relative mt-2">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Buscar cliente..."
+            value={clientSearch}
+            onChange={(e) => setClientSearch(e.target.value)}
+            className="h-9 pl-7 text-xs"
+          />
+        </div>
+
+
+
         {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
