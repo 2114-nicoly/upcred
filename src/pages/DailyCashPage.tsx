@@ -60,6 +60,13 @@ import OpenCashBanner from "@/components/OpenCashBanner";
 import { getDailyCollectionSummary, HISTORICAL_UNAVAILABLE_LABEL, type DailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
 import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
+import {
+  buildDailyRouteSearchIndex,
+  filterRouteSearchIndex,
+  groupRouteSearchResults,
+  normalizeSearchText,
+  type RouteSearchResult,
+} from "@/lib/daily-route-search";
 
 type InstallmentWithLoan = {
   id: string;
@@ -306,6 +313,11 @@ export default function DailyCashPage() {
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [renewalEvents, setRenewalEvents] = useState<DailyEventRow[]>([]);
   const [reversedEvents, setReversedEvents] = useState<DailyEvent[]>([]);
+  /** Todos os eventos válidos da data (não estornados) — base da busca global. */
+  const [dayEvents, setDayEvents] = useState<any[]>([]);
+  /** Nomes congelados (snapshot) para dias fechados. */
+  const [snapshotClientNames, setSnapshotClientNames] = useState<Record<string, string>>({});
+
   const [pendingPenalties, setPendingPenalties] = useState<Array<{ id: string; amount: number; loan_id: string; clientName: string; clientId: string; created_at: string }>>([]);
   const [rescheduledInstIds, setRescheduledInstIds] = useState<Set<string>>(new Set());
   const [totalPenaltyPaidToday, setTotalPenaltyPaidToday] = useState(0);
@@ -340,7 +352,7 @@ export default function DailyCashPage() {
   const [openingBalance, setOpeningBalance] = useState(0);
   const [manualInToday, setManualInToday] = useState(0);
   const [manualOutToday, setManualOutToday] = useState(0);
-  const [quickSearch, setQuickSearch] = useState("");
+  
   const [dailySummary, setDailySummary] = useState<DailyCollectionSummary>({ expectedToReceiveToday: 0, receivedToday: 0, receivedFromExpected: 0, pendingToReceiveToday: 0, overdueAmount: 0, cashExpectedForClosing: 0, reversedToday: 0, hasError: false, historicalIncomplete: false });
   const [summaryLoading, setSummaryLoading] = useState(true);
   // O resumo é carregado dentro de fetchData (atualização atômica após qualquer ação).
@@ -414,20 +426,48 @@ export default function DailyCashPage() {
     const base = pendingFilter === "overdue" ? overdueItems
       : pendingFilter === "today" ? todayItems
       : pendingInstallments;
-    const q = clientSearch.trim().toLowerCase();
+    const q = normalizeSearchText(clientSearch);
     if (!q) return base;
-    return base.filter((i) => getInstClientName(i).toLowerCase().includes(q));
+    return base.filter((i) => normalizeSearchText(getInstClientName(i)).includes(q));
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments, clientSearch]);
 
   const filteredOverdue = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    return q ? overdueItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : overdueItems;
+    const q = normalizeSearchText(clientSearch);
+    return q ? overdueItems.filter((i) => normalizeSearchText(getInstClientName(i)).includes(q)) : overdueItems;
   }, [overdueItems, clientSearch]);
 
   const filteredToday = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    return q ? todayItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : todayItems;
+    const q = normalizeSearchText(clientSearch);
+    return q ? todayItems.filter((i) => normalizeSearchText(getInstClientName(i)).includes(q)) : todayItems;
   }, [todayItems, clientSearch]);
+
+  /** Índice único de atividades da data (fonte da busca global). */
+  const routeSearchIndex = useMemo(
+    () =>
+      buildDailyRouteSearchIndex({
+        cashDate: selectedDate,
+        scope: { workerId: effectiveWorkerId, adminId: effectiveAdminId },
+        pendingInstallments,
+        paidGroups,
+        notPaidMarks,
+        newLoans,
+        renewalEvents,
+        events: dayEvents,
+        reversedEvents,
+        clientNames: snapshotClientNames,
+      }),
+    [
+      selectedDate, effectiveWorkerId, effectiveAdminId, pendingInstallments, paidGroups,
+      notPaidMarks, newLoans, renewalEvents, dayEvents, reversedEvents, snapshotClientNames,
+    ],
+  );
+
+  const searchGroups = useMemo(
+    () => groupRouteSearchResults(filterRouteSearchIndex(routeSearchIndex, clientSearch)),
+    [routeSearchIndex, clientSearch],
+  );
+  const isSearching = normalizeSearchText(clientSearch).length > 0;
+
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++fetchSeqRef.current;
@@ -481,6 +521,9 @@ export default function DailyCashPage() {
             setNewLoans((snap.new_loans as any) || []);
             setRenewalEvents((snap.renewal_events as any) || []);
             setReversedEvents((snap.reversed_events as any) || []);
+            // Busca de dia fechado: exclusivamente o snapshot.
+            setDayEvents(((snap as any).events as any[]) || []);
+            setSnapshotClientNames(((snap as any).client_names as Record<string, string>) || {});
             setPaidGroups(normalizeSnapshotPaidGroups((snap.paid_groups as any) || []));
             setNotPaidMarks((snap.not_paid_marks as any) || []);
             setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
@@ -558,6 +601,9 @@ export default function DailyCashPage() {
       const allEvents = (eventsData || []) as unknown as DailyEventRow[];
       setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
       setReversedEvents((allEventsIncReversed || []).filter((e) => e.reversed_at !== null));
+      // Caixa aberto: guardar TODOS os eventos válidos da data (base da busca).
+      setDayEvents((eventsData || []) as any[]);
+      setSnapshotClientNames({});
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
       // Loans com pagamento/não pagou hoje (anti-reaparecimento na lista de pendentes)
@@ -1553,6 +1599,19 @@ export default function DailyCashPage() {
       <div className="mb-3">
         <DateNavigator date={selectedDate} onChange={handleDateChange} origin="rota" />
 
+        {/* Busca global da Rota: sempre visível, qualquer status do caixa */}
+        <div className="relative mt-2">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Buscar cliente..."
+            value={clientSearch}
+            onChange={(e) => setClientSearch(e.target.value)}
+            className="h-9 pl-7 text-xs"
+          />
+        </div>
+
+
+
         {isReallyClosed && (
           <div className="mt-1.5 rounded-md bg-success/10 border border-success/30 p-2 text-center">
             <p className="text-xs font-medium text-success flex items-center justify-center gap-1">
@@ -1592,7 +1651,80 @@ export default function DailyCashPage() {
         />
       </div>
 
+      {/* RESULTADOS DA BUSCA (todas as ações do cliente nesta data) */}
+      {isSearching && (
+        <div className="mb-4 rounded-lg border bg-card p-3 space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1">
+            <Search className="h-3 w-3" /> Resultados nesta data
+          </h2>
+          {isReallyClosed && (
+            <p className="text-[11px] text-muted-foreground italic">
+              Dia fechado — resultados somente leitura, montados a partir do histórico congelado.
+            </p>
+          )}
+          {isReallyClosed && snapshotVersion !== null && snapshotVersion < 2 && (
+            <p className="text-[11px] text-warning">{INCOMPLETE_HISTORY_LABEL}</p>
+          )}
+          {searchGroups.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhum registro deste cliente nesta data.</p>
+          ) : (
+            searchGroups.map((g) => (
+              <div key={safeKey("sg", g.clientId, g.clientName)} className="rounded-md border border-border p-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold truncate">{g.clientName}</p>
+                  <span className="text-[10px] text-muted-foreground">{g.results.length} registro(s)</span>
+                </div>
+                {g.results.map((r: RouteSearchResult) => (
+                  <div key={r.key} className="rounded-md bg-muted/30 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">{r.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        {r.amount != null && r.amount > 0 && (
+                          <span className={`text-xs font-bold tabular-nums ${r.status === "reversed" ? "text-muted-foreground line-through" : ""}`}>
+                            {formatCurrency(r.amount)}
+                          </span>
+                        )}
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                          {r.status === "pending" ? "Pendente" : r.status === "reversed" ? "Estornado" : "Realizado"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground break-words">{r.description}</p>
+                    {r.at && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {format(new Date(r.at), "dd/MM/yyyy HH:mm")}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {r.loanId && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-primary hover:underline"
+                          onClick={() => navigate(`/loans/${r.loanId}`)}
+                        >
+                          Ver detalhes do empréstimo
+                        </button>
+                      )}
+                      {r.clientId && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-primary hover:underline"
+                          onClick={() => navigate(`/clients/${r.clientId}`)}
+                        >
+                          Histórico do cliente
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* Painel de produção removido: indicadores unificados pelo bloco "Cobranças do dia" abaixo. */}
+
 
 
       {/* Últimos dias trabalhados (link discreto) */}
@@ -1687,15 +1819,6 @@ export default function DailyCashPage() {
                       : "Somente visualização — reabra o caixa para registrar."}
                   </p>
                 )}
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar cliente..."
-                    value={clientSearch}
-                    onChange={(e) => setClientSearch(e.target.value)}
-                    className="h-8 pl-7 text-xs"
-                  />
-                </div>
                 <div className="flex items-center gap-1.5">
                   {(["all", "overdue", "today"] as PendingFilter[]).map(f => (
                     <button
