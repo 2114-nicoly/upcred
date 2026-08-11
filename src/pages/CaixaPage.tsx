@@ -1806,24 +1806,35 @@ export default function CaixaPage() {
                 <div className="flex justify-between font-semibold"><span>Total de entradas</span><span className="text-success tabular-nums">+{formatCurrency(summary.totalIn)}</span></div>
               </div>
               <div className="pt-1 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas operacionais</p>
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Novos empréstimos liberados</span><span className="text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Dinheiro adicional em renovações</span><span className="text-primary tabular-nums">-{formatCurrency(summary.renewals)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground pl-2">Despesas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
-                <div className="flex justify-between font-semibold"><span>Total de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total de saídas operacionais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.operationalOut)}</span></div>
               </div>
-              <div className="flex justify-between border-t pt-1 font-semibold"><span>Dinheiro do trabalhador esperado</span><span className={`tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>{summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}</span></div>
-              <div className="flex justify-between font-semibold border-t pt-1"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
-              
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
+                <div className="flex justify-between font-semibold"><span>Valor esperado com o trabalhador</span><span className={`tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>{summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}</span></div>
+              </div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Movimentações manuais do caixa</p>
+                <div className="flex justify-between"><span className="text-muted-foreground pl-2">Saídas manuais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span></div>
+                <p className="text-[10px] text-muted-foreground">Valor exibido para conferência. Não reduz o indicador do trabalhador, mas reduz o caixa disponível.</p>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total geral de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
+              </div>
+              <div className="pt-1 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
+                <div className="flex justify-between font-semibold"><span>Valor líquido do dia após saídas manuais</span><span className={`tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>{summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
+              </div>
             </div>
             {(() => {
               const parsed = parseFloat((countedAmount || "").replace(",", "."));
-              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.expected.toFixed(2))) > 0.005;
+              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.netAfterManualOut.toFixed(2))) > 0.005;
               return (
                 <>
                   <div>
-                    <Label>Dinheiro contado no caixa <span className="text-destructive">*</span></Label>
+                    <Label>Dinheiro contado após movimentações manuais <span className="text-destructive">*</span></Label>
                     <Input
                       type="number" inputMode="decimal" step="0.01"
                       value={countedAmount}
@@ -1831,9 +1842,10 @@ export default function CaixaPage() {
                       placeholder="0,00"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Pré-preenchido com o esperado. Ajuste conforme o dinheiro real em mãos.
+                      Compare com o valor líquido esperado após as saídas manuais.
                     </p>
                   </div>
+
                   <div>
                     <Label>
                       Observação {differs ? <span className="text-destructive">* (obrigatória)</span> : <span className="text-muted-foreground">(opcional)</span>}
