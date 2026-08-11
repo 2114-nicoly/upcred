@@ -260,42 +260,54 @@ export default function CaixaPage() {
   const liveTotals = computeDailyTotals(scopedAllEvents as any, 0);
   const saldoDia = liveTotals.entradas - liveTotals.saidas;
 
-  // Summary: quando fechado, usa valores gravados no fechamento (snapshot imutável).
-  // Detalhamentos (novos vs renovações) são derivados dos eventos, que também são imutáveis.
+  // Summary: quando fechado, usa PRIMEIRO os valores congelados do snapshot
+  // (snapshot.totals) e só recorre a daily_cash como fallback do próprio
+  // fechamento. Nunca reconstrói um dia fechado com movimentações atuais.
   const summary = (() => {
     const useSnapshot = isClosed && !!dailyCashRow;
-    const opening = useSnapshot ? Number(dailyCashRow.opening_balance || 0) : inheritedOpening;
-    const received = useSnapshot ? Number(dailyCashRow.total_received || 0) : liveTotals.pagamentos;
-    const penalty = useSnapshot ? Number(dailyCashRow.total_penalty_received || 0) : liveTotals.multas;
-    const manualIn = useSnapshot ? Number(dailyCashRow.total_manual_in || 0) : liveTotals.entradasManuais;
-    const manualOut = useSnapshot ? Number(dailyCashRow.total_manual_out || 0) : liveTotals.saidasManuais;
-    const expenses = useSnapshot ? Number((dailyCashRow as any).total_expenses || 0) : liveTotals.despesas;
-    // Split (novo vs renovação) sempre a partir dos eventos — histórico imutável.
-    const newLoans = liveTotals.emprestimosLiberados;
-    const renewals = liveTotals.renovacoes + liveTotals.renegociacoes;
-    const lent = useSnapshot ? Number(dailyCashRow.total_lent || 0) : (newLoans + renewals);
+    const st: any = (snapshot as any)?.totals || null;
+    const froz = (key: string, fallback: number) => {
+      const v = st ? Number(st[key]) : NaN;
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const opening = useSnapshot ? froz("opening_balance", Number(dailyCashRow.opening_balance || 0)) : inheritedOpening;
+    const received = useSnapshot ? froz("received", Number(dailyCashRow.total_received || 0)) : liveTotals.pagamentos;
+    const penalty = useSnapshot ? froz("penalty", Number(dailyCashRow.total_penalty_received || 0)) : liveTotals.multas;
+    const manualIn = useSnapshot ? froz("manual_in", Number(dailyCashRow.total_manual_in || 0)) : liveTotals.entradasManuais;
+    const manualOut = useSnapshot ? froz("manual_out", Number(dailyCashRow.total_manual_out || 0)) : liveTotals.saidasManuais;
+    const expenses = useSnapshot ? froz("expenses", Number((dailyCashRow as any).total_expenses || 0)) : liveTotals.despesas;
+    const newLoans = useSnapshot ? froz("new_loans", liveTotals.emprestimosLiberados) : liveTotals.emprestimosLiberados;
+    const liveRenewals = liveTotals.renovacoes + liveTotals.renegociacoes;
+    const renewals = useSnapshot ? froz("renewals", liveRenewals) : liveRenewals;
+    const lent = useSnapshot ? froz("lent", Number(dailyCashRow.total_lent || 0)) : (newLoans + renewals);
     const totalIn = received + penalty + manualIn;
-    const totalOut = lent + manualOut + expenses;
-    // Dinheiro do trabalhador esperado = totalIn - totalOut (calculado automaticamente).
-    const expected = totalIn - totalOut;
-    // Dinheiro contado no caixa = valor digitado pelo trabalhador ao fechar. Quando aberto,
-    // por padrão é igual ao esperado (o input do modal pré-preenche com esse valor).
+    // Saídas operacionais: empréstimos liberados + despesas (NÃO inclui saídas manuais).
+    const operationalOut = lent + expenses;
+    // Total geral de saídas (apenas exibição/conferência).
+    const totalOut = operationalOut + manualOut;
+    // Dinheiro do trabalhador esperado: saídas manuais NÃO reduzem este indicador.
+    const workerExpected = totalIn - operationalOut;
+    // Valor líquido do dia após as saídas manuais.
+    const netAfterManualOut = workerExpected - manualOut;
+    // Caixa Disponível no Final do Dia = inicial + líquido após saídas manuais.
+    const finalCash = opening + netAfterManualOut;
+    // Dinheiro contado = valor digitado no fechamento; padrão = líquido após saídas manuais.
     const counted = useSnapshot
-      ? Number(dailyCashRow.counted_closing_balance ?? expected)
-      : expected;
-    // Caixa Disponível no Final do Dia = Caixa disponível inicial + esperado (auto).
-    const finalCash = opening + expected;
+      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? netAfterManualOut)
+      : netAfterManualOut;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
-      totalIn, totalOut,
-      expected,
+      totalIn, operationalOut, totalOut,
+      workerExpected,
+      netAfterManualOut,
       counted,
       finalCash,
-      notPaidCount: useSnapshot ? Number(dailyCashRow.total_not_paid_count || 0) : liveTotals.naoPagos,
-      eventsCount: useSnapshot ? Number(dailyCashRow.total_events_count || scopedEvents.length) : scopedEvents.length,
+      notPaidCount: useSnapshot ? froz("not_paid_count", Number(dailyCashRow.total_not_paid_count || 0)) : liveTotals.naoPagos,
+      eventsCount: useSnapshot ? froz("events_count", Number(dailyCashRow.total_events_count || scopedEvents.length)) : scopedEvents.length,
     };
   })();
+
   const availableNow = Number(balance?.available_cash ?? 0);
 
 
