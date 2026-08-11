@@ -521,6 +521,9 @@ export default function DailyCashPage() {
             setNewLoans((snap.new_loans as any) || []);
             setRenewalEvents((snap.renewal_events as any) || []);
             setReversedEvents((snap.reversed_events as any) || []);
+            // Busca de dia fechado: exclusivamente o snapshot.
+            setDayEvents(((snap as any).events as any[]) || []);
+            setSnapshotClientNames(((snap as any).client_names as Record<string, string>) || {});
             setPaidGroups(normalizeSnapshotPaidGroups((snap.paid_groups as any) || []));
             setNotPaidMarks((snap.not_paid_marks as any) || []);
             setTotalPenaltyPaidToday(Number(snap.totals.penalty_paid_today) || 0);
