@@ -419,20 +419,48 @@ export default function DailyCashPage() {
     const base = pendingFilter === "overdue" ? overdueItems
       : pendingFilter === "today" ? todayItems
       : pendingInstallments;
-    const q = clientSearch.trim().toLowerCase();
+    const q = normalizeSearchText(clientSearch);
     if (!q) return base;
-    return base.filter((i) => getInstClientName(i).toLowerCase().includes(q));
+    return base.filter((i) => normalizeSearchText(getInstClientName(i)).includes(q));
   }, [pendingFilter, overdueItems, todayItems, pendingInstallments, clientSearch]);
 
   const filteredOverdue = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    return q ? overdueItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : overdueItems;
+    const q = normalizeSearchText(clientSearch);
+    return q ? overdueItems.filter((i) => normalizeSearchText(getInstClientName(i)).includes(q)) : overdueItems;
   }, [overdueItems, clientSearch]);
 
   const filteredToday = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    return q ? todayItems.filter((i) => getInstClientName(i).toLowerCase().includes(q)) : todayItems;
+    const q = normalizeSearchText(clientSearch);
+    return q ? todayItems.filter((i) => normalizeSearchText(getInstClientName(i)).includes(q)) : todayItems;
   }, [todayItems, clientSearch]);
+
+  /** Índice único de atividades da data (fonte da busca global). */
+  const routeSearchIndex = useMemo(
+    () =>
+      buildDailyRouteSearchIndex({
+        cashDate: selectedDate,
+        scope: { workerId: effectiveWorkerId, adminId: effectiveAdminId },
+        pendingInstallments,
+        paidGroups,
+        notPaidMarks,
+        newLoans,
+        renewalEvents,
+        events: dayEvents,
+        reversedEvents,
+        clientNames: snapshotClientNames,
+      }),
+    [
+      selectedDate, effectiveWorkerId, effectiveAdminId, pendingInstallments, paidGroups,
+      notPaidMarks, newLoans, renewalEvents, dayEvents, reversedEvents, snapshotClientNames,
+    ],
+  );
+
+  const searchGroups = useMemo(
+    () => groupRouteSearchResults(filterRouteSearchIndex(routeSearchIndex, clientSearch)),
+    [routeSearchIndex, clientSearch],
+  );
+  const isSearching = normalizeSearchText(clientSearch).length > 0;
+
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++fetchSeqRef.current;
