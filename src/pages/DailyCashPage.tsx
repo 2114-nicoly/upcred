@@ -1733,15 +1733,6 @@ export default function DailyCashPage() {
                       : "Somente visualização — reabra o caixa para registrar."}
                   </p>
                 )}
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar cliente..."
-                    value={clientSearch}
-                    onChange={(e) => setClientSearch(e.target.value)}
-                    className="h-8 pl-7 text-xs"
-                  />
-                </div>
                 <div className="flex items-center gap-1.5">
                   {(["all", "overdue", "today"] as PendingFilter[]).map(f => (
                     <button
