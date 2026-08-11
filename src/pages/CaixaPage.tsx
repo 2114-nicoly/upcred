@@ -544,10 +544,13 @@ export default function CaixaPage() {
             despesas: Number(summary.expenses.toFixed(2)),
             saidas_manuais: Number(summary.manualOut.toFixed(2)),
             total_saidas: Number(summary.totalOut.toFixed(2)),
-            dinheiro_trabalhador_esperado: expected,
+            saidas_operacionais: Number(summary.operationalOut.toFixed(2)),
+            dinheiro_trabalhador_esperado: Number(summary.workerExpected.toFixed(2)),
+            liquido_apos_saidas_manuais: netExpected,
             dinheiro_contado: counted,
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
+
           closeNote.trim() || null,
         );
       } catch (e) { console.warn("[caixa] audit log failed", e); }
