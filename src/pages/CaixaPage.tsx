@@ -1039,9 +1039,9 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Saídas */}
+            {/* Saídas operacionais (não inclui saídas manuais) */}
             <div className="pt-1.5 border-t space-y-0.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Saídas operacionais</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground pl-2">Novos empréstimos liberados</span>
                 <span className="text-xs font-medium text-primary tabular-nums">-{formatCurrency(summary.newLoans)}</span>
@@ -1054,33 +1054,60 @@ export default function CaixaPage() {
                 <span className="text-xs text-muted-foreground pl-2">Despesas</span>
                 <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.expenses)}</span>
               </div>
+              <div className="flex items-center justify-between border-t pt-1 mt-1">
+                <span className="text-xs font-semibold">Total de saídas operacionais</span>
+                <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.operationalOut)}</span>
+              </div>
+            </div>
+
+            {/* Dinheiro do trabalhador esperado = totalIn - saídas operacionais */}
+            <div className="pt-1.5 border-t">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Valor esperado com o trabalhador</span>
+                <span className={`text-base font-bold tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>
+                  {summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}
+                </span>
+              </div>
+            </div>
+
+            {/* Movimentações manuais do caixa */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Movimentações manuais do caixa</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground pl-2">Saídas manuais</span>
                 <span className="text-xs font-medium text-destructive tabular-nums">-{formatCurrency(summary.manualOut)}</span>
               </div>
-              <div className="flex items-center justify-between border-t pt-1 mt-1">
-                <span className="text-xs font-semibold">Total de saídas</span>
-                <span className="text-sm font-bold text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
+              <p className="text-[10px] text-muted-foreground">
+                Valor exibido para conferência. Não reduz o indicador do trabalhador, mas reduz o caixa disponível.
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">Total geral de saídas</span>
+                <span className="text-[11px] font-medium text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span>
               </div>
             </div>
 
-            {/* Dinheiro do trabalhador esperado (auto = totalIn - totalOut) */}
-            <div className="flex items-center justify-between border-t pt-1.5">
-              <span className="text-xs font-semibold">Dinheiro do trabalhador esperado</span>
-              <span className={`text-sm font-bold tabular-nums ${summary.expected >= 0 ? "text-success" : "text-destructive"}`}>
-                {summary.expected >= 0 ? "+" : ""}{formatCurrency(summary.expected)}
-              </span>
+            {/* Resultado da conferência */}
+            <div className="pt-1.5 border-t space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Valor líquido do dia após saídas manuais</span>
+                <span className={`text-sm font-bold tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>
+                  {summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}
+                </span>
+              </div>
             </div>
 
             {/* Dinheiro contado no caixa (input do trabalhador — só após fechar) */}
             {isClosed && dailyCashRow && (
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Dinheiro contado no caixa</span>
+                <span className="text-xs font-semibold">Dinheiro contado após movimentações manuais</span>
                 <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
                   {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
                 </span>
               </div>
             )}
+
 
             {/* Caixa Disponível no Final do Dia */}
             <div className="flex items-center justify-between border-t pt-1.5">
