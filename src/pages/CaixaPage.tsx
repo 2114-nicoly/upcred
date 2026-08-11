@@ -495,17 +495,19 @@ export default function CaixaPage() {
   const openCloseDialog = () => {
     if (isClosed) return;
     setCloseNote("");
-    setCountedAmount(summary.expected.toFixed(2));
+    setCountedAmount(summary.netAfterManualOut.toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    const expected = Number(summary.expected.toFixed(2));
+    // Comparação é sempre contra o líquido após saídas manuais (nunca workerExpected).
+    const netExpected = Number(summary.netAfterManualOut.toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
     if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
     const counted = Number(parsed.toFixed(2));
-    const differs = Math.abs(counted - expected) > 0.005;
+    const differs = Math.abs(counted - netExpected) > 0.005;
+
     if (differs && closeNote.trim().length < 3) {
       toast.error("O valor contado difere do esperado. Observação é obrigatória.");
       return;
