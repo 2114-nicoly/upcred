@@ -1651,7 +1651,80 @@ export default function DailyCashPage() {
         />
       </div>
 
+      {/* RESULTADOS DA BUSCA (todas as ações do cliente nesta data) */}
+      {isSearching && (
+        <div className="mb-4 rounded-lg border bg-card p-3 space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1">
+            <Search className="h-3 w-3" /> Resultados nesta data
+          </h2>
+          {isReallyClosed && (
+            <p className="text-[11px] text-muted-foreground italic">
+              Dia fechado — resultados somente leitura, montados a partir do histórico congelado.
+            </p>
+          )}
+          {isReallyClosed && snapshotVersion !== null && snapshotVersion < 2 && (
+            <p className="text-[11px] text-warning">{INCOMPLETE_HISTORY_LABEL}</p>
+          )}
+          {searchGroups.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhum registro deste cliente nesta data.</p>
+          ) : (
+            searchGroups.map((g) => (
+              <div key={safeKey("sg", g.clientId, g.clientName)} className="rounded-md border border-border p-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold truncate">{g.clientName}</p>
+                  <span className="text-[10px] text-muted-foreground">{g.results.length} registro(s)</span>
+                </div>
+                {g.results.map((r: RouteSearchResult) => (
+                  <div key={r.key} className="rounded-md bg-muted/30 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">{r.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        {r.amount != null && r.amount > 0 && (
+                          <span className={`text-xs font-bold tabular-nums ${r.status === "reversed" ? "text-muted-foreground line-through" : ""}`}>
+                            {formatCurrency(r.amount)}
+                          </span>
+                        )}
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                          {r.status === "pending" ? "Pendente" : r.status === "reversed" ? "Estornado" : "Realizado"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground break-words">{r.description}</p>
+                    {r.at && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {format(new Date(r.at), "dd/MM/yyyy HH:mm")}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {r.loanId && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-primary hover:underline"
+                          onClick={() => navigate(`/loans/${r.loanId}`)}
+                        >
+                          Ver detalhes do empréstimo
+                        </button>
+                      )}
+                      {r.clientId && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-primary hover:underline"
+                          onClick={() => navigate(`/clients/${r.clientId}`)}
+                        >
+                          Histórico do cliente
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* Painel de produção removido: indicadores unificados pelo bloco "Cobranças do dia" abaixo. */}
+
 
 
       {/* Últimos dias trabalhados (link discreto) */}
