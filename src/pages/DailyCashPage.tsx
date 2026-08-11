@@ -60,6 +60,13 @@ import OpenCashBanner from "@/components/OpenCashBanner";
 import { getDailyCollectionSummary, HISTORICAL_UNAVAILABLE_LABEL, type DailyCollectionSummary } from "@/lib/daily-totals";
 import UpcomingRemindersSection from "@/components/UpcomingRemindersSection";
 import { loadDailyCashSnapshot } from "@/lib/daily-snapshot";
+import {
+  buildDailyRouteSearchIndex,
+  filterRouteSearchIndex,
+  groupRouteSearchResults,
+  normalizeSearchText,
+  type RouteSearchResult,
+} from "@/lib/daily-route-search";
 
 type InstallmentWithLoan = {
   id: string;
