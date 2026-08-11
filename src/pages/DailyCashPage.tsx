@@ -306,6 +306,11 @@ export default function DailyCashPage() {
   const [newLoans, setNewLoans] = useState<NewLoanInfo[]>([]);
   const [renewalEvents, setRenewalEvents] = useState<DailyEventRow[]>([]);
   const [reversedEvents, setReversedEvents] = useState<DailyEvent[]>([]);
+  /** Todos os eventos válidos da data (não estornados) — base da busca global. */
+  const [dayEvents, setDayEvents] = useState<any[]>([]);
+  /** Nomes congelados (snapshot) para dias fechados. */
+  const [snapshotClientNames, setSnapshotClientNames] = useState<Record<string, string>>({});
+
   const [pendingPenalties, setPendingPenalties] = useState<Array<{ id: string; amount: number; loan_id: string; clientName: string; clientId: string; created_at: string }>>([]);
   const [rescheduledInstIds, setRescheduledInstIds] = useState<Set<string>>(new Set());
   const [totalPenaltyPaidToday, setTotalPenaltyPaidToday] = useState(0);
