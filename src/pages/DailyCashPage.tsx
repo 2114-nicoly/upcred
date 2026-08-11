@@ -601,6 +601,9 @@ export default function DailyCashPage() {
       const allEvents = (eventsData || []) as unknown as DailyEventRow[];
       setRenewalEvents(allEvents.filter((e) => e.event_type === "renovacao"));
       setReversedEvents((allEventsIncReversed || []).filter((e) => e.reversed_at !== null));
+      // Caixa aberto: guardar TODOS os eventos válidos da data (base da busca).
+      setDayEvents((eventsData || []) as any[]);
+      setSnapshotClientNames({});
       const npMarks = (npData || []) as unknown as NotPaidMark[];
 
       // Loans com pagamento/não pagou hoje (anti-reaparecimento na lista de pendentes)
