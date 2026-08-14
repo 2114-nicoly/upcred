@@ -285,27 +285,37 @@ export default function CaixaPage() {
     const operationalOut = lent + expenses;
     // Total geral de saídas (apenas exibição/conferência).
     const totalOut = operationalOut + manualOut;
-    // Dinheiro do trabalhador esperado: saídas manuais NÃO reduzem este indicador.
-    const workerExpected = totalIn - operationalOut;
-    // Valor líquido do dia após as saídas manuais.
-    const netAfterManualOut = workerExpected - manualOut;
-    // Caixa Disponível no Final do Dia = inicial + líquido após saídas manuais.
-    const finalCash = opening + netAfterManualOut;
-    // Dinheiro contado = valor digitado no fechamento; padrão = líquido após saídas manuais.
+    // Valor bruto esperado com o trabalhador (pode ser negativo internamente).
+    const rawWorkerExpectedLive = totalIn - operationalOut;
+    // Snapshots novos trazem raw_worker_expected; os antigos são derivados dos totais congelados.
+    const rawWorkerExpected = useSnapshot
+      ? froz("raw_worker_expected", rawWorkerExpectedLive)
+      : rawWorkerExpectedLive;
+    // Dinheiro do trabalhador esperado: nunca negativo; saídas manuais não reduzem.
+    const workerExpected = Math.max(0, rawWorkerExpected);
+    // Movimento líquido do dia (pode ser negativo).
+    const dayNet = useSnapshot
+      ? froz("day_net", rawWorkerExpected - manualOut)
+      : rawWorkerExpected - manualOut;
+    // Caixa Disponível no Final do Dia = inicial + movimento líquido do dia.
+    const finalCash = opening + dayNet;
+    // Dinheiro contado com o trabalhador; padrão = valor esperado com o trabalhador.
     const counted = useSnapshot
-      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? netAfterManualOut)
-      : netAfterManualOut;
+      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? workerExpected)
+      : workerExpected;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
       totalIn, operationalOut, totalOut,
+      rawWorkerExpected,
       workerExpected,
-      netAfterManualOut,
+      dayNet,
       counted,
       finalCash,
       notPaidCount: useSnapshot ? froz("not_paid_count", Number(dailyCashRow.total_not_paid_count || 0)) : liveTotals.naoPagos,
       eventsCount: useSnapshot ? froz("events_count", Number(dailyCashRow.total_events_count || scopedEvents.length)) : scopedEvents.length,
     };
+
   })();
 
   const availableNow = Number(balance?.available_cash ?? 0);
