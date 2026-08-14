@@ -1071,15 +1071,20 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Dinheiro do trabalhador esperado = totalIn - saídas operacionais */}
+            {/* Valor esperado com o trabalhador = max(0, entradas - saídas operacionais) */}
             <div className="pt-1.5 border-t">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Valor esperado com o trabalhador</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold">Valor esperado com o trabalhador</span>
-                <span className={`text-base font-bold tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>
-                  {summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}
+                <span className={`text-base font-bold tabular-nums ${summary.workerExpected > 0 ? "text-success" : "text-foreground"}`}>
+                  {formatCurrency(summary.workerExpected)}
                 </span>
               </div>
+              {summary.rawWorkerExpected < 0 && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  As saídas operacionais foram maiores que as entradas. Por isso, não há valor esperado com o trabalhador; a diferença foi coberta pelo caixa disponível.
+                </p>
+              )}
             </div>
 
             {/* Movimentações manuais do caixa */}
@@ -1098,26 +1103,16 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Resultado da conferência */}
-            <div className="pt-1.5 border-t space-y-0.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Valor líquido do dia após saídas manuais</span>
-                <span className={`text-sm font-bold tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>
-                  {summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}
-                </span>
-              </div>
-            </div>
-
-            {/* Dinheiro contado no caixa (input do trabalhador — só após fechar) */}
+            {/* Dinheiro contado com o trabalhador (só após fechar) */}
             {isClosed && dailyCashRow && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Dinheiro contado após movimentações manuais</span>
-                <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
-                  {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
+              <div className="flex items-center justify-between border-t pt-1.5">
+                <span className="text-xs font-semibold">Dinheiro contado com o trabalhador</span>
+                <span className="text-sm font-bold tabular-nums text-foreground">
+                  {formatCurrency(Math.max(0, summary.counted))}
                 </span>
               </div>
             )}
+
 
 
             {/* Caixa Disponível no Final do Dia */}
