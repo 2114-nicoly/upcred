@@ -285,27 +285,37 @@ export default function CaixaPage() {
     const operationalOut = lent + expenses;
     // Total geral de saídas (apenas exibição/conferência).
     const totalOut = operationalOut + manualOut;
-    // Dinheiro do trabalhador esperado: saídas manuais NÃO reduzem este indicador.
-    const workerExpected = totalIn - operationalOut;
-    // Valor líquido do dia após as saídas manuais.
-    const netAfterManualOut = workerExpected - manualOut;
-    // Caixa Disponível no Final do Dia = inicial + líquido após saídas manuais.
-    const finalCash = opening + netAfterManualOut;
-    // Dinheiro contado = valor digitado no fechamento; padrão = líquido após saídas manuais.
+    // Valor bruto esperado com o trabalhador (pode ser negativo internamente).
+    const rawWorkerExpectedLive = totalIn - operationalOut;
+    // Snapshots novos trazem raw_worker_expected; os antigos são derivados dos totais congelados.
+    const rawWorkerExpected = useSnapshot
+      ? froz("raw_worker_expected", rawWorkerExpectedLive)
+      : rawWorkerExpectedLive;
+    // Dinheiro do trabalhador esperado: nunca negativo; saídas manuais não reduzem.
+    const workerExpected = Math.max(0, rawWorkerExpected);
+    // Movimento líquido do dia (pode ser negativo).
+    const dayNet = useSnapshot
+      ? froz("day_net", rawWorkerExpected - manualOut)
+      : rawWorkerExpected - manualOut;
+    // Caixa Disponível no Final do Dia = inicial + movimento líquido do dia.
+    const finalCash = opening + dayNet;
+    // Dinheiro contado com o trabalhador; padrão = valor esperado com o trabalhador.
     const counted = useSnapshot
-      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? netAfterManualOut)
-      : netAfterManualOut;
+      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? workerExpected)
+      : workerExpected;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
       totalIn, operationalOut, totalOut,
+      rawWorkerExpected,
       workerExpected,
-      netAfterManualOut,
+      dayNet,
       counted,
       finalCash,
       notPaidCount: useSnapshot ? froz("not_paid_count", Number(dailyCashRow.total_not_paid_count || 0)) : liveTotals.naoPagos,
       eventsCount: useSnapshot ? froz("events_count", Number(dailyCashRow.total_events_count || scopedEvents.length)) : scopedEvents.length,
     };
+
   })();
 
   const availableNow = Number(balance?.available_cash ?? 0);
@@ -495,14 +505,14 @@ export default function CaixaPage() {
   const openCloseDialog = () => {
     if (isClosed) return;
     setCloseNote("");
-    setCountedAmount(summary.netAfterManualOut.toFixed(2));
+    setCountedAmount(Math.max(0, summary.workerExpected).toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    // Comparação é sempre contra o líquido após saídas manuais (nunca workerExpected).
-    const netExpected = Number(summary.netAfterManualOut.toFixed(2));
+    // Comparação é sempre contra o valor esperado com o trabalhador (nunca negativo).
+    const netExpected = Number(Math.max(0, summary.workerExpected).toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
     if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
     const counted = Number(parsed.toFixed(2));
@@ -546,7 +556,8 @@ export default function CaixaPage() {
             total_saidas: Number(summary.totalOut.toFixed(2)),
             saidas_operacionais: Number(summary.operationalOut.toFixed(2)),
             dinheiro_trabalhador_esperado: Number(summary.workerExpected.toFixed(2)),
-            liquido_apos_saidas_manuais: netExpected,
+            valor_esperado_bruto: Number(summary.rawWorkerExpected.toFixed(2)),
+            movimento_liquido_caixa: Number(summary.dayNet.toFixed(2)),
             dinheiro_contado: counted,
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
@@ -1060,15 +1071,20 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Dinheiro do trabalhador esperado = totalIn - saídas operacionais */}
+            {/* Valor esperado com o trabalhador = max(0, entradas - saídas operacionais) */}
             <div className="pt-1.5 border-t">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Valor esperado com o trabalhador</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold">Valor esperado com o trabalhador</span>
-                <span className={`text-base font-bold tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>
-                  {summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}
+                <span className={`text-base font-bold tabular-nums ${summary.workerExpected > 0 ? "text-success" : "text-foreground"}`}>
+                  {formatCurrency(summary.workerExpected)}
                 </span>
               </div>
+              {summary.rawWorkerExpected < 0 && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  As saídas operacionais foram maiores que as entradas. Por isso, não há valor esperado com o trabalhador; a diferença foi coberta pelo caixa disponível.
+                </p>
+              )}
             </div>
 
             {/* Movimentações manuais do caixa */}
@@ -1087,26 +1103,16 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Resultado da conferência */}
-            <div className="pt-1.5 border-t space-y-0.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Valor líquido do dia após saídas manuais</span>
-                <span className={`text-sm font-bold tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>
-                  {summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}
-                </span>
-              </div>
-            </div>
-
-            {/* Dinheiro contado no caixa (input do trabalhador — só após fechar) */}
+            {/* Dinheiro contado com o trabalhador (só após fechar) */}
             {isClosed && dailyCashRow && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Dinheiro contado após movimentações manuais</span>
-                <span className={`text-sm font-bold tabular-nums ${summary.counted >= 0 ? "text-success" : "text-destructive"}`}>
-                  {summary.counted >= 0 ? "+" : ""}{formatCurrency(summary.counted)}
+              <div className="flex items-center justify-between border-t pt-1.5">
+                <span className="text-xs font-semibold">Dinheiro contado com o trabalhador</span>
+                <span className="text-sm font-bold tabular-nums text-foreground">
+                  {formatCurrency(Math.max(0, summary.counted))}
                 </span>
               </div>
             )}
+
 
 
             {/* Caixa Disponível no Final do Dia */}
@@ -1813,8 +1819,11 @@ export default function CaixaPage() {
                 <div className="flex justify-between font-semibold"><span>Total de saídas operacionais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.operationalOut)}</span></div>
               </div>
               <div className="pt-1 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dinheiro do trabalhador esperado</p>
-                <div className="flex justify-between font-semibold"><span>Valor esperado com o trabalhador</span><span className={`tabular-nums ${summary.workerExpected >= 0 ? "text-success" : "text-destructive"}`}>{summary.workerExpected >= 0 ? "+" : ""}{formatCurrency(summary.workerExpected)}</span></div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Valor esperado com o trabalhador</p>
+                <div className="flex justify-between font-semibold"><span>Valor esperado com o trabalhador</span><span className={`tabular-nums ${summary.workerExpected > 0 ? "text-success" : "text-foreground"}`}>{formatCurrency(summary.workerExpected)}</span></div>
+                {summary.rawWorkerExpected < 0 && (
+                  <p className="text-[10px] text-muted-foreground">As saídas operacionais foram maiores que as entradas. Por isso, não há valor esperado com o trabalhador; a diferença foi coberta pelo caixa disponível.</p>
+                )}
               </div>
               <div className="pt-1 border-t space-y-0.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Movimentações manuais do caixa</p>
@@ -1823,28 +1832,27 @@ export default function CaixaPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Total geral de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
               </div>
               <div className="pt-1 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resultado da conferência</p>
-                <div className="flex justify-between font-semibold"><span>Valor líquido do dia após saídas manuais</span><span className={`tabular-nums ${summary.netAfterManualOut >= 0 ? "text-success" : "text-destructive"}`}>{summary.netAfterManualOut >= 0 ? "+" : ""}{formatCurrency(summary.netAfterManualOut)}</span></div>
                 <div className="flex justify-between font-semibold"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
               </div>
             </div>
             {(() => {
               const parsed = parseFloat((countedAmount || "").replace(",", "."));
-              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(summary.netAfterManualOut.toFixed(2))) > 0.005;
+              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(Math.max(0, summary.workerExpected).toFixed(2))) > 0.005;
               return (
                 <>
                   <div>
-                    <Label>Dinheiro contado após movimentações manuais <span className="text-destructive">*</span></Label>
+                    <Label>Dinheiro contado com o trabalhador <span className="text-destructive">*</span></Label>
                     <Input
-                      type="number" inputMode="decimal" step="0.01"
+                      type="number" inputMode="decimal" step="0.01" min="0"
                       value={countedAmount}
                       onChange={(e) => setCountedAmount(e.target.value)}
                       placeholder="0,00"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Compare com o valor líquido esperado após as saídas manuais.
+                      Preenchido automaticamente com o valor esperado. Ajuste somente se o valor real contado for diferente.
                     </p>
                   </div>
+
 
                   <div>
                     <Label>
