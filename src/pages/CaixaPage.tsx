@@ -505,14 +505,14 @@ export default function CaixaPage() {
   const openCloseDialog = () => {
     if (isClosed) return;
     setCloseNote("");
-    setCountedAmount(summary.netAfterManualOut.toFixed(2));
+    setCountedAmount(Math.max(0, summary.workerExpected).toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    // Comparação é sempre contra o líquido após saídas manuais (nunca workerExpected).
-    const netExpected = Number(summary.netAfterManualOut.toFixed(2));
+    // Comparação é sempre contra o valor esperado com o trabalhador (nunca negativo).
+    const netExpected = Number(Math.max(0, summary.workerExpected).toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
     if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
     const counted = Number(parsed.toFixed(2));
