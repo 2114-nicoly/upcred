@@ -504,19 +504,38 @@ export default function CaixaPage() {
     }
   };
 
-  const openCloseDialog = () => {
+  const openCloseDialog = async () => {
     if (isClosed) return;
+    // Base OFICIAL do fechamento: Caixa Disponível Atual do escopo (worker/admin do caixa).
+    let available: number | null = null;
+    try {
+      const cb = await getCashBalance(scopeArg);
+      const raw = Number((cb as any)?.available_cash);
+      if (cb && Number.isFinite(raw)) available = Number(raw.toFixed(2));
+    } catch (e) {
+      console.error("[caixa] falha ao carregar caixa disponível", e);
+    }
+    if (available == null) {
+      toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
+      return;
+    }
+    setClosingAvailableCash(available);
     setCloseNote("");
-    setCountedAmount(Math.max(0, summary.workerExpected).toFixed(2));
+    setCountedAmount(Math.max(0, available).toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    // Comparação é sempre contra o valor esperado com o trabalhador (nunca negativo).
-    const netExpected = Number(Math.max(0, summary.workerExpected).toFixed(2));
+    if (closingAvailableCash == null) {
+      toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
+      return;
+    }
+    // Comparação é sempre contra o Caixa Disponível Atual.
+    const netExpected = Number(closingAvailableCash.toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
-    if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
+    if (isNaN(parsed)) { toast.error("Informe o valor disponível contado no fechamento."); return; }
+    if (parsed < 0) { toast.error("O valor contado não pode ser negativo."); return; }
     const counted = Number(parsed.toFixed(2));
     const differs = Math.abs(counted - netExpected) > 0.005;
 
