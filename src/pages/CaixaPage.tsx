@@ -124,6 +124,8 @@ export default function CaixaPage() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [countedAmount, setCountedAmount] = useState("");
   const [closeNote, setCloseNote] = useState("");
+  /** Caixa Disponível Atual do escopo, lido no momento da abertura do modal. */
+  const [closingAvailableCash, setClosingAvailableCash] = useState<number | null>(null);
 
   const handleDateChange = (newDate: string) => {
     setOperationalDate(newDate);
@@ -299,10 +301,17 @@ export default function CaixaPage() {
       : rawWorkerExpected - manualOut;
     // Caixa Disponível no Final do Dia = inicial + movimento líquido do dia.
     const finalCash = opening + dayNet;
-    // Dinheiro contado com o trabalhador; padrão = valor esperado com o trabalhador.
+    // Valor contado no fechamento (congelado).
     const counted = useSnapshot
-      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? workerExpected)
-      : workerExpected;
+      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? 0)
+      : 0;
+    // Caixa Disponível confirmado no fechamento (somente valores congelados do dia).
+    const availableAtClose = useSnapshot
+      ? Number((st as any)?.available_cash_at_close ?? dailyCashRow.expected_closing_balance ?? 0)
+      : 0;
+    const closingDifference = useSnapshot
+      ? Number((st as any)?.difference ?? dailyCashRow.closing_difference ?? 0)
+      : 0;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
@@ -311,6 +320,8 @@ export default function CaixaPage() {
       workerExpected,
       dayNet,
       counted,
+      availableAtClose,
+      closingDifference,
       finalCash,
       notPaidCount: useSnapshot ? froz("not_paid_count", Number(dailyCashRow.total_not_paid_count || 0)) : liveTotals.naoPagos,
       eventsCount: useSnapshot ? froz("events_count", Number(dailyCashRow.total_events_count || scopedEvents.length)) : scopedEvents.length,
@@ -502,19 +513,38 @@ export default function CaixaPage() {
     }
   };
 
-  const openCloseDialog = () => {
+  const openCloseDialog = async () => {
     if (isClosed) return;
+    // Base OFICIAL do fechamento: Caixa Disponível Atual do escopo (worker/admin do caixa).
+    let available: number | null = null;
+    try {
+      const cb = await getCashBalance(scopeArg);
+      const raw = Number((cb as any)?.available_cash);
+      if (cb && Number.isFinite(raw)) available = Number(raw.toFixed(2));
+    } catch (e) {
+      console.error("[caixa] falha ao carregar caixa disponível", e);
+    }
+    if (available == null) {
+      toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
+      return;
+    }
+    setClosingAvailableCash(available);
     setCloseNote("");
-    setCountedAmount(Math.max(0, summary.workerExpected).toFixed(2));
+    setCountedAmount(Math.max(0, available).toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    // Comparação é sempre contra o valor esperado com o trabalhador (nunca negativo).
-    const netExpected = Number(Math.max(0, summary.workerExpected).toFixed(2));
+    if (closingAvailableCash == null) {
+      toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
+      return;
+    }
+    // Comparação é sempre contra o Caixa Disponível Atual.
+    const netExpected = Number(closingAvailableCash.toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
-    if (isNaN(parsed)) { toast.error("Informe o dinheiro contado no caixa."); return; }
+    if (isNaN(parsed)) { toast.error("Informe o valor disponível contado no fechamento."); return; }
+    if (parsed < 0) { toast.error("O valor contado não pode ser negativo."); return; }
     const counted = Number(parsed.toFixed(2));
     const differs = Math.abs(counted - netExpected) > 0.005;
 
@@ -559,6 +589,8 @@ export default function CaixaPage() {
             valor_esperado_bruto: Number(summary.rawWorkerExpected.toFixed(2)),
             movimento_liquido_caixa: Number(summary.dayNet.toFixed(2)),
             dinheiro_contado: counted,
+            caixa_disponivel_conferido: netExpected,
+            diferenca_conferencia: Number((counted - netExpected).toFixed(2)),
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
 
@@ -1103,13 +1135,28 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Dinheiro contado com o trabalhador (só após fechar) */}
+            {/* Conferência do fechamento (somente valores congelados do dia fechado) */}
             {isClosed && dailyCashRow && (
-              <div className="flex items-center justify-between border-t pt-1.5">
-                <span className="text-xs font-semibold">Dinheiro contado com o trabalhador</span>
-                <span className="text-sm font-bold tabular-nums text-foreground">
-                  {formatCurrency(Math.max(0, summary.counted))}
-                </span>
+              <div className="pt-1.5 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Conferência do fechamento</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Valor esperado com o trabalhador</span>
+                  <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.workerExpected)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Caixa disponível confirmado no fechamento</span>
+                  <span className="text-xs font-medium tabular-nums text-primary">{formatCurrency(summary.availableAtClose)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Valor contado no fechamento</span>
+                  <span className="text-xs font-medium tabular-nums">{formatCurrency(Math.max(0, summary.counted))}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Diferença da conferência</span>
+                  <span className={`text-xs font-semibold tabular-nums ${Math.abs(summary.closingDifference) > 0.005 ? "text-destructive" : "text-foreground"}`}>
+                    {formatCurrency(summary.closingDifference)}
+                  </span>
+                </div>
               </div>
             )}
 
@@ -1819,8 +1866,7 @@ export default function CaixaPage() {
                 <div className="flex justify-between font-semibold"><span>Total de saídas operacionais</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.operationalOut)}</span></div>
               </div>
               <div className="pt-1 border-t space-y-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Valor esperado com o trabalhador</p>
-                <div className="flex justify-between font-semibold"><span>Valor esperado com o trabalhador</span><span className={`tabular-nums ${summary.workerExpected > 0 ? "text-success" : "text-foreground"}`}>{formatCurrency(summary.workerExpected)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Valor esperado com o trabalhador (informativo)</span><span className={`tabular-nums ${summary.workerExpected > 0 ? "text-success" : "text-foreground"}`}>{formatCurrency(summary.workerExpected)}</span></div>
                 {summary.rawWorkerExpected < 0 && (
                   <p className="text-[10px] text-muted-foreground">As saídas operacionais foram maiores que as entradas. Por isso, não há valor esperado com o trabalhador; a diferença foi coberta pelo caixa disponível.</p>
                 )}
@@ -1832,16 +1878,21 @@ export default function CaixaPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Total geral de saídas</span><span className="text-destructive tabular-nums">-{formatCurrency(summary.totalOut)}</span></div>
               </div>
               <div className="pt-1 border-t space-y-0.5">
-                <div className="flex justify-between font-semibold"><span>Caixa Disponível no Final do Dia</span><span className="tabular-nums text-primary">{formatCurrency(summary.finalCash)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Caixa Disponível no Final do Dia</span><span className="tabular-nums">{formatCurrency(summary.finalCash)}</span></div>
+                <div className="flex justify-between items-center font-semibold">
+                  <span>Caixa disponível atual para fechamento</span>
+                  <span className="text-base tabular-nums text-primary">{formatCurrency(closingAvailableCash ?? 0)}</span>
+                </div>
               </div>
             </div>
             {(() => {
+              const base = Number((closingAvailableCash ?? 0).toFixed(2));
               const parsed = parseFloat((countedAmount || "").replace(",", "."));
-              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - Number(Math.max(0, summary.workerExpected).toFixed(2))) > 0.005;
+              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - base) > 0.005;
               return (
                 <>
                   <div>
-                    <Label>Dinheiro contado com o trabalhador <span className="text-destructive">*</span></Label>
+                    <Label>Valor disponível contado no fechamento <span className="text-destructive">*</span></Label>
                     <Input
                       type="number" inputMode="decimal" step="0.01" min="0"
                       value={countedAmount}
@@ -1849,7 +1900,7 @@ export default function CaixaPage() {
                       placeholder="0,00"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Preenchido automaticamente com o valor esperado. Ajuste somente se o valor real contado for diferente.
+                      Preenchido com o Caixa Disponível Atual. Ajuste somente se o valor real conferido for diferente.
                     </p>
                   </div>
 

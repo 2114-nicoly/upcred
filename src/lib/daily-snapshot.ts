@@ -140,6 +140,14 @@ export type DailyCashSnapshotPayload = {
     /** Valor estornado no dia (contrapartidas, contado uma vez). */
     estornos?: number;
     estornos_count?: number;
+    /** Valor bruto esperado com o trabalhador (pode ser negativo). */
+    raw_worker_expected?: number;
+    /** Movimento líquido do dia (pode ser negativo). */
+    day_net?: number;
+    /** Caixa Disponível confirmado no momento do fechamento. */
+    available_cash_at_close?: number;
+    /** Diferença entre o contado e o Caixa Disponível no fechamento. */
+    difference?: number;
   };
   daily_summary: {
     expectedToReceiveToday: number;
