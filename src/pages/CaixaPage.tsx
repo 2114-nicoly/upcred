@@ -580,6 +580,8 @@ export default function CaixaPage() {
             valor_esperado_bruto: Number(summary.rawWorkerExpected.toFixed(2)),
             movimento_liquido_caixa: Number(summary.dayNet.toFixed(2)),
             dinheiro_contado: counted,
+            caixa_disponivel_conferido: netExpected,
+            diferenca_conferencia: Number((counted - netExpected).toFixed(2)),
             caixa_disponivel_final: Number(summary.finalCash.toFixed(2)),
           },
 
