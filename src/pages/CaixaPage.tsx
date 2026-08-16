@@ -1135,13 +1135,28 @@ export default function CaixaPage() {
               </div>
             </div>
 
-            {/* Dinheiro contado com o trabalhador (só após fechar) */}
+            {/* Conferência do fechamento (somente valores congelados do dia fechado) */}
             {isClosed && dailyCashRow && (
-              <div className="flex items-center justify-between border-t pt-1.5">
-                <span className="text-xs font-semibold">Dinheiro contado com o trabalhador</span>
-                <span className="text-sm font-bold tabular-nums text-foreground">
-                  {formatCurrency(Math.max(0, summary.counted))}
-                </span>
+              <div className="pt-1.5 border-t space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Conferência do fechamento</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Valor esperado com o trabalhador</span>
+                  <span className="text-xs font-medium tabular-nums">{formatCurrency(summary.workerExpected)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Caixa disponível confirmado no fechamento</span>
+                  <span className="text-xs font-medium tabular-nums text-primary">{formatCurrency(summary.availableAtClose)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Valor contado no fechamento</span>
+                  <span className="text-xs font-medium tabular-nums">{formatCurrency(Math.max(0, summary.counted))}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground pl-2">Diferença da conferência</span>
+                  <span className={`text-xs font-semibold tabular-nums ${Math.abs(summary.closingDifference) > 0.005 ? "text-destructive" : "text-foreground"}`}>
+                    {formatCurrency(summary.closingDifference)}
+                  </span>
+                </div>
               </div>
             )}
 
