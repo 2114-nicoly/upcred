@@ -124,6 +124,8 @@ export default function CaixaPage() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [countedAmount, setCountedAmount] = useState("");
   const [closeNote, setCloseNote] = useState("");
+  /** Caixa Disponível Atual do escopo, lido no momento da abertura do modal. */
+  const [closingAvailableCash, setClosingAvailableCash] = useState<number | null>(null);
 
   const handleDateChange = (newDate: string) => {
     setOperationalDate(newDate);
