@@ -301,10 +301,17 @@ export default function CaixaPage() {
       : rawWorkerExpected - manualOut;
     // Caixa Disponível no Final do Dia = inicial + movimento líquido do dia.
     const finalCash = opening + dayNet;
-    // Dinheiro contado com o trabalhador; padrão = valor esperado com o trabalhador.
+    // Valor contado no fechamento (congelado).
     const counted = useSnapshot
-      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? workerExpected)
-      : workerExpected;
+      ? Number(st?.counted_cash ?? dailyCashRow.counted_closing_balance ?? 0)
+      : 0;
+    // Caixa Disponível confirmado no fechamento (somente valores congelados do dia).
+    const availableAtClose = useSnapshot
+      ? Number((st as any)?.available_cash_at_close ?? dailyCashRow.expected_closing_balance ?? 0)
+      : 0;
+    const closingDifference = useSnapshot
+      ? Number((st as any)?.difference ?? dailyCashRow.closing_difference ?? 0)
+      : 0;
     return {
       opening, received, penalty, manualIn, manualOut, expenses,
       newLoans, renewals, lent,
@@ -313,6 +320,8 @@ export default function CaixaPage() {
       workerExpected,
       dayNet,
       counted,
+      availableAtClose,
+      closingDifference,
       finalCash,
       notPaidCount: useSnapshot ? froz("not_paid_count", Number(dailyCashRow.total_not_paid_count || 0)) : liveTotals.naoPagos,
       eventsCount: useSnapshot ? froz("events_count", Number(dailyCashRow.total_events_count || scopedEvents.length)) : scopedEvents.length,
