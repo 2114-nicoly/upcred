@@ -75,11 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
+        const sameUser = userIdRef.current === newSession.user.id;
         userIdRef.current = newSession.user.id;
+        // TOKEN_REFRESHED e SIGNED_IN do mesmo usuário apenas atualizam a sessão,
+        // sem recarregar contexto, sem loading e sem remontar a página.
+        if ((event === "TOKEN_REFRESHED" || event === "SIGNED_IN") && sameUser) {
+          return;
+        }
         void loadUserContext(newSession.user.id).then(() => enforceAccess(newSession.user.id));
       } else {
         clearUserContext();
@@ -120,8 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /** Verifica a licença individual; bloqueia encerrando a sessão. */
-  const enforceAccess = async (uid: string) => {
-    setAccessChecking(true);
+  const enforceAccess = async (uid: string, background = false) => {
+    if (!background) setAccessChecking(true);
     try {
       const result = await checkWorkerAccess(uid);
       if (!result.allowed) {
@@ -132,16 +138,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return result;
     } finally {
-      setAccessChecking(false);
+      if (!background) setAccessChecking(false);
     }
   };
 
   // Reverificação durante a sessão: mudanças na própria licença, na própria
-  // empresa, no enforcement global, retorno do segundo plano e foco na janela.
+  // empresa e no enforcement global. Ocorre em segundo plano, sem loading.
   useEffect(() => {
     if (!user?.id) return;
 
-    const recheck = () => { void enforceAccess(user.id); };
+    const recheck = () => { void enforceAccess(user.id, true); };
 
     const channel = supabase
       .channel(`access-watch-${user.id}`)
@@ -166,14 +172,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     channel.subscribe();
 
-    const onVisible = () => { if (document.visibilityState === "visible") recheck(); };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
-
     return () => {
       supabase.removeChannel(channel);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
     };
   }, [user?.id, workerId, adminId]);
 

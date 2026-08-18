@@ -344,7 +344,6 @@ export default function DailyCashPage() {
   const [quitarDate, setQuitarDate] = useState(selectedDate);
   const localActionedLoanIds = useRef<Set<string>>(new Set());
   const fetchSeqRef = useRef(0);
-  const refreshTimerRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
   const [reopenRequestDialogOpen, setReopenRequestDialogOpen] = useState(false);
   const [reopenRequestReason, setReopenRequestReason] = useState("");
@@ -365,10 +364,6 @@ export default function DailyCashPage() {
     return () => {
       isMountedRef.current = false;
       fetchSeqRef.current += 1;
-      if (refreshTimerRef.current) {
-        window.clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
     };
   }, []);
 
@@ -789,47 +784,6 @@ export default function DailyCashPage() {
     if (!isMountedRef.current) return;
     void fetchData({ silent: true });
   }, [fetchData]);
-
-  useEffect(() => {
-    const scheduleRefresh = () => {
-      if (!isMountedRef.current) return;
-      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = window.setTimeout(() => {
-        refreshTimerRef.current = null;
-        if (isMountedRef.current) void fetchData({ silent: true });
-      }, 1000);
-    };
-
-    // Use an opaque, per-session random channel topic so other authenticated
-    // users cannot guess and subscribe to this client's realtime topic.
-    // Row-level data is already protected by RLS; this hardens topic naming.
-    const opaque = (typeof crypto !== "undefined" && "randomUUID" in crypto)
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2);
-    const channel = supabase
-      .channel(`rota-${opaque}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_events" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "not_paid_marks" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "installments" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "loans" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_cash" }, scheduleRefresh)
-      .subscribe();
-
-    const handleFocus = () => { if (isMountedRef.current) void fetchData({ silent: true }); };
-    const handleVisibility = () => { if (document.visibilityState === "visible") handleFocus(); };
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      if (refreshTimerRef.current) {
-        window.clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
-      void supabase.removeChannel(channel);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [selectedDate, fetchData]);
 
   // === Payment handler: wait for server confirmation (no premature optimistic UI) ===
   const handlePay= async (id: string) => {
