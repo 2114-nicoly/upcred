@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatCurrency, calculateOverdueDays, calculateLoanProgress } from "@/lib/loan-utils";
+import { formatCurrency,  calculateLoanProgress } from "@/lib/loan-utils";
 import { isSunday } from "@/lib/utils";
 import { updateCashBalance, createCashMovement, recalculateCashBalanceFromLedger, getCurrentDailyCashScope, applyDailyCashScope } from "@/lib/cash-utils";
 import { createDailyEvent, reverseDailyEvent, getDailyEvents, getEventTypeLabel, DailyEvent } from "@/lib/daily-events";
@@ -400,12 +400,22 @@ export default function DailyCashPage() {
     const due = parseLocalNoonDate(inst.due_date);
     const sel = parseLocalNoonDate(selectedDate);
     if (!due || !sel) return 0;
+    // Vencimento igual ou futuro em relação à data selecionada: em dia (verde).
     if (sel <= due) return 0;
     if (getInstLoan(inst)?.payment_type === "daily") {
-      return calculateOverdueDays(inst.due_date, "daily");
+      // Conta os dias úteis (sem domingos) entre o vencimento e a data selecionada.
+      let count = 0;
+      const cur = new Date(due);
+      cur.setDate(cur.getDate() + 1);
+      while (cur <= sel) {
+        if (cur.getDay() !== 0) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
     }
     return differenceInCalendarDays(sel, due);
   }, [selectedDate]);
+
 
   const { overdueItems, todayItems } = useMemo(() => {
     const overdue: InstallmentWithLoan[] = [];
@@ -1792,7 +1802,7 @@ export default function DailyCashPage() {
                       onClick={() => setPendingFilter(f)}
                       className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${pendingFilter === f ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-accent"}`}
                     >
-                      {f === "all" ? `Todos (${pendingInstallments.length})` : f === "overdue" ? `Atrasados (${overdueItems.length})` : `Hoje (${todayItems.length})`}
+                      {f === "all" ? `Todos (${pendingInstallments.length})` : f === "overdue" ? `Atrasados (${overdueItems.length})` : `Em dia (${todayItems.length})`}
                     </button>
                   ))}
                 </div>
