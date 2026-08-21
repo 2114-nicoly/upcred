@@ -1802,7 +1802,7 @@ export default function DailyCashPage() {
                       onClick={() => setPendingFilter(f)}
                       className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${pendingFilter === f ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-accent"}`}
                     >
-                      {f === "all" ? `Todos (${pendingInstallments.length})` : f === "overdue" ? `Atrasados (${overdueItems.length})` : `Hoje (${todayItems.length})`}
+                      {f === "all" ? `Todos (${pendingInstallments.length})` : f === "overdue" ? `Atrasados (${overdueItems.length})` : `Em dia (${todayItems.length})`}
                     </button>
                   ))}
                 </div>
