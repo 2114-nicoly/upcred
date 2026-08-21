@@ -400,12 +400,22 @@ export default function DailyCashPage() {
     const due = parseLocalNoonDate(inst.due_date);
     const sel = parseLocalNoonDate(selectedDate);
     if (!due || !sel) return 0;
+    // Vencimento igual ou futuro em relação à data selecionada: em dia (verde).
     if (sel <= due) return 0;
     if (getInstLoan(inst)?.payment_type === "daily") {
-      return calculateOverdueDays(inst.due_date, "daily");
+      // Conta os dias úteis (sem domingos) entre o vencimento e a data selecionada.
+      let count = 0;
+      const cur = new Date(due);
+      cur.setDate(cur.getDate() + 1);
+      while (cur <= sel) {
+        if (cur.getDay() !== 0) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
     }
     return differenceInCalendarDays(sel, due);
   }, [selectedDate]);
+
 
   const { overdueItems, todayItems } = useMemo(() => {
     const overdue: InstallmentWithLoan[] = [];
