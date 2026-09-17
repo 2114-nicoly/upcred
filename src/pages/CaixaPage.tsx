@@ -611,17 +611,21 @@ export default function CaixaPage() {
 
 
       toast.success("Caixa fechado!");
+      setCloseError(null);
       setCloseOpen(false);
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
       const msg = String(err?.message || "");
       const mismatch = formatClosingMismatch(msg);
+      const shown = mismatch || (msg || "Erro ao fechar caixa") + " O caixa permaneceu aberto.";
+      setCloseError(shown);
       if (mismatch) {
         toast.error(mismatch, { duration: 15000, style: { whiteSpace: "pre-line" } });
       } else if (!reportFinancialError(err)) {
-        toast.error((msg || "Erro ao fechar caixa") + " O caixa permaneceu aberto.");
+        toast.error(shown);
       }
+
 
     } finally {
       setSubmitting(false);
