@@ -5,8 +5,11 @@ import { parseClosingMismatch, formatClosingMismatch } from "@/lib/closing-misma
 
 const MIG_DIR = resolve(process.cwd(), "supabase/migrations");
 const files = readdirSync(MIG_DIR).filter(f => f.endsWith(".sql")).sort();
-const latest = readFileSync(resolve(MIG_DIR, files[files.length - 1]), "utf8");
-const allSql = files.map(f => readFileSync(resolve(MIG_DIR, f), "utf8")).join("\n");
+const sqlByFile = files.map(f => readFileSync(resolve(MIG_DIR, f), "utf8"));
+const allSql = sqlByFile.join("\n");
+// Migration corretiva de reconciliação (a mais recente que a contém), e não
+// simplesmente "a última migration do projeto".
+const latest = [...sqlByFile].reverse().find(s => s.includes("'ajuste_reconciliacao'"))!;
 
 const dbMessage = (opening: number, day: number, available: number) => {
   const diff = Math.round((opening + day - available) * 100) / 100;
