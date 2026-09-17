@@ -126,6 +126,7 @@ export default function CaixaPage() {
   const [closeNote, setCloseNote] = useState("");
   /** Caixa Disponível Atual do escopo, lido no momento da abertura do modal. */
   const [closingAvailableCash, setClosingAvailableCash] = useState<number | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   const handleDateChange = (newDate: string) => {
     setOperationalDate(newDate);
@@ -513,22 +514,28 @@ export default function CaixaPage() {
     }
   };
 
-  const openCloseDialog = async () => {
-    if (isClosed) return;
-    // Base OFICIAL do fechamento: Caixa Disponível Atual do escopo (worker/admin do caixa).
-    let available: number | null = null;
+  /** Lê o Caixa Disponível Atual do escopo exato do caixa. */
+  const loadAvailableCash = async (): Promise<number | null> => {
     try {
       const cb = await getCashBalance(scopeArg);
       const raw = Number((cb as any)?.available_cash);
-      if (cb && Number.isFinite(raw)) available = Number(raw.toFixed(2));
+      if (cb && Number.isFinite(raw)) return Number(raw.toFixed(2));
     } catch (e) {
       console.error("[caixa] falha ao carregar caixa disponível", e);
     }
+    return null;
+  };
+
+  const openCloseDialog = async () => {
+    if (isClosed) return;
+    // Base OFICIAL do fechamento: Caixa Disponível Atual do escopo (worker/admin do caixa).
+    const available = await loadAvailableCash();
     if (available == null) {
       toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
       return;
     }
     setClosingAvailableCash(available);
+    setCloseError(null);
     setCloseNote("");
     setCountedAmount(Math.max(0, available).toFixed(2));
     setCloseOpen(true);
@@ -536,20 +543,24 @@ export default function CaixaPage() {
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
-    if (closingAvailableCash == null) {
-      toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
+    setCloseError(null);
+    // Reconsulta o Caixa Disponível no momento da confirmação.
+    const available = await loadAvailableCash();
+    if (available == null) {
+      setCloseError("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
       return;
     }
+    setClosingAvailableCash(available);
     // Comparação é sempre contra o Caixa Disponível Atual.
-    const netExpected = Number(closingAvailableCash.toFixed(2));
+    const netExpected = Number(available.toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
-    if (isNaN(parsed)) { toast.error("Informe o valor disponível contado no fechamento."); return; }
-    if (parsed < 0) { toast.error("O valor contado não pode ser negativo."); return; }
+    if (isNaN(parsed)) { setCloseError("Informe o valor disponível contado no fechamento."); return; }
+    if (parsed < 0) { setCloseError("O valor contado não pode ser negativo."); return; }
     const counted = Number(parsed.toFixed(2));
     const differs = Math.abs(counted - netExpected) > 0.005;
 
     if (differs && closeNote.trim().length < 3) {
-      toast.error("O valor contado difere do esperado. Observação é obrigatória.");
+      setCloseError("O valor contado difere do Caixa Disponível. Escreva uma observação explicando a diferença (mínimo de 3 caracteres).");
       return;
     }
     setSubmitting(true);
@@ -600,17 +611,21 @@ export default function CaixaPage() {
 
 
       toast.success("Caixa fechado!");
+      setCloseError(null);
       setCloseOpen(false);
       await fetchData();
     } catch (err: any) {
       console.error("[caixa] close failed", err);
       const msg = String(err?.message || "");
       const mismatch = formatClosingMismatch(msg);
+      const shown = mismatch || (msg || "Erro ao fechar caixa") + " O caixa permaneceu aberto.";
+      setCloseError(shown);
       if (mismatch) {
         toast.error(mismatch, { duration: 15000, style: { whiteSpace: "pre-line" } });
       } else if (!reportFinancialError(err)) {
-        toast.error((msg || "Erro ao fechar caixa") + " O caixa permaneceu aberto.");
+        toast.error(shown);
       }
+
 
     } finally {
       setSubmitting(false);
@@ -1911,9 +1926,17 @@ export default function CaixaPage() {
                     </Label>
                     <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder={differs ? "Explique por que o valor contado difere do esperado..." : "Observações do fechamento..."} />
                   </div>
+                  {closeError && (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive whitespace-pre-line"
+                    >
+                      {closeError}
+                    </div>
+                  )}
                   <Button
                     onClick={handleCloseCash}
-                    disabled={submitting || isNaN(parsed) || (differs && closeNote.trim().length < 3)}
+                    disabled={submitting}
                     className="w-full"
                   >
                     {submitting ? "Salvando..." : "Confirmar fechamento"}

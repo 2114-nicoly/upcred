@@ -2040,6 +2040,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      _assert_open_cash_consistency: {
+        Args: { p_admin: string; p_worker: string }
+        Returns: undefined
+      }
       _cash_is_closed_for: {
         Args: { p_admin_id: string; p_cash_date: string; p_worker_id: string }
         Returns: boolean
