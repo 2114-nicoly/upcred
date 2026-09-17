@@ -1926,9 +1926,17 @@ export default function CaixaPage() {
                     </Label>
                     <Textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder={differs ? "Explique por que o valor contado difere do esperado..." : "Observações do fechamento..."} />
                   </div>
+                  {closeError && (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive whitespace-pre-line"
+                    >
+                      {closeError}
+                    </div>
+                  )}
                   <Button
                     onClick={handleCloseCash}
-                    disabled={submitting || isNaN(parsed) || (differs && closeNote.trim().length < 3)}
+                    disabled={submitting}
                     className="w-full"
                   >
                     {submitting ? "Salvando..." : "Confirmar fechamento"}
