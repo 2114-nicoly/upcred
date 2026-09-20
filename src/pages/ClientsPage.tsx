@@ -186,6 +186,7 @@ export default function ClientsPage() {
       }
       if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     }
+    newClientDraft.clear();
     setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
@@ -201,6 +202,7 @@ export default function ClientsPage() {
       return;
     }
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    newClientDraft.clear();
     setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
@@ -365,6 +367,7 @@ export default function ClientsPage() {
         <Dialog open={open} onOpenChange={(o) => {
           setOpen(o);
           if (o && isAdmin && !newClientWorkerId && selectedWorkerId) setNewClientWorkerId(selectedWorkerId);
+          if (!o) newClientDraft.clear(); // fechamento intencional descarta o rascunho
         }}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
