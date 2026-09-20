@@ -367,7 +367,12 @@ export default function ClientsPage() {
         <Dialog open={open} onOpenChange={(o) => {
           setOpen(o);
           if (o && isAdmin && !newClientWorkerId && selectedWorkerId) setNewClientWorkerId(selectedWorkerId);
-          if (!o) newClientDraft.clear(); // fechamento intencional descarta o rascunho
+          if (!o) {
+            // fechamento/cancelamento intencional descarta o rascunho e limpa o formulário
+            newClientDraft.clear();
+            setForm(emptyClientForm);
+            setNewClientWorkerId("");
+          }
         }}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
