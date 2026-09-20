@@ -32,15 +32,21 @@ type Options = {
  * Autosave de formulários em localStorage por usuário.
  * Retorna { hasDraft, restore, clear }.
  * - hasDraft: existe rascunho salvo (na montagem)
- * - restore(): retorna o último valor salvo (ou null)
+ * - restore(): retorna o último valor salvo (ou null) e marca o rascunho como restaurado
  * - clear(): apaga o rascunho (chamar após submit ok)
+ *
+ * Persistência:
+ * - debounce durante a digitação;
+ * - salvamento IMEDIATO em "pagehide", ao ficar oculto (visibilitychange) e ao
+ *   desmontar — apenas grava localmente, sem buscar dados, recarregar ou navegar;
+ * - um rascunho existente não é sobrescrito por valores iniciais antes de restore().
  *
  * Uso:
  *   const draft = useFormDraft("new-client", formValue);
  *   useEffect(() => {
  *     const saved = draft.restore();
  *     if (saved) { setFormValue(saved); toast("Rascunho restaurado"); }
- *   }, []);
+ *   }, [draft.restore]);
  *   // ao concluir: draft.clear();
  */
 export function useFormDraft<T>(key: string, value: T, opts: Options = {}) {
@@ -49,37 +55,72 @@ export function useFormDraft<T>(key: string, value: T, opts: Options = {}) {
   const fullKey = safeKey(user?.id, key);
   const timerRef = useRef<number | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
+  // valor mais recente, usado pelos salvamentos imediatos
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  // refs para uso dentro de listeners/efeitos sem depender de re-render
+  const fullKeyRef = useRef(fullKey);
+  fullKeyRef.current = fullKey;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+  // rascunho existente ainda não restaurado: protege contra sobrescrita pelo valor inicial
+  const pendingRestoreRef = useRef(false);
 
   // detecta rascunho na montagem (uma vez por key/user)
   useEffect(() => {
     if (!fullKey) return;
     try {
-      setHasDraft(!!localStorage.getItem(fullKey));
+      const exists = !!localStorage.getItem(fullKey);
+      setHasDraft(exists);
+      pendingRestoreRef.current = exists;
     } catch {
       /* ignore */
     }
   }, [fullKey]);
 
-  // salva com debounce
+  const writeNow = useCallback(() => {
+    const k = fullKeyRef.current;
+    if (!k || !enabledRef.current) return;
+    if (pendingRestoreRef.current) return; // não sobrescrever rascunho antes da restauração
+    try {
+      localStorage.setItem(k, JSON.stringify(sanitize(valueRef.current)));
+    } catch {
+      /* quota / private mode — ignora */
+    }
+  }, []);
+
+  // salva com debounce durante a digitação
   useEffect(() => {
     if (!fullKey || !enabled) return;
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => {
-      try {
-        localStorage.setItem(fullKey, JSON.stringify(sanitize(value)));
-      } catch {
-        /* quota / private mode — ignora */
-      }
-    }, debounceMs);
+    timerRef.current = window.setTimeout(writeNow, debounceMs);
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };
-  }, [fullKey, enabled, value, debounceMs]);
+  }, [fullKey, enabled, value, debounceMs, writeNow]);
+
+  // salvamento imediato ao sair da página ou ir para segundo plano (apenas grava localmente)
+  useEffect(() => {
+    if (!fullKey || !enabled) return;
+    const onPageHide = () => writeNow();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") writeNow();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      // salvamento imediato ao desmontar o componente
+      writeNow();
+    };
+  }, [fullKey, enabled, writeNow]);
 
   const restore = useCallback((): T | null => {
     if (!fullKey) return null;
     try {
       const raw = localStorage.getItem(fullKey);
+      pendingRestoreRef.current = false;
       return raw ? (JSON.parse(raw) as T) : null;
     } catch {
       return null;
@@ -90,6 +131,7 @@ export function useFormDraft<T>(key: string, value: T, opts: Options = {}) {
     if (!fullKey) return;
     try {
       localStorage.removeItem(fullKey);
+      pendingRestoreRef.current = false;
       setHasDraft(false);
     } catch {
       /* ignore */

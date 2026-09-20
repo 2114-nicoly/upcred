@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import PendingClientAttachments, { type PendingAttachment } from "@/components/P
 import { uploadPendingAttachments } from "@/lib/attachment-upload";
 
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
+import { useFormDraft } from "@/hooks/useFormDraft";
 
 type Client = {
   id: string;
@@ -65,6 +66,25 @@ export default function ClientsPage() {
   const [tab, setTab] = useState<"active" | "archived">("active");
   const [archivedClients, setArchivedClients] = useState<(Client & { archived_at: string | null })[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
+
+  // Rascunho do cadastro de NOVO cliente (não se aplica à edição):
+  // preserva os campos se o celular reconstruir a página em segundo plano.
+  const newClientDraft = useFormDraft(
+    "clients-new-client",
+    { form, newClientWorkerId },
+    { enabled: !editOpen }
+  );
+  const draftRestoredRef = useRef(false);
+  useEffect(() => {
+    if (draftRestoredRef.current) return;
+    const saved = newClientDraft.restore();
+    if (saved) {
+      draftRestoredRef.current = true;
+      setForm(saved.form);
+      setNewClientWorkerId(saved.newClientWorkerId || "");
+      setOpen(true);
+    }
+  }, [newClientDraft.restore]);
 
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
@@ -166,6 +186,7 @@ export default function ClientsPage() {
       }
       if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     }
+    newClientDraft.clear();
     setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
@@ -181,6 +202,7 @@ export default function ClientsPage() {
       return;
     }
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
+    newClientDraft.clear();
     setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
@@ -345,6 +367,12 @@ export default function ClientsPage() {
         <Dialog open={open} onOpenChange={(o) => {
           setOpen(o);
           if (o && isAdmin && !newClientWorkerId && selectedWorkerId) setNewClientWorkerId(selectedWorkerId);
+          if (!o) {
+            // fechamento/cancelamento intencional descarta o rascunho e limpa o formulário
+            newClientDraft.clear();
+            setForm(emptyClientForm);
+            setNewClientWorkerId("");
+          }
         }}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
