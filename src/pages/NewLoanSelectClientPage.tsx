@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import ClientForm, { ClientFormValues, emptyClientForm, validateClientForm } fro
 import PendingClientAttachments, { type PendingAttachment } from "@/components/PendingClientAttachments";
 import { uploadPendingAttachments } from "@/lib/attachment-upload";
 import { logAction } from "@/lib/audit-utils";
+import { useFormDraft } from "@/hooks/useFormDraft";
 
 type Client = {
   id: string;
@@ -50,6 +51,25 @@ export default function NewLoanSelectClientPage() {
   const [saving, setSaving] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
+
+  // Rascunho do formulário "Novo cliente": preserva campos, trabalhador e modo
+  // se o celular reconstruir a página em segundo plano.
+  const newClientDraft = useFormDraft("new-loan-new-client", {
+    form,
+    newClientWorkerId,
+    newClientMode,
+  });
+  const draftRestoredRef = useRef(false);
+  useEffect(() => {
+    if (draftRestoredRef.current) return;
+    const saved = newClientDraft.restore();
+    if (saved) {
+      draftRestoredRef.current = true;
+      setForm(saved.form);
+      setNewClientWorkerId(saved.newClientWorkerId || "");
+      if (saved.newClientMode) setNewClientMode(true);
+    }
+  }, [newClientDraft.restore]);
 
   // Active-loan blocking dialog
   const [activeBlockDialog, setActiveBlockDialog] = useState<{
