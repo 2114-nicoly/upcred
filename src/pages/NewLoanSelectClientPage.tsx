@@ -196,6 +196,7 @@ export default function NewLoanSelectClientPage() {
         }
         if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
       }
+      newClientDraft.clear();
       navigate(withDate(`/clients/${createdId}/new-loan`));
     }
   };
@@ -214,6 +215,7 @@ export default function NewLoanSelectClientPage() {
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     setPendingAttachments([]);
     setRetryQueue(null);
+    newClientDraft.clear();
     navigate(withDate(`/clients/${retryQueue.clientId}/new-loan`));
   };
 
@@ -222,7 +224,13 @@ export default function NewLoanSelectClientPage() {
       <div className="mx-auto max-w-lg p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Novo cliente</h2>
-          <Button variant="ghost" size="sm" onClick={() => setNewClientMode(false)}>Voltar</Button>
+          <Button variant="ghost" size="sm" onClick={() => {
+            // "Voltar" intencional descarta o rascunho e limpa o formulário
+            newClientDraft.clear();
+            setForm(emptyClientForm);
+            setNewClientWorkerId("");
+            setNewClientMode(false);
+          }}>Voltar</Button>
         </div>
         <ClientForm
           value={form}
