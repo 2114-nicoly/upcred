@@ -2066,6 +2066,15 @@ export type Database = {
         }
         Returns: Json
       }
+      _closing_basis: {
+        Args: {
+          p_admin: string
+          p_cash_date: string
+          p_opening: number
+          p_worker: string
+        }
+        Returns: Json
+      }
       _daily_cash_emptiness_reason: {
         Args: { p_cash_id: string }
         Returns: string
@@ -2325,6 +2334,7 @@ export type Database = {
         }[]
       }
       get_admin_id: { Args: { _user_id: string }; Returns: string }
+      get_closing_basis: { Args: { p_daily_cash_id: string }; Returns: Json }
       get_latest_credential: {
         Args: { p_kind: string; p_target_id: string }
         Returns: {
