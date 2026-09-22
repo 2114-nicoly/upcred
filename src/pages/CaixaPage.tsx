@@ -1954,7 +1954,9 @@ export default function CaixaPage() {
                       placeholder="0,00"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Preenchido com o Caixa Disponível Atual. Ajuste somente se o valor real conferido for diferente.
+                      {closingIsHistoric
+                        ? "Preenchido com o saldo apurado daquele dia. Ajuste somente se o valor real conferido for diferente."
+                        : "Preenchido com o Caixa Disponível Atual. Ajuste somente se o valor real conferido for diferente."}
                     </p>
                   </div>
 
