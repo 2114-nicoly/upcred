@@ -514,45 +514,71 @@ export default function CaixaPage() {
     }
   };
 
-  /** Lê o Caixa Disponível Atual do escopo exato do caixa. */
-  const loadAvailableCash = async (): Promise<number | null> => {
+  /**
+   * Base do fechamento. Para o caixa do dia é o Caixa Disponível Atual; para um
+   * caixa de data antiga (com movimentos posteriores) é o saldo daquele dia.
+   * O saldo atual continua sendo exibido, apenas para conferência.
+   */
+  const loadClosingBasis = async (): Promise<{ base: number; current: number | null; historic: boolean } | null> => {
     try {
+      const cashId = dailyCashRow?.id;
+      if (cashId) {
+        const { data, error } = await supabase.rpc("get_closing_basis" as any, { p_daily_cash_id: cashId });
+        if (!error && data) {
+          const b: any = data;
+          const historic = !!b.is_historic;
+          const base = Number(historic ? b.historic_expected : b.available_cash);
+          const current = Number(b.available_cash);
+          if (Number.isFinite(base)) {
+            return {
+              base: Number(base.toFixed(2)),
+              current: Number.isFinite(current) ? Number(current.toFixed(2)) : null,
+              historic,
+            };
+          }
+        }
+      }
       const cb = await getCashBalance(scopeArg);
       const raw = Number((cb as any)?.available_cash);
-      if (cb && Number.isFinite(raw)) return Number(raw.toFixed(2));
+      if (cb && Number.isFinite(raw)) {
+        const v = Number(raw.toFixed(2));
+        return { base: v, current: v, historic: false };
+      }
     } catch (e) {
-      console.error("[caixa] falha ao carregar caixa disponível", e);
+      console.error("[caixa] falha ao carregar base do fechamento", e);
     }
     return null;
   };
 
   const openCloseDialog = async () => {
     if (isClosed) return;
-    // Base OFICIAL do fechamento: Caixa Disponível Atual do escopo (worker/admin do caixa).
-    const available = await loadAvailableCash();
-    if (available == null) {
+    const basis = await loadClosingBasis();
+    if (!basis) {
       toast.error("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
       return;
     }
-    setClosingAvailableCash(available);
+    setClosingAvailableCash(basis.base);
+    setClosingCurrentCash(basis.current);
+    setClosingIsHistoric(basis.historic);
     setCloseError(null);
     setCloseNote("");
-    setCountedAmount(Math.max(0, available).toFixed(2));
+    setCountedAmount(Math.max(0, basis.base).toFixed(2));
     setCloseOpen(true);
   };
 
   const handleCloseCash = async () => {
     if (submitting || isClosed) return;
     setCloseError(null);
-    // Reconsulta o Caixa Disponível no momento da confirmação.
-    const available = await loadAvailableCash();
-    if (available == null) {
+    // Reconsulta a base no momento da confirmação.
+    const basis = await loadClosingBasis();
+    if (!basis) {
       setCloseError("Não foi possível carregar o Caixa Disponível deste trabalhador. O fechamento foi cancelado.");
       return;
     }
-    setClosingAvailableCash(available);
-    // Comparação é sempre contra o Caixa Disponível Atual.
-    const netExpected = Number(available.toFixed(2));
+    setClosingAvailableCash(basis.base);
+    setClosingCurrentCash(basis.current);
+    setClosingIsHistoric(basis.historic);
+    const netExpected = Number(basis.base.toFixed(2));
     const parsed = parseFloat((countedAmount || "").replace(",", "."));
     if (isNaN(parsed)) { setCloseError("Informe o valor disponível contado no fechamento."); return; }
     if (parsed < 0) { setCloseError("O valor contado não pode ser negativo."); return; }
@@ -560,7 +586,7 @@ export default function CaixaPage() {
     const differs = Math.abs(counted - netExpected) > 0.005;
 
     if (differs && closeNote.trim().length < 3) {
-      setCloseError("O valor contado difere do Caixa Disponível. Escreva uma observação explicando a diferença (mínimo de 3 caracteres).");
+      setCloseError("O valor contado difere do saldo apurado. Escreva uma observação explicando a diferença (mínimo de 3 caracteres).");
       return;
     }
     setSubmitting(true);
