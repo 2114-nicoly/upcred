@@ -1923,9 +1923,20 @@ export default function CaixaPage() {
               <div className="pt-1 border-t space-y-0.5">
                 <div className="flex justify-between"><span className="text-muted-foreground">Caixa Disponível no Final do Dia</span><span className="tabular-nums">{formatCurrency(summary.finalCash)}</span></div>
                 <div className="flex justify-between items-center font-semibold">
-                  <span>Caixa disponível atual para fechamento</span>
+                  <span>{closingIsHistoric ? "Saldo deste dia para fechamento" : "Caixa disponível atual para fechamento"}</span>
                   <span className="text-base tabular-nums text-primary">{formatCurrency(closingAvailableCash ?? 0)}</span>
                 </div>
+                {closingIsHistoric && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Caixa disponível atual (apenas conferência)</span>
+                      <span className="tabular-nums">{formatCurrency(closingCurrentCash ?? 0)}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Este é um caixa de data antiga. O fechamento usa o saldo daquele dia; o saldo atual, que já inclui os dias seguintes, não é alterado.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
             {(() => {
