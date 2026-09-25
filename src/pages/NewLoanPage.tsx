@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
 import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, recalculateCashBalanceForLoan } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
-import { settleLoan, registerPayment, absorbLoanBalance } from "@/lib/payment-utils";
+import { settleLoan } from "@/lib/payment-utils";
 import PaymentAmountSelector from "@/components/PaymentAmountSelector";
 import { PaymentAmountState, createPaymentAmountState, computePaymentAmount, resolveObservation } from "@/lib/payment-amount";
 import { getActiveLoanForClient } from "@/lib/loan-utils";
@@ -572,50 +572,7 @@ export default function NewLoanPage() {
       }
     }
 
-    // ===== RENOVAÇÃO: novo empréstimo já criado com sucesso → registra pagamento do antigo =====
-    if (renewFromLoanId && renewPaid > 0) {
-      try {
-        await registerPayment({
-          loanId: renewFromLoanId,
-          amount: Math.min(renewPaid, faltaQuitar),
-          clientId: clientId!,
-          clientName: clientName,
-          cashDate: loanDate,
-          origin: "renovacao",
-          observation: resolveObservation(renewPayState, renewOldInstAmount),
-        });
-      } catch (err: any) {
-        console.error("Erro ao registrar pagamento da renovação:", err);
-        await rollbackLoan();
-        toast.error(`Erro ao registrar pagamento da renovação. Renovação cancelada.${err?.message ? ` (${err.message})` : ""}`);
-        setSaving(false);
-        return;
-      }
-    }
-
-    // Se ainda restou saldo no antigo após o pagamento, ABSORVER (não é caixa).
-    // O saldo absorvido migra para o novo contrato — NÃO conta como recebimento,
-    // NÃO cria cash_movement, NÃO aumenta available_cash.
-    if (renewFromLoanId) {
-      const { data: oldLoanState } = await supabase
-        .from("loans")
-        .select("remaining_balance")
-        .eq("id", renewFromLoanId)
-        .single();
-      const stillOwed = Number(oldLoanState?.remaining_balance) || 0;
-      if (stillOwed > 0.01) {
-        await absorbLoanBalance({
-          loanId: renewFromLoanId,
-          newLoanId: loan.id,
-          clientId: clientId!,
-          clientName: clientName,
-          cashDate: loanDate,
-        });
-      } else {
-        await supabase.from("loans").update({ status: "paid" }).eq("id", renewFromLoanId);
-      }
-      toast.success("Empréstimo renovado com sucesso!");
-    } else if (isOngoing) {
+    if (isOngoing) {
       // ===== Empréstimo IMPORTADO (em andamento) =====
       // Regras: NÃO movimenta caixa, NÃO cria cash_movement, NÃO marca valor já pago como recebido.
       // O que falta receber entra em A Receber (money_lent + interest_receivable) e
