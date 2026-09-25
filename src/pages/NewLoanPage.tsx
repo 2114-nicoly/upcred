@@ -335,7 +335,47 @@ export default function NewLoanPage() {
     const userId = session?.user?.id;
     if (!userId) { toast.error("Sessão expirada"); setSaving(false); return; }
 
-    // (renovação: o pagamento do antigo é registrado SÓ após o novo empréstimo estar criado com sucesso)
+    // ===== RENOVAÇÃO: uma única transação no banco (renew_loan_tx) =====
+    if (renewFromLoanId) {
+      try {
+        const renewInstallments = dueDates.map((date, i) => ({
+          number: i + 1,
+          amount: calc.installmentAmount,
+          due_date: format(date, "yyyy-MM-dd"),
+        }));
+        const { data, error } = await supabase.rpc("renew_loan_tx" as any, {
+          p_old_loan_id: renewFromLoanId,
+          p_cash_date: loanDate,
+          p_paid_amount: Math.min(renewPaid, faltaQuitar),
+          p_amount: numAmount,
+          p_interest_type: interestType,
+          p_interest_value: numInterest,
+          p_total_amount: calc.totalAmount,
+          p_installment_count: numInstallments,
+          p_payment_type: paymentType,
+          p_first_due_date: paymentType !== "fixed_dates" ? firstDueDate : null,
+          p_installments: renewInstallments,
+          p_observation: observation || null,
+          p_payment_observation: resolveObservation(renewPayState, renewOldInstAmount) || null,
+        } as any);
+        if (error) throw error;
+        const res: any = data;
+        if (!res?.new_loan_id || res?.old_status !== "paid" || Number(res?.old_remaining_balance ?? 1) > 0.01) {
+          throw new Error("A renovação não foi confirmada pelo banco.");
+        }
+        toast.success("Empréstimo renovado com sucesso!");
+        draft.clear();
+        navigate("/");
+      } catch (err: any) {
+        console.error("Erro na renovação:", err);
+        if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao renovar o empréstimo.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+
 
 
     // ===== Criar novo empréstimo =====
