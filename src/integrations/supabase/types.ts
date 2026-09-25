@@ -2040,6 +2040,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      _assert_loan_scope_caller: {
+        Args: { p_admin: string; p_worker: string }
+        Returns: undefined
+      }
       _assert_open_cash_consistency: {
         Args: { p_admin: string; p_worker: string }
         Returns: undefined
@@ -2473,6 +2477,24 @@ export type Database = {
         Args: { p_note?: string; p_request_id: string }
         Returns: string
       }
+      renew_loan_tx: {
+        Args: {
+          p_amount: number
+          p_cash_date: string
+          p_first_due_date: string
+          p_installment_count: number
+          p_installments: Json
+          p_interest_type: string
+          p_interest_value: number
+          p_observation?: string
+          p_old_loan_id: string
+          p_paid_amount: number
+          p_payment_observation?: string
+          p_payment_type: string
+          p_total_amount: number
+        }
+        Returns: Json
+      }
       reopen_daily_cash: {
         Args: { p_cash_date: string; p_reason: string }
         Returns: string
@@ -2492,6 +2514,10 @@ export type Database = {
       reverse_loan_payment: {
         Args: { p_amount: number; p_loan_id: string }
         Returns: number
+      }
+      reverse_renewal_tx: {
+        Args: { p_event_id: string; p_reason: string }
+        Returns: Json
       }
       set_worker_active: {
         Args: { p_active: boolean; p_worker_id: string }

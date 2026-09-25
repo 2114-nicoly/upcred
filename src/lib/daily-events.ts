@@ -204,9 +204,24 @@ export async function undoDailyEvent(event: DailyEvent, reason?: string) {
       "Não é possível desfazer um novo empréstimo automaticamente. Exclua o empréstimo na tela de detalhes do cliente."
     );
   }
-  if (event.event_type === "renovacao" || event.event_type === "renegociacao") {
+  if (event.event_type === "renovacao") {
+    if ((event as any).reversed_at) throw new Error("Esta renovação já foi desfeita.");
+    // Estorno transacional completo no banco (usa o evento e renewed_from_loan_id).
+    const { error } = await supabase.rpc("reverse_renewal_tx" as any, {
+      p_event_id: event.id,
+      p_reason: (reason || "").trim() || "Estorno de renovação solicitado pelo operador",
+    } as any);
+    if (error) throw error;
+    return;
+  }
+  if (event.event_type === "renegociacao") {
     throw new Error(
-      "Não é possível desfazer uma renovação/renegociação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
+      "Não é possível desfazer uma renegociação automaticamente. Exclua o novo empréstimo manualmente — o anterior ficará encerrado."
+    );
+  }
+  if (event.event_type === "pagamento" && event.origin === "renovacao") {
+    throw new Error(
+      "Este pagamento faz parte de uma renovação. Desfaça a renovação para estornar tudo em conjunto."
     );
   }
 
