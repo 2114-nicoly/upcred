@@ -42,8 +42,12 @@ describe("buildRenewalCardValues (Rota — Renovações do Dia)", () => {
     );
     expect(values.paid).toBe(0);
     expect(values.faltava).toBe(0);
-    expect(values.released).toBe(500); // vem do empréstimo, não do texto
+    expect(values.released).toBe(0); // sem metadata, vale o amount_out do evento
     expect(values.newAmount).toBe(500);
+  });
+
+  it("sem evento de renovação, o liberado vem do valor do novo empréstimo", () => {
+    expect(buildRenewalCardValues(null, { amount: "500.00" }).released).toBe(500);
   });
 
   it("usa a cadeia de fallback do valor liberado", () => {
