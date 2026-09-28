@@ -112,7 +112,7 @@ export default function NewLoanPage() {
       console.warn("[NewLoanPage] Falha ao restaurar rascunho, ignorando:", err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [draft.restore]);
 
   // Empréstimo normal: a data é sempre a do caixa ABERTO (não editável).
   // Importado: mantém a data histórica escolhida pelo usuário.
