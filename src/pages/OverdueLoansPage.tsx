@@ -355,6 +355,14 @@ export default function OverdueLoansPage() {
         amount_in: 0,
         amount_out: 0,
         observation: `Multa adicionada ${formatCurrency(amount)}${penaltyObservation ? ` - ${penaltyObservation}` : ""}`,
+        metadata: {
+          penalty_amount: amount,
+          penalty_type: "fixed",
+          reason: penaltyObservation || null,
+          due_date: penaltyDate,
+          status: "Em aberto",
+          frozen_at: new Date().toISOString(),
+        },
         origin: "atrasados",
       });
     } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }
