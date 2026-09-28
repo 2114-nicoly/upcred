@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ListSkeleton, EmptyState } from "@/components/LoadingSkeleton";
+import { normalizeEvent, type NormalizedRecord } from "@/lib/event-record";
 
 type PaymentMovement = {
   movementId: string;
@@ -32,6 +33,7 @@ type PaymentMovement = {
   reversedAt: string | null;
   reversesMovementId: string | null;
   reversalReason: string | null;
+  record: NormalizedRecord | null;
 };
 
 
@@ -76,6 +78,16 @@ export default function PaymentHistoryPage() {
         for (const client of clients || []) clientMap.set(client.id, client.name);
       }
 
+      // Registros congelados (daily_events + metadata) pelo normalizador único.
+      const evIds = [...new Set(((movements as any[]) || []).map((m: any) => m.daily_event_id).filter(Boolean))] as string[];
+      const evMap = new Map<string, any>();
+      for (let i = 0; i < evIds.length; i += 200) {
+        const { data: evs } = await supabase.from("daily_events" as any)
+          .select("id, cash_date, event_type, client_id, loan_id, installment_id, cash_movement_id, amount_in, amount_out, observation, origin, created_at, worker_id, admin_id, reversed_at, metadata")
+          .in("id", evIds.slice(i, i + 200));
+        ((evs as any[]) || []).forEach((e) => evMap.set(e.id, e));
+      }
+
       const grouped: Record<string, PaymentMovement[]> = {};
       ((movements as any[]) || []).forEach((movement) => {
         const day = movement.cash_date;
@@ -94,6 +106,9 @@ export default function PaymentHistoryPage() {
           reversedAt: movement.reversed_at ?? null,
           reversesMovementId: movement.reverses_movement_id ?? null,
           reversalReason: movement.reversal_reason ?? null,
+          record: evMap.get(movement.daily_event_id)
+            ? normalizeEvent(evMap.get(movement.daily_event_id), { clientName: (id) => (id ? clientMap.get(id) : null) })
+            : null,
         });
       });
 
@@ -208,8 +223,10 @@ export default function PaymentHistoryPage() {
                         <div>
                           <p className={`font-medium ${isReversed ? "line-through" : ""}`}>{payment.clientName}</p>
                           <p className="text-sm text-muted-foreground">
-                            {getMovementTypeLabel(payment.type)} • {formatCurrency(payment.amount)}
+                            {payment.record?.title || getMovementTypeLabel(payment.type)} • {formatCurrency(payment.amount)}
                           </p>
+                          {payment.record?.summary && <p className="text-xs text-muted-foreground">{payment.record.summary}</p>}
+                          {payment.record?.incomplete && <p className="text-[10px] text-muted-foreground">Registro antigo com informações incompletas</p>}
                           {payment.observation && <p className="text-xs text-muted-foreground italic">{payment.observation}</p>}
                           {payment.reversalReason && (
                             <p className="text-xs text-muted-foreground">Motivo: {payment.reversalReason}</p>
