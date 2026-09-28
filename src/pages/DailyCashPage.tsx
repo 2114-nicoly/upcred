@@ -182,6 +182,14 @@ function toMoney(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** Evento de renovação mínimo necessário para montar o card. */
+export type RenewalCardSource = {
+  amount_out?: number | string | null;
+  metadata?: Record<string, any> | null;
+  /** Texto descritivo do evento — nunca é lido como valor. */
+  observation?: string | null;
+};
+
 /**
  * Valores exibidos no card "Renovações do Dia".
  *
@@ -190,7 +198,7 @@ function toMoney(value: unknown): number | null {
  * lido como valor — reinterpretar "325.00" como número brasileiro viraria 32500.
  */
 export function buildRenewalCardValues(
-  renewEvt: Pick<DailyEventRow, "amount_out" | "metadata"> | null | undefined,
+  renewEvt: RenewalCardSource | null | undefined,
   loan: { amount: number | string },
 ): RenewalCardValues {
   const md = (renewEvt?.metadata ?? {}) as Record<string, unknown>;
