@@ -1972,16 +1972,9 @@ export default function DailyCashPage() {
               <CollapsibleContent className="mt-2 space-y-2">
                 {newLoans.filter(r => !!r.renewed_from_loan_id).map(r => {
                   const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
-                  // Find the renovacao daily_event for this loan to extract paid/liberado from observation
+                  // Valores do card: exclusivamente o metadata congelado do evento.
                   const renewEvt = renewalEvents.find((e) => e.event_type === "renovacao" && e.loan_id === r.id);
-                  const liberado = renewEvt ? Number(renewEvt.amount_out) : Number(r.amount);
-                  // Try parse Pago / Faltava from observation
-                  const obs = renewEvt?.observation || "";
-                  const pagoMatch = obs.match(/Pago:\s*R\$\s*([\d.,]+)/);
-                  const faltavaMatch = obs.match(/Faltava:\s*R\$\s*([\d.,]+)/);
-                  const parseBR = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
-                  const pago = pagoMatch ? parseBR(pagoMatch[1]) : 0;
-                  const faltava = faltavaMatch ? parseBR(faltavaMatch[1]) : 0;
+                  const card = buildRenewalCardValues(renewEvt, r);
                   return (
                     <div key={safeKey("loan", r.id, r.renewed_from_loan_id || "new")} className="rounded-lg border border-primary/30 bg-card p-3">
                       <div className="flex items-center justify-between mb-1.5">
