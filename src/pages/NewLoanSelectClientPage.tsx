@@ -54,22 +54,37 @@ export default function NewLoanSelectClientPage() {
 
   // Rascunho do formulário "Novo cliente": preserva campos, trabalhador e modo
   // se o celular reconstruir a página em segundo plano.
-  const newClientDraft = useFormDraft("new-loan-new-client", {
-    form,
-    newClientWorkerId,
-    newClientMode,
-  });
+  const newClientDraft = useFormDraft(
+    "new-loan-new-client",
+    { form, newClientWorkerId },
+    { enabled: newClientMode }
+  );
   const draftRestoredRef = useRef(false);
   useEffect(() => {
     if (draftRestoredRef.current) return;
-    const saved = newClientDraft.restore();
-    if (saved) {
-      draftRestoredRef.current = true;
-      setForm(saved.form);
-      setNewClientWorkerId(saved.newClientWorkerId || "");
-      if (saved.newClientMode) setNewClientMode(true);
+    const saved = newClientDraft.restore() as any;
+    if (!saved) return;
+    draftRestoredRef.current = true;
+    const f = saved?.form;
+    if (f && typeof f === "object" && !Array.isArray(f)) {
+      const clean: any = { ...emptyClientForm };
+      for (const k of Object.keys(emptyClientForm)) {
+        if (typeof f[k] === "string") clean[k] = f[k];
+      }
+      setForm(clean);
+      setNewClientWorkerId(typeof saved.newClientWorkerId === "string" ? saved.newClientWorkerId : "");
+      setNewClientMode(true);
+    } else {
+      newClientDraft.clear();
     }
   }, [newClientDraft.restore]);
+
+  const startNewClient = () => {
+    newClientDraft.clear();
+    setForm(emptyClientForm);
+    setNewClientWorkerId("");
+    setNewClientMode(true);
+  };
 
   // Active-loan blocking dialog
   const [activeBlockDialog, setActiveBlockDialog] = useState<{
@@ -273,7 +288,7 @@ export default function NewLoanSelectClientPage() {
     <div className="mx-auto max-w-lg p-4">
 
       <div className="mb-3 flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={() => setNewClientMode(true)}>
+        <Button variant="outline" className="flex-1" onClick={startNewClient}>
           Cadastrar novo cliente
         </Button>
       </div>
@@ -299,7 +314,7 @@ export default function NewLoanSelectClientPage() {
             message={search ? "Nenhum cliente elegível encontrado" : "Nenhum cliente sem empréstimo ativo"}
             description={search ? "Tente outro termo de busca." : "Cadastre um novo cliente para liberar um empréstimo."}
             actionLabel={!search ? "Cadastrar novo cliente" : undefined}
-            onAction={!search ? () => setNewClientMode(true) : undefined}
+            onAction={!search ? startNewClient : undefined}
 
           />
 

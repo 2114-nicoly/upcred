@@ -72,17 +72,25 @@ export default function ClientsPage() {
   const newClientDraft = useFormDraft(
     "clients-new-client",
     { form, newClientWorkerId },
-    { enabled: !editOpen }
+    { enabled: open && !editOpen }
   );
   const draftRestoredRef = useRef(false);
   useEffect(() => {
     if (draftRestoredRef.current) return;
-    const saved = newClientDraft.restore();
-    if (saved) {
-      draftRestoredRef.current = true;
-      setForm(saved.form);
-      setNewClientWorkerId(saved.newClientWorkerId || "");
+    const saved = newClientDraft.restore() as any;
+    if (!saved) return;
+    draftRestoredRef.current = true;
+    const f = saved?.form;
+    if (f && typeof f === "object" && !Array.isArray(f)) {
+      const clean: any = { ...emptyClientForm };
+      for (const k of Object.keys(emptyClientForm)) {
+        if (typeof f[k] === "string") clean[k] = f[k];
+      }
+      setForm(clean);
+      setNewClientWorkerId(typeof saved.newClientWorkerId === "string" ? saved.newClientWorkerId : "");
       setOpen(true);
+    } else {
+      newClientDraft.clear();
     }
   }, [newClientDraft.restore]);
 
