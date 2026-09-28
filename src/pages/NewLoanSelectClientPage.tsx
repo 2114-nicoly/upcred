@@ -288,7 +288,7 @@ export default function NewLoanSelectClientPage() {
     <div className="mx-auto max-w-lg p-4">
 
       <div className="mb-3 flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={() => setNewClientMode(true)}>
+        <Button variant="outline" className="flex-1" onClick={startNewClient}>
           Cadastrar novo cliente
         </Button>
       </div>
@@ -314,7 +314,7 @@ export default function NewLoanSelectClientPage() {
             message={search ? "Nenhum cliente elegível encontrado" : "Nenhum cliente sem empréstimo ativo"}
             description={search ? "Tente outro termo de busca." : "Cadastre um novo cliente para liberar um empréstimo."}
             actionLabel={!search ? "Cadastrar novo cliente" : undefined}
-            onAction={!search ? () => setNewClientMode(true) : undefined}
+            onAction={!search ? startNewClient : undefined}
 
           />
 
