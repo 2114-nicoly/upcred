@@ -83,7 +83,14 @@ export default function NewLoanPage() {
   useEffect(() => {
     if (restoredRef.current) return;
     try {
-      const saved = draft.restore() as Partial<typeof draftValue> | null;
+      const raw = draft.restore() as any;
+      if (!raw) return;
+      restoredRef.current = true;
+      // renovação nunca aceita rascunho de cadastro "em andamento" (e vice-versa pela chave)
+      const saved = (raw && typeof raw === "object" && !Array.isArray(raw) &&
+        !(renewFromLoanId && raw.registrationType === "ongoing"))
+        ? (raw as Partial<typeof draftValue>) : null;
+      if (!saved) { draft.clear(); return; }
       if (saved && typeof saved === "object") {
         restoredRef.current = true;
         if (typeof saved.amount === "string") setAmount(saved.amount);
