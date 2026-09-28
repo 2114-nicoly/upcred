@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
-const PREFIX = "upcred:draft:";
+const LEGACY_PREFIX = "upcred:draft:";
+const PREFIX = "upcred:draft:v2:";
+const MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const FORBIDDEN_KEYS = ["password", "senha", "token", "pwd", "secret"];
 
-function safeKey(userId: string | null | undefined, key: string) {
-  if (!userId) return null;
-  return `${PREFIX}${userId}:${key}`;
+/** Remove uma única vez os rascunhos antigos (localStorage, sem "v2"). */
+let legacyCleaned = false;
+function cleanupLegacyDrafts() {
+  if (legacyCleaned) return;
+  legacyCleaned = true;
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LEGACY_PREFIX) && !k.startsWith(PREFIX)) toRemove.push(k);
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
 }
 
-/** Remove campos sensíveis recursivamente. */
 function sanitize<T>(value: T): T {
   if (value == null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => sanitize(v)) as any;
@@ -21,75 +35,72 @@ function sanitize<T>(value: T): T {
   return out;
 }
 
-type Options = {
-  /** debounce em ms (default 500) */
-  debounceMs?: number;
-  /** desabilita persistência condicionalmente */
-  enabled?: boolean;
-};
+function readDraft<T>(k: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(k);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      !parsed || typeof parsed !== "object" ||
+      typeof parsed.savedAt !== "number" ||
+      Date.now() - parsed.savedAt > MAX_AGE_MS ||
+      parsed.data == null
+    ) {
+      sessionStorage.removeItem(k);
+      return null;
+    }
+    return parsed.data as T;
+  } catch {
+    try { sessionStorage.removeItem(k); } catch { /* ignore */ }
+    return null;
+  }
+}
+
+type Options = { debounceMs?: number; enabled?: boolean };
 
 /**
- * Autosave de formulários em localStorage por usuário.
- * Retorna { hasDraft, restore, clear }.
- * - hasDraft: existe rascunho salvo (na montagem)
- * - restore(): retorna o último valor salvo (ou null) e marca o rascunho como restaurado
- * - clear(): apaga o rascunho (chamar após submit ok)
- *
- * Persistência:
- * - debounce durante a digitação;
- * - salvamento IMEDIATO em "pagehide", ao ficar oculto (visibilitychange) e ao
- *   desmontar — apenas grava localmente, sem buscar dados, recarregar ou navegar;
- * - um rascunho existente não é sobrescrito por valores iniciais antes de restore().
- *
- * Uso:
- *   const draft = useFormDraft("new-client", formValue);
- *   useEffect(() => {
- *     const saved = draft.restore();
- *     if (saved) { setFormValue(saved); toast("Rascunho restaurado"); }
- *   }, [draft.restore]);
- *   // ao concluir: draft.clear();
+ * Rascunho de formulário limitado à AÇÃO atual (usuário + chave + location.key),
+ * em sessionStorage, válido por 2h. Só sobrevive quando o navegador oculta/reconstrói
+ * a página; ao desmontar por navegação interna, o rascunho é apagado.
+ * O listener de visibilidade apenas grava localmente — nunca busca dados nem navega.
  */
 export function useFormDraft<T>(key: string, value: T, opts: Options = {}) {
   const { user } = useAuth();
+  const location = useLocation();
   const { debounceMs = 500, enabled = true } = opts;
-  const fullKey = safeKey(user?.id, key);
+  const fullKey = user?.id ? `${PREFIX}${user.id}:${key}:${location.key}` : null;
+
   const timerRef = useRef<number | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
-  // valor mais recente, usado pelos salvamentos imediatos
   const valueRef = useRef(value);
   valueRef.current = value;
-  // refs para uso dentro de listeners/efeitos sem depender de re-render
   const fullKeyRef = useRef(fullKey);
   fullKeyRef.current = fullKey;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
-  // rascunho existente ainda não restaurado: protege contra sobrescrita pelo valor inicial
   const pendingRestoreRef = useRef(false);
+  const hiddenRef = useRef(false);
 
-  // detecta rascunho na montagem (uma vez por key/user)
+  useEffect(() => { cleanupLegacyDrafts(); }, []);
+
   useEffect(() => {
     if (!fullKey) return;
-    try {
-      const exists = !!localStorage.getItem(fullKey);
-      setHasDraft(exists);
-      pendingRestoreRef.current = exists;
-    } catch {
-      /* ignore */
-    }
+    const exists = readDraft(fullKey) != null;
+    setHasDraft(exists);
+    pendingRestoreRef.current = exists;
   }, [fullKey]);
 
   const writeNow = useCallback(() => {
     const k = fullKeyRef.current;
-    if (!k || !enabledRef.current) return;
-    if (pendingRestoreRef.current) return; // não sobrescrever rascunho antes da restauração
+    if (!k || !enabledRef.current || pendingRestoreRef.current) return;
     try {
-      localStorage.setItem(k, JSON.stringify(sanitize(valueRef.current)));
+      sessionStorage.setItem(k, JSON.stringify({ savedAt: Date.now(), data: sanitize(valueRef.current) }));
     } catch {
-      /* quota / private mode — ignora */
+      /* ignore */
     }
   }, []);
 
-  // salva com debounce durante a digitação
+  // debounce durante a digitação (somente habilitado)
   useEffect(() => {
     if (!fullKey || !enabled) return;
     if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -99,60 +110,63 @@ export function useFormDraft<T>(key: string, value: T, opts: Options = {}) {
     };
   }, [fullKey, enabled, value, debounceMs, writeNow]);
 
-  // salvamento imediato ao sair da página ou ir para segundo plano (apenas grava localmente)
+  // ocultação/reconstrução pelo navegador: grava imediatamente (somente local)
   useEffect(() => {
-    if (!fullKey || !enabled) return;
-    const onPageHide = () => writeNow();
+    const onPageHide = () => { hiddenRef.current = true; writeNow(); };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") writeNow();
+      if (document.visibilityState === "hidden") { hiddenRef.current = true; writeNow(); }
+      else hiddenRef.current = false;
     };
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
-      // salvamento imediato ao desmontar o componente
-      writeNow();
     };
-  }, [fullKey, enabled, writeNow]);
+  }, [writeNow]);
+
+  // desmonte normal (navegação interna): descarta o rascunho desta ação
+  useEffect(() => {
+    return () => {
+      const k = fullKeyRef.current;
+      if (!k || hiddenRef.current) return;
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      try { sessionStorage.removeItem(k); } catch { /* ignore */ }
+    };
+  }, [fullKey]);
 
   const restore = useCallback((): T | null => {
     if (!fullKey) return null;
-    try {
-      const raw = localStorage.getItem(fullKey);
-      pendingRestoreRef.current = false;
-      return raw ? (JSON.parse(raw) as T) : null;
-    } catch {
-      return null;
-    }
+    pendingRestoreRef.current = false;
+    return readDraft<T>(fullKey);
   }, [fullKey]);
 
   const clear = useCallback(() => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    pendingRestoreRef.current = false;
+    setHasDraft(false);
     if (!fullKey) return;
-    try {
-      localStorage.removeItem(fullKey);
-      pendingRestoreRef.current = false;
-      setHasDraft(false);
-    } catch {
-      /* ignore */
-    }
+    try { sessionStorage.removeItem(fullKey); } catch { /* ignore */ }
   }, [fullKey]);
 
   return { hasDraft, restore, clear };
 }
 
-/** Limpa todos os rascunhos do usuário (use no logout). */
+/** Limpa todos os rascunhos do usuário (logout): sessionStorage v2 e localStorage antigo. */
 export function clearAllDraftsForUser(userId: string | null | undefined) {
   if (!userId) return;
-  const prefix = `${PREFIX}${userId}:`;
-  try {
-    const toRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) toRemove.push(k);
+  const purge = (store: Storage, prefix: string) => {
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const k = store.key(i);
+        if (k && k.startsWith(prefix)) toRemove.push(k);
+      }
+      toRemove.forEach((k) => store.removeItem(k));
+    } catch {
+      /* ignore */
     }
-    toRemove.forEach((k) => localStorage.removeItem(k));
-  } catch {
-    /* ignore */
-  }
+  };
+  purge(sessionStorage, `${PREFIX}${userId}:`);
+  purge(localStorage, LEGACY_PREFIX);
 }
