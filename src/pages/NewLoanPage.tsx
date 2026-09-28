@@ -199,6 +199,11 @@ export default function NewLoanPage() {
   // - em andamento: apenas pendingCount (datas correspondem às parcelas pendentes reais)
   const datesNeeded = isOngoing ? (ongoingPlan?.pendingCount ?? 0) : numInstallments;
 
+  const lastDueIso = (ds: Date[]) => {
+    const d = ds[ds.length - 1];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
   const dueDates = useMemo(() => {
     if (paymentType === "fixed_dates") return fixedDates.filter((d) => d).map((d) => new Date(d + "T12:00:00"));
     if (!firstDueDate || datesNeeded <= 0) return [];
@@ -532,6 +537,11 @@ export default function NewLoanPage() {
           installment_amount: calc.installmentAmount,
           receivable_created: calc.totalAmount,
           first_due_date: firstDueStr,
+          last_due_date: dueDates.length ? lastDueIso(dueDates) : firstDueStr,
+          interest_type: interestType,
+          interest_value: Number(interestValue) || 0,
+          payment_type: paymentType,
+          loan_date: loanDate,
           released_amount: cashOut,
           ...(renewFromLoanId ? {
             renew_paid_amount: Math.min(renewPaid, faltaQuitar),
@@ -611,6 +621,12 @@ export default function NewLoanPage() {
         first_pending_amount: firstPendingAmount,
         pending_installments_count: ongoingPlan?.pendingCount ?? null,
         next_due_date: nextDueStr,
+        first_due_date: nextDueStr,
+        last_due_date: dueDates.length ? lastDueIso(dueDates) : nextDueStr,
+        interest_type: interestType,
+        interest_value: Number(interestValue) || 0,
+        payment_type: paymentType,
+        released_amount: 0,
         original_loan_date: loanDate,
         imported_at: new Date().toISOString(),
       };

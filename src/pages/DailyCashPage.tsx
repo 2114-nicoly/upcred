@@ -914,6 +914,37 @@ export default function DailyCashPage() {
     setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
   };
 
+  /** Congela no momento da marcação todos os dados do "Não pagou" (nunca recalculados depois). */
+  const buildNotPaidMetadata = (inst: InstallmentWithLoan, reason: string) => {
+    const loan: any = getInstLoan(inst) || {};
+    const instAmount = Number((inst as any).amount) || 0;
+    const total = Number(loan.installment_count) || null;
+    const remaining = Number(loan.remaining_balance);
+    const totalAmount = Number(loan.total_amount);
+    const units = instAmount > 0 && Number.isFinite(remaining) && Number.isFinite(totalAmount)
+      ? Math.max(0, Math.round(((totalAmount - remaining) / instAmount) * 100) / 100) : null;
+    const fmt = (n: number) => String(n).replace(".", ",");
+    return {
+      client_id: getInstClientId(inst),
+      client_name: getInstClientName(inst),
+      loan_id: (inst as any).loan_id,
+      installment_id: inst.id,
+      installment_number: (inst as any).number ?? null,
+      total_installments: total,
+      expected_amount: Math.max(0, instAmount - Number((inst as any).paid_amount || 0)),
+      installment_amount: instAmount,
+      due_date: (inst as any).due_date ?? null,
+      overdue_days: getOverdueDays(inst),
+      reason: reason || null,
+      remaining_balance: Number.isFinite(remaining) ? remaining : null,
+      installment_progress: units != null && total ? `${fmt(units)}/${total}` : null,
+      remaining_installments: units != null && total ? Math.max(0, Math.round((total - units) * 100) / 100) : null,
+      payment_type: loan.payment_type ?? null,
+      cash_date: selectedDate,
+      frozen_at: new Date().toISOString(),
+    };
+  };
+
   const handleNotPaid= async (id: string) => {
     if (isSubmitting) return;
     if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
@@ -965,6 +996,7 @@ export default function DailyCashPage() {
         installment_id: inst.id,
         observation: obs || `Não pagou - ${safeClientName}`,
         origin: "rota",
+        metadata: buildNotPaidMetadata(inst, obs),
       });
       setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
       setNotPaidObs("");
@@ -1016,6 +1048,7 @@ export default function DailyCashPage() {
           installment_id: inst.id,
           observation: obs || `Não pagou - ${getInstClientName(inst)}`,
           origin: "rota",
+          metadata: buildNotPaidMetadata(inst, obs),
         });
       }
       setSelectedForNotPaid(new Set());

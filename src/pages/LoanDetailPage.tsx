@@ -484,6 +484,14 @@ export default function LoanDetailPage() {
         amount_in: 0,
         amount_out: 0,
         observation: `Multa adicionada ${formatCurrency(penAmount)}${penObs ? ` - ${penObs}` : ""}`,
+        metadata: {
+          penalty_amount: penAmount,
+          penalty_type: "fixed",
+          reason: penObs || null,
+          due_date: opDate,
+          status: "Em aberto",
+          frozen_at: new Date().toISOString(),
+        },
         origin: "detalhe_emprestimo",
       });
     } catch (err) { console.warn("[daily_event multa_adicionada] failed", err); }

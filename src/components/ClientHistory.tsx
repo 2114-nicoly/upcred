@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/loan-utils";
+import { normalizeEvent } from "@/lib/event-record";
 
 type TimelineKind = "payment" | "penalty" | "reschedule" | "audit" | "renegotiation" | "delete" | "cash";
 
@@ -116,15 +117,12 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
             )
             .order("created_at", { ascending: false })
             .limit(300),
-          loanIds.length
-            ? supabase
-                .from("cash_movements")
-                .select("id, created_at, type, amount, observation, loan_id, reversed_at")
-                .in("loan_id", loanIds)
-                .is("reversed_at", null)
-                .order("created_at", { ascending: false })
-                .limit(200)
-            : Promise.resolve({ data: [] as any[] }),
+          // Registros congelados (daily_events + metadata) — normalizador único.
+          (supabase.from("daily_events" as any) as any)
+            .select("id, cash_date, event_type, client_id, loan_id, installment_id, cash_movement_id, amount_in, amount_out, observation, origin, created_at, worker_id, admin_id, reversed_at, metadata")
+            .eq("client_id", clientId)
+            .order("created_at", { ascending: false })
+            .limit(300),
           loanIds.length
             ? supabase
                 .from("penalties")
@@ -160,6 +158,8 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
 
         (auditRes.data || []).forEach((l: any) => {
           const isReneg = l.action_type === "renegociacao_emprestimo" || l.action_type === "renovacao_emprestimo" || l.action_type === "renovar_emprestimo";
+          // Renovação/renegociação já aparecem uma única vez pelo registro congelado.
+          if (isReneg) return;
           const isDelete = SOFT_DELETE_ACTIONS.has(l.action_type);
           const nv: any = l.new_value || {};
           const isImported = l.action_type === "criar_emprestimo" && nv?.imported_ongoing === true;
@@ -182,17 +182,24 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
           });
         });
 
-        (movRes.data || []).forEach((m: any) => {
-          if (m.type === "payment" || m.type === "penalty_payment") {
-            out.push({
-              id: `m-${m.id}`,
-              date: m.created_at,
-              kind: m.type === "penalty_payment" ? "penalty" : "payment",
-              title: m.type === "penalty_payment" ? "Multa paga" : "Pagamento",
-              amount: Number(m.amount),
-              detail: m.observation || undefined,
-            });
-          }
+        ((movRes.data as any[]) || []).forEach((e: any) => {
+          const r = normalizeEvent(e);
+          if (r.internal) return;
+          if (!["pagamento", "recebimento_multa", "nao_pagou", "emprestimo_novo", "emprestimo_importado",
+            "renovacao", "renegociacao", "estorno_pagamento", "estorno_manual", "cancelamento", "transferencia_cliente",
+            "parcela_editada", "anexo_adicionado", "anexo_removido"].includes(e.event_type)) return;
+          out.push({
+            id: `e-${e.id}`,
+            date: e.created_at,
+            kind: e.event_type === "recebimento_multa" ? "penalty"
+              : e.event_type === "renovacao" || e.event_type === "renegociacao" ? "renegotiation"
+              : e.event_type === "pagamento" ? "payment" : "cash",
+            title: r.title,
+            detail: [r.summary, r.incomplete ? "Registro antigo com informações incompletas" : null].filter(Boolean).join(" • ") || undefined,
+            amount: r.amountIn || r.amountOut || null,
+            badge: r.reversed ? "Estornado" : undefined,
+            destructive: r.reversed,
+          });
         });
 
         (penRes.data || []).forEach((p: any) => {

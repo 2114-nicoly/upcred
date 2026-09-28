@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCurrency, getPaymentTypeLabel } from "@/lib/loan-utils";
-import { DailyEvent, getEventTypeLabel } from "@/lib/daily-events";
+import { DailyEvent } from "@/lib/daily-events";
+import { normalizeEvent, type NormalizedRecord } from "@/lib/event-record";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/status-constants";
 
 /**
@@ -14,20 +15,8 @@ import { INSTALLMENT_COLLECTIBLE_STATUSES, LOAN_ACTIVE_STATUSES } from "@/lib/st
 
 export type DetailLine = { label: string; value: string };
 
-export type ReportRecord = {
-  id: string;
-  kind: string;
-  createdAt: string | null;
-  time: string;
-  clientName: string;
-  workerName: string;
-  title: string;
-  summary: string;
-  amountIn: number;
-  amountOut: number;
-  reversed: boolean;
-  details: DetailLine[];
-};
+export type ReportRecord = Omit<NormalizedRecord, "category" | "status" | "cashDate" | "incomplete" | "internal" | "informative" | "isSettlement"> &
+  Partial<Pick<NormalizedRecord, "category" | "status" | "cashDate" | "incomplete" | "internal" | "informative" | "isSettlement">>;
 
 const nn = (v: any) => (v == null || v === "" ? null : v);
 const money = (v: any) => formatCurrency(Number(v || 0));
@@ -231,226 +220,16 @@ export async function fetchReportDetails(opts: {
   };
 
   // ---------- construtor de registro ----------
+  // Delegado ao NORMALIZADOR ÚNICO: somente metadata/linhas congeladas.
   const recordFor = (e: DailyEvent): ReportRecord => {
-    const loan = e.loan_id ? loanMap[e.loan_id] : null;
-    const st = instStats(e.loan_id);
-    const meta = (e.metadata || {}) as any;
-    const details: DetailLine[] = [];
-    // Nomes congelados no metadata têm prioridade sobre os nomes atuais.
-    const clientName = (meta.client_name as string) || cName(e.client_id || loan?.client_id);
-    const workerName = (meta.worker_name as string) || wName(e.worker_id);
-
-    const amountIn = Number(e.amount_in || 0);
-    const amountOut = Number(e.amount_out || 0);
-    let title = getEventTypeLabel(e.event_type);
-    let summary = "";
-
-    const totalInst = Number(loan?.installment_count || st.active.length || 0) || null;
-    const instOfEvent = e.installment_id ? st.list.find((i) => i.id === e.installment_id) : null;
-    const instAmount = instOfEvent?.amount ?? st.next?.amount ?? (loan && totalInst ? Number(loan.total_amount) / totalInst : null);
-
-    if (e.event_type === "pagamento" || e.event_type === "recebimento_multa") {
-      // FONTE PRIMÁRIA: metadata imutável gravado no momento do pagamento.
-      // Só recorremos à auditoria/estado atual quando o metadata não existe (registros antigos).
-      const hasMeta = meta.remaining_balance_before != null && meta.remaining_balance_after != null;
-      const audit = auditByEvent[e.id];
-      const before = hasMeta ? Number(meta.remaining_balance_before) : audit?.old_value?.remaining_balance;
-      const after = hasMeta ? Number(meta.remaining_balance_after) : audit?.new_value?.remaining_balance;
-      const snapStatus = audit?.new_value?.loan_snapshot?.status;
-      const paidAfterLive = st.paid.filter((i) => i.paid_at && String(i.paid_at) <= e.created_at).length;
-      const paidBeforeLive = st.paid.filter((i) => i.paid_at && String(i.paid_at) < e.created_at).length;
-      const paidBeforeCount = hasMeta && meta.paid_installments_before != null
-        ? Number(meta.paid_installments_before) : paidBeforeLive;
-      const paidAfter = hasMeta && meta.paid_installments_after != null
-        ? Number(meta.paid_installments_after) : paidAfterLive;
-      const covered = hasMeta && meta.installments_advanced != null
-        ? Number(meta.installments_advanced)
-        : Math.max(0, paidAfterLive - paidBeforeLive);
-      const totalInstFrozen = hasMeta && meta.total_installments ? Number(meta.total_installments) : totalInst;
-      const instAmountFrozen = hasMeta && meta.installment_amount != null
-        ? Number(meta.installment_amount) : instAmount;
-      const restantes = totalInstFrozen != null ? Math.max(0, totalInstFrozen - paidAfter) : null;
-      const isQuit = after != null && Number(after) <= 0.01;
-      const isPartial = !isQuit && instAmountFrozen != null && amountIn + 0.01 < Number(instAmountFrozen);
-      const tipo = isQuit ? "Quitação" : isPartial ? "Pagamento parcial" : "Parcela completa";
-      title = e.event_type === "recebimento_multa" ? "Multa recebida" : tipo;
-
-      push(details, "Cliente", clientName);
-      push(details, "Data e hora", dtHour(e.created_at));
-      push(details, "Valor recebido", money(amountIn));
-      push(details, "Tipo do pagamento", tipo);
-      push(details, "Situação do empréstimo antes", snapStatus ? LOAN_STATUS_LABEL[snapStatus] || snapStatus : null);
-      if (before != null) push(details, "Saldo devedor antes", money(before));
-      if (after != null) push(details, "Saldo devedor depois", money(after));
-      push(details, "Progresso antes", nn(meta.installment_progress_before));
-      push(details, "Progresso depois", nn(meta.installment_progress_after));
-      push(details, "Total de parcelas", totalInstFrozen);
-      push(details, "Parcelas pagas antes", paidBeforeCount);
-      if (covered > 0) push(details, "Parcelas pagas com este recebimento", covered);
-      push(details, "Parcelas pagas depois", paidAfter);
-      push(details, "Parcelas restantes", restantes);
-      if (instAmountFrozen != null) push(details, "Valor da parcela", money(instAmountFrozen));
-      push(details, "Número da parcela paga", instOfEvent ? `${instOfEvent.number}${totalInstFrozen ? ` de ${totalInstFrozen}` : ""}` : null);
-      (Array.isArray(meta.affected_installments) ? meta.affected_installments : []).forEach((a: any, idx: number) => {
-        push(details, `Parcela afetada ${idx + 1}`,
-          `Nº ${a.number} · aplicado ${money(a.amount_applied)} · pago ${money(a.paid_amount_before)} → ${money(a.paid_amount_after)}`);
-      });
-      push(details, "Próxima data de pagamento", dt(st.next?.due_date));
-      push(details, "Forma de pagamento", nn(meta.payment_method));
-      push(details, "Observação", nn(e.observation));
-
-      const partes: string[] = [];
-      if (before != null && totalInstFrozen) partes.push(`Antes: ${meta.installment_progress_before || `${paidBeforeCount} de ${totalInstFrozen}`} parcelas pagas${instAmountFrozen != null ? `, parcela de ${money(instAmountFrozen)}` : ""} e saldo de ${money(before)}.`);
-      partes.push(`Pagamento: ${money(amountIn)}${covered > 0 ? `, correspondente a ${covered} parcela(s)` : ""}.`);
-      if (after != null && totalInstFrozen) partes.push(`Depois: ${meta.installment_progress_after || `${paidAfter} de ${totalInstFrozen}`} parcelas pagas, ${restantes} restantes, saldo de ${money(after)}.`);
-      summary = partes.join(" ");
-      return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
-    }
-
-
-    if (e.event_type === "emprestimo_novo" || e.event_type === "emprestimo_importado") {
-      const lastDue = st.active.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(-1)[0];
-      const juros = loan
-        ? (loan.interest_type === "percentage" ? `${Number(loan.interest_value)}%` : money(loan.interest_value))
-        : null;
-      title = e.event_type === "emprestimo_importado" ? "Empréstimo em andamento (importado)" : "Novo empréstimo";
-      push(details, "Cliente", clientName);
-      push(details, "Data de criação", dt(loan?.loan_date) || dtHour(e.created_at));
-      push(details, "Valor emprestado", money(loan?.amount ?? meta.released_amount ?? amountOut));
-      push(details, "Valor total a receber", money(loan?.total_amount ?? meta.total_amount));
-      push(details, "Juros/acréscimo", juros);
-      push(details, "Tipo de cobrança", loan ? getPaymentTypeLabel(loan.payment_type, loan.first_due_date) : null);
-      push(details, "Intervalo entre cobranças", loan ? INTERVAL_LABEL[loan.payment_type] : null);
-      push(details, "Total de parcelas", totalInst);
-      push(details, "Valor de cada parcela", instAmount != null ? money(instAmount) : null);
-      push(details, "Primeira parcela", dt(loan?.first_due_date ?? meta.first_due_date));
-      push(details, "Última parcela prevista", dt(lastDue?.due_date));
-      if (loan?.payment_type === "monthly") {
-        push(details, "Dia do pagamento", dt(loan?.first_due_date)?.slice(0, 2));
-      }
-      push(details, "Parcelas já pagas", st.paid.length);
-      push(details, "Parcelas restantes", st.pending.length);
-      push(details, "Saldo devedor atual", loan ? money(loan.remaining_balance) : null);
-      push(details, "Próxima data de pagamento", dt(st.next?.due_date));
-      push(details, "Status", loanStatusLabel(loan, st.next?.due_date, referenceDate));
-      push(details, "Observações", nn(loan?.observation) || nn(e.observation));
-      summary = [
-        money(loan?.amount ?? amountOut),
-        totalInst ? `${totalInst}x${instAmount != null ? ` de ${money(instAmount)}` : ""}` : null,
-        loan ? getPaymentTypeLabel(loan.payment_type, loan.first_due_date) : null,
-        st.next ? `próxima em ${dt(st.next.due_date)}` : null,
-      ].filter(Boolean).join(" · ");
-      return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
-    }
-
-    if (e.event_type === "renovacao" || e.event_type === "renegociacao" || e.event_type === "renovacao_absorvida") {
-      const r = (e.loan_id && (renegByNew[e.loan_id] || renegByOriginal[e.loan_id])) || null;
-      const isReneg = e.event_type === "renegociacao" || r?.type === "renegotiation";
-      title = isReneg ? "Renegociação" : "Renovação";
-      const newLoan = r?.new_loan_id ? loanMap[r.new_loan_id] || loan : loan;
-      const newInst = instStats(newLoan?.id);
-      const newInstAmount = newInst.list[0]?.amount
-        ?? (newLoan?.total_amount && newLoan?.installment_count ? Number(newLoan.total_amount) / Number(newLoan.installment_count) : null);
-
-      push(details, "Cliente", clientName);
-      push(details, `Data da ${isReneg ? "renegociação" : "renovação"}`, dtHour(e.created_at));
-      // Antes
-      push(details, "Contrato anterior", r?.original_loan_id ? `ID ${String(r.original_loan_id).slice(0, 8)}` : null);
-      push(details, "Antes — situação", r ? "Contrato encerrado por " + (isReneg ? "renegociação" : "renovação") : null);
-      push(details, "Antes — saldo devedor", r ? money(r.original_remaining_balance) : null);
-      push(details, "Antes — total do contrato", r ? money(r.original_total_amount) : null);
-      push(details, "Antes — parcelas do contrato", r?.original_installment_count);
-      push(details, "Antes — valor da parcela", r?.original_total_amount && r?.original_installment_count
-        ? money(Number(r.original_total_amount) / Number(r.original_installment_count)) : null);
-      push(details, "Antes — frequência", r?.original_payment_type ? getPaymentTypeLabel(r.original_payment_type) : null);
-      push(details, "Valor quitado pelo cliente", r ? money(r.client_paid_amount) : null);
-      push(details, "Valor absorvido no novo contrato", r ? money(r.absorbed_from_new) : null);
-      push(details, "Valor adicional liberado", r ? money(r.released_to_client) : null);
-      // Depois
-      push(details, "Depois — novo valor emprestado", r ? money(r.new_amount) : (newLoan ? money(newLoan.amount) : null));
-      push(details, "Depois — novo total a receber", r ? money(r.new_total_amount) : (newLoan ? money(newLoan.total_amount) : null));
-      push(details, "Depois — parcelas", r?.new_installment_count ?? newLoan?.installment_count);
-      push(details, "Depois — valor da parcela", newInstAmount != null ? money(newInstAmount) : null);
-      push(details, "Depois — frequência", (r?.new_payment_type || newLoan?.payment_type)
-        ? getPaymentTypeLabel(r?.new_payment_type || newLoan?.payment_type, newLoan?.first_due_date) : null);
-      push(details, "Depois — primeira parcela", dt(newLoan?.first_due_date));
-      push(details, "Depois — próxima data de pagamento", dt(newInst.next?.due_date));
-      push(details, "Depois — saldo devedor atual", newLoan ? money(newLoan.remaining_balance) : null);
-      push(details, "Motivo/observação", nn(r?.reason) || nn(e.observation));
-      summary = [
-        r ? `Saldo anterior ${money(r.original_remaining_balance)}` : null,
-        r ? `novo contrato ${money(r.new_amount)}` : null,
-        r?.new_installment_count ? `${r.new_installment_count}x` : null,
-        r && Number(r.released_to_client) > 0 ? `adicional ${money(r.released_to_client)}` : null,
-      ].filter(Boolean).join(" · ") || nn(e.observation) || title;
-      return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
-    }
-
-    if (e.event_type === "nao_pagou") {
-      title = "Não pagou";
-      const inst = instOfEvent || st.next;
-      const dias = inst ? Math.max(0, differenceInCalendarDays(new Date(e.cash_date + "T12:00:00"), new Date(inst.due_date + "T12:00:00"))) : null;
-      push(details, "Cliente", clientName);
-      push(details, "Data do registro", dtHour(e.created_at));
-      push(details, "Parcela", inst && totalInst ? `Parcela ${inst.number} de ${totalInst}` : inst ? `Parcela ${inst.number}` : null);
-      push(details, "Valor esperado", inst ? money(inst.amount) : null);
-      push(details, "Vencimento", dt(inst?.due_date));
-      if (dias != null) push(details, "Dias em atraso", `${dias} dia${dias === 1 ? "" : "s"} em atraso`);
-      push(details, "Parcelas pagas", st.paid.length);
-      push(details, "Parcelas restantes", st.pending.length);
-      push(details, "Saldo devedor", loan ? money(loan.remaining_balance) : null);
-      push(details, "Trabalhador responsável", workerName);
-      push(details, "Observação", nn(e.observation));
-      summary = [
-        inst && totalInst ? `Parcela ${inst.number} de ${totalInst}` : null,
-        inst ? money(inst.amount) : null,
-        inst ? `vencida em ${dt(inst.due_date)}` : null,
-      ].filter(Boolean).join(" · ") || (nn(e.observation) ?? "");
-      return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
-    }
-
-    if (e.event_type === "despesa") {
-      title = "Despesa";
-      push(details, "Data e hora", dtHour(e.created_at));
-      push(details, "Valor", money(amountOut));
-      push(details, "Categoria/descrição", nn(e.observation));
-      push(details, "Trabalhador responsável", workerName);
-      summary = `${money(amountOut)}${e.observation ? ` · ${e.observation}` : ""}`;
-      return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
-    }
-
-    // Genérico (entradas/saídas manuais, estornos, ajustes, cancelamentos)
-    push(details, "Data e hora", dtHour(e.created_at));
-    if (amountIn > 0) push(details, "Entrada", money(amountIn));
-    if (amountOut > 0) push(details, "Saída", money(amountOut));
-    push(details, "Cliente", e.client_id ? clientName : null);
-    push(details, "Trabalhador responsável", workerName);
-    push(details, "Observação", nn(e.observation));
-    if (e.reversed_at) push(details, "Estornado em", dtHour(e.reversed_at));
-    summary = [amountIn > 0 ? `+ ${money(amountIn)}` : null, amountOut > 0 ? `- ${money(amountOut)}` : null, nn(e.observation)]
-      .filter(Boolean).join(" · ");
-    return rec(e, { title, summary, details, clientName, workerName, amountIn, amountOut });
+    const reneg = e.loan_id ? renegByNew[e.loan_id] || renegByOriginal[e.loan_id] || null : null;
+    return normalizeEvent(e, {
+      clientName: (id) => (id ? clientNames[id] : null) || (e.loan_id && loanMap[e.loan_id] ? clientNames[loanMap[e.loan_id].client_id] : null),
+      workerName: (id) => (id ? workerNames[id] : null),
+      renegotiation: e.event_type === "renovacao" || e.event_type === "renegociacao" ? reneg : null,
+      audit: auditByEvent[e.id] || null,
+    });
   };
-
-  function rec(e: DailyEvent, p: {
-    title: string; summary: string; details: DetailLine[];
-    clientName: string; workerName: string; amountIn: number; amountOut: number;
-  }): ReportRecord {
-    return {
-      id: e.id,
-      kind: e.event_type,
-      createdAt: e.created_at,
-      time: format(new Date(e.created_at), "HH:mm"),
-      clientName: p.clientName,
-      workerName: p.workerName,
-      title: p.title,
-      summary: p.summary,
-      amountIn: p.amountIn,
-      amountOut: p.amountOut,
-      reversed: !!e.reversed_at,
-      details: p.details,
-    };
-  }
 
   // ---------- Pendentes de registro e atrasados ----------
   const eventInstKeys = new Set<string>();

@@ -907,7 +907,8 @@ type RecordGroups = ReturnType<typeof buildRecordGroups>;
  * Não altera valores, saldos nem regras financeiras.
  */
 function buildRecordGroups(list: DailyEvent[], recordFor: (e: DailyEvent) => ReportRecord) {
-  const recs = list.map(recordFor);
+  // renovacao_absorvida é detalhe interno da renovação: nunca listado sozinho.
+  const recs = list.map(recordFor).filter((r) => !r.internal && r.kind !== "renovacao_absorvida");
   const of = (kinds: string[], filter?: (r: ReportRecord) => boolean) =>
     recs.filter((r) => kinds.includes(r.kind) && !r.reversed && (!filter || filter(r)));
 
@@ -922,7 +923,7 @@ function buildRecordGroups(list: DailyEvent[], recordFor: (e: DailyEvent) => Rep
     pagamentos,
     pagamentosParciais: parciais,
     novosEmprestimos: of(["emprestimo_novo", "emprestimo_importado"]),
-    renovacoes: of(["renovacao", "renovacao_absorvida"]),
+    renovacoes: of(["renovacao"]),
     renegociacoes: of(["renegociacao"]),
     naoPagos: of(["nao_pagou"]),
     despesas: of(["despesa"]),
