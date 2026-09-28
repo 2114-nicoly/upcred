@@ -266,6 +266,13 @@ export async function registerPenaltyPayment(params: {
       observation: `Multa - ${clientName}`,
       origin,
       cash_movement_id: movement?.id || null,
+      metadata: {
+        client_id: clientId, client_name: clientName, loan_id: loanId,
+        penalty_paid_amount: amount,
+        penalty_balance_before: Math.max(0, Number(penaltyInst.amount) - Number(penaltyInst.paid_amount)),
+        penalty_balance_after: Math.max(0, Number(penaltyInst.amount) - Math.min(newPaid, Number(penaltyInst.amount))),
+        cash_movement_id: movement?.id || null,
+      },
     } as any) as any;
     if (!movement?.id || !event?.id) throw new Error("Pagamento de multa sem movimentação/evento financeiro vinculado.");
     await linkCashMovementToDailyEvent(movement.id, event.id);
@@ -374,6 +381,11 @@ export async function settleLoan(params: {
         observation: `Quitação multa - ${clientName}`,
         origin,
         cash_movement_id: movement?.id || null,
+        metadata: {
+          client_id: clientId, client_name: clientName, loan_id: loanId,
+          penalty_paid_amount: totalPenaltyPaying, penalty_balance_before: totalPenaltyPaying,
+          penalty_balance_after: 0, origin: "quitacao", cash_movement_id: movement?.id || null,
+        },
       } as any) as any;
       if (!movement?.id || !event?.id) throw new Error("Quitação de multa sem movimentação/evento financeiro vinculado.");
       await linkCashMovementToDailyEvent(movement.id, event.id);
