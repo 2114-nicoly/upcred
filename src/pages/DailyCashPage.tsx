@@ -1982,25 +1982,25 @@ export default function DailyCashPage() {
                         <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-primary/10 text-primary">Renovação</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-1 text-xs">
-                        {pago > 0 && (
+                        {card.paid > 0 && (
                           <div className="flex justify-between col-span-2">
                             <span className="text-muted-foreground">Pago na renovação:</span>
-                            <span className="font-semibold text-success">{formatCurrency(pago)}</span>
+                            <span className="font-semibold text-success">{formatCurrency(card.paid)}</span>
                           </div>
                         )}
-                        {faltava > 0 && (
+                        {card.faltava > 0 && (
                           <div className="flex justify-between col-span-2">
                             <span className="text-muted-foreground">Faltava quitar:</span>
-                            <span className="font-semibold">{formatCurrency(faltava)}</span>
+                            <span className="font-semibold">{formatCurrency(card.faltava)}</span>
                           </div>
                         )}
                         <div className="flex justify-between col-span-2">
                           <span className="text-muted-foreground">Novo empréstimo:</span>
-                          <span className="font-semibold">{formatCurrency(Number(r.amount))} ({r.installment_count}x • {paymentLabel})</span>
+                          <span className="font-semibold">{formatCurrency(card.newAmount)} ({r.installment_count}x • {paymentLabel})</span>
                         </div>
                         <div className="flex justify-between col-span-2 border-t pt-1 mt-1">
                           <span className="font-medium">Liberado ao cliente:</span>
-                          <span className="font-bold text-primary">{formatCurrency(liberado)}</span>
+                          <span className="font-bold text-primary">{formatCurrency(card.released)}</span>
                         </div>
                       </div>
                     </div>
