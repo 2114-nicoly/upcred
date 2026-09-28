@@ -158,6 +158,8 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
 
         (auditRes.data || []).forEach((l: any) => {
           const isReneg = l.action_type === "renegociacao_emprestimo" || l.action_type === "renovacao_emprestimo" || l.action_type === "renovar_emprestimo";
+          // Renovação/renegociação já aparecem uma única vez pelo registro congelado.
+          if (isReneg) return;
           const isDelete = SOFT_DELETE_ACTIONS.has(l.action_type);
           const nv: any = l.new_value || {};
           const isImported = l.action_type === "criar_emprestimo" && nv?.imported_ongoing === true;
