@@ -150,6 +150,8 @@ type DailyEventRow = {
   amount_in: number;
   amount_out: number;
   observation: string | null;
+  /** Valores congelados no momento da ação — única fonte de valores do card. */
+  metadata?: Record<string, any> | null;
 };
 
 type NewLoanInfo = {
@@ -164,6 +166,47 @@ type NewLoanInfo = {
   renewed_from_loan_id: string | null;
   clients: { id: string; name: string };
 };
+
+export type RenewalCardValues = {
+  paid: number;
+  faltava: number;
+  newAmount: number;
+  released: number;
+  absorbed: number;
+};
+
+/** Aceita apenas números finitos e não negativos; qualquer outra coisa vira null. */
+function toMoney(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Valores exibidos no card "Renovações do Dia".
+ *
+ * Fonte EXCLUSIVA: campos numéricos de daily_event.metadata. O texto de
+ * "observation" é apenas descrição legível (ex.: "Pago: R$ 325.00") e nunca é
+ * lido como valor — reinterpretar "325.00" como número brasileiro viraria 32500.
+ */
+export function buildRenewalCardValues(
+  renewEvt: Pick<DailyEventRow, "amount_out" | "metadata"> | null | undefined,
+  loan: { amount: number | string },
+): RenewalCardValues {
+  const md = (renewEvt?.metadata ?? {}) as Record<string, unknown>;
+  return {
+    paid: toMoney(md.renew_paid_amount) ?? 0,
+    faltava: toMoney(md.old_remaining_before) ?? 0,
+    newAmount: toMoney(loan.amount) ?? 0,
+    released:
+      toMoney(md.renew_additional_cash) ??
+      toMoney(md.released_amount) ??
+      toMoney(renewEvt?.amount_out) ??
+      toMoney(loan.amount) ??
+      0,
+    absorbed: toMoney(md.renew_absorbed_amount) ?? 0,
+  };
+}
 
 type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } | null }>;
 
