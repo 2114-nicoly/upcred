@@ -150,6 +150,8 @@ type DailyEventRow = {
   amount_in: number;
   amount_out: number;
   observation: string | null;
+  /** Valores congelados no momento da ação — única fonte de valores do card. */
+  metadata?: Record<string, any> | null;
 };
 
 type NewLoanInfo = {
@@ -164,6 +166,55 @@ type NewLoanInfo = {
   renewed_from_loan_id: string | null;
   clients: { id: string; name: string };
 };
+
+export type RenewalCardValues = {
+  paid: number;
+  faltava: number;
+  newAmount: number;
+  released: number;
+  absorbed: number;
+};
+
+/** Aceita apenas números finitos e não negativos; qualquer outra coisa vira null. */
+function toMoney(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Evento de renovação mínimo necessário para montar o card. */
+export type RenewalCardSource = {
+  amount_out?: number | string | null;
+  metadata?: Record<string, any> | null;
+  /** Texto descritivo do evento — nunca é lido como valor. */
+  observation?: string | null;
+};
+
+/**
+ * Valores exibidos no card "Renovações do Dia".
+ *
+ * Fonte EXCLUSIVA: campos numéricos de daily_event.metadata. O texto de
+ * "observation" é apenas descrição legível (ex.: "Pago: R$ 325.00") e nunca é
+ * lido como valor — reinterpretar "325.00" como número brasileiro viraria 32500.
+ */
+export function buildRenewalCardValues(
+  renewEvt: RenewalCardSource | null | undefined,
+  loan: { amount: number | string },
+): RenewalCardValues {
+  const md = (renewEvt?.metadata ?? {}) as Record<string, unknown>;
+  return {
+    paid: toMoney(md.renew_paid_amount) ?? 0,
+    faltava: toMoney(md.old_remaining_before) ?? 0,
+    newAmount: toMoney(loan.amount) ?? 0,
+    released:
+      toMoney(md.renew_additional_cash) ??
+      toMoney(md.released_amount) ??
+      toMoney(renewEvt?.amount_out) ??
+      toMoney(loan.amount) ??
+      0,
+    absorbed: toMoney(md.renew_absorbed_amount) ?? 0,
+  };
+}
 
 type QueryResult<T> = Promise<{ data: T[] | null; error?: { message?: string } | null }>;
 
@@ -1929,16 +1980,9 @@ export default function DailyCashPage() {
               <CollapsibleContent className="mt-2 space-y-2">
                 {newLoans.filter(r => !!r.renewed_from_loan_id).map(r => {
                   const paymentLabel = r.payment_type === "daily" ? "Diário" : r.payment_type === "weekly" ? "Semanal" : r.payment_type === "monthly" ? "Mensal" : r.payment_type;
-                  // Find the renovacao daily_event for this loan to extract paid/liberado from observation
+                  // Valores do card: exclusivamente o metadata congelado do evento.
                   const renewEvt = renewalEvents.find((e) => e.event_type === "renovacao" && e.loan_id === r.id);
-                  const liberado = renewEvt ? Number(renewEvt.amount_out) : Number(r.amount);
-                  // Try parse Pago / Faltava from observation
-                  const obs = renewEvt?.observation || "";
-                  const pagoMatch = obs.match(/Pago:\s*R\$\s*([\d.,]+)/);
-                  const faltavaMatch = obs.match(/Faltava:\s*R\$\s*([\d.,]+)/);
-                  const parseBR = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
-                  const pago = pagoMatch ? parseBR(pagoMatch[1]) : 0;
-                  const faltava = faltavaMatch ? parseBR(faltavaMatch[1]) : 0;
+                  const card = buildRenewalCardValues(renewEvt, r);
                   return (
                     <div key={safeKey("loan", r.id, r.renewed_from_loan_id || "new")} className="rounded-lg border border-primary/30 bg-card p-3">
                       <div className="flex items-center justify-between mb-1.5">
@@ -1946,25 +1990,25 @@ export default function DailyCashPage() {
                         <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-primary/10 text-primary">Renovação</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-1 text-xs">
-                        {pago > 0 && (
+                        {card.paid > 0 && (
                           <div className="flex justify-between col-span-2">
                             <span className="text-muted-foreground">Pago na renovação:</span>
-                            <span className="font-semibold text-success">{formatCurrency(pago)}</span>
+                            <span className="font-semibold text-success">{formatCurrency(card.paid)}</span>
                           </div>
                         )}
-                        {faltava > 0 && (
+                        {card.faltava > 0 && (
                           <div className="flex justify-between col-span-2">
                             <span className="text-muted-foreground">Faltava quitar:</span>
-                            <span className="font-semibold">{formatCurrency(faltava)}</span>
+                            <span className="font-semibold">{formatCurrency(card.faltava)}</span>
                           </div>
                         )}
                         <div className="flex justify-between col-span-2">
                           <span className="text-muted-foreground">Novo empréstimo:</span>
-                          <span className="font-semibold">{formatCurrency(Number(r.amount))} ({r.installment_count}x • {paymentLabel})</span>
+                          <span className="font-semibold">{formatCurrency(card.newAmount)} ({r.installment_count}x • {paymentLabel})</span>
                         </div>
                         <div className="flex justify-between col-span-2 border-t pt-1 mt-1">
                           <span className="font-medium">Liberado ao cliente:</span>
-                          <span className="font-bold text-primary">{formatCurrency(liberado)}</span>
+                          <span className="font-bold text-primary">{formatCurrency(card.released)}</span>
                         </div>
                       </div>
                     </div>
