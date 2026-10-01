@@ -57,7 +57,8 @@ export default function ClientsPage() {
   const [groupByWorker, setGroupByWorker] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [form, setForm] = useState<ClientFormValues>(emptyClientForm);
+  const [newClientForm, setNewClientForm] = useState<ClientFormValues>(emptyClientForm);
+  const [editClientForm, setEditClientForm] = useState<ClientFormValues>(emptyClientForm);
   const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
   const [sortAlpha, setSortAlpha] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
@@ -71,7 +72,7 @@ export default function ClientsPage() {
   // preserva os campos se o celular reconstruir a página em segundo plano.
   const newClientDraft = useFormDraft(
     "clients-new-client",
-    { form, newClientWorkerId },
+    { newClientForm, newClientWorkerId },
     { enabled: open && !editOpen }
   );
   const draftRestoredRef = useRef(false);
@@ -86,7 +87,7 @@ export default function ClientsPage() {
       for (const k of Object.keys(emptyClientForm)) {
         if (typeof f[k] === "string") clean[k] = f[k];
       }
-      setForm(clean);
+      setNewClientForm(clean);
       setNewClientWorkerId(typeof saved.newClientWorkerId === "string" ? saved.newClientWorkerId : "");
       setOpen(true);
     } else {
@@ -126,7 +127,7 @@ export default function ClientsPage() {
   };
 
   const handleCreate = async (force = false) => {
-    const err = validateClientForm(form);
+    const err = validateClientForm(newClientForm);
     if (err) { toast.error(err); return; }
     if (isAdmin && !newClientWorkerId) {
       toast.error("Selecione o trabalhador responsável");
@@ -134,11 +135,11 @@ export default function ClientsPage() {
     }
 
     if (!force) {
-      const trimmedName = form.name.trim();
+      const trimmedName = newClientForm.name.trim();
       const { data: dupes } = await supabase
         .from("clients")
         .select("id, name, phone")
-        .or(form.phone ? `name.ilike.${trimmedName},phone.eq.${form.phone}` : `name.ilike.${trimmedName}`);
+        .or(newClientForm.phone ? `name.ilike.${trimmedName},phone.eq.${newClientForm.phone}` : `name.ilike.${trimmedName}`);
       if (dupes && dupes.length > 0) {
         const ok = confirm(`Cliente parecido encontrado: ${dupes[0].name}${dupes[0].phone ? ` (${dupes[0].phone})` : ""}.\n\nDeseja criar mesmo assim?`);
         if (!ok) return;
@@ -148,36 +149,36 @@ export default function ClientsPage() {
     let createdId: string | null = null;
     if (isAdmin) {
       const { data, error } = await supabase.rpc("admin_create_client" as any, {
-        p_name: form.name.trim(),
-        p_phone: form.phone || null,
-        p_notes: form.notes || null,
+        p_name: newClientForm.name.trim(),
+        p_phone: newClientForm.phone || null,
+        p_notes: newClientForm.notes || null,
         p_worker_id: newClientWorkerId,
-        p_full_name: form.full_name || null,
-        p_address: form.address || null,
-        p_doc_primary_type: form.doc_primary_type || null,
-        p_doc_primary_number: form.doc_primary_number || null,
-        p_doc_secondary_type: form.doc_secondary_type || null,
-        p_doc_secondary_number: form.doc_secondary_number || null,
+        p_full_name: newClientForm.full_name || null,
+        p_address: newClientForm.address || null,
+        p_doc_primary_type: newClientForm.doc_primary_type || null,
+        p_doc_primary_number: newClientForm.doc_primary_number || null,
+        p_doc_secondary_type: newClientForm.doc_secondary_type || null,
+        p_doc_secondary_number: newClientForm.doc_secondary_number || null,
       });
       if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
       createdId = data as any;
     } else {
       // trabalhador: vínculo automático ao próprio worker + admin responsável
       const { data, error } = await supabase.rpc("worker_create_client" as any, {
-        p_name: form.name.trim(),
-        p_phone: form.phone || null,
-        p_notes: form.notes || null,
-        p_full_name: form.full_name || null,
-        p_address: form.address || null,
-        p_doc_primary_type: form.doc_primary_type || null,
-        p_doc_primary_number: form.doc_primary_number || null,
-        p_doc_secondary_type: form.doc_secondary_type || null,
-        p_doc_secondary_number: form.doc_secondary_number || null,
+        p_name: newClientForm.name.trim(),
+        p_phone: newClientForm.phone || null,
+        p_notes: newClientForm.notes || null,
+        p_full_name: newClientForm.full_name || null,
+        p_address: newClientForm.address || null,
+        p_doc_primary_type: newClientForm.doc_primary_type || null,
+        p_doc_primary_number: newClientForm.doc_primary_number || null,
+        p_doc_secondary_type: newClientForm.doc_secondary_type || null,
+        p_doc_secondary_number: newClientForm.doc_secondary_number || null,
       });
       if (error) { toast.error(error.message || "Erro ao cadastrar cliente"); return; }
       createdId = data as any;
     }
-    if (createdId) logAction("criar_cliente", "client", createdId, null, { name: form.name, full_name: form.full_name });
+    if (createdId) logAction("criar_cliente", "client", createdId, null, { name: newClientForm.name, full_name: newClientForm.full_name });
     toast.success("Cliente cadastrado!");
 
     if (createdId && pendingAttachments.length > 0) {
@@ -195,7 +196,7 @@ export default function ClientsPage() {
       if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     }
     newClientDraft.clear();
-    setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
+    setNewClientForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
   };
@@ -211,14 +212,14 @@ export default function ClientsPage() {
     }
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     newClientDraft.clear();
-    setForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
+    setNewClientForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
     setPendingAttachments([]); setRetryQueue(null);
     fetchClients();
   };
 
   const handleEdit = async () => {
     if (!editingClient) return;
-    const err = validateClientForm(form);
+    const err = validateClientForm(editClientForm);
     if (err) { toast.error(err); return; }
     const oldVal = {
       name: editingClient.name,
@@ -232,17 +233,17 @@ export default function ClientsPage() {
       doc_secondary_number: (editingClient as any).doc_secondary_number,
     };
     const newVal = {
-      name: form.name.trim(), phone: form.phone || null, notes: form.notes || null,
-      full_name: form.full_name || null, address: form.address || null,
-      doc_primary_type: form.doc_primary_type || null, doc_primary_number: form.doc_primary_number || null,
-      doc_secondary_type: form.doc_secondary_type || null, doc_secondary_number: form.doc_secondary_number || null,
+      name: editClientForm.name.trim(), phone: editClientForm.phone || null, notes: editClientForm.notes || null,
+      full_name: editClientForm.full_name || null, address: editClientForm.address || null,
+      doc_primary_type: editClientForm.doc_primary_type || null, doc_primary_number: editClientForm.doc_primary_number || null,
+      doc_secondary_type: editClientForm.doc_secondary_type || null, doc_secondary_number: editClientForm.doc_secondary_number || null,
     };
     const { error } = await supabase.from("clients").update(newVal as any).eq("id", editingClient.id);
     if (error) { toast.error("Erro ao editar"); return; }
     logAction("editar_cliente", "client", editingClient.id, oldVal, newVal);
     toast.success("Cliente atualizado!");
     setEditOpen(false); setEditingClient(null);
-    setForm(emptyClientForm);
+    setEditClientForm(emptyClientForm);
     fetchClients();
   };
 
@@ -295,7 +296,7 @@ export default function ClientsPage() {
 
   const openEdit = (client: Client) => {
     setEditingClient(client);
-    setForm({
+    setEditClientForm({
       name: client.name || "",
       full_name: (client as any).full_name || "",
       phone: client.phone || "",
@@ -378,7 +379,7 @@ export default function ClientsPage() {
           if (!o) {
             // fechamento/cancelamento intencional descarta o rascunho e limpa o formulário
             newClientDraft.clear();
-            setForm(emptyClientForm);
+            setNewClientForm(emptyClientForm);
             setNewClientWorkerId("");
           }
         }}>
@@ -388,8 +389,8 @@ export default function ClientsPage() {
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Novo Cliente</DialogTitle></DialogHeader>
             <ClientForm
-              value={form}
-              onChange={setForm}
+              value={newClientForm}
+              onChange={setNewClientForm}
               submitLabel="Cadastrar"
               onSubmit={() => handleCreate()}
               extra={
@@ -608,8 +609,8 @@ export default function ClientsPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>
           <ClientForm
-            value={form}
-            onChange={setForm}
+            value={editClientForm}
+            onChange={setEditClientForm}
             submitLabel="Salvar"
             onSubmit={handleEdit}
             extra={editingClient && (
