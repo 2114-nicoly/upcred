@@ -494,7 +494,7 @@ export default function ClientsPage() {
             icon={Users}
             message={search ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
             actionLabel={!search ? "Cadastrar cliente" : undefined}
-            onAction={!search ? () => setOpen(true) : undefined}
+            onAction={!search ? openNewClient : undefined}
           />
         ) : (
           (() => {
