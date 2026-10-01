@@ -113,25 +113,29 @@ export function useFormDraft<T>(key: string, value: T, opts: Options = {}) {
   // ocultação/reconstrução pelo navegador: grava imediatamente (somente local)
   useEffect(() => {
     const onPageHide = () => { hiddenRef.current = true; writeNow(); };
+    const onPageShow = () => { hiddenRef.current = false; };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") { hiddenRef.current = true; writeNow(); }
       else hiddenRef.current = false;
     };
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [writeNow]);
 
-  // desmonte normal (navegação interna): descarta o rascunho desta ação
+  // desmonte normal (navegação interna) ou troca de ação: descarta o rascunho
+  // da chave capturada nesta renderização (nunca da chave atual)
   useEffect(() => {
+    const keyAtEffect = fullKey;
     return () => {
-      const k = fullKeyRef.current;
-      if (!k || hiddenRef.current) return;
+      if (!keyAtEffect || hiddenRef.current) return;
       if (timerRef.current) window.clearTimeout(timerRef.current);
-      try { sessionStorage.removeItem(k); } catch { /* ignore */ }
+      try { sessionStorage.removeItem(keyAtEffect); } catch { /* ignore */ }
     };
   }, [fullKey]);
 
