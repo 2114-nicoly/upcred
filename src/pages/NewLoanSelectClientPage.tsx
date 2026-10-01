@@ -79,10 +79,16 @@ export default function NewLoanSelectClientPage() {
     }
   }, [newClientDraft.restore]);
 
-  const startNewClient = () => {
+  /** Descarta toda a ação atual de cadastro (formulário, trabalhador, anexos, fila e rascunho). */
+  const resetNewClient = () => {
     newClientDraft.clear();
     setForm(emptyClientForm);
     setNewClientWorkerId("");
+    setPendingAttachments([]);
+    setRetryQueue(null);
+  };
+  const startNewClient = () => {
+    resetNewClient();
     setNewClientMode(true);
   };
 
@@ -211,7 +217,7 @@ export default function NewLoanSelectClientPage() {
         }
         if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
       }
-      newClientDraft.clear();
+      resetNewClient();
       navigate(withDate(`/clients/${createdId}/new-loan`));
     }
   };
@@ -228,10 +234,9 @@ export default function NewLoanSelectClientPage() {
       return;
     }
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
-    setPendingAttachments([]);
-    setRetryQueue(null);
-    newClientDraft.clear();
-    navigate(withDate(`/clients/${retryQueue.clientId}/new-loan`));
+    const clientId = retryQueue.clientId;
+    resetNewClient();
+    navigate(withDate(`/clients/${clientId}/new-loan`));
   };
 
   if (newClientMode) {
@@ -240,10 +245,8 @@ export default function NewLoanSelectClientPage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Novo cliente</h2>
           <Button variant="ghost" size="sm" onClick={() => {
-            // "Voltar" intencional descarta o rascunho e limpa o formulário
-            newClientDraft.clear();
-            setForm(emptyClientForm);
-            setNewClientWorkerId("");
+            // "Voltar" intencional descarta toda a ação atual
+            resetNewClient();
             setNewClientMode(false);
           }}>Voltar</Button>
         </div>
