@@ -72,7 +72,7 @@ export default function ClientsPage() {
   // preserva os campos se o celular reconstruir a página em segundo plano.
   const newClientDraft = useFormDraft(
     "clients-new-client",
-    { newClientForm, newClientWorkerId },
+    { form: newClientForm, newClientWorkerId },
     { enabled: open && !editOpen }
   );
   const draftRestoredRef = useRef(false);
@@ -94,6 +94,27 @@ export default function ClientsPage() {
       newClientDraft.clear();
     }
   }, [newClientDraft.restore]);
+
+  /** Limpa toda a ação de novo cadastro (formulário, trabalhador, anexos, fila e rascunho). */
+  const resetNewClient = () => {
+    newClientDraft.clear();
+    setNewClientForm(emptyClientForm);
+    setNewClientWorkerId("");
+    setPendingAttachments([]);
+    setRetryQueue(null);
+    setOpen(false);
+  };
+  /** Abre um cadastro novo totalmente limpo. */
+  const openNewClient = () => {
+    newClientDraft.clear();
+    setNewClientForm(emptyClientForm);
+    setNewClientWorkerId(isAdmin && selectedWorkerId ? selectedWorkerId : "");
+    setPendingAttachments([]);
+    setRetryQueue(null);
+    setOpen(true);
+  };
+  const cancelNewClient = resetNewClient;
+
 
   const fetchClients = async () => {
     const { data } = await supabase.from("clients").select("*").is("archived_at", null).order("client_code");
@@ -195,9 +216,7 @@ export default function ClientsPage() {
       }
       if (res.ok.length > 0) toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
     }
-    newClientDraft.clear();
-    setNewClientForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
-    setPendingAttachments([]); setRetryQueue(null);
+    resetNewClient();
     fetchClients();
   };
 
@@ -211,9 +230,7 @@ export default function ClientsPage() {
       return;
     }
     toast.success(`${res.ok.length} arquivo(s) enviado(s)`);
-    newClientDraft.clear();
-    setNewClientForm(emptyClientForm); setNewClientWorkerId(""); setOpen(false);
-    setPendingAttachments([]); setRetryQueue(null);
+    resetNewClient();
     fetchClients();
   };
 
@@ -373,19 +390,8 @@ export default function ClientsPage() {
   return (
     <div className="mx-auto max-w-lg p-4">
       <div className="mb-4 flex items-center justify-end">
-        <Dialog open={open} onOpenChange={(o) => {
-          setOpen(o);
-          if (o && isAdmin && !newClientWorkerId && selectedWorkerId) setNewClientWorkerId(selectedWorkerId);
-          if (!o) {
-            // fechamento/cancelamento intencional descarta o rascunho e limpa o formulário
-            newClientDraft.clear();
-            setNewClientForm(emptyClientForm);
-            setNewClientWorkerId("");
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Novo</Button>
-          </DialogTrigger>
+        <Dialog open={open} onOpenChange={(o) => { if (o) openNewClient(); else cancelNewClient(); }}>
+          <Button size="sm" onClick={openNewClient}><Plus className="mr-1 h-4 w-4" /> Novo</Button>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Novo Cliente</DialogTitle></DialogHeader>
             <ClientForm
@@ -605,7 +611,7 @@ export default function ClientsPage() {
       )}
 
 
-      <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingClient(null); }}>
+      <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) { setEditingClient(null); setEditClientForm(emptyClientForm); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Cliente</DialogTitle></DialogHeader>
           <ClientForm
