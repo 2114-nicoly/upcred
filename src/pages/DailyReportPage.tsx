@@ -790,7 +790,7 @@ export default function DailyReportPage({
           label="Total recebido"
           value={formatCurrency(totals.receivedTotal)}
           tone="positive"
-          sub={`Inclui ${formatCurrency(123.45)} em multas`}
+          sub={totals.penalties > 0 ? `Inclui ${formatCurrency(totals.penalties)} em multas` : undefined}
         />
         <StatCard highlight label="Total emprestado" value={formatCurrency(totals.lent)} tone="negative" />
         <StatCard
