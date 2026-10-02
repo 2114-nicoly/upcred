@@ -14,7 +14,7 @@ import {
   Building2, Users,
 } from "lucide-react";
 import {
-  format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO,
+  format, subDays, startOfWeek, endOfWeek, startOfMonth, parseISO,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ import {
   loadFrozenReportPeriod, emptyFrozenPeriod, type FrozenReportPeriod,
 } from "@/lib/frozen-report";
 import { RecordSection } from "@/components/reports/RecordSection";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { computeCoreTotals } from "@/lib/finance-totals";
 import {
   loadScopeWorkers, loadWorkersStats, consolidate, groupByCompany,
@@ -88,8 +89,13 @@ function computeRange(mode: PeriodMode, cs: string, ce: string) {
   if (mode === "today") { s = today; e = today; }
   else if (mode === "yesterday") { s = subDays(today, 1); e = subDays(today, 1); }
   else if (mode === "week") { s = startOfWeek(today, { weekStartsOn: 1 }); e = endOfWeek(today, { weekStartsOn: 1 }); }
-  else if (mode === "month") { s = startOfMonth(today); e = endOfMonth(today); }
-  else { s = parseISO(cs + "T12:00:00"); e = parseISO(ce + "T12:00:00"); }
+  else if (mode === "month") { s = startOfMonth(today); e = today; }
+  else {
+    s = parseISO(cs + "T12:00:00");
+    e = parseISO(ce + "T12:00:00");
+    // Personalizado nunca aceita início maior que fim.
+    if (s > e) e = s;
+  }
   const startDate = format(s, "yyyy-MM-dd");
   const endDate = format(e, "yyyy-MM-dd");
   const label = startDate === endDate
@@ -116,6 +122,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [financialDetailOpen, setFinancialDetailOpen] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [adminName, setAdminName] = useState<string>("");
   const { adminId, isSuperAdmin } = useAuth();
@@ -600,11 +607,29 @@ export default function ReportsPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs">Início</Label>
-                <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                <Input
+                  type="date"
+                  value={customStart}
+                  max={customEnd}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCustomStart(v);
+                    if (v && customEnd && v > customEnd) setCustomEnd(v);
+                  }}
+                />
               </div>
               <div>
                 <Label className="text-xs">Fim</Label>
-                <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                <Input
+                  type="date"
+                  value={customEnd}
+                  min={customStart}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCustomEnd(v);
+                    if (v && customStart && v < customStart) setCustomStart(v);
+                  }}
+                />
               </div>
             </div>
           )}
@@ -697,6 +722,7 @@ export default function ReportsPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
               {globalMode ? "Resumo geral do sistema" : REPORT_SECTIONS.resumo}
             </p>
+            {globalMode ? (
             <ReportKpiGrid>
               {globalMode && (
                 <>
@@ -741,7 +767,77 @@ export default function ReportsPage() {
                 tone={summary.atrasados > 0 ? "negative" : "neutral"}
               />
             </ReportKpiGrid>
+            ) : (
+              <>
+                <ReportKpiGrid>
+                  <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido" value={formatCurrency(summary.recebidoTotal)} tone="positive" />
+                  <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-warning" />} label="Total emprestado" value={formatCurrency(summary.emprestado)} />
+                  <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa disponível da equipe" value={formatCurrency(summary.caixaDisponivel)} />
+                  <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Trabalhadores ativos" value={String(workers.length)} />
+                </ReportKpiGrid>
 
+                <Collapsible open={financialDetailOpen} onOpenChange={setFinancialDetailOpen} className="mt-3">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full">
+                      {financialDetailOpen
+                        ? <ChevronDown className="h-4 w-4 mr-1" />
+                        : <ChevronRight className="h-4 w-4 mr-1" />}
+                      Ver detalhamento financeiro
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Recebimentos</p>
+                      <ReportKpiGrid>
+                        <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Recebido principal" value={formatCurrency(summary.recebido)} tone="positive" />
+                        <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Multas recebidas" value={formatCurrency(summary.multas)} tone="positive" />
+                        <ReportKpiCard icon={<TrendingUp className="h-4 w-4 text-success" />} label="Total recebido (com multas)" value={formatCurrency(summary.recebidoTotal)} tone="positive" />
+                      </ReportKpiGrid>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Caixa</p>
+                      <ReportKpiGrid>
+                        <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Caixa inicial da equipe" value={formatCurrency(summary.caixaInicial)} />
+                        <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Caixa final da equipe" value={formatCurrency(summary.caixaFinal)} />
+                        <ReportKpiCard icon={<ArrowUpCircle className="h-4 w-4 text-success" />} label="Entradas" value={formatCurrency(summary.entradas)} tone="positive" />
+                        <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Saídas" value={formatCurrency(summary.saidas)} tone="negative" />
+                        <ReportKpiCard icon={<ArrowDownCircle className="h-4 w-4 text-destructive" />} label="Despesas" value={formatCurrency(summary.despesas)} tone="negative" />
+                        <ReportKpiCard icon={<RefreshCw className="h-4 w-4 text-muted-foreground" />} label="Estornos" value={formatCurrency(summary.estornos)} />
+                        <ReportKpiCard
+                          icon={summary.diferenca >= 0 ? <TrendingUp className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-destructive" />}
+                          label="Diferença total de caixa"
+                          value={formatCurrency(summary.diferenca)}
+                          tone={summary.diferenca >= 0 ? "positive" : "negative"}
+                        />
+                      </ReportKpiGrid>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Carteira</p>
+                      <ReportKpiGrid>
+                        <ReportKpiCard icon={<Target className="h-4 w-4 text-primary" />} label="Previsto no período" value={formatCurrency(summary.previsto)} />
+                        <ReportKpiCard icon={<AlertTriangle className="h-4 w-4 text-warning" />} label="Falta receber (previsto)" value={formatCurrency(summary.faltaReceber)} tone={summary.faltaReceber > 0 ? "warning" : "neutral"} />
+                        <ReportKpiCard icon={<AlertTriangle className="h-4 w-4 text-destructive" />} label="Valor atrasado" value={formatCurrency(summary.valorAtrasado)} tone={summary.valorAtrasado > 0 ? "negative" : "neutral"} />
+                        <ReportKpiCard icon={<Wallet className="h-4 w-4 text-primary" />} label="Saldo emprestado na rua" value={formatCurrency(summary.saldoNaRua)} />
+                        <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Clientes ativos" value={String(summary.clientesAtivos)} />
+                        <ReportKpiCard icon={<Users className="h-4 w-4 text-primary" />} label="Empréstimos ativos" value={String(summary.emprestimosAtivos)} />
+                        <ReportKpiCard
+                          icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
+                          label="Clientes atrasados"
+                          value={String(summary.atrasados)}
+                          tone={summary.atrasados > 0 ? "negative" : "neutral"}
+                        />
+                        <ReportKpiCard
+                          icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+                          label="Clientes pendentes de registro"
+                          value={String(pendentesTotal)}
+                          tone={pendentesTotal > 0 ? "warning" : "neutral"}
+                        />
+                      </ReportKpiGrid>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </>
+            )}
           </div>
 
           {/* Comparação entre empresas (SuperAdmin — todas as empresas) */}
@@ -823,18 +919,8 @@ export default function ReportsPage() {
                           }`}>{r.statusLabel}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1">
-                          <span>Cx. disponível: <b className="text-foreground">{formatCurrency(r.totals.caixaDisponivel)}</b></span>
-                          <span>Cx. inicial: <b className="text-foreground">{formatCurrency(r.totals.caixaInicial)}</b></span>
-                          <span>Cx. final: <b className="text-foreground">{formatCurrency(r.totals.caixaFinal)}</b></span>
                           <span>Recebido: <b className="text-success">{formatCurrency(r.totals.recebido)}</b></span>
-                          <span>Multas: <b className="text-success">{formatCurrency(r.totals.multas)}</b></span>
-                          <span>Emprestado: <b className="text-foreground">{formatCurrency(r.totals.emprestado)}</b></span>
-                          <span>Despesas: <b className="text-destructive">{formatCurrency(r.totals.despesas)}</b></span>
-                          <span>
-                            Diferença: <b className={r.totals.diferenca >= 0 ? "text-success" : "text-destructive"}>
-                              {formatCurrency(r.totals.diferenca)}
-                            </b>
-                          </span>
+                          <span>Cx. disponível: <b className="text-foreground">{formatCurrency(r.totals.caixaDisponivel)}</b></span>
                           <span>Pendentes: <b className="text-warning">{frozen.pendentesByWorker[r.worker.id] || 0}</b></span>
                           <span>Atrasados: <b className="text-destructive">{r.totals.atrasados}</b></span>
                         </div>
