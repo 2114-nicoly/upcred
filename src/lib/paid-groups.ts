@@ -62,6 +62,11 @@ export type PaidGroup = {
   progressDeltaFormatted: string | null;
   installmentsAdvanced: number | null;
   installmentIds: string[];
+  /** "normal" (pagamento comum) | "regular_and_penalty" | "penalty_only". */
+  paymentMode?: "normal" | "regular_and_penalty" | "penalty_only";
+  operationId?: string | null;
+  regularAmount?: number | null;
+  penaltyAmount?: number | null;
 };
 
 export type ScopeFilter = { workerId?: string | null; adminId?: string | null };
@@ -105,7 +110,9 @@ export function buildPaidGroupsFromFrozenEvents(
 
   const validEvents = (events || []).filter((ev) => {
     if (!ev) return false;
-    if (ev.event_type !== "pagamento") return false;
+    if (ev.event_type !== "pagamento" && ev.event_type !== "recebimento_multa") return false;
+    // Multa só vira card quando é "somente multa" da Rota (parcela + multa é agrupada no pagamento).
+    if (ev.event_type === "recebimento_multa" && (ev.metadata as any)?.payment_mode !== "penalty_only") return false;
     if (ev.reversed_at) return false;
     if (opts.cashDate && ev.cash_date !== opts.cashDate) return false;
     if (!inScope(ev, scope)) return false;
@@ -118,6 +125,32 @@ export function buildPaidGroupsFromFrozenEvents(
 
   for (const ev of sorted) {
     const md = (ev.metadata || {}) as Record<string, any>;
+    if (ev.event_type === "recebimento_multa") {
+      const movementId = (md.cash_movement_id as string) || ev.cash_movement_id || "";
+      if (movementId) seenMovementIds.add(movementId);
+      const penalty = numOrNull(md.penalty_amount) ?? num(ev.amount_in);
+      const rb = numOrNull(md.remaining_balance_before);
+      groups.push({
+        eventId: ev.id, movementId,
+        clientName: (md.client_name as string) || "Cliente",
+        clientId: (md.client_id as string) || ev.client_id || "",
+        loanId: (md.loan_id as string) || ev.loan_id || "",
+        totalPaid: numOrNull(md.total_received) ?? penalty,
+        createdAt: ev.created_at,
+        cashDate: (md.cash_date as string) || ev.cash_date,
+        hasFrozenProgress: false,
+        instAmount: null, totalAmount: null, installmentCount: null,
+        paidBefore: null, paidAfter: null,
+        remainingBefore: rb, remainingAfter: numOrNull(md.remaining_balance_after) ?? rb,
+        progressBeforeFormatted: null, progressAfterFormatted: null, progressDeltaFormatted: null,
+        installmentsAdvanced: null, installmentIds: [],
+        paymentMode: "penalty_only",
+        operationId: (md.operation_id as string) || null,
+        regularAmount: 0,
+        penaltyAmount: penalty,
+      });
+      continue;
+    }
     const movementId = (md.cash_movement_id as string) || ev.cash_movement_id || "";
     if (movementId) seenMovementIds.add(movementId);
 
@@ -169,6 +202,15 @@ export function buildPaidGroupsFromFrozenEvents(
       installmentIds: (affected ?? [])
         .map((a: any) => a?.installment_id)
         .filter((id: any): id is string => typeof id === "string"),
+      ...(md.payment_mode === "regular_and_penalty" && md.operation_id
+        ? {
+            paymentMode: "regular_and_penalty" as const,
+            operationId: md.operation_id as string,
+            regularAmount: numOrNull(md.regular_amount) ?? paymentAmount ?? num(ev.amount_in),
+            penaltyAmount: numOrNull(md.penalty_amount) ?? 0,
+            totalPaid: numOrNull(md.total_received) ?? (paymentAmount ?? num(ev.amount_in)),
+          }
+        : { paymentMode: "normal" as const, operationId: null }),
     });
   }
 
@@ -206,6 +248,22 @@ export function buildPaidGroupsFromFrozenEvents(
   return groups.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
+/**
+ * Empréstimos que já receberam ação nesta data e devem sair de Pendentes:
+ * pagamentos e "somente multa" da Rota (recebimento_multa com payment_mode=penalty_only).
+ * Os eventos já vêm filtrados pela data — no dia seguinte o cliente volta normalmente.
+ */
+export function collectHandledLoanIds(events: FrozenPaymentEvent[], cashDate?: string): Set<string> {
+  const ids = new Set<string>();
+  for (const ev of events || []) {
+    if (!ev?.loan_id || ev.reversed_at) continue;
+    if (cashDate && ev.cash_date !== cashDate) continue;
+    if (ev.event_type === "pagamento") ids.add(ev.loan_id);
+    else if (ev.event_type === "recebimento_multa" && (ev.metadata as any)?.payment_mode === "penalty_only") ids.add(ev.loan_id);
+  }
+  return ids;
+}
+
 /** Normaliza grupos vindos do snapshot (dias fechados) para o formato de exibição. */
 export function normalizeSnapshotPaidGroups(raw: any[]): PaidGroup[] {
   return (raw || []).map((g: any) => {
@@ -233,6 +291,10 @@ export function normalizeSnapshotPaidGroups(raw: any[]): PaidGroup[] {
       progressDeltaFormatted: hasFrozenProgress ? (g?.progressDeltaFormatted ?? null) : null,
       installmentsAdvanced: numOrNull(g?.installmentsAdvanced),
       installmentIds: Array.isArray(g?.installmentIds) ? g.installmentIds : [],
+      paymentMode: g?.paymentMode ?? "normal",
+      operationId: g?.operationId ?? null,
+      regularAmount: numOrNull(g?.regularAmount),
+      penaltyAmount: numOrNull(g?.penaltyAmount),
     } as PaidGroup;
   });
 }
