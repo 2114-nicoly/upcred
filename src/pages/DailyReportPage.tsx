@@ -522,59 +522,61 @@ export default function DailyReportPage({
     };
 
 
-    // ===== 1. Resumo financeiro (mesmos cards da tela) =====
-    writeBlockTitle("1. Resumo Financeiro");
+    // ===== Resumo do período: somente os números principais =====
+    writeBlockTitle("Resumo do período");
     addTable(
       null,
       ["Indicador", "Valor"],
       [
-        [isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial", formatCurrency(periodOpening)],
-        [
-          isMultiDay
-            ? "Caixa final (último dia)"
-            : cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)",
-          formatCurrency(periodFinal),
-        ],
+        ["Total recebido (com multas)", formatCurrency(totals.receivedTotal)],
+        ["Multas recebidas", formatCurrency(totals.penalties)],
+        ["Total emprestado", formatCurrency(totals.lent)],
+        ["Caixa final do período", formatCurrency(periodFinal)],
         ...(currentAvailableCash != null
           ? [["Caixa disponível atual", formatCurrency(currentAvailableCash)] as string[]]
           : []),
+      ],
+      { rightCols: [1] }
+    );
+
+    // ===== Como foi o período: somente as contagens =====
+    writeBlockTitle("Como foi o período");
+    addTable(
+      null,
+      ["Indicador", "Quantidade"],
+      [
+        ["Pagamentos", String(recordGroups.pagamentos.length)],
+        ["Pagamentos parciais", String(recordGroups.pagamentosParciais.length)],
+        ["Novos empréstimos", String(recordGroups.novosEmprestimos.length)],
+        ["Renovações", String(recordGroups.renovacoes.length)],
+        ["Renegociações", String(recordGroups.renegociacoes.length)],
+        ["Registros de não pagamento", String(recordGroups.naoPagos.length)],
+        ["Pendentes", String(pendentesPeriodo.length)],
+        ["Atrasados", String(atrasadosPeriodo.length)],
+      ],
+      { rightCols: [1] }
+    );
+
+    // ===== Detalhamento financeiro: valores que não estão no resumo =====
+    writeBlockTitle("Detalhamento financeiro");
+    addTable(
+      null,
+      ["Indicador", "Valor"],
+      [
+        ["Caixa inicial", formatCurrency(periodOpening)],
         ["Recebido principal", formatCurrency(totals.payments)],
-        ["Multas recebidas", formatCurrency(totals.penalties)],
-        ["Total recebido (com multas)", formatCurrency(totals.receivedTotal)],
-        ["Total emprestado", formatCurrency(totals.lent)],
         ["Entradas", formatCurrency(totals.manualIn)],
         ["Saídas", formatCurrency(totals.manualOut)],
         ["Despesas", formatCurrency(totals.expenses)],
         ["Estornos", `${formatCurrency(estornosTotal)} (${groups.estornos.length})`],
         ["Diferença de caixa", formatCurrency(periodDiffValue)],
-      ],
-      { rightCols: [1] }
-    );
-
-    // ===== 2. Indicadores operacionais =====
-    writeBlockTitle("2. Indicadores Operacionais");
-    addTable(
-      null,
-      ["Indicador", "Quantidade"],
-      [
-        ["Pagamentos registrados", String(recordGroups.pagamentos.length)],
-        ["Pagamentos parciais", String(recordGroups.pagamentosParciais.length)],
-        ["Novos empréstimos", String(recordGroups.novosEmprestimos.length)],
-        ["Renovações", String(recordGroups.renovacoes.length)],
-        ["Renegociações", String(recordGroups.renegociacoes.length)],
-        ["Clientes não pagos", String(recordGroups.naoPagos.length)],
-        ["Clientes pendentes de registro", String(pendentesPeriodo.length)],
-        ["Clientes atrasados", String(atrasadosPeriodo.length)],
-        ["Despesas", String(recordGroups.despesas.length)],
-        ["Entradas e saídas", String(recordGroups.outras.length)],
-        ["Estornos", String(recordGroups.estornos.length)],
-        ["Total de registros", String(events.length)],
-
+        ["Caixa final", formatCurrency(periodFinal)],
       ],
       { rightCols: [1] }
     );
 
     // ===== 3. Detalhamento =====
+    ensureSpace(60); // evita título sozinho no fim da página
     writeBlockTitle("3. Detalhamento");
 
     if (events.length === 0 && pendentesPeriodo.length === 0 && atrasadosPeriodo.length === 0) {
@@ -608,27 +610,6 @@ export default function DailyReportPage({
       writeRecordGroups(recordGroups, frozen.pendentesByDate[endDate] || [], atrasadosPeriodo);
     }
 
-
-    // ===== 4. Totais finais =====
-    writeBlockTitle("4. Totais Finais");
-    addTable(
-      null,
-      ["Total", "Valor"],
-      [
-        ["Recebido principal no período", formatCurrency(totals.payments)],
-        ["Multas recebidas no período", formatCurrency(totals.penalties)],
-        ["Total recebido (com multas)", formatCurrency(totals.receivedTotal)],
-        ["Emprestado no período", formatCurrency(totals.lent)],
-        ["Entradas do período", formatCurrency(totals.totalIn)],
-        ["Saídas do período", formatCurrency(totals.totalOut)],
-        ["Saldo do período (entradas - saídas)", formatCurrency(totals.balance)],
-        ["Caixa final do período", formatCurrency(periodFinal)],
-        ...(currentAvailableCash != null
-          ? [["Caixa disponível atual", formatCurrency(currentAvailableCash)] as string[]]
-          : []),
-      ],
-      { rightCols: [1] }
-    );
 
     // Assinaturas
     ensureSpace(35);
