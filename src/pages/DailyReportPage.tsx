@@ -121,8 +121,8 @@ export default function DailyReportPage({
   const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  // Demais indicadores ficam recolhidos: a primeira visão mostra só os destaques.
-  const [moreOpen, setMoreOpen] = useState(false);
+  // Detalhamento financeiro fica recolhido: a primeira visão mostra só os destaques.
+  const [detailOpen, setDetailOpen] = useState(false);
 
 
 
@@ -804,62 +804,78 @@ export default function DailyReportPage({
         )}
       </div>
 
-      {/* Demais indicadores do período — preservados, fora da primeira visão */}
+      {/* Detalhamento financeiro — preservado, recolhido por padrão */}
       <Card>
-        <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+        <Collapsible open={detailOpen} onOpenChange={setDetailOpen}>
           <CollapsibleTrigger className="w-full">
             <div className="flex items-center gap-2 p-3 text-left">
-              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${detailOpen ? "rotate-180" : ""}`} />
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">Outros indicadores do período</p>
+                <p className="text-sm font-medium truncate">Ver detalhamento financeiro</p>
                 <p className="text-[11px] text-muted-foreground truncate">
-                  Caixa inicial e final, recebimentos, entradas, saídas, despesas, estornos e diferença
+                  Recebimentos, caixa, despesas, estornos e diferença
                 </p>
               </div>
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="border-t p-3 space-y-3">
+            <div className="border-t p-3 space-y-4">
               {isMultiDay && (
                 <p className="text-xs font-semibold text-muted-foreground uppercase">Resumo total do período</p>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <StatCard label={isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial"} value={formatCurrency(periodOpening)} />
-                <StatCard
-                  label={isMultiDay ? "Caixa final (último dia)" : (cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)")}
-                  value={formatCurrency(periodFinal)}
-                />
-                <StatCard label="Recebido principal" value={formatCurrency(totals.payments)} tone="positive" />
-                <StatCard label="Multas recebidas" value={formatCurrency(totals.penalties)} tone="positive" />
-                <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
-                <StatCard label="Saídas" value={formatCurrency(totals.manualOut)} tone="negative" />
-                <StatCard label="Despesas" value={formatCurrency(totals.expenses)} tone="negative" />
-                <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
-                <StatCard
-                  label="Diferença de caixa"
-                  value={formatCurrency(periodDiffValue)}
-                  tone={periodDiffValue === 0 ? undefined : periodDiffValue > 0 ? "positive" : "negative"}
-                  sub={isMultiDay ? "soma dos dias fechados" : (cashSummary?.counted == null ? "aguardando fechamento" : undefined)}
-                />
+
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Recebimentos</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCard label="Recebido principal" value={formatCurrency(totals.payments)} tone="positive" />
+                  <StatCard label="Multas recebidas" value={formatCurrency(totals.penalties)} tone="positive" />
+                  <StatCard label="Total recebido" value={formatCurrency(totals.receivedTotal)} tone="positive" />
+                </div>
               </div>
 
-              {/* Contagens do período */}
-              {!loading && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
-                  <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
-                  <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
-                  <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
-                  <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
-                  <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
-                  <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
-                  <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Caixa</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCard label={isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial"} value={formatCurrency(periodOpening)} />
+                  <StatCard
+                    label={isMultiDay ? "Caixa final (último dia)" : (cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)")}
+                    value={formatCurrency(periodFinal)}
+                  />
+                  <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
+                  <StatCard label="Saídas" value={formatCurrency(totals.manualOut)} tone="negative" />
+                  <StatCard label="Despesas" value={formatCurrency(totals.expenses)} tone="negative" />
+                  <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
+                  <StatCard
+                    label="Diferença de caixa"
+                    value={formatCurrency(periodDiffValue)}
+                    tone={periodDiffValue === 0 ? undefined : periodDiffValue > 0 ? "positive" : "negative"}
+                    sub={isMultiDay ? "soma dos dias fechados" : (cashSummary?.counted == null ? "aguardando fechamento" : undefined)}
+                  />
                 </div>
-              )}
+              </div>
             </div>
           </CollapsibleContent>
         </Collapsible>
       </Card>
+
+      {/* Contagens operacionais do período — mesma informação, apresentação mais enxuta */}
+      {!loading && (
+        <Card>
+          <CardContent className="p-0">
+            <p className="border-b px-3 py-2 text-sm font-medium">Como foi o período</p>
+            <div className="divide-y divide-border/60">
+              <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
+              <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
+              <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
+              <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
+              <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
+              <CountCard label="Registros de não pagamento" value={recordGroups.naoPagos.length} />
+              <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
+              <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {!isMultiDay && cashStatus !== "closed" && (
         <p className="text-xs text-muted-foreground">Caixa ainda aberto — valores do dia podem mudar.</p>
