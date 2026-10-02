@@ -576,7 +576,7 @@ export default function DailyReportPage({
     );
 
     // ===== 3. Detalhamento =====
-    ensureSpace(34); // evita título sozinho no fim da página
+    ensureSpace(60); // evita título sozinho no fim da página
     writeBlockTitle("3. Detalhamento");
 
     if (events.length === 0 && pendentesPeriodo.length === 0 && atrasadosPeriodo.length === 0) {
