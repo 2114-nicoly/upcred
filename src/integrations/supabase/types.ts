@@ -2473,6 +2473,10 @@ export type Database = {
         Args: { p_email: string; p_login: string; p_nome: string }
         Returns: string
       }
+      register_route_batch_payments_tx: {
+        Args: { p_cash_date: string; p_installment_ids: string[] }
+        Returns: Json
+      }
       reject_cash_reopen_request: {
         Args: { p_note?: string; p_request_id: string }
         Returns: string
