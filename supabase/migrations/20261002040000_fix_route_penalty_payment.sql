@@ -2,6 +2,12 @@
 -- Mesmas assinaturas e permissões. Idempotência por operation_id, conferência
 -- da parcela agregada de multa com penalties, snapshot exato para estorno.
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_daily_events_penalty_operation_id
+  ON public.daily_events ((metadata->>'operation_id'))
+  WHERE event_type = 'recebimento_multa'
+    AND reverses_event_id IS NULL
+    AND metadata ? 'operation_id';
+
 CREATE OR REPLACE FUNCTION public.register_route_payment_with_penalty_tx(
   p_installment_id uuid,
   p_cash_date date,

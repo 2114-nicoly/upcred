@@ -48,7 +48,7 @@ describe("register_route_payment_with_penalty_tx", () => {
 
   it("operation_id duplicado é bloqueado (lock + verificação + índice único)", () => {
     expect(reg).toContain("pg_advisory_xact_lock");
-    expect(reg).toContain("operação duplicada");
+    expect(reg).toContain("já foi usado com dados diferentes");
     expect(sql).toMatch(/CREATE UNIQUE INDEX[\s\S]*operation_id/);
   });
 
