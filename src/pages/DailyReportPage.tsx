@@ -121,6 +121,8 @@ export default function DailyReportPage({
   const [details, setDetails] = useState<ReportDetailsData>(() => emptyReportDetails());
   const [loading, setLoading] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  // Demais indicadores ficam recolhidos: a primeira visão mostra só os destaques.
+  const [moreOpen, setMoreOpen] = useState(false);
 
 
 
@@ -781,34 +783,69 @@ export default function DailyReportPage({
         </CardContent>
       </Card>
 
-      {/* Indicadores — resumo do período selecionado */}
-      {isMultiDay && (
-        <p className="text-xs font-semibold text-muted-foreground uppercase">Resumo total do período</p>
-      )}
+      {/* Destaques — primeira visão do relatório: somente os 4 números principais */}
       <div className="grid grid-cols-2 gap-2">
+        <StatCard
+          highlight
+          label="Total recebido"
+          value={formatCurrency(totals.receivedTotal)}
+          tone="positive"
+          sub={totals.penalties > 0 ? `Inclui ${formatCurrency(totals.penalties)} em multas` : undefined}
+        />
+        <StatCard highlight label="Total emprestado" value={formatCurrency(totals.lent)} tone="negative" />
+        <StatCard
+          highlight
+          label="Pagamentos"
+          value={String(recordGroups.pagamentos.length)}
+          sub="registros no período"
+        />
         {currentAvailableCash != null && (
-          <StatCard label="Caixa disponível atual" value={formatCurrency(currentAvailableCash)} />
+          <StatCard highlight label="Caixa disponível agora" value={formatCurrency(currentAvailableCash)} />
         )}
-        <StatCard label={isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial"} value={formatCurrency(periodOpening)} />
-        <StatCard
-          label={isMultiDay ? "Caixa final (último dia)" : (cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)")}
-          value={formatCurrency(periodFinal)}
-        />
-        <StatCard label="Recebido principal" value={formatCurrency(totals.payments)} tone="positive" />
-        <StatCard label="Multas recebidas" value={formatCurrency(totals.penalties)} tone="positive" />
-        <StatCard label="Total recebido (com multas)" value={formatCurrency(totals.receivedTotal)} tone="positive" />
-        <StatCard label="Total emprestado" value={formatCurrency(totals.lent)} tone="negative" />
-        <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
-        <StatCard label="Saídas" value={formatCurrency(totals.manualOut)} tone="negative" />
-        <StatCard label="Despesas" value={formatCurrency(totals.expenses)} tone="negative" />
-        <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
-        <StatCard
-          label="Diferença de caixa"
-          value={formatCurrency(periodDiffValue)}
-          tone={periodDiffValue === 0 ? undefined : periodDiffValue > 0 ? "positive" : "negative"}
-          sub={isMultiDay ? "soma dos dias fechados" : (cashSummary?.counted == null ? "aguardando fechamento" : undefined)}
-        />
       </div>
+
+      {/* Demais indicadores do período — preservados, fora da primeira visão */}
+      <Card>
+        <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+          <CollapsibleTrigger className="w-full">
+            <div className="flex items-center gap-2 p-3 text-left">
+              <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">Outros indicadores do período</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  Caixa inicial e final, recebimentos, entradas, saídas, despesas, estornos e diferença
+                </p>
+              </div>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t p-3 space-y-3">
+              {isMultiDay && (
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Resumo total do período</p>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard label={isMultiDay ? "Caixa inicial (1º dia)" : "Caixa inicial"} value={formatCurrency(periodOpening)} />
+                <StatCard
+                  label={isMultiDay ? "Caixa final (último dia)" : (cashSummary?.counted != null ? "Caixa final (fechado)" : "Caixa final (previsto)")}
+                  value={formatCurrency(periodFinal)}
+                />
+                <StatCard label="Recebido principal" value={formatCurrency(totals.payments)} tone="positive" />
+                <StatCard label="Multas recebidas" value={formatCurrency(totals.penalties)} tone="positive" />
+                <StatCard label="Entradas" value={formatCurrency(totals.manualIn)} tone="positive" />
+                <StatCard label="Saídas" value={formatCurrency(totals.manualOut)} tone="negative" />
+                <StatCard label="Despesas" value={formatCurrency(totals.expenses)} tone="negative" />
+                <StatCard label="Estornos" value={formatCurrency(estornosTotal)} sub={`${groups.estornos.length} registro(s)`} />
+                <StatCard
+                  label="Diferença de caixa"
+                  value={formatCurrency(periodDiffValue)}
+                  tone={periodDiffValue === 0 ? undefined : periodDiffValue > 0 ? "positive" : "negative"}
+                  sub={isMultiDay ? "soma dos dias fechados" : (cashSummary?.counted == null ? "aguardando fechamento" : undefined)}
+                />
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
 
       {!isMultiDay && cashStatus !== "closed" && (
         <p className="text-xs text-muted-foreground">Caixa ainda aberto — valores do dia podem mudar.</p>
@@ -1037,12 +1074,12 @@ function DaySection({
 }
 
 
-function StatCard({ label, value, tone, sub }: { label: string; value: string; tone?: "positive" | "negative"; sub?: string }) {
+function StatCard({ label, value, tone, sub, highlight }: { label: string; value: string; tone?: "positive" | "negative"; sub?: string; highlight?: boolean }) {
   return (
-    <Card>
+    <Card className={highlight ? "border-primary/30" : undefined}>
       <CardContent className="p-3">
-        <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
-        <p className={`font-bold text-sm mt-1 break-words ${tone === "positive" ? "text-success" : tone === "negative" ? "text-destructive" : ""}`}>{value}</p>
+        <p className={`text-[11px] text-muted-foreground leading-tight ${highlight ? "font-medium" : ""}`}>{label}</p>
+        <p className={`font-bold mt-1 break-words tabular-nums ${highlight ? "text-lg" : "text-sm"} ${tone === "positive" ? "text-success" : tone === "negative" ? "text-destructive" : ""}`}>{value}</p>
         {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
       </CardContent>
     </Card>
