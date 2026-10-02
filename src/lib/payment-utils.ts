@@ -216,6 +216,55 @@ export async function registerPayment(params: {
 /**
  * Register a penalty payment.
  */
+export type PenaltyRow = {
+  id: string;
+  amount: number;
+  paid_amount: number;
+  paid: boolean;
+  paid_at: string | null;
+  created_at?: string;
+};
+
+/**
+ * Distribui um pagamento de multa pelas penalties ativas em ordem de criação.
+ * Rejeita (sem efeitos) se o valor exceder o pendente ou se a parcela agregada
+ * divergir do detalhamento — mesma regra usada pela Rota.
+ */
+export function planPenaltyDistribution(
+  rows: PenaltyRow[],
+  amount: number,
+  aggregatePending: number,
+  cashDate: string,
+) {
+  if (!(amount > 0)) throw new Error("Valor da multa inválido.");
+  const sorted = [...rows].sort((a, b) => String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")));
+  const pending = sorted.reduce((s, r) => s + Math.max(0, Number(r.amount) - Number(r.paid_amount)), 0);
+  const pendingR = Math.round(pending * 100) / 100;
+  if (Math.abs(pendingR - aggregatePending) > 0.01) {
+    throw new Error(
+      `Multas inconsistentes: parcela de multa com ${aggregatePending.toFixed(2)} pendente e detalhamento com ${pendingR.toFixed(2)}. Corrija antes de receber.`,
+    );
+  }
+  if (amount > pendingR + 0.005) {
+    throw new Error(`Valor maior que a multa pendente (R$ ${pendingR.toFixed(2).replace(".", ",")}).`);
+  }
+  let left = Math.round(amount * 100) / 100;
+  const paidAt = new Date(cashDate + "T12:00:00").toISOString();
+  const updates: { id: string; applied: number; paid_amount: number; paid: boolean; paid_at: string | null }[] = [];
+  for (const r of sorted) {
+    if (left <= 0.005) break;
+    const open = Math.round(Math.max(0, Number(r.amount) - Number(r.paid_amount)) * 100) / 100;
+    if (open <= 0.005) continue;
+    const applied = Math.min(open, left);
+    const newPaid = Math.round((Number(r.paid_amount) + applied) * 100) / 100;
+    const full = newPaid >= Number(r.amount) - 0.005;
+    updates.push({ id: r.id, applied, paid_amount: newPaid, paid: full, paid_at: full ? paidAt : r.paid_at });
+    left = Math.round((left - applied) * 100) / 100;
+  }
+  if (left > 0.005) throw new Error("Valor da multa não pôde ser distribuído.");
+  return { updates, pendingBefore: pendingR, pendingAfter: Math.round((pendingR - amount) * 100) / 100 };
+}
+
 export async function registerPenaltyPayment(params: {
   loanId: string;
   amount: number;
@@ -244,10 +293,23 @@ export async function registerPenaltyPayment(params: {
   const penaltyInst = penaltyInsts?.[0];
   if (!penaltyInst) throw new Error("Nenhuma multa registrada para abater");
 
+  // Saldo real das multas ativas (penalties) — fonte do detalhamento.
+  const { data: penaltyRows, error: penErr } = await supabase
+    .from("penalties")
+    .select("id, amount, paid_amount, paid, paid_at, created_at")
+    .eq("loan_id", loanId)
+    .is("cancelled_at", null)
+    .order("created_at", { ascending: true });
+  if (penErr) throw penErr;
+  const rows = (penaltyRows || []) as PenaltyRow[];
+  const aggPending = Math.max(0, Number(penaltyInst.amount) - Number(penaltyInst.paid_amount));
+  const plan = planPenaltyDistribution(rows, amount, aggPending, cashDate);
+
   const newPaid = Number(penaltyInst.paid_amount) + amount;
   const fullyPaid = newPaid >= Number(penaltyInst.amount) - 0.01;
   let movement: any = null;
   let event: any = null;
+  const appliedPenalties: PenaltyRow[] = [];
   try {
     movement = await createCashMovement({
       type: "recebimento_multa",
@@ -269,13 +331,22 @@ export async function registerPenaltyPayment(params: {
       metadata: {
         client_id: clientId, client_name: clientName, loan_id: loanId,
         penalty_paid_amount: amount,
-        penalty_balance_before: Math.max(0, Number(penaltyInst.amount) - Number(penaltyInst.paid_amount)),
+        penalty_balance_before: aggPending,
         penalty_balance_after: Math.max(0, Number(penaltyInst.amount) - Math.min(newPaid, Number(penaltyInst.amount))),
         cash_movement_id: movement?.id || null,
+        penalty_allocations: plan.updates.map((u) => ({ penalty_id: u.id, amount: u.applied })),
       },
     } as any) as any;
     if (!movement?.id || !event?.id) throw new Error("Pagamento de multa sem movimentação/evento financeiro vinculado.");
     await linkCashMovementToDailyEvent(movement.id, event.id);
+    for (const u of plan.updates) {
+      const prev = rows.find((r) => r.id === u.id)!;
+      const { error } = await supabase.from("penalties")
+        .update({ paid_amount: u.paid_amount, paid: u.paid, paid_at: u.paid_at } as any)
+        .eq("id", u.id);
+      if (error) throw error;
+      appliedPenalties.push(prev);
+    }
     await updateCashBalance({ available_cash: amount, penalty_receivable: -amount });
     const { error: instError } = await supabase.from("installments").update({
       paid_amount: Math.min(newPaid, Number(penaltyInst.amount)),
@@ -284,6 +355,11 @@ export async function registerPenaltyPayment(params: {
     }).eq("id", penaltyInst.id);
     if (instError) throw instError;
   } catch (err) {
+    for (const prev of appliedPenalties) {
+      await supabase.from("penalties")
+        .update({ paid_amount: prev.paid_amount, paid: prev.paid, paid_at: prev.paid_at } as any)
+        .eq("id", prev.id);
+    }
     if (event?.id) await supabase.from("daily_events" as any).delete().eq("id", event.id);
     if (movement?.id) await supabase.from("cash_movements").delete().eq("id", movement.id);
     await recalculateCashBalanceForLoan(loanId);
