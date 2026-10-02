@@ -2477,6 +2477,18 @@ export type Database = {
         Args: { p_cash_date: string; p_installment_ids: string[] }
         Returns: Json
       }
+      register_route_payment_with_penalty_tx: {
+        Args: {
+          p_cash_date: string
+          p_installment_id: string
+          p_mode: string
+          p_observation: string
+          p_operation_id: string
+          p_penalty_amount: number
+          p_regular_amount: number
+        }
+        Returns: Json
+      }
       reject_cash_reopen_request: {
         Args: { p_note?: string; p_request_id: string }
         Returns: string
@@ -2521,6 +2533,10 @@ export type Database = {
       }
       reverse_renewal_tx: {
         Args: { p_event_id: string; p_reason: string }
+        Returns: Json
+      }
+      reverse_route_payment_with_penalty_tx: {
+        Args: { p_operation_id: string; p_reason: string }
         Returns: Json
       }
       set_worker_active: {
