@@ -1508,23 +1508,66 @@ export default function DailyCashPage() {
                 <p className="text-sm text-muted-foreground">
                   {clientName} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
-                <PaymentAmountSelector
-                  installmentAmount={instAmount}
-                  remainingBalance={remainingBalance}
-                  state={payState}
-                  onChange={setPayState}
-                />
-                <div>
-                  <Label>Multa a cobrar hoje (R$)</Label>
-                  <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Opcional — registrado separado da parcela</p>
-                </div>
+                {(() => {
+                  const penVal = parsePenaltyInput(payPenaltyAmount) ?? 0;
+                  const onlyPenalty = penVal > 0 && payPenaltyMode === "penalty_only";
+                  const regVal = onlyPenalty ? 0 : (validatePaymentAmount(payState, instAmount, remainingBalance).amount || 0);
+                  return (
+                    <>
+                      <div className={onlyPenalty ? "opacity-40 pointer-events-none" : ""} aria-disabled={onlyPenalty}>
+                        <PaymentAmountSelector
+                          installmentAmount={instAmount}
+                          remainingBalance={remainingBalance}
+                          state={payState}
+                          onChange={setPayState}
+                          disabled={onlyPenalty}
+                        />
+                      </div>
+                      <div className="rounded-md border border-warning/50 bg-warning/10 p-2">
+                        <Label>Multa recebida (opcional)</Label>
+                        <Input type="number" inputMode="decimal" placeholder="0,00" value={payPenaltyAmount}
+                          data-testid="route-penalty-amount"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setPayPenaltyAmount(v);
+                            if (!((parsePenaltyInput(v) ?? 0) > 0)) setPayPenaltyMode(null);
+                          }} />
+                        <p className="text-[10px] text-muted-foreground mt-0.5">A multa é contabilizada separadamente e não reduz o saldo da parcela.</p>
+                      </div>
+                      {penVal > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">{PENALTY_MODE_REQUIRED_MESSAGE}</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button type="button" variant={payPenaltyMode === "regular_and_penalty" ? "default" : "outline"} onClick={() => setPayPenaltyMode("regular_and_penalty")}>Parcela + multa</Button>
+                            <Button type="button" variant={payPenaltyMode === "penalty_only" ? "default" : "outline"} onClick={() => setPayPenaltyMode("penalty_only")}>Somente multa</Button>
+                          </div>
+                          {payPenaltyMode && (
+                            <div className="rounded-md bg-muted/50 p-2 text-xs tabular-nums space-y-0.5">
+                              <div>Parcela: {formatCurrency(regVal)}</div>
+                              <div>Multa: {formatCurrency(penVal)}</div>
+                              <div className="font-semibold">Total recebido: {formatCurrency(regVal + penVal)}</div>
+                              <div>Saldo antes: {formatCurrency(remainingBalance)}</div>
+                              {onlyPenalty ? (
+                                <>
+                                  <div>Saldo sem alteração</div>
+                                  <div>Vencimento sem alteração</div>
+                                </>
+                              ) : (
+                                <div>Saldo estimado depois: {formatCurrency(Math.max(0, remainingBalance - regVal))}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <div>
                   <Label>Data do pagamento</Label>
                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                 </div>
                 <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting || ((parsePenaltyInput(payPenaltyAmount) ?? 0) > 0 && !payPenaltyMode)}>
                   {isSubmitting ? "Processando..." : "Confirmar Pagamento"}
                 </Button>
               </div>
