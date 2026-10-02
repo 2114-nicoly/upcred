@@ -604,13 +604,30 @@ export default function DailyReportPage({
         if (d.events.length === 0 && d.pendentes.length === 0) writeText("Sem movimentações neste dia.", 8);
         else writeRecordGroups(d.recordGroups, d.pendentes);
       });
+      currentDetailDate = endDate; // atrasados = situação na data de referência
       writeRecordSection("Clientes atrasados", atrasadosPeriodo);
     } else {
       if (cashSummary?.closingObs) writeText(`Obs. fechamento: ${cashSummary.closingObs}`, 8);
       if (!isMultiDay && cashStatus !== "closed") writeText("Caixa ainda aberto — valores do dia podem mudar.", 8);
+      currentDetailDate = endDate;
       writeRecordGroups(recordGroups, frozen.pendentesByDate[endDate] || [], atrasadosPeriodo);
     }
 
+
+    // ===== Detalhes completos: somente depois de todas as movimentações =====
+    if (detailEntries.length > 0) {
+      ensureSpace(60); // evita título sozinho no fim da página
+      writeBlockTitle("Detalhes completos dos lançamentos");
+      writeText("Cada lançamento é identificado por Data · Hora · Cliente · Tipo, na mesma ordem das movimentações acima.", 8);
+      detailEntries.forEach(({ date, record }) => {
+        const detailDay = format(new Date(String(date).slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR });
+        addTable(
+          `${detailDay} · ${record.time} · ${record.clientName} · ${record.title}${record.reversed ? " (estornado)" : ""}`,
+          ["Detalhe", "Informação"],
+          record.details.map((d) => [d.label, d.value]),
+        );
+      });
+    }
 
     // Assinaturas
     ensureSpace(35);
