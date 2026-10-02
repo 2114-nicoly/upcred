@@ -1102,15 +1102,13 @@ function StatCard({ label, value, tone, sub, highlight }: { label: string; value
   );
 }
 
-/** Contador simples de registros do período. */
+/** Linha de contagem de registros do período. */
 function CountCard({ label, value }: { label: string; value: number }) {
   return (
-    <Card>
-      <CardContent className="p-3">
-        <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
-        <p className="font-bold text-sm mt-1 tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="flex items-center justify-between gap-3 px-3 py-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-bold tabular-nums">{value}</span>
+    </div>
   );
 }
 
