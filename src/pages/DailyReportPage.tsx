@@ -483,7 +483,7 @@ export default function DailyReportPage({
     };
 
     // Linhas de registros, no mesmo formato das seções da tela.
-    const RECORD_HEAD = ["Hora", "Cliente", "Tipo", "Entrada", "Saída", "Resumo"];
+    const RECORD_HEAD = ["Hora", "Cliente", "Movimento", "Entrada", "Saída", "Resumo"];
     const recordLines = (list: ReportRecord[]) =>
       list.map((r) => [
         r.time,
@@ -494,7 +494,12 @@ export default function DailyReportPage({
         r.summary,
       ]);
 
-    /** Uma seção: tabela-resumo + detalhamento completo de cada registro. */
+    /** Registros com detalhes: impressos somente ao final, em "Detalhes completos dos lançamentos". */
+    const detailEntries: { date: string; record: ReportRecord }[] = [];
+    /** Dia em exibição — alternativa quando o registro não traz a data da movimentação. */
+    let currentDetailDate = endDate;
+
+    /** Tabela compacta do grupo; os detalhes de cada registro são guardados para o fim. */
     const writeRecordSection = (label: string, list: ReportRecord[]) => {
       if (!list.length) return;
       const total = list.reduce((s, r) => s + r.amountIn + r.amountOut, 0);
@@ -505,12 +510,7 @@ export default function DailyReportPage({
         { rightCols: [3, 4] }
       );
       list.forEach((r) => {
-        if (!r.details.length) return;
-        addTable(
-          `${r.time} · ${r.clientName} — ${r.title}`,
-          ["Detalhe", "Informação"],
-          r.details.map((d) => [d.label, d.value]),
-        );
+        if (r.details.length > 0) detailEntries.push({ date: r.cashDate || currentDetailDate, record: r });
       });
     };
 
@@ -575,15 +575,16 @@ export default function DailyReportPage({
       { rightCols: [1] }
     );
 
-    // ===== 3. Detalhamento =====
+    // ===== Movimentações do período: somente as tabelas compactas =====
     ensureSpace(60); // evita título sozinho no fim da página
-    writeBlockTitle("3. Detalhamento");
+    writeBlockTitle("Movimentações do período");
 
     if (events.length === 0 && pendentesPeriodo.length === 0 && atrasadosPeriodo.length === 0) {
       writeText("Não houve movimentações no período selecionado.", 10);
 
     } else if (isMultiDay) {
       days.forEach((d) => {
+        currentDetailDate = d.date; // registros deste dia recebem esta data na seção final
         const dayLabel = format(new Date(d.date + "T12:00:00"), "EEEE, dd/MM/yyyy", { locale: ptBR });
         const statusLabel = d.statusLabel;
         ensureSpace(18);
