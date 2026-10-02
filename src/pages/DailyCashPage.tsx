@@ -386,6 +386,9 @@ export default function DailyCashPage() {
   const [notPaidReason, setNotPaidReason] = useState<string>("Não encontrado");
   const [selectedInstallmentIds, setSelectedInstallmentIds] = useState<Set<string>>(new Set());
   const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
+  const [batchPayDialogOpen, setBatchPayDialogOpen] = useState(false);
+  const [batchPaying, setBatchPaying] = useState(false);
+  const batchPayLockRef = useRef(false);
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
   const [batchNotPaidReason, setBatchNotPaidReason] = useState<string>("Não encontrado");
@@ -1009,6 +1012,46 @@ export default function DailyCashPage() {
       console.error("[handleNotPaid] failed", err);
       if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao marcar como 'Não Pagou'.");
     } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Pagamento em lote: 1 parcela por cliente, valor = LEAST(parcela, saldo).
+  const batchPaySelection = pendingInstallments
+    .filter(i => selectedInstallmentIds.has(i.id))
+    .filter(canActOnRouteInstallment);
+  const batchPayTotal = batchPaySelection.reduce((s, i) => {
+    const amt = Number(i.amount) || 0;
+    const rem = Number(getInstLoan(i)?.remaining_balance ?? amt);
+    return s + Math.max(0, Math.min(amt, rem));
+  }, 0);
+
+  const handleBatchPay = async () => {
+    if (batchPayLockRef.current || isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
+    if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
+    if (batchPaySelection.length === 0) return;
+    batchPayLockRef.current = true;
+    setBatchPaying(true);
+    setIsSubmitting(true);
+    try {
+      await assertCashOpen(selectedDate, activeCashScope);
+      const { data, error } = await supabase.rpc("register_route_batch_payments_tx" as any, {
+        p_cash_date: selectedDate,
+        p_installment_ids: batchPaySelection.map(i => i.id),
+      } as any);
+      if (error) throw error;
+      const res = data as any;
+      setSelectedInstallmentIds(new Set());
+      setBatchPayDialogOpen(false);
+      toast.success(`${res?.count ?? batchPaySelection.length} pagamento(s) registrado(s): ${formatCurrency(Number(res?.total ?? 0))}`);
+      await fetchData({ silent: true });
+    } catch (err: any) {
+      console.error("[handleBatchPay] failed", err);
+      if (!reportFinancialError(err)) toast.error(err?.message || "Erro no pagamento em lote. Nada foi registrado.");
+    } finally {
+      batchPayLockRef.current = false;
+      setBatchPaying(false);
       setIsSubmitting(false);
     }
   };
@@ -2089,10 +2132,32 @@ export default function DailyCashPage() {
       {selectedInstallmentIds.size > 0 && !isClosed && (
         <div className="fixed bottom-20 left-0 right-0 z-40 flex items-center justify-center gap-2 px-4">
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
+            <Dialog open={batchPayDialogOpen} onOpenChange={(o) => { if (!batchPaying) setBatchPayDialogOpen(o); }}>
+              <DialogTrigger asChild>
+                <Button type="button" size="sm" className="flex-1 bg-success text-success-foreground hover:bg-success/90" disabled={batchPaying}>
+                  <CheckCircle className="mr-1.5 h-4 w-4" /> Pagou ({selectedInstallmentIds.size})
+                </Button>
+              </DialogTrigger>
+              <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                <DialogHeader><DialogTitle>Registrar pagamento em lote</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Será registrada <strong>1 parcela</strong> de cada cliente selecionado (sem multa).
+                  </p>
+                  <div className="rounded-lg border p-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>Clientes</span><strong>{batchPaySelection.length}</strong></div>
+                    <div className="flex justify-between"><span>Valor total</span><strong>{formatCurrency(batchPayTotal)}</strong></div>
+                  </div>
+                  <Button onClick={handleBatchPay} className="w-full bg-success text-success-foreground hover:bg-success/90" disabled={batchPaying || batchPaySelection.length === 0}>
+                    {batchPaying ? "Registrando..." : `Confirmar Pagou (${batchPaySelection.length})`}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); setBatchNotPaidReason("Não encontrado"); } }}>
               <DialogTrigger asChild>
-                <Button type="button" size="sm" variant="destructive" className="flex-1">
-                  <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedInstallmentIds.size})
+                <Button type="button" size="sm" variant="destructive" className="flex-1" disabled={batchPaying}>
+                  <XCircle className="mr-1.5 h-4 w-4" /> Não pagou ({selectedInstallmentIds.size})
                 </Button>
               </DialogTrigger>
               <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -2128,8 +2193,8 @@ export default function DailyCashPage() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Button size="sm" variant="ghost" onClick={() => setSelectedInstallmentIds(new Set())}>
-              Limpar
+            <Button size="sm" variant="ghost" disabled={batchPaying} onClick={() => setSelectedInstallmentIds(new Set())}>
+              Limpar seleção
             </Button>
           </div>
         </div>
