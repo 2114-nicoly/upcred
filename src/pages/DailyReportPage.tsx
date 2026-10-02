@@ -25,6 +25,7 @@ import {
   type FrozenReportPeriod, type FrozenDay,
 } from "@/lib/frozen-report";
 import { RecordSection } from "@/components/reports/RecordSection";
+import { mergePenaltyOperations } from "@/lib/event-record";
 
 
 
@@ -908,7 +909,7 @@ type RecordGroups = ReturnType<typeof buildRecordGroups>;
  */
 function buildRecordGroups(list: DailyEvent[], recordFor: (e: DailyEvent) => ReportRecord) {
   // renovacao_absorvida é detalhe interno da renovação: nunca listado sozinho.
-  const recs = list.map(recordFor).filter((r) => !r.internal && r.kind !== "renovacao_absorvida");
+  const recs = mergePenaltyOperations(list.map(recordFor)).filter((r) => !r.internal && r.kind !== "renovacao_absorvida");
   const of = (kinds: string[], filter?: (r: ReportRecord) => boolean) =>
     recs.filter((r) => kinds.includes(r.kind) && !r.reversed && (!filter || filter(r)));
 

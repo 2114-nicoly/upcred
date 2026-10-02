@@ -112,6 +112,20 @@ export default function PaymentHistoryPage() {
         });
       });
 
+      // "Parcela + multa": uma única linha por operation_id (soma dos dois eventos contábeis).
+      for (const day of Object.keys(grouped)) {
+        const list = grouped[day];
+        const pen = new Map<string, PaymentMovement>();
+        list.forEach((p) => { if (p.record?.operationId && p.record.operationPart === "penalty") pen.set(p.record.operationId, p); });
+        grouped[day] = list.filter((p) => {
+          const op = p.record?.operationId;
+          const target = op && p.record?.operationPart === "regular" ? pen.get(op) : undefined;
+          if (!target || !!target.reversedAt !== !!p.reversedAt) return true;
+          target.amount = Math.round((target.amount + p.amount) * 100) / 100;
+          return false;
+        });
+      }
+
       setPaymentsByDay(grouped);
     } catch (err: any) {
       console.error("PaymentHistoryPage fetchData error:", err);

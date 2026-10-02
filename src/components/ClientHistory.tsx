@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/loan-utils";
-import { normalizeEvent } from "@/lib/event-record";
+import { normalizeEvent, mergePenaltyOperations } from "@/lib/event-record";
 
 type TimelineKind = "payment" | "penalty" | "reschedule" | "audit" | "renegotiation" | "delete" | "cash";
 
@@ -182,8 +182,9 @@ export default function ClientHistory({ clientId }: { clientId: string }) {
           });
         });
 
-        ((movRes.data as any[]) || []).forEach((e: any) => {
-          const r = normalizeEvent(e);
+        const evRecs = mergePenaltyOperations(((movRes.data as any[]) || []).map((e: any) => ({ ...normalizeEvent(e), _e: e })));
+        evRecs.forEach((r: any) => {
+          const e = r._e;
           if (r.internal) return;
           if (!["pagamento", "recebimento_multa", "nao_pagou", "emprestimo_novo", "emprestimo_importado",
             "renovacao", "renegociacao", "estorno_pagamento", "estorno_manual", "cancelamento", "transferencia_cliente",

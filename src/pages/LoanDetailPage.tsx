@@ -125,6 +125,7 @@ export default function LoanDetailPage() {
 
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [penalties, setPenalties] = useState<Penalty[]>([]);
+  const [penaltiesPaidTotal, setPenaltiesPaidTotal] = useState(0);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryEntry[]>([]);
   const [paymentEvents, setPaymentEvents] = useState<PaidDateEvent[]>([]);
 
@@ -215,6 +216,15 @@ export default function LoanDetailPage() {
       setInstallments(inst || []);
       const { data: pen } = await supabase.from("penalties").select("*").eq("loan_id", loanId!).order("created_at");
       setPenalties((pen as Penalty[]) || []);
+
+      // Multas pagas: recebimentos de multa deste contrato ainda não estornados
+      // (o original estornado tem reversed_at; a contrapartida é estorno_pagamento e não entra).
+      const { data: penMovs } = await supabase.from("cash_movements")
+        .select("amount").eq("loan_id", loanId!).eq("type", "recebimento_multa").is("reversed_at", null);
+      setPenaltiesPaidTotal(Math.round(((penMovs as any[]) || []).reduce((s, m) => {
+        const n = Number(m.amount);
+        return s + (Number.isFinite(n) && n > 0 ? n : 0);
+      }, 0) * 100) / 100);
 
       // Fetch payment history: join cash_movements with daily_events
       const { data: movs } = await supabase.from("cash_movements")
@@ -1011,14 +1021,12 @@ export default function LoanDetailPage() {
           <div className="flex justify-between"><span className="text-muted-foreground">Emprestado:</span><span>{formatCurrency(Number(loan.amount))}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Juros:</span><span>{formatCurrency(totalLoanAmount - Number(loan.amount))}</span></div>
           <div className="flex justify-between font-bold"><span>Valor Total:</span><span className="text-primary">{formatCurrency(totalLoanAmount)}</span></div>
+          <div className="flex justify-between" data-testid="loan-penalties-paid"><span className="text-muted-foreground">Multas pagas:</span><span className="text-success">{formatCurrency(penaltiesPaidTotal)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Pago:</span><span className="text-success">{formatCurrency(totalPaidAll)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Saldo Restante:</span><span className="font-bold">{formatCurrency(remainingLoan)}</span></div>
           {penaltyTotal > 0 && (
             <div className="border-t pt-2 space-y-1">
-              <div className="flex justify-between"><span className="text-destructive font-medium">Total de Multas:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
-              {penaltyPaid > 0 && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Multa paga:</span><span className="text-success">{formatCurrency(penaltyPaid)}</span></div>
-              )}
+              <div className="flex justify-between"><span className="text-destructive font-medium">Multas pendentes:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
             </div>
           )}
           {overdueDaysCount > 0 && (

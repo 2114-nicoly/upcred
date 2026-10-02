@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { findPenaltyOperationForMovement, reverseRoutePaymentWithPenalty } from "@/lib/payment-utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,11 +111,17 @@ export default function CashHistoryPage() {
     try {
       // Estorno 100% transacional no banco: contrapartida, parcelas, saldo e
       // auditoria em uma única transação. Nada é gravado direto por esta tela.
-      const { error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
-        p_movement_id: mov.id,
-        p_reason: reason,
-      } as any);
-      if (error) throw error;
+      // Parte de "Parcela + multa": estorna o conjunto inteiro pela RPC da operação.
+      const op = await findPenaltyOperationForMovement(mov.id);
+      if (op) {
+        await reverseRoutePaymentWithPenalty({ operationId: op.operationId, reason });
+      } else {
+        const { error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
+          p_movement_id: mov.id,
+          p_reason: reason,
+        } as any);
+        if (error) throw error;
+      }
       toast.success("Movimentação estornada!");
       setReverseTarget(null);
       setReverseReason("");

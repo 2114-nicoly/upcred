@@ -383,6 +383,7 @@ export default function DailyCashPage() {
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payPenaltyMode, setPayPenaltyMode] = useState<PenaltyMode | null>(null);
   const payLockRef = useRef(false);
+  const payOpRef = useRef<{ sig: string; id: string } | null>(null);
   const [payDate, setPayDate] = useState(selectedDate);
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
@@ -922,7 +923,12 @@ export default function DailyCashPage() {
           regularAmount: plan.regular,
           penaltyAmount: plan.penalty,
           observation: plan.kind === "regular_and_penalty" ? resolveObservation(payState, fullInstAmount) : null,
-          operationId: newOperationId(),
+          operationId: (() => {
+            // Mesmo operation_id para repetições da MESMA tentativa (ex.: falha de rede).
+            const sig = [inst.id, payDate, plan.kind, plan.regular, plan.penalty].join("|");
+            if (!payOpRef.current || payOpRef.current.sig !== sig) payOpRef.current = { sig, id: newOperationId() };
+            return payOpRef.current.id;
+          })(),
         });
         toast.success(plan.kind === "penalty_only"
           ? `Multa: ${formatCurrency(plan.penalty)} registrada!`
@@ -941,6 +947,7 @@ export default function DailyCashPage() {
 
 
   const resetPayDialog = () => {
+    payOpRef.current = null;
     setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayPenaltyMode(null); setPayDate(selectedDate); setPayDialogId(null);
   };
 

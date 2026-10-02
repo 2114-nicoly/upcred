@@ -5,6 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown } from "lucide-react";
 import { formatCurrency } from "@/lib/loan-utils";
 import type { ReportRecord } from "@/lib/report-details";
+import { mergePenaltyOperations } from "@/lib/event-record";
 
 /**
  * Seção recolhível de registros detalhados (apresentação apenas).
@@ -12,7 +13,7 @@ import type { ReportRecord } from "@/lib/report-details";
  */
 export function RecordSection({
   title,
-  records,
+  records: rawRecords,
   hideWhenEmpty = true,
   showWorker = false,
 }: {
@@ -22,6 +23,7 @@ export function RecordSection({
   showWorker?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const records = mergePenaltyOperations(rawRecords);
   if (hideWhenEmpty && records.length === 0) return null;
   const total = records.reduce((s, r) => s + r.amountIn + r.amountOut, 0);
 
