@@ -54,14 +54,92 @@ export function RecordSection({
   );
 }
 
-export function RecordRow({ record, showWorker }: { record: ReportRecord; showWorker?: boolean }) {
+export type CategoryItem = { key: string; label: string; records: ReportRecord[] };
+
+/**
+ * Lista de categorias expansíveis: "Nome | quantidade | chevron".
+ * A quantidade é sempre `records.length` do MESMO array exibido ao abrir.
+ */
+export function CategoryList({
+  title,
+  items,
+  showWorker = false,
+  showDate = false,
+}: {
+  title: string;
+  items: CategoryItem[];
+  showWorker?: boolean;
+  showDate?: boolean;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <p className="border-b px-3 py-2 text-sm font-medium">{title}</p>
+        <div className="divide-y divide-border/60">
+          {items.map((it) => (
+            <CategoryRow key={it.key} label={it.label} records={it.records} showWorker={showWorker} showDate={showDate} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function CategoryRow({
+  label,
+  records,
+  showWorker,
+  showDate,
+}: {
+  label: string;
+  records: ReportRecord[];
+  showWorker?: boolean;
+  showDate?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const empty = records.length === 0;
+  return (
+    <Collapsible open={open && !empty} onOpenChange={(v) => !empty && setOpen(v)}>
+      <CollapsibleTrigger className="w-full" disabled={empty}>
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+          <span className="text-xs text-muted-foreground text-left">{label}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-sm font-bold tabular-nums">{records.length}</span>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform ${open && !empty ? "rotate-180" : ""} ${empty ? "opacity-30" : ""}`}
+            />
+          </div>
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="divide-y border-t bg-muted/20">
+          {records.map((r) => (
+            <RecordRow key={r.id} record={r} showWorker={showWorker} showDate={showDate} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function recordDateLabel(record: ReportRecord): string | null {
+  const raw = record.cashDate || record.createdAt;
+  if (!raw) return null;
+  const s = String(raw).slice(0, 10);
+  const [y, m, d] = s.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : null;
+}
+
+export function RecordRow({ record, showWorker, showDate }: { record: ReportRecord; showWorker?: boolean; showDate?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const dateLabel = showDate ? recordDateLabel(record) : null;
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="w-full text-left">
         <div className="flex items-start justify-between gap-2 p-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
+              {dateLabel && <span className="text-[11px] text-muted-foreground tabular-nums">{dateLabel}</span>}
               <span className="text-[11px] text-muted-foreground tabular-nums">{record.time}</span>
               <span className="text-sm font-medium truncate">{record.clientName}</span>
               <Badge variant="outline" className="text-[10px] h-4 shrink-0">{record.title}</Badge>

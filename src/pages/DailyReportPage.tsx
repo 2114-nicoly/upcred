@@ -24,8 +24,9 @@ import {
   loadFrozenReportPeriod, emptyFrozenPeriod, frozenSourceLabel,
   type FrozenReportPeriod, type FrozenDay,
 } from "@/lib/frozen-report";
-import { RecordSection } from "@/components/reports/RecordSection";
+import { RecordSection, CategoryList } from "@/components/reports/RecordSection";
 import { mergePenaltyOperations } from "@/lib/event-record";
+import { buildRecordGroups, RECORD_GROUP_ORDER, type RecordGroups } from "@/lib/report-record-groups";
 
 
 
@@ -859,23 +860,22 @@ export default function DailyReportPage({
         </Collapsible>
       </Card>
 
-      {/* Contagens operacionais do período — mesma informação, apresentação mais enxuta */}
+      {/* Como foi o período — cada contagem abre exatamente os registros contados */}
       {!loading && (
-        <Card>
-          <CardContent className="p-0">
-            <p className="border-b px-3 py-2 text-sm font-medium">Como foi o período</p>
-            <div className="divide-y divide-border/60">
-              <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
-              <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
-              <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
-              <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
-              <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
-              <CountCard label="Registros de não pagamento" value={recordGroups.naoPagos.length} />
-              <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
-              <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
-            </div>
-          </CardContent>
-        </Card>
+        <CategoryList
+          title="Como foi o período"
+          showDate={isMultiDay}
+          items={[
+            { key: "pagamentos", label: "Pagamentos", records: recordGroups.pagamentos },
+            { key: "parciais", label: "Pagamentos parciais", records: recordGroups.pagamentosParciais },
+            { key: "novos", label: "Novos empréstimos", records: recordGroups.novosEmprestimos },
+            { key: "renovacoes", label: "Renovações", records: recordGroups.renovacoes },
+            { key: "renegociacoes", label: "Renegociações", records: recordGroups.renegociacoes },
+            { key: "naoPagos", label: "Registros de não pagamento", records: recordGroups.naoPagos },
+            { key: "pendentes", label: "Pendentes", records: pendentesPeriodo },
+            { key: "atrasados", label: "Clientes atrasados", records: atrasadosPeriodo },
+          ]}
+        />
       )}
 
       {!isMultiDay && cashStatus !== "closed" && (
@@ -914,27 +914,37 @@ export default function DailyReportPage({
         </Button>
       </div>
 
-      {/* Registros */}
+      {/* Demais registros (fora das categorias acima) */}
       {loading ? (
         <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
-      ) : isMultiDay ? (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">Registros por dia</p>
-          {days.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Nenhuma movimentação no período.</p>
-          )}
-          {days.map((d) => (
-            <DaySection key={d.date} day={d} />
-          ))}
-          <p className="text-xs font-semibold text-muted-foreground uppercase pt-2">Situação atual da carteira</p>
-          <RecordSection title="Clientes atrasados" records={atrasadosPeriodo} />
-        </div>
       ) : (
-        <RecordGroupSections
-          groups={recordGroups}
-          pendentes={frozen.pendentesByDate[endDate] || []}
-          atrasados={atrasadosPeriodo}
-        />
+        <div className="space-y-2">
+          {RECORD_GROUP_ORDER.slice(6).map((g) => (
+            <RecordSection key={g.key} title={g.label} records={recordGroups[g.key]} />
+          ))}
+          {isMultiDay && (
+            <Card>
+              <Collapsible>
+                <CollapsibleTrigger className="group w-full">
+                  <div className="flex items-center justify-between gap-2 p-3">
+                    <span className="text-sm font-medium">Ver por dia</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-2 border-t p-2">
+                    {days.length === 0 && (
+                      <p className="text-center text-sm text-muted-foreground py-8">Nenhuma movimentação no período.</p>
+                    )}
+                    {days.map((d) => (
+                      <DaySection key={d.date} day={d} />
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </Card>
+          )}
+        </div>
       )}
 
     </div>
@@ -957,49 +967,6 @@ function buildGroups(list: DailyEvent[]) {
   };
 }
 
-type RecordGroups = ReturnType<typeof buildRecordGroups>;
-
-/**
- * Agrupa os registros detalhados por tipo de movimentação (apresentação apenas).
- * Não altera valores, saldos nem regras financeiras.
- */
-function buildRecordGroups(list: DailyEvent[], recordFor: (e: DailyEvent) => ReportRecord) {
-  // renovacao_absorvida é detalhe interno da renovação: nunca listado sozinho.
-  const recs = mergePenaltyOperations(list.map(recordFor)).filter((r) => !r.internal && r.kind !== "renovacao_absorvida");
-  const of = (kinds: string[], filter?: (r: ReportRecord) => boolean) =>
-    recs.filter((r) => kinds.includes(r.kind) && !r.reversed && (!filter || filter(r)));
-
-  const pagamentosAll = of(["pagamento", "recebimento_multa"]);
-  const parciais = pagamentosAll.filter((r) => r.title === "Pagamento parcial");
-  const pagamentos = pagamentosAll.filter((r) => r.title !== "Pagamento parcial");
-  const known = new Set([
-    "pagamento", "recebimento_multa", "nao_pagou", "emprestimo_novo", "emprestimo_importado",
-    "renovacao", "renovacao_absorvida", "renegociacao", "despesa",
-  ]);
-  return {
-    pagamentos,
-    pagamentosParciais: parciais,
-    novosEmprestimos: of(["emprestimo_novo", "emprestimo_importado"]),
-    renovacoes: of(["renovacao"]),
-    renegociacoes: of(["renegociacao"]),
-    naoPagos: of(["nao_pagou"]),
-    despesas: of(["despesa"]),
-    outras: recs.filter((r) => !r.reversed && !known.has(r.kind)),
-    estornos: recs.filter((r) => r.reversed),
-  };
-}
-
-const RECORD_GROUP_ORDER: { key: keyof RecordGroups; label: string }[] = [
-  { key: "pagamentos", label: "Pagamentos" },
-  { key: "pagamentosParciais", label: "Pagamentos parciais" },
-  { key: "novosEmprestimos", label: "Novos empréstimos" },
-  { key: "renovacoes", label: "Renovações" },
-  { key: "renegociacoes", label: "Renegociações" },
-  { key: "naoPagos", label: "Clientes não pagos" },
-  { key: "despesas", label: "Despesas" },
-  { key: "outras", label: "Outras movimentações" },
-  { key: "estornos", label: "Estornos" },
-];
 
 /** Seções detalhadas de um dia/período (mesma ordem na tela e no PDF). */
 function RecordGroupSections({
