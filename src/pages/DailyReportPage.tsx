@@ -842,6 +842,20 @@ export default function DailyReportPage({
                   sub={isMultiDay ? "soma dos dias fechados" : (cashSummary?.counted == null ? "aguardando fechamento" : undefined)}
                 />
               </div>
+
+              {/* Contagens do período */}
+              {!loading && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
+                  <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
+                  <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
+                  <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
+                  <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
+                  <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
+                  <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
+                  <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
+                </div>
+              )}
             </div>
           </CollapsibleContent>
         </Collapsible>
@@ -882,20 +896,6 @@ export default function DailyReportPage({
           <Share2 className="mr-2 h-4 w-4" /> Compartilhar
         </Button>
       </div>
-
-      {/* Contagens do período */}
-      {!loading && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <CountCard label="Pagamentos" value={recordGroups.pagamentos.length} />
-          <CountCard label="Pagamentos parciais" value={recordGroups.pagamentosParciais.length} />
-          <CountCard label="Novos empréstimos" value={recordGroups.novosEmprestimos.length} />
-          <CountCard label="Renovações" value={recordGroups.renovacoes.length} />
-          <CountCard label="Renegociações" value={recordGroups.renegociacoes.length} />
-          <CountCard label="Clientes não pagos" value={recordGroups.naoPagos.length} />
-          <CountCard label="Clientes pendentes" value={pendentesPeriodo.length} />
-          <CountCard label="Clientes atrasados" value={atrasadosPeriodo.length} />
-        </div>
-      )}
 
       {/* Registros */}
       {loading ? (
