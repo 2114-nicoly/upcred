@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, startOfWeek, endOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -94,8 +94,10 @@ export default function DailyReportPage({
       const y = new Date(now); y.setDate(now.getDate() - 1);
       setStartDate(fmt(y)); setEndDate(fmt(y));
     } else if (p === "semana") {
-      const s = new Date(now); s.setDate(now.getDate() - now.getDay());
-      setStartDate(fmt(s)); setEndDate(fmt(now));
+      // Semana comercial: segunda-feira → domingo da mesma semana
+      // (o domingo pode ser futuro; apenas registros existentes são exibidos).
+      const s = startOfWeek(now, { weekStartsOn: 1 });
+      setStartDate(fmt(s)); setEndDate(fmt(endOfWeek(s, { weekStartsOn: 1 })));
     } else if (p === "mes") {
       const s = new Date(now.getFullYear(), now.getMonth(), 1);
       setStartDate(fmt(s)); setEndDate(fmt(now));
@@ -701,7 +703,7 @@ export default function DailyReportPage({
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="h-5 w-5 text-primary shrink-0" />
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold leading-tight">Relatório Diário</h2>
+                <h2 className="text-lg font-semibold leading-tight">Meu relatório</h2>
                 <p className="text-xs text-muted-foreground truncate">
                   {(workerName || (selectedWorkerId ? "—" : "Selecione um trabalhador"))} · {periodLabel}
                 </p>
