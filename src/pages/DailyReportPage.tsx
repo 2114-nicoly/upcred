@@ -25,6 +25,7 @@ import {
   type FrozenReportPeriod, type FrozenDay,
 } from "@/lib/frozen-report";
 import { RecordSection } from "@/components/reports/RecordSection";
+import { mergePenaltyOperations } from "@/lib/event-record";
 
 
 
