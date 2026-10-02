@@ -468,6 +468,7 @@ export default function ReportsPage() {
       ["Diferença", formatCurrency(summary.diferenca)],
     ], { rightCols: [1] });
 
+    pdf.ensureSpace(40);
     pdf.blockTitle("Trabalhadores");
     if (workerRows.length === 0) {
       pdf.text("Nenhum trabalhador ativo no período.");
