@@ -383,6 +383,7 @@ export default function DailyCashPage() {
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
   const [payPenaltyMode, setPayPenaltyMode] = useState<PenaltyMode | null>(null);
   const payLockRef = useRef(false);
+  const payOpRef = useRef<{ sig: string; id: string } | null>(null);
   const [payDate, setPayDate] = useState(selectedDate);
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
