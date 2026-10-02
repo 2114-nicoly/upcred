@@ -621,9 +621,8 @@ export default function DailyReportPage({
       writeText("Cada lançamento é identificado por Data · Hora · Cliente · Tipo, na mesma ordem das movimentações acima.", 8);
       detailEntries.forEach(({ date, record }) => {
         const detailDay = format(new Date(String(date).slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR });
-        // Reserva espaço para o bloco inteiro: a identificação nunca fica sozinha no fim da página.
-        const blockHeight = 16 + record.details.length * 7;
-        ensureSpace(blockHeight < PAGE_BOTTOM - HEADER_BOTTOM ? blockHeight : 30);
+        // Reserva o mínimo para cabeçalho + início da tabela: a identificação não fica sozinha na página.
+        ensureSpace(26);
         addTable(
           `${detailDay} · ${record.time} · ${record.clientName} · ${record.title}${record.reversed ? " (estornado)" : ""}`,
           ["Detalhe", "Informação"],
