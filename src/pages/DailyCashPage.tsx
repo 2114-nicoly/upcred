@@ -384,7 +384,7 @@ export default function DailyCashPage() {
   const [notPaidObs, setNotPaidObs] = useState("");
   const [showNotPaidObs, setShowNotPaidObs] = useState(false);
   const [notPaidReason, setNotPaidReason] = useState<string>("Não encontrado");
-  const [selectedForNotPaid, setSelectedForNotPaid] = useState<Set<string>>(new Set());
+  const [selectedInstallmentIds, setSelectedInstallmentIds] = useState<Set<string>>(new Set());
   const [batchNotPaidDialogOpen, setBatchNotPaidDialogOpen] = useState(false);
   const [batchNotPaidObs, setBatchNotPaidObs] = useState("");
   const [showBatchNotPaidObs, setShowBatchNotPaidObs] = useState(false);
@@ -607,7 +607,7 @@ export default function DailyCashPage() {
               },
             })));
             setSnapshotVersion(Number((snap as any).version) || 1);
-            setSelectedForNotPaid(new Set());
+            setSelectedInstallmentIds(new Set());
 
             setPendingPenalties([]);
             setRescheduledInstIds(new Set());
@@ -719,7 +719,7 @@ export default function DailyCashPage() {
 
       if (status === "closed") {
         setPendingInstallments([]);
-        setSelectedForNotPaid(new Set());
+        setSelectedInstallmentIds(new Set());
         return;
       }
 
@@ -732,7 +732,7 @@ export default function DailyCashPage() {
         console.error("[DailyCashPage] get_route_installments failed:", routeError);
         if (!silent) toast.error("Não foi possível carregar a rota do dia. Tente novamente.");
         setPendingInstallments([]);
-        setSelectedForNotPaid(new Set());
+        setSelectedInstallmentIds(new Set());
         return;
       }
 
@@ -773,7 +773,7 @@ export default function DailyCashPage() {
         }
       }
       setPendingInstallments(dedupedPending);
-      setSelectedForNotPaid(new Set());
+      setSelectedInstallmentIds(new Set());
 
       // Rescheduled flags for pending installments
       const pendingInstIds = dedupedPending.map((i) => i.id);
@@ -814,7 +814,7 @@ export default function DailyCashPage() {
       console.error("[DailyCashPage] fetchData failed:", err);
       if (!isStale()) {
         setPendingInstallments([]);
-        setSelectedForNotPaid(new Set());
+        setSelectedInstallmentIds(new Set());
         setPendingPenalties([]);
         if (!silent) toast.error("Erro ao carregar rota do dia. Tente atualizar.");
       }
@@ -998,7 +998,7 @@ export default function DailyCashPage() {
         origin: "rota",
         metadata: buildNotPaidMetadata(inst, obs),
       });
-      setSelectedForNotPaid(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setSelectedInstallmentIds(prev => { const n = new Set(prev); n.delete(id); return n; });
       setNotPaidObs("");
       setShowNotPaidObs(false);
       setNotPaidReason("Não encontrado");
@@ -1019,7 +1019,7 @@ export default function DailyCashPage() {
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
     const selectedInsts = pendingInstallments
-      .filter(i => selectedForNotPaid.has(i.id))
+      .filter(i => selectedInstallmentIds.has(i.id))
       .filter(canActOnRouteInstallment);
     if (selectedInsts.length === 0) return;
 
@@ -1051,7 +1051,7 @@ export default function DailyCashPage() {
           metadata: buildNotPaidMetadata(inst, obs),
         });
       }
-      setSelectedForNotPaid(new Set());
+      setSelectedInstallmentIds(new Set());
       setBatchNotPaidDialogOpen(false);
       setBatchNotPaidObs("");
       setShowBatchNotPaidObs(false);
@@ -1068,7 +1068,7 @@ export default function DailyCashPage() {
 
 
   const toggleSelectForNotPaid = (id: string) => {
-    setSelectedForNotPaid(prev => {
+    setSelectedInstallmentIds(prev => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id); else n.add(id);
       return n;
@@ -1077,15 +1077,15 @@ export default function DailyCashPage() {
 
   const toggleSelectAll = () => {
     const currentFiltered = filteredPending;
-    const allSelected = currentFiltered.every(i => selectedForNotPaid.has(i.id));
+    const allSelected = currentFiltered.every(i => selectedInstallmentIds.has(i.id));
     if (allSelected) {
-      setSelectedForNotPaid(prev => {
+      setSelectedInstallmentIds(prev => {
         const n = new Set(prev);
         currentFiltered.forEach(i => n.delete(i.id));
         return n;
       });
     } else {
-      setSelectedForNotPaid(prev => {
+      setSelectedInstallmentIds(prev => {
         const n = new Set(prev);
         currentFiltered.forEach(i => n.add(i.id));
         return n;
@@ -1094,7 +1094,7 @@ export default function DailyCashPage() {
   };
 
   const selectAllOverdue = () => {
-    setSelectedForNotPaid(prev => {
+    setSelectedInstallmentIds(prev => {
       const n = new Set(prev);
       overdueItems.forEach(i => n.add(i.id));
       return n;
@@ -1102,7 +1102,7 @@ export default function DailyCashPage() {
   };
 
   const selectAllToday = () => {
-    setSelectedForNotPaid(prev => {
+    setSelectedInstallmentIds(prev => {
       const n = new Set(prev);
       todayItems.forEach(i => n.add(i.id));
       return n;
@@ -1304,7 +1304,7 @@ export default function DailyCashPage() {
     const instAmount = Number(inst.amount);
     const overdueDays = getOverdueDays(inst);
     const isOverdue = overdueDays > 0;
-    const isSelected = selectedForNotPaid.has(inst.id);
+    const isSelected = selectedInstallmentIds.has(inst.id);
     const progress = calculateLoanProgress({
       totalAmount: Number(loan.total_amount),
       remainingBalance,
@@ -1895,15 +1895,15 @@ export default function DailyCashPage() {
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
                       <Checkbox
-                        checked={filteredPending.length > 0 && filteredPending.every(i => selectedForNotPaid.has(i.id))}
+                        checked={filteredPending.length > 0 && filteredPending.every(i => selectedInstallmentIds.has(i.id))}
                         onCheckedChange={toggleSelectAll}
                         className="h-3.5 w-3.5"
                       />
                       Selecionar exibidos
                     </label>
-                    {selectedForNotPaid.size > 0 && (
-                      <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setSelectedForNotPaid(new Set())}>
-                        Limpar ({selectedForNotPaid.size})
+                    {selectedInstallmentIds.size > 0 && (
+                      <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setSelectedInstallmentIds(new Set())}>
+                        Limpar ({selectedInstallmentIds.size})
                       </button>
                     )}
                   </div>
@@ -2086,20 +2086,20 @@ export default function DailyCashPage() {
       )}
 
       {/* Batch not-paid floating bar */}
-      {selectedForNotPaid.size > 0 && !isClosed && (
+      {selectedInstallmentIds.size > 0 && !isClosed && (
         <div className="fixed bottom-20 left-0 right-0 z-40 flex items-center justify-center gap-2 px-4">
           <div className="flex items-center gap-2 rounded-xl border bg-card shadow-lg px-4 py-2.5 max-w-lg w-full">
             <Dialog open={batchNotPaidDialogOpen} onOpenChange={(o) => { setBatchNotPaidDialogOpen(o); if (!o) { setBatchNotPaidObs(""); setShowBatchNotPaidObs(false); setBatchNotPaidReason("Não encontrado"); } }}>
               <DialogTrigger asChild>
                 <Button type="button" size="sm" variant="destructive" className="flex-1">
-                  <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedForNotPaid.size})
+                  <XCircle className="mr-1.5 h-4 w-4" /> Não Pagou ({selectedInstallmentIds.size})
                 </Button>
               </DialogTrigger>
               <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
-                <DialogHeader><DialogTitle>Marcar {selectedForNotPaid.size} como Não Pagou</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Marcar {selectedInstallmentIds.size} como Não Pagou</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    {selectedForNotPaid.size} parcela(s) selecionada(s).
+                    {selectedInstallmentIds.size} parcela(s) selecionada(s).
                   </p>
                   <div>
                     <Label>Motivo</Label>
@@ -2123,12 +2123,12 @@ export default function DailyCashPage() {
                     </button>
                   )}
                   <Button onClick={handleBatchNotPaid} variant="destructive" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Salvando..." : `Confirmar Não Pagou (${selectedForNotPaid.size})`}
+                    {isSubmitting ? "Salvando..." : `Confirmar Não Pagou (${selectedInstallmentIds.size})`}
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
-            <Button size="sm" variant="ghost" onClick={() => setSelectedForNotPaid(new Set())}>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedInstallmentIds(new Set())}>
               Limpar
             </Button>
           </div>
