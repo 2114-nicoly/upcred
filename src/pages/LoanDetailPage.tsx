@@ -1026,7 +1026,7 @@ export default function LoanDetailPage() {
           <div className="flex justify-between"><span className="text-muted-foreground">Saldo Restante:</span><span className="font-bold">{formatCurrency(remainingLoan)}</span></div>
           {penaltyTotal > 0 && (
             <div className="border-t pt-2 space-y-1">
-              <div className="flex justify-between"><span className="text-destructive font-medium">Total de Multas:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              <div className="flex justify-between"><span className="text-destructive font-medium">Multas pendentes:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
             </div>
           )}
           {overdueDaysCount > 0 && (
