@@ -39,6 +39,10 @@ export type NormalizedRecord = {
   /** Pagamento que zerou o saldo. */
   isSettlement: boolean;
   details: DetailLine[];
+  /** operation_id congelado de "Parcela + multa" / "Somente multa". */
+  operationId?: string | null;
+  /** Parte contábil da operação: parcela regular ou multa. */
+  operationPart?: "regular" | "penalty" | null;
 };
 
 export const INCOMPLETE_RECORD_LABEL = "Registro antigo com informações incompletas";
@@ -188,6 +192,10 @@ export function normalizeEvent(e: NormalizeInput, ctx: NormalizeContext = {}): N
   let title = category;
   let summary = "";
   let isSettlement = false;
+  const opMode = text(m.payment_mode);
+  const operationId = m.operation_id && (opMode === "regular_and_penalty" || opMode === "penalty_only") ? String(m.operation_id) : null;
+  const operationPart: "regular" | "penalty" | null = !operationId ? null
+    : kind === "recebimento_multa" ? "penalty" : kind === "pagamento" ? "regular" : null;
 
   const specific: DetailLine[] = [];
   const P = (l: string, v: string | number | null | undefined) => push(specific, l, v);
@@ -502,7 +510,32 @@ export function normalizeEvent(e: NormalizeInput, ctx: NormalizeContext = {}): N
     informative,
     isSettlement,
     details,
+    operationId,
+    operationPart,
   };
+}
+
+/**
+ * Apresentação: "Parcela + multa" vira UM registro (o da multa, que congela parcela,
+ * multa, total e saldos). O valor exibido é a soma dos dois eventos contábeis
+ * existentes — os totais não mudam e nada é contado duas vezes.
+ */
+export function mergePenaltyOperations<T extends { operationId?: string | null; operationPart?: "regular" | "penalty" | null; amountIn: number; reversed: boolean }>(list: T[]): T[] {
+  const penaltyByOp = new Map<string, T>();
+  list.forEach((r) => { if (r.operationId && r.operationPart === "penalty") penaltyByOp.set(r.operationId, r); });
+  const extra = new Map<string, number>();
+  const out: T[] = [];
+  list.forEach((r) => {
+    const pen = r.operationId && r.operationPart === "regular" ? penaltyByOp.get(r.operationId) : undefined;
+    if (pen && pen.reversed === r.reversed) {
+      extra.set(r.operationId!, (extra.get(r.operationId!) || 0) + r.amountIn);
+      return;
+    }
+    out.push(r);
+  });
+  return out.map((r) => (r.operationPart === "penalty" && r.operationId && extra.has(r.operationId)
+    ? { ...r, amountIn: Math.round((r.amountIn + extra.get(r.operationId)!) * 100) / 100 }
+    : r));
 }
 
 /** Linhas de abertura/fechamento/reabertura de caixa a partir de daily_cash + snapshot congelado. */
