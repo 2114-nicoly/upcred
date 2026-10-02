@@ -1509,9 +1509,12 @@ export default function DailyCashPage() {
                 <CheckCircle className="h-3.5 w-3.5" /> PAGOU
               </button>
             </DialogTrigger>
-            <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
-              <DialogHeader><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
-              <div className="space-y-3">
+            <DialogContent
+              onOpenAutoFocus={(e) => e.preventDefault()}
+              className="flex max-h-[calc(100dvh-1.5rem)] flex-col gap-3 overflow-hidden"
+            >
+              <DialogHeader className="shrink-0"><DialogTitle>Registrar Pagamento</DialogTitle></DialogHeader>
+              <div className="-mx-1 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-1 pb-1">
                 <p className="text-sm text-muted-foreground">
                   {clientName} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
@@ -1574,6 +1577,8 @@ export default function DailyCashPage() {
                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                 </div>
                 <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
+              </div>
+              <div className="-mb-1 shrink-0 border-t border-border/60 pt-3">
                 <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting || ((parsePenaltyInput(payPenaltyAmount) ?? 0) > 0 && !payPenaltyMode)}>
                   {isSubmitting ? "Processando..." : "Confirmar Pagamento"}
                 </Button>
