@@ -216,6 +216,55 @@ export async function registerPayment(params: {
 /**
  * Register a penalty payment.
  */
+export type PenaltyRow = {
+  id: string;
+  amount: number;
+  paid_amount: number;
+  paid: boolean;
+  paid_at: string | null;
+  created_at?: string;
+};
+
+/**
+ * Distribui um pagamento de multa pelas penalties ativas em ordem de criação.
+ * Rejeita (sem efeitos) se o valor exceder o pendente ou se a parcela agregada
+ * divergir do detalhamento — mesma regra usada pela Rota.
+ */
+export function planPenaltyDistribution(
+  rows: PenaltyRow[],
+  amount: number,
+  aggregatePending: number,
+  cashDate: string,
+) {
+  if (!(amount > 0)) throw new Error("Valor da multa inválido.");
+  const sorted = [...rows].sort((a, b) => String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")));
+  const pending = sorted.reduce((s, r) => s + Math.max(0, Number(r.amount) - Number(r.paid_amount)), 0);
+  const pendingR = Math.round(pending * 100) / 100;
+  if (Math.abs(pendingR - aggregatePending) > 0.01) {
+    throw new Error(
+      `Multas inconsistentes: parcela de multa com ${aggregatePending.toFixed(2)} pendente e detalhamento com ${pendingR.toFixed(2)}. Corrija antes de receber.`,
+    );
+  }
+  if (amount > pendingR + 0.005) {
+    throw new Error(`Valor maior que a multa pendente (R$ ${pendingR.toFixed(2).replace(".", ",")}).`);
+  }
+  let left = Math.round(amount * 100) / 100;
+  const paidAt = new Date(cashDate + "T12:00:00").toISOString();
+  const updates: { id: string; applied: number; paid_amount: number; paid: boolean; paid_at: string | null }[] = [];
+  for (const r of sorted) {
+    if (left <= 0.005) break;
+    const open = Math.round(Math.max(0, Number(r.amount) - Number(r.paid_amount)) * 100) / 100;
+    if (open <= 0.005) continue;
+    const applied = Math.min(open, left);
+    const newPaid = Math.round((Number(r.paid_amount) + applied) * 100) / 100;
+    const full = newPaid >= Number(r.amount) - 0.005;
+    updates.push({ id: r.id, applied, paid_amount: newPaid, paid: full, paid_at: full ? paidAt : r.paid_at });
+    left = Math.round((left - applied) * 100) / 100;
+  }
+  if (left > 0.005) throw new Error("Valor da multa não pôde ser distribuído.");
+  return { updates, pendingBefore: pendingR, pendingAfter: Math.round((pendingR - amount) * 100) / 100 };
+}
+
 export async function registerPenaltyPayment(params: {
   loanId: string;
   amount: number;
