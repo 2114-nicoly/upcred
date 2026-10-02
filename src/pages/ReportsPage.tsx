@@ -432,48 +432,59 @@ export default function ReportsPage() {
     const hasMovement =
       scopedCash.length > 0 || scopedEvents.length > 0;
 
-    pdf.blockTitle("Resumo financeiro da equipe");
+    pdf.blockTitle("Resumo do período");
     if (!hasMovement) {
       pdf.text("Nenhuma movimentação registrada no período selecionado.");
     }
     pdf.table(null, ["Indicador", "Valor"], [
-      ["Caixa disponível da equipe", formatCurrency(summary.caixaDisponivel)],
-      ["Caixa inicial da equipe", formatCurrency(summary.caixaInicial)],
-      ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
-      ["Recebido principal", formatCurrency(summary.recebido)],
-      ["Multas recebidas", formatCurrency(summary.multas)],
       ["Total recebido (com multas)", formatCurrency(summary.recebidoTotal)],
       ["Total emprestado", formatCurrency(summary.emprestado)],
+      ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
+      ["Caixa disponível da equipe", formatCurrency(summary.caixaDisponivel)],
+    ], { rightCols: [1] });
+
+    // Mesmas contagens da tela (mesmos arrays de "Como foi o período")
+    pdf.blockTitle("Como foi o período");
+    pdf.table(null, ["Categoria", "Quantidade"], [
+      ["Pagamentos", String(teamRecordGroups.pagamentos.length)],
+      ["Pagamentos parciais", String(teamRecordGroups.pagamentosParciais.length)],
+      ["Novos empréstimos", String(teamRecordGroups.novosEmprestimos.length)],
+      ["Renovações", String(teamRecordGroups.renovacoes.length)],
+      ["Renegociações", String(teamRecordGroups.renegociacoes.length)],
+      ["Não pagamentos", String(teamRecordGroups.naoPagos.length)],
+      ["Pendentes", String(teamPendentes.length)],
+      ["Atrasados", String(atrasadosPeriodo.length)],
+    ], { rightCols: [1] });
+
+    pdf.blockTitle("Detalhamento financeiro");
+    pdf.table(null, ["Indicador", "Valor"], [
+      ["Caixa inicial", formatCurrency(summary.caixaInicial)],
+      ["Recebido principal", formatCurrency(summary.recebido)],
+      ["Multas", formatCurrency(summary.multas)],
       ["Entradas", formatCurrency(summary.entradas)],
       ["Saídas", formatCurrency(summary.saidas)],
       ["Despesas", formatCurrency(summary.despesas)],
       ["Estornos", formatCurrency(summary.estornos)],
-      ["Diferença total de caixa", formatCurrency(summary.diferenca)],
-      ["Clientes pendentes de registro", String(pendentesTotal)],
-      ["Clientes atrasados", String(summary.atrasados)],
+      ["Diferença", formatCurrency(summary.diferenca)],
     ], { rightCols: [1] });
 
-    pdf.blockTitle("Comparação dos trabalhadores");
+    pdf.ensureSpace(40);
+    pdf.blockTitle("Trabalhadores");
     if (workerRows.length === 0) {
       pdf.text("Nenhum trabalhador ativo no período.");
     }
     pdf.table(
       null,
-      ["Trabalhador", "Status", "Cx. disponível", "Cx. inicial", "Cx. final", "Recebido", "Multas", "Emprestado", "Despesas", "Diferença", "Pend.", "Atras."],
+      ["Trabalhador", "Status", "Recebido", "Emprestado", "Cx. final", "Pend.", "Atras."],
       workerRows.map((r) => [
         r.worker.nome, r.statusLabel,
-        formatCurrency(r.totals.caixaDisponivel),
-        formatCurrency(r.totals.caixaInicial),
-        formatCurrency(r.totals.caixaFinal),
         formatCurrency(r.totals.recebido),
-        formatCurrency(r.totals.multas),
         formatCurrency(r.totals.emprestado),
-        formatCurrency(r.totals.despesas),
-        formatCurrency(r.totals.diferenca),
+        formatCurrency(r.totals.caixaFinal),
         String(frozen.pendentesByWorker[r.worker.id] || 0),
         String(r.totals.atrasados),
       ]),
-      { rightCols: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+      { rightCols: [2, 3, 4, 5, 6] },
     );
 
     // Detalhamento completo de clientes atrasados (situação atual da carteira)
@@ -524,17 +535,6 @@ export default function ReportsPage() {
       });
     }
 
-    pdf.blockTitle("Totais finais");
-    pdf.table(null, ["Total", "Valor"], [
-      ["Recebido principal no período", formatCurrency(summary.recebido)],
-      ["Multas recebidas no período", formatCurrency(summary.multas)],
-      ["Total recebido (com multas)", formatCurrency(summary.recebidoTotal)],
-      ["Emprestado no período", formatCurrency(summary.emprestado)],
-      ["Despesas no período", formatCurrency(summary.despesas)],
-      ["Caixa disponível da equipe", formatCurrency(summary.caixaDisponivel)],
-      ["Caixa final da equipe", formatCurrency(summary.caixaFinal)],
-      ["Diferença total de caixa", formatCurrency(summary.diferenca)],
-    ], { rightCols: [1] });
 
     const filename = `relatorio-equipe-${startDate}_a_${endDate}.pdf`;
     return { doc: pdf.doc, filename };
