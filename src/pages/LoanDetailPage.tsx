@@ -353,7 +353,13 @@ export default function LoanDetailPage() {
             cashDate: payDate, origin: "detalhe_emprestimo",
           });
           toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-        } catch { toast.error("Nenhuma multa registrada para abater"); }
+        } catch (penaltyErr: any) {
+          // Interrompe: não registra a parcela se a multa falhou.
+          toast.error(penaltyErr?.message || "Erro ao registrar pagamento da multa");
+          setIsSubmitting(false);
+          fetchData();
+          return;
+        }
       }
 
       // Regular payment - auto-distributes across installments
