@@ -456,12 +456,30 @@ export async function reverseRoutePaymentWithPenalty(params: { operationId: stri
   return data as any;
 }
 
+/** Se o movimento pertence a uma operação com multa, devolve o operation_id (metadata congelado). */
+export async function findPenaltyOperationForMovement(movementId: string): Promise<{ operationId: string; total: number | null } | null> {
+  const { data } = await (supabase.from("daily_events" as any)
+    .select("metadata").eq("cash_movement_id", movementId).is("reverses_event_id", null).limit(1) as any);
+  const md = ((data as any[])?.[0]?.metadata || {}) as Record<string, any>;
+  const mode = md.payment_mode;
+  if (!md.operation_id || (mode !== "regular_and_penalty" && mode !== "penalty_only")) return null;
+  const t = Number(md.total_received);
+  return { operationId: String(md.operation_id), total: Number.isFinite(t) && t >= 0 ? t : null };
+}
+
 export async function reversePayment(params: {
   movementId: string;
   reason?: string;
 }) {
   const { movementId } = params;
   const reason = (params.reason || "").trim() || "Estorno solicitado pelo operador";
+
+  // Parte de "Parcela + multa" / "Somente multa": estorna o conjunto pela RPC da operação.
+  const op = await findPenaltyOperationForMovement(movementId);
+  if (op) {
+    const res = await reverseRoutePaymentWithPenalty({ operationId: op.operationId, reason });
+    return op.total ?? Math.abs(Number(res?.original_amount) || 0);
+  }
 
   const { data, error } = await supabase.rpc("reverse_cash_movement_tx" as any, {
     p_movement_id: movementId,
@@ -490,6 +508,9 @@ export async function editPayment(params: {
 }) {
   const { loanId, clientId, clientName, cashDate, newAmount, origin, movementId } = params;
   if (newAmount <= 0) throw new Error("Valor deve ser maior que zero");
+  if (await findPenaltyOperationForMovement(movementId)) {
+    throw new Error("Pagamento com multa não pode ser editado. Desfaça a operação inteira e registre novamente.");
+  }
 
   // Capture old amount for audit
   const { data: oldMov } = await supabase
