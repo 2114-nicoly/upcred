@@ -34,7 +34,8 @@ import {
 import {
   loadFrozenReportPeriod, emptyFrozenPeriod, type FrozenReportPeriod,
 } from "@/lib/frozen-report";
-import { RecordSection } from "@/components/reports/RecordSection";
+import { CategoryList } from "@/components/reports/RecordSection";
+import { buildRecordGroups } from "@/lib/report-record-groups";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { computeCoreTotals } from "@/lib/finance-totals";
 import {
@@ -252,6 +253,13 @@ export default function ReportsPage() {
     [frozen],
   );
   const atrasadosPeriodo = frozen.atrasados;
+  /** Mesma regra de agrupamento do relatório do trabalhador (helper compartilhado). */
+  const teamRecordGroups = useMemo(
+    () => buildRecordGroups(frozen.events, details.recordFor),
+    [frozen, details],
+  );
+  const teamPendentes = useMemo(() => Object.values(frozen.pendentesByDate).flat(), [frozen]);
+  const [dayViewOpen, setDayViewOpen] = useState(false);
 
   /** Adapta a estrutura única de WorkerStats para os rótulos usados na tela/PDF. */
   const toTotals = (s: WorkerStats) => ({
@@ -935,20 +943,37 @@ export default function ReportsPage() {
           </Card>
           )}
 
-          {/* Situação atual da carteira da equipe */}
+          {/* Como foi o período — mesma classificação do relatório do trabalhador */}
           {!globalMode && (
-            <RecordSection title="Clientes atrasados" records={atrasadosPeriodo} showWorker />
+            <CategoryList
+              title="Como foi o período"
+              showWorker
+              showDate={startDate !== endDate}
+              items={[
+                { key: "pagamentos", label: "Pagamentos", records: teamRecordGroups.pagamentos },
+                { key: "parciais", label: "Pagamentos parciais", records: teamRecordGroups.pagamentosParciais },
+                { key: "novos", label: "Novos empréstimos", records: teamRecordGroups.novosEmprestimos },
+                { key: "renovacoes", label: "Renovações", records: teamRecordGroups.renovacoes },
+                { key: "renegociacoes", label: "Renegociações", records: teamRecordGroups.renegociacoes },
+                { key: "naoPagos", label: "Registros de não pagamento", records: teamRecordGroups.naoPagos },
+                { key: "pendentes", label: "Pendentes", records: teamPendentes },
+                { key: "atrasados", label: "Clientes atrasados", records: atrasadosPeriodo },
+              ]}
+            />
           )}
 
-
-
-          {/* Detalhamento por dia */}
+          {/* Ver por dia — fechado por padrão */}
           {!globalMode && startDate !== endDate && (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Detalhamento por dia</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
+              <Collapsible open={dayViewOpen} onOpenChange={setDayViewOpen}>
+              <CollapsibleTrigger className="w-full">
+                <div className="flex items-center justify-between gap-2 p-3">
+                  <span className="text-sm font-medium">Ver por dia</span>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${dayViewOpen ? "rotate-180" : ""}`} />
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+              <CardContent className="p-0 border-t">
                 {dayRows.length === 0 ? (
                   <ReportEmptyState message="Nenhuma movimentação no período." />
                 ) : (
@@ -1039,6 +1064,8 @@ export default function ReportsPage() {
                   </div>
                 )}
               </CardContent>
+              </CollapsibleContent>
+              </Collapsible>
             </Card>
           )}
         </>
