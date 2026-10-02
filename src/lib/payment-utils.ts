@@ -422,6 +422,40 @@ export async function settleLoan(params: {
  *
  * O frontend NÃO grava cash_balance, reversed_at nem auditoria.
  */
+/** Parcela + multa ou somente multa — uma única transação no banco. */
+export async function registerRoutePaymentWithPenalty(params: {
+  installmentId: string;
+  cashDate: string;
+  mode: "regular_and_penalty" | "penalty_only";
+  regularAmount: number;
+  penaltyAmount: number;
+  observation?: string | null;
+  operationId: string;
+}) {
+  const { data, error } = await supabase.rpc("register_route_payment_with_penalty_tx" as any, {
+    p_installment_id: params.installmentId,
+    p_cash_date: params.cashDate,
+    p_mode: params.mode,
+    p_regular_amount: params.mode === "penalty_only" ? 0 : params.regularAmount,
+    p_penalty_amount: params.penaltyAmount,
+    p_observation: params.observation ?? null,
+    p_operation_id: params.operationId,
+  } as any);
+  if (error) throw error;
+  return data as any;
+}
+
+/** Desfaz a operação inteira (parcela + multa ou somente multa) pelo operation_id. */
+export async function reverseRoutePaymentWithPenalty(params: { operationId: string; reason?: string }) {
+  const reason = (params.reason || "").trim() || "Desfeito na Rota do Dia";
+  const { data, error } = await supabase.rpc("reverse_route_payment_with_penalty_tx" as any, {
+    p_operation_id: params.operationId,
+    p_reason: reason,
+  } as any);
+  if (error) throw error;
+  return data as any;
+}
+
 export async function reversePayment(params: {
   movementId: string;
   reason?: string;
