@@ -23,13 +23,15 @@ import {
   normalizeSnapshotPaidGroups,
   removePaidGroupByMovement,
   findPaidGroupByMovement,
+  collectHandledLoanIds,
   INCOMPLETE_HISTORY_LABEL,
   type PaidGroup,
   type FrozenPaymentEvent,
   type LegacyPaymentMovement,
 } from "@/lib/paid-groups";
 
-import { registerPayment, registerPenaltyPayment, settleLoan, reversePayment } from "@/lib/payment-utils";
+import { registerPayment, settleLoan, reversePayment, registerRoutePaymentWithPenalty, reverseRoutePaymentWithPenalty } from "@/lib/payment-utils";
+import { resolvePenaltyPaymentPlan, parsePenaltyInput, newOperationId, PENALTY_MODE_REQUIRED_MESSAGE, type PenaltyMode } from "@/lib/penalty-payment";
 import { logAction } from "@/lib/audit-utils";
 import { isCashClosed, getTodayCashDate, assertCashOpen } from "@/lib/cash-lock";
 import { useOperationalDate } from "@/hooks/useActiveCash";
@@ -379,6 +381,8 @@ export default function DailyCashPage() {
   const [payDialogId, setPayDialogId] = useState<string | null>(null);
   const [payState, setPayState] = useState<PaymentAmountState>(createPaymentAmountState());
   const [payPenaltyAmount, setPayPenaltyAmount] = useState("");
+  const [payPenaltyMode, setPayPenaltyMode] = useState<PenaltyMode | null>(null);
+  const payLockRef = useRef(false);
   const [payDate, setPayDate] = useState(selectedDate);
   const [notPaidDialogId, setNotPaidDialogId] = useState<string | null>(null);
   const [notPaidObs, setNotPaidObs] = useState("");
@@ -670,9 +674,7 @@ export default function DailyCashPage() {
       const npLoanIds = new Set<string>();
       const npInstIds = new Set<string>();
 
-      for (const ev of allEvents) {
-        if (ev.event_type === "pagamento" && ev.loan_id) paidLoanIds.add(ev.loan_id);
-      }
+      for (const id of collectHandledLoanIds(allEvents as unknown as FrozenPaymentEvent[], selectedDate)) paidLoanIds.add(id);
       for (const mov of (paidMovementsData || []) as CashMovementPaymentRow[]) {
         if (mov.loan_id) paidLoanIds.add(mov.loan_id);
       }
@@ -851,7 +853,7 @@ export default function DailyCashPage() {
 
   // === Payment handler: wait for server confirmation (no premature optimistic UI) ===
   const handlePay= async (id: string) => {
-    if (isSubmitting) return;
+    if (isSubmitting || payLockRef.current) return;
     if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
     if (isClosed) { toast.error("Caixa fechado. Reabra para registrar."); return; }
 
@@ -863,44 +865,68 @@ export default function DailyCashPage() {
     }
     const safeClientId = getInstClientId(inst)!;
     const safeClientName = getInstClientName(inst);
-
-    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
-
     const fullInstAmount = Number(inst.amount);
-    const { amount: paidValue, error: amountError } = validatePaymentAmount(
-      payState,
-      fullInstAmount,
-      Number((inst as any).loans?.remaining_balance ?? (inst as any).remaining_balance ?? 0),
-    );
-    if (amountError) { toast.error(amountError); return; }
+    const remaining = Number((inst as any).loans?.remaining_balance ?? (inst as any).remaining_balance ?? 0);
 
+    const penaltyValue = parsePenaltyInput(payPenaltyAmount);
+    if (penaltyValue === null) { toast.error("Valor de multa inválido"); return; }
+
+    let paidValue = 0;
+    if (!(penaltyValue > 0 && payPenaltyMode === "penalty_only")) {
+      const { amount, error: amountError } = validatePaymentAmount(payState, fullInstAmount, remaining);
+      if (amountError) { toast.error(amountError); return; }
+      paidValue = amount;
+    }
+    const plan = resolvePenaltyPaymentPlan({ penaltyRaw: payPenaltyAmount, mode: payPenaltyMode, regularAmount: paidValue });
+    if (plan.kind === "invalid") { toast.error(plan.error); return; }
+    if (plan.kind === "needs_mode") { toast.error(PENALTY_MODE_REQUIRED_MESSAGE); return; }
+
+    if (plan.kind === "regular_and_penalty" || plan.kind === "penalty_only") {
+      const isOnly = plan.kind === "penalty_only";
+      const ok = await confirm({
+        title: isOnly ? "Confirmar somente multa?" : "Confirmar parcela + multa?",
+        description: isOnly
+          ? "O cliente não está pagando nenhuma parcela. O saldo, o vencimento e o atraso continuarão iguais."
+          : "A parcela será abatida normalmente. A multa será registrada separadamente.",
+        affected: [
+          { label: "Cliente", value: safeClientName },
+          { label: "Parcela", value: formatCurrency(plan.regular) },
+          { label: "Multa", value: formatCurrency(plan.penalty) },
+          { label: "Total recebido", value: formatCurrency(plan.regular + plan.penalty) },
+        ],
+        confirmText: "Confirmar",
+      });
+      if (!ok) return;
+    }
+
+    payLockRef.current = true;
     setIsSubmitting(true);
     try {
-      // Pagamento sempre na data do caixa ATIVO.
       await assertCashOpen(payDate, activeCashScope);
-      if (multaValue > 0) {
-
-        try {
-          await registerPenaltyPayment({
-            loanId: inst.loan_id, amount: multaValue,
+      if (plan.kind === "normal") {
+        if (paidValue > 0) {
+          await registerPayment({
+            loanId: inst.loan_id, amount: paidValue,
             clientId: safeClientId, clientName: safeClientName,
             cashDate: payDate, origin: "rota",
+            installmentId: inst.id, startInstNumber: inst.number,
+            observation: resolveObservation(payState, fullInstAmount),
           });
-          toast.success(`Multa: ${formatCurrency(multaValue)} registrado!`);
-        } catch {
-          toast.error("Nenhuma multa registrada para abater");
+          toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
         }
-      }
-      if (paidValue > 0) {
-        await registerPayment({
-          loanId: inst.loan_id, amount: paidValue,
-          clientId: safeClientId, clientName: safeClientName,
-          cashDate: payDate, origin: "rota",
-          installmentId: inst.id, startInstNumber: inst.number,
-          observation: resolveObservation(payState, fullInstAmount),
+      } else {
+        await registerRoutePaymentWithPenalty({
+          installmentId: inst.id,
+          cashDate: payDate,
+          mode: plan.kind,
+          regularAmount: plan.regular,
+          penaltyAmount: plan.penalty,
+          observation: plan.kind === "regular_and_penalty" ? resolveObservation(payState, fullInstAmount) : null,
+          operationId: newOperationId(),
         });
-        toast.success(`Pagamento: ${formatCurrency(paidValue)} registrado!`);
+        toast.success(plan.kind === "penalty_only"
+          ? `Multa: ${formatCurrency(plan.penalty)} registrada!`
+          : `Parcela + multa: ${formatCurrency(plan.regular + plan.penalty)} registrado!`);
       }
       resetPayDialog();
       await fetchData({ silent: true });
@@ -908,13 +934,14 @@ export default function DailyCashPage() {
       console.error("[handlePay] failed", err);
       if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao registrar pagamento. O cliente continua em pendentes.");
     } finally {
+      payLockRef.current = false;
       setIsSubmitting(false);
     }
   };
 
 
   const resetPayDialog = () => {
-    setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayDate(selectedDate); setPayDialogId(null);
+    setPayState(createPaymentAmountState()); setPayPenaltyAmount(""); setPayPenaltyMode(null); setPayDate(selectedDate); setPayDialogId(null);
   };
 
   /** Congela no momento da marcação todos os dados do "Não pagou" (nunca recalculados depois). */
@@ -1193,6 +1220,37 @@ export default function DailyCashPage() {
     }
   };
 
+  const handleUndoPenaltyOperation = async (group: PaidGroup) => {
+    if (isSubmitting) return;
+    if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
+    if (isClosed) { toast.error("Caixa fechado. Reabra para desfazer."); return; }
+    if (!group.operationId) return;
+    const ok = await confirm({
+      title: group.paymentMode === "penalty_only" ? "Desfazer multa?" : "Desfazer parcela + multa?",
+      description: group.paymentMode === "penalty_only"
+        ? "A multa recebida será estornada. A parcela não é alterada."
+        : "A parcela e a multa serão estornadas juntas.",
+      affected: [
+        { label: "Cliente", value: group.clientName || "—" },
+        { label: "Total", value: formatCurrency(group.totalPaid) },
+      ],
+      confirmText: "Desfazer", destructive: true,
+    });
+    if (!ok) return;
+    setIsSubmitting(true);
+    try {
+      await reverseRoutePaymentWithPenalty({ operationId: group.operationId });
+      if (group.loanId) localActionedLoanIds.current.delete(group.loanId);
+      toast.success("Operação desfeita!");
+      await fetchData({ silent: true });
+    } catch (err: any) {
+      console.error("[handleUndoPenaltyOperation] failed", err);
+      if (!reportFinancialError(err)) toast.error(err?.message || "Não foi possível desfazer.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleUndoPayment = async (movementId: string) => {
     if (isSubmitting) return;
     if (readOnly) { toast.error("Modo visualização: ações bloqueadas."); return; }
@@ -1450,23 +1508,66 @@ export default function DailyCashPage() {
                 <p className="text-sm text-muted-foreground">
                   {clientName} — Saldo: {formatCurrency(remainingBalance)} — Parcela: {formatCurrency(instAmount)}
                 </p>
-                <PaymentAmountSelector
-                  installmentAmount={instAmount}
-                  remainingBalance={remainingBalance}
-                  state={payState}
-                  onChange={setPayState}
-                />
-                <div>
-                  <Label>Multa a cobrar hoje (R$)</Label>
-                  <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Opcional — registrado separado da parcela</p>
-                </div>
+                {(() => {
+                  const penVal = parsePenaltyInput(payPenaltyAmount) ?? 0;
+                  const onlyPenalty = penVal > 0 && payPenaltyMode === "penalty_only";
+                  const regVal = onlyPenalty ? 0 : (validatePaymentAmount(payState, instAmount, remainingBalance).amount || 0);
+                  return (
+                    <>
+                      <div className={onlyPenalty ? "opacity-40 pointer-events-none" : ""} aria-disabled={onlyPenalty}>
+                        <PaymentAmountSelector
+                          installmentAmount={instAmount}
+                          remainingBalance={remainingBalance}
+                          state={payState}
+                          onChange={setPayState}
+                          disabled={onlyPenalty}
+                        />
+                      </div>
+                      <div className="rounded-md border border-warning/50 bg-warning/10 p-2">
+                        <Label>Multa recebida (opcional)</Label>
+                        <Input type="number" inputMode="decimal" placeholder="0,00" value={payPenaltyAmount}
+                          data-testid="route-penalty-amount"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setPayPenaltyAmount(v);
+                            if (!((parsePenaltyInput(v) ?? 0) > 0)) setPayPenaltyMode(null);
+                          }} />
+                        <p className="text-[10px] text-muted-foreground mt-0.5">A multa é contabilizada separadamente e não reduz o saldo da parcela.</p>
+                      </div>
+                      {penVal > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">{PENALTY_MODE_REQUIRED_MESSAGE}</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button type="button" variant={payPenaltyMode === "regular_and_penalty" ? "default" : "outline"} onClick={() => setPayPenaltyMode("regular_and_penalty")}>Parcela + multa</Button>
+                            <Button type="button" variant={payPenaltyMode === "penalty_only" ? "default" : "outline"} onClick={() => setPayPenaltyMode("penalty_only")}>Somente multa</Button>
+                          </div>
+                          {payPenaltyMode && (
+                            <div className="rounded-md bg-muted/50 p-2 text-xs tabular-nums space-y-0.5">
+                              <div>Parcela: {formatCurrency(regVal)}</div>
+                              <div>Multa: {formatCurrency(penVal)}</div>
+                              <div className="font-semibold">Total recebido: {formatCurrency(regVal + penVal)}</div>
+                              <div>Saldo antes: {formatCurrency(remainingBalance)}</div>
+                              {onlyPenalty ? (
+                                <>
+                                  <div>Saldo sem alteração</div>
+                                  <div>Vencimento sem alteração</div>
+                                </>
+                              ) : (
+                                <div>Saldo estimado depois: {formatCurrency(Math.max(0, remainingBalance - regVal))}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <div>
                   <Label>Data do pagamento</Label>
                   <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
                 </div>
                 <p className="text-xs text-muted-foreground">💡 Valor excedente abate parcelas seguintes.</p>
-                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>
+                <Button onClick={() => handlePay(inst.id)} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting || ((parsePenaltyInput(payPenaltyAmount) ?? 0) > 0 && !payPenaltyMode)}>
                   {isSubmitting ? "Processando..." : "Confirmar Pagamento"}
                 </Button>
               </div>
@@ -1542,8 +1643,15 @@ export default function DailyCashPage() {
   // === Paid row ===
   const renderPaidRow = (group: PaidGroup) => {
     const isSettled = group.hasFrozenProgress && (group.remainingAfter ?? 1) <= 0.01;
+    const isPenaltyOnly = group.paymentMode === "penalty_only";
+    const isWithPenalty = group.paymentMode === "regular_and_penalty";
     return (
-      <div key={safeKey("paid", group.movementId || group.eventId || group.loanId, group.createdAt, group.totalPaid)} className="rounded-lg border border-success/30 bg-card px-3 py-2">
+      <div key={safeKey("paid", group.movementId || group.eventId || group.loanId, group.createdAt, group.totalPaid)} className={`rounded-lg border px-3 py-2 ${isPenaltyOnly ? "border-warning/50 bg-warning/10" : "border-success/30 bg-card"}`}>
+        {(isPenaltyOnly || isWithPenalty) && (
+          <div className={`text-[10px] font-semibold uppercase ${isPenaltyOnly ? "text-warning" : "text-success"}`}>
+            {isPenaltyOnly ? "Pagou somente multa" : "Pagou parcela + multa"}
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-sm truncate">{group.clientName}</span>
           <div className="flex items-center gap-2">
@@ -1559,7 +1667,7 @@ export default function DailyCashPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleUndoPayment(group.movementId)} className="text-destructive">
+                  <DropdownMenuItem onClick={() => (group.operationId ? handleUndoPenaltyOperation(group) : handleUndoPayment(group.movementId))} className="text-destructive">
                     Desfazer pagamento
                   </DropdownMenuItem>
                   {group.loanId && (
@@ -1572,7 +1680,21 @@ export default function DailyCashPage() {
             )}
           </div>
         </div>
-        {group.hasFrozenProgress ? (
+        {(isPenaltyOnly || isWithPenalty) && (
+          <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
+            Parcela: {formatCurrency(group.regularAmount ?? 0)}
+            <span className="mx-1">•</span>
+            {isPenaltyOnly ? "Multa recebida" : "Multa"}: <span className="text-warning font-medium">{formatCurrency(group.penaltyAmount ?? 0)}</span>
+            <span className="mx-1">•</span>
+            {isPenaltyOnly ? "Total recebido" : "Total"}: <span className="text-foreground font-medium">{formatCurrency(group.totalPaid)}</span>
+          </div>
+        )}
+        {isPenaltyOnly ? (
+          <div className="mt-0.5 text-[11px] text-muted-foreground leading-tight">
+            <div className="font-medium text-foreground">Parcela permanece em aberto</div>
+            <div>Saldo sem alteração: {formatCurrency(group.remainingAfter ?? 0)} • Vencimento original mantido</div>
+          </div>
+        ) : group.hasFrozenProgress ? (
           <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums leading-tight">
             <div>
               Parcelas: <span className="text-foreground font-medium">{group.progressBeforeFormatted} → {group.progressAfterFormatted}</span>
