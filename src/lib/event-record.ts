@@ -248,6 +248,28 @@ export function normalizeEvent(e: NormalizeInput, ctx: NormalizeContext = {}): N
       break;
     }
     case "recebimento_multa": {
+      const mode = text(m.payment_mode);
+      if (mode === "regular_and_penalty" || mode === "penalty_only") {
+        const penalty = safeAmount(m.penalty_amount) ?? amountIn;
+        const regular = mode === "penalty_only" ? 0 : (safeAmount(m.regular_amount) ?? 0);
+        const total = safeAmount(m.total_received) ?? regular + penalty;
+        const before = safeAmount(m.remaining_balance_before);
+        const after = safeAmount(m.remaining_balance_after);
+        title = mode === "penalty_only" ? "Pagou somente multa" : "Pagou parcela + multa";
+        category = "Multa recebida";
+        P("Parcela", money(regular));
+        P("Multa", money(penalty));
+        P("Total", money(total));
+        P("Saldo antes", money(before));
+        P("Saldo depois", money(after));
+        if (mode === "penalty_only") {
+          P("Situação da parcela", "Parcela permanece em aberto");
+          P("Vencimento", "Vencimento original mantido");
+        }
+        P("Operação", shortId(m.operation_id));
+        summary = [`parcela ${money(regular)}`, `multa ${money(penalty)}`, `total ${money(total)}`].join(" · ");
+        break;
+      }
       const received = safeAmount(m.penalty_paid_amount) ?? safeAmount(m.payment_amount) ?? amountIn;
       const before = safeAmount(m.penalty_balance_before);
       const after = safeAmount(m.penalty_balance_after);
