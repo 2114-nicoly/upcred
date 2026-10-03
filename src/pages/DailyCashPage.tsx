@@ -1534,7 +1534,7 @@ export default function DailyCashPage() {
                         />
                       </div>
                       <div className="rounded-md border border-warning/50 bg-warning/10 p-2">
-                        <Label>Multa recebida (opcional)</Label>
+                        <Label>Multa cobrada neste pagamento</Label>
                         <Input type="number" inputMode="decimal" placeholder="0,00" value={payPenaltyAmount}
                           data-testid="route-penalty-amount"
                           onChange={(e) => {

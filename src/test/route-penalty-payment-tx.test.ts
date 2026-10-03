@@ -75,7 +75,10 @@ describe("register_route_payment_with_penalty_tx", () => {
 
   it("registra a multa no sistema existente e só reduz penalty_receivable pela multa antiga", () => {
     expect(reg).toContain("'recebimento_multa'");
-    expect(reg).toContain("INSERT INTO public.penalties");
+    // Multa digitada é adicional: não cria penalties nem parcela agregada.
+    expect(reg).not.toContain("INSERT INTO public.penalties");
+    expect(reg).not.toMatch(/INSERT INTO public\.installments/);
+    expect(reg).toContain("'snapshot_version', 3");
     expect(reg).toMatch(/penalty_receivable = penalty_receivable - v_used_old/);
     expect(reg).toContain("UPDATE public.cash_movements SET daily_event_id = v_event_id");
     expect(reg).toContain("log_audit");
@@ -97,10 +100,10 @@ describe("reverse_route_payment_with_penalty_tx", () => {
     expect(rev).toContain("v_mode <> 'penalty_only'");
   });
 
-  it("multa criada e paga é cancelada, não fica pendente", () => {
+  it("v3: estorno só restaura multas pré-existentes; legado continua cancelando multa criada", () => {
+    expect(rev).toMatch(/snapshot_version'\)::int, 0\) >= 3/);
+    expect(rev).toContain("v_exp_paid   := (v_snap->>'paid_amount')::numeric + v_used_old");
     expect(rev).toMatch(/UPDATE public\.penalties\s+SET paid = false, paid_amount = 0, paid_at = NULL,\s+cancelled_at = now\(\)/);
-    expect(rev).toMatch(/v_new_amount := round\(v_pen_inst\.amount - v_new_part, 2\)/);
-    expect(rev).toContain("v_new_status := 'cancelled'");
   });
 
   it("restaura multa antiga e penalty_receivable", () => {
