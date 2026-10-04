@@ -214,7 +214,7 @@ export default function LoanDetailPage() {
       setLoan(l as unknown as Loan);
       const { data: inst } = await supabase.from("installments").select("*").eq("loan_id", loanId!).order("number");
       setInstallments(inst || []);
-      const { data: pen } = await supabase.from("penalties").select("*").eq("loan_id", loanId!).order("created_at");
+      const { data: pen } = await supabase.from("penalties").select("*").eq("loan_id", loanId!).is("cancelled_at", null).order("created_at");
       setPenalties((pen as Penalty[]) || []);
 
       // Multas pagas: recebimentos de multa deste contrato ainda não estornados
@@ -305,6 +305,8 @@ export default function LoanDetailPage() {
 
   const penaltyTotal = penaltyInst ? Number(penaltyInst.amount) : 0;
   const penaltyPaid = penaltyInst ? Number(penaltyInst.paid_amount) : 0;
+  // Multas operacionais: somente registros com cancelled_at IS NULL e agregado não cancelado
+  const penaltyPending = penaltyInst && penaltyInst.status !== "cancelled" ? Math.max(0, penaltyTotal - penaltyPaid) : 0;
 
   // Overdue calculation
   const overdueInstallments = regularInstallments.filter((i) => {
@@ -1030,9 +1032,9 @@ export default function LoanDetailPage() {
           <div className="flex justify-between" data-testid="loan-penalties-paid"><span className="text-muted-foreground">Multas pagas:</span><span className="text-success">{formatCurrency(penaltiesPaidTotal)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Pago:</span><span className="text-success">{formatCurrency(totalPaidAll)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Saldo Restante:</span><span className="font-bold">{formatCurrency(remainingLoan)}</span></div>
-          {penaltyTotal > 0 && (
+          {penaltyPending > 0.01 && (
             <div className="border-t pt-2 space-y-1">
-              <div className="flex justify-between"><span className="text-destructive font-medium">Multas pendentes:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              <div className="flex justify-between"><span className="text-destructive font-medium">Multas pendentes:</span><span className="text-destructive font-semibold">{formatCurrency(penaltyPending)}</span></div>
             </div>
           )}
           {overdueDaysCount > 0 && (
@@ -1099,10 +1101,10 @@ export default function LoanDetailPage() {
       </Card>
 
       {/* Penalty button */}
-      {loanActive && (
+      {loanActive && (penalties.length > 0 || penaltyPending > 0.01) && (
         <Button variant="outline" className="w-full mb-4 border-warning/50 text-warning hover:bg-warning/10" onClick={() => setPenaltyDetailOpen(true)}>
           <AlertTriangle className="mr-2 h-4 w-4" />
-          🔶 Multas {penaltyInst ? `(${formatCurrency(penaltyTotal - penaltyPaid)} pendente)` : ""}
+          🔶 Multas {penaltyPending > 0.01 ? `(${formatCurrency(penaltyPending)} pendente)` : ""}
         </Button>
       )}
 
@@ -1256,7 +1258,7 @@ export default function LoanDetailPage() {
       )}
 
       {/* Penalty installment card */}
-      {penaltyInst && (
+      {penaltyInst && (penalties.length > 0 || penaltyPending > 0.01) && (
         <Card className="border-warning/50 mt-3">
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-1">
@@ -1343,9 +1345,9 @@ export default function LoanDetailPage() {
               onChange={setPayState}
             />
 
-            {penaltyInst && (penaltyTotal - penaltyPaid) > 0.01 && (
+            {penaltyInst && penaltyPending > 0.01 && (
               <div className="rounded-lg border border-warning/50 p-3 space-y-2">
-                <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(penaltyTotal - penaltyPaid)}</p>
+                <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(penaltyPending)}</p>
                 <Label>Valor destinado à multa (opcional)</Label>
                 <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
               </div>
@@ -1489,10 +1491,10 @@ export default function LoanDetailPage() {
                       <span className="font-semibold">Saldo devedor:</span>
                       <span className="text-2xl font-bold text-primary">{formatCurrency(renegBase)}</span>
                     </div>
-                    {penaltyTotal - penaltyPaid > 0.01 && (
+                    {penaltyPending > 0.01 && (
                       <div className="flex justify-between text-destructive">
                         <span>Multas pendentes:</span>
-                        <span className="font-semibold">{formatCurrency(penaltyTotal - penaltyPaid)}</span>
+                        <span className="font-semibold">{formatCurrency(penaltyPending)}</span>
                       </div>
                     )}
                   </CardContent>
@@ -1658,10 +1660,10 @@ export default function LoanDetailPage() {
             <div className="rounded-lg border p-3 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Parcelas restantes:</span><span className="font-semibold">{loan.installment_count - Math.floor(loanProgress.fractionalProgress)}/{loan.installment_count}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Valor restante:</span><span className="font-bold">{formatCurrency(Math.max(0, remainingLoan))}</span></div>
-              {penaltyTotal - penaltyPaid > 0.01 && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(penaltyTotal - penaltyPaid)}</span></div>
+              {penaltyPending > 0.01 && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Multa pendente:</span><span className="font-bold text-warning">{formatCurrency(penaltyPending)}</span></div>
               )}
-              <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency(Math.max(0, remainingLoan) + Math.max(0, penaltyTotal - penaltyPaid))}</span></div>
+              <div className="border-t pt-1 mt-1 flex justify-between"><span className="font-semibold">Total a quitar:</span><span className="font-bold text-primary">{formatCurrency(Math.max(0, remainingLoan) + penaltyPending)}</span></div>
             </div>
             <div><Label>Data do pagamento</Label><Input type="date" value={quitarDate} onChange={(e) => setQuitarDate(e.target.value)} /></div>
             <Button onClick={handleQuitarEmprestimo} className="w-full bg-success hover:bg-success/90" disabled={isSubmitting}>

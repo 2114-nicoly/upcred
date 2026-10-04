@@ -801,6 +801,7 @@ export default function DailyCashPage() {
         .from("penalties")
         .select("id, amount, loan_id, created_at, loans:loan_id(client_id, status, remaining_balance, clients:client_id(id, name))")
         .eq("paid", false)
+        .is("cancelled_at", null)
         .lte("created_at", selectedDate + "T23:59:59")
         .order("created_at", { ascending: false })
         .limit(100));
