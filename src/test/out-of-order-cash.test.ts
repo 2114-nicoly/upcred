@@ -23,7 +23,7 @@ function ledger(base: number) {
 
 describe("caixa fora da ordem cronológica", () => {
   it("consistência não usa mais reconstrução histórica", () => {
-    const body = latest.split("_assert_open_cash_consistency")[1];
+    const body = latest.split("_assert_open_cash_consistency")[1].replace(/--.*$/gm, "");
     expect(body).not.toContain("_closing_basis");
     expect(body).not.toContain("after_net");
     expect(body).toContain("_cash_ledger_net");
