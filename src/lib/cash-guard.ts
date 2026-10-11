@@ -98,3 +98,24 @@ export function reportFinancialError(
   }
   return true;
 }
+
+/**
+ * Abre o MESMO modal de saldo insuficiente a partir de uma pré-checagem
+ * feita no frontend (antes de gravar). Nunca criar outro modal: este é o
+ * único ponto de exibição de CASH_INSUFFICIENT.
+ */
+export function showCashGuardModal(
+  info: { available_cash: number; operation_amount: number; missing_amount: number },
+  opts: { scope?: CashGuardScope; onCashAdded?: () => void | Promise<void> } = {},
+): void {
+  handler?.({
+    info: {
+      code: "CASH_INSUFFICIENT",
+      available_cash: normalizeMoney(info.available_cash),
+      operation_amount: Math.abs(normalizeMoney(info.operation_amount)),
+      missing_amount: Math.abs(normalizeMoney(info.missing_amount)),
+    },
+    scope: opts.scope ?? null,
+    onCashAdded: opts.onCashAdded,
+  });
+}

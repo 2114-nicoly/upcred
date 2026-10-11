@@ -1,4 +1,4 @@
-import { reportFinancialError } from "@/lib/cash-guard";
+import { reportFinancialError, showCashGuardModal } from "@/lib/cash-guard";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateLoan, generateDueDates, formatCurrency } from "@/lib/loan-utils";
-import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, recalculateCashBalanceForLoan } from "@/lib/cash-utils";
+import { updateCashBalance, createCashMovement, linkCashMovementToDailyEvent, recalculateCashBalanceFromLedger, recalculateCashBalanceForLoan, getCashBalance } from "@/lib/cash-utils";
 import { createDailyEvent } from "@/lib/daily-events";
 import { settleLoan } from "@/lib/payment-utils";
 import PaymentAmountSelector from "@/components/PaymentAmountSelector";
@@ -329,9 +329,35 @@ export default function NewLoanPage() {
     try {
       await assertScopedCashOpen(isOngoing ? activeCashDate : loanDate, activeCashScope);
     } catch (err: any) {
-      if (!reportFinancialError(err)) toast.error(err?.message || "Caixa fechado para esta data");
+      if (!reportFinancialError(err, { scope: activeCashScope })) toast.error(err?.message || "Caixa fechado para esta data");
       setSaving(false);
       return;
+    }
+
+    // Pré-checagem de saldo: SEMPRE abrir o modal existente quando o dinheiro
+    // efetivamente liberado supera o Caixa Disponível do trabalhador responsável.
+    // Renovação compara SOMENTE o adicional liberado (valorLiberado), nunca o
+    // valor total do novo contrato. Importado (em andamento) não movimenta
+    // caixa e nunca é bloqueado aqui.
+    if (!isOngoing && cashOutPreview > 0.005) {
+      try {
+        const bal = await getCashBalance(activeCashScope);
+        const available = Number(bal?.available_cash ?? 0);
+        if (Number.isFinite(available) && cashOutPreview > available + 0.005) {
+          showCashGuardModal(
+            {
+              available_cash: available,
+              operation_amount: cashOutPreview,
+              missing_amount: cashOutPreview - available,
+            },
+            { scope: activeCashScope, onCashAdded: () => scopedCash.refresh() },
+          );
+          setSaving(false);
+          return;
+        }
+      } catch {
+        // Leitura de saldo indisponível: a validação definitiva é do banco.
+      }
     }
 
     // Guard: only 1 active loan per client (renewal allowed when targeting the existing active loan)
@@ -380,7 +406,7 @@ export default function NewLoanPage() {
         navigate("/");
       } catch (err: any) {
         console.error("Erro na renovação:", err);
-        if (!reportFinancialError(err)) toast.error(err?.message || "Erro ao renovar o empréstimo.");
+        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => scopedCash.refresh() })) toast.error(err?.message || "Erro ao renovar o empréstimo.");
       } finally {
         setSaving(false);
       }
@@ -583,7 +609,9 @@ export default function NewLoanPage() {
       } catch (err: any) {
         console.error("Erro ao criar movimentação/evento do empréstimo:", err);
         await rollbackLoan();
-        toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
+        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => scopedCash.refresh() })) {
+          toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
+        }
         setSaving(false);
         return;
       }
