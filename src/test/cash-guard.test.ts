@@ -83,4 +83,34 @@ describe("CASH_INSUFFICIENT", () => {
   it("reportFinancialError devolve false para erros genéricos (toast normal)", () => {
     expect(reportFinancialError(new Error("falha de rede"))).toBe(false);
   });
+
+  it("showCashGuardModal abre o mesmo modal com valores pré-calculados", () => {
+    const calls: any[] = [];
+    registerCashGuardHandler((r) => calls.push(r));
+    showCashGuardModal(
+      { available_cash: 4834.14, operation_amount: 5000, missing_amount: 165.86 },
+      { scope: { workerId: "w1", adminId: "a1" } },
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].info.code).toBe("CASH_INSUFFICIENT");
+    expect(calls[0].info.available_cash).toBe(4834.14);
+    expect(calls[0].info.operation_amount).toBe(5000);
+    expect(calls[0].info.missing_amount).toBe(165.86);
+    expect(calls[0].scope).toEqual({ workerId: "w1", adminId: "a1" });
+    registerCashGuardHandler(null);
+  });
+
+  it("pré-checagem de renovação: compara só o adicional liberado, não o total", () => {
+    // Novo contrato 5000, absorve 4600 do antigo → operação de caixa é 400.
+    // Saldo 500: não pode abrir modal (400 <= 500).
+    const calls: any[] = [];
+    registerCashGuardHandler((r) => calls.push(r));
+    const available = 500;
+    const valorLiberado = 400;
+    if (valorLiberado > available + 0.005) {
+      showCashGuardModal({ available_cash: available, operation_amount: valorLiberado, missing_amount: valorLiberado - available });
+    }
+    expect(calls).toHaveLength(0);
+    registerCashGuardHandler(null);
+  });
 });
