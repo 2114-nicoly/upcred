@@ -914,11 +914,17 @@ export default function NewLoanPage() {
               </div>
               <div className="flex items-center justify-between gap-2 border-t pt-1.5">
                 {cashPreview.state !== "ok" ? (
-                  <span className="text-xs text-muted-foreground">
-                    {cashPreview.state === "loading" ? "previsão indisponível" : "sem leitura de saldo"}
-                  </span>
+                  <>
+                    <span className="text-xs text-muted-foreground">
+                      {cashPreview.state === "loading" ? "previsão indisponível" : "sem leitura de saldo"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">—</span>
+                  </>
                 ) : isOngoing ? (
-                  <span className="text-xs text-muted-foreground">Sem efeito no caixa</span>
+                  <>
+                    <span className="text-xs text-muted-foreground">Sem efeito no caixa</span>
+                    <span className="text-xs text-muted-foreground">—</span>
+                  </>
                 ) : releasedAmount <= cashPreview.available + 0.005 ? (
                   <>
                     <span className="text-xs text-muted-foreground">Saldo previsto após liberação</span>
