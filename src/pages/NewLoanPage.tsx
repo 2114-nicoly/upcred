@@ -280,11 +280,11 @@ export default function NewLoanPage() {
     }
   }, [clientScope]);
 
-  // Troca de empresa/trabalhador: o número anterior é descartado na hora.
+  // Troca de cliente/empresa/trabalhador: o número anterior é descartado na hora.
   useEffect(() => {
     cashSeqRef.current += 1;
     setCashPreview({ state: "loading" });
-  }, [clientScope]);
+  }, [clientScope, clientId]);
 
   // Consulta ao abrir a tela e sempre que o valor liberado muda (novo valor,
   // ou dados da renovação). O modal chama refreshAvailableCash ao adicionar dinheiro.
