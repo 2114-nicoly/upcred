@@ -12,7 +12,7 @@ const SRC = readFileSync(resolve(process.cwd(), "src/pages/NewLoanPage.tsx"), "u
 const refreshFn = (() => {
   const start = SRC.indexOf("const refreshAvailableCash");
   expect(start).toBeGreaterThan(-1);
-  const end = SRC.indexOf("\n  // Troca de empresa", start);
+  const end = SRC.indexOf("\n  // Troca de cliente", start);
   expect(end).toBeGreaterThan(start);
   return SRC.slice(start, end);
 })();
@@ -33,7 +33,7 @@ describe("card Caixa disponível (NewLoanPage)", () => {
 
   it("descarta leitura do trabalhador anterior quando o escopo muda", () => {
     expect(refreshFn).toContain("if (seq !== cashSeqRef.current) return;");
-    expect(SRC).toContain("cashSeqRef.current += 1;");
+    expect(SRC).toMatch(/cashSeqRef\.current \+= 1;[\s\S]{0,120}\}, \[clientScope, clientId\]\);/);
   });
 
   it("valor liberado: renovação usa valorLiberado, novo usa numAmount, importado zero", () => {
