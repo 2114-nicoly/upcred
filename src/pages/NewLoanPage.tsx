@@ -404,7 +404,10 @@ export default function NewLoanPage() {
               operation_amount: cashOutPreview,
               missing_amount: cashOutPreview - available,
             },
-            { scope: activeCashScope, onCashAdded: () => scopedCash.refresh() },
+            {
+              scope: activeCashScope,
+              onCashAdded: () => { scopedCash.refresh(); void refreshAvailableCash(); },
+            },
           );
           setSaving(false);
           return;
@@ -460,7 +463,7 @@ export default function NewLoanPage() {
         navigate("/");
       } catch (err: any) {
         console.error("Erro na renovação:", err);
-        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => scopedCash.refresh() })) toast.error(err?.message || "Erro ao renovar o empréstimo.");
+        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => { scopedCash.refresh(); void refreshAvailableCash(); } })) toast.error(err?.message || "Erro ao renovar o empréstimo.");
       } finally {
         setSaving(false);
       }
@@ -663,7 +666,7 @@ export default function NewLoanPage() {
       } catch (err: any) {
         console.error("Erro ao criar movimentação/evento do empréstimo:", err);
         await rollbackLoan();
-        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => scopedCash.refresh() })) {
+        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => { scopedCash.refresh(); void refreshAvailableCash(); } })) {
           toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
         }
         setSaving(false);
@@ -881,6 +884,63 @@ export default function NewLoanPage() {
             )}
           </div>
         )}
+
+        <Card className="border-border/60 bg-muted/30">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Caixa disponível
+              </span>
+              {isOngoing && (
+                <span className="text-[11px] text-muted-foreground">não movimenta o caixa</span>
+              )}
+            </div>
+            <div className="mt-1.5 space-y-1 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">Saldo atual do trabalhador</span>
+                {cashPreview.state === "ok" ? (
+                  <span className="font-bold tabular-nums">{formatCurrency(cashPreview.available)}</span>
+                ) : cashPreview.state === "loading" ? (
+                  <span className="text-xs text-muted-foreground">consultando…</span>
+                ) : (
+                  <span className="text-xs font-medium text-warning">Saldo indisponível</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {renewFromLoanId ? "Valor liberado ao cliente" : "Valor a liberar"}
+                </span>
+                <span className="font-semibold tabular-nums">{formatCurrency(releasedAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t pt-1.5">
+                {cashPreview.state !== "ok" ? (
+                  <span className="text-xs text-muted-foreground">
+                    {cashPreview.state === "loading" ? "previsão indisponível" : "sem leitura de saldo"}
+                  </span>
+                ) : isOngoing ? (
+                  <span className="text-xs text-muted-foreground">Sem efeito no caixa</span>
+                ) : releasedAmount <= cashPreview.available + 0.005 ? (
+                  <>
+                    <span className="text-xs text-muted-foreground">Saldo previsto após liberação</span>
+                    <span className="font-semibold tabular-nums text-success">
+                      {formatCurrency(cashPreview.available - releasedAmount)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1 text-xs text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Falta no caixa
+                    </span>
+                    <span className="font-bold tabular-nums text-destructive">
+                      {formatCurrency(releasedAmount - cashPreview.available)}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <div>
           <Label>Valor Emprestado (R$)</Label>
