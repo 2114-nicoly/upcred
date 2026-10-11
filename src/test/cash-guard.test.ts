@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { normalizeMoney } from "@/lib/money";
 import { formatCurrency } from "@/lib/loan-utils";
-import { parseCashInsufficient, reportFinancialError, registerCashGuardHandler } from "@/lib/cash-guard";
+import { parseCashInsufficient, reportFinancialError, registerCashGuardHandler, showCashGuardModal } from "@/lib/cash-guard";
 
 const pgError = (available: number, operation: number, missing: number) => ({
   message: `Saldo insuficiente no caixa. Caixa disponível atual: R$ ${available.toFixed(2)}. Valor da operação: R$ ${Math.abs(operation).toFixed(2)}. Faltam: R$ ${missing.toFixed(2)}.`,
