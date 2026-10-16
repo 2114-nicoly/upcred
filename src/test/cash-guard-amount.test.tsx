@@ -8,7 +8,7 @@ const { rpc, errorToast } = vi.hoisted(() => ({
   errorToast: vi.fn(),
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc } }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: errorToast } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: errorToast, warning: vi.fn() } }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ workerId: "w1", adminId: "a1" }) }));
 vi.mock("@/hooks/useEffectiveScope", () => ({
   useEffectiveScope: () => ({ effectiveWorkerId: "w1", effectiveAdminId: "a1", readOnly: false }),
@@ -17,10 +17,10 @@ vi.mock("@/lib/loan-cash", () => ({
   fetchScopedActiveCash: vi.fn().mockResolvedValue({ cashDate: "2026-10-16" }),
 }));
 
-async function openEntry(missing = 20.5) {
-  render(<CashGuardProvider><span>Conteúdo</span></CashGuardProvider>);
+async function openEntry(missing = 20.5, onCashAdded?: () => void | Promise<void>) {
+  render(<CashGuardProvider><input aria-label="Formulário do empréstimo" defaultValue="1250" /></CashGuardProvider>);
   const { act } = await import("@testing-library/react");
-  act(() => showCashGuardModal({ available_cash: 0, operation_amount: missing, missing_amount: missing }));
+  act(() => showCashGuardModal({ available_cash: 0, operation_amount: missing, missing_amount: missing }, { onCashAdded }));
   fireEvent.click(await screen.findByRole("button", { name: "Adicionar dinheiro ao caixa" }));
   return screen.getByLabelText("Valor da entrada");
 }
@@ -28,6 +28,31 @@ async function openEntry(missing = 20.5) {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("entrada monetária do modal de saldo insuficiente", () => {
+  it("registra na data do caixa ativo e atualiza sem perder o formulário", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    await openEntry(20.5, refresh);
+    fireEvent.click(screen.getByRole("button", { name: "Revisar entrada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar entrada" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("register_manual_movement", {
+      p_cash_date: "2026-10-16", p_type: "entrada_manual", p_amount: 20.5,
+      p_observation: "Aporte para cobrir saldo insuficiente do caixa",
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Formulário do empréstimo")).toHaveValue("1250");
+  });
+
+  it("falha ao atualizar depois da gravação não permite repetir o aporte confirmado", async () => {
+    await openEntry(20.5, vi.fn().mockRejectedValue(new Error("Falha na atualização")));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar entrada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar entrada" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(errorToast).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Formulário do empréstimo")).toHaveValue("1250");
+  });
+
   it.each([
     ["20,50", 20.5],
     ["1.080,50", 1080.5],

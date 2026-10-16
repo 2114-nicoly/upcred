@@ -50,7 +50,7 @@ describe("card Caixa disponível (NewLoanPage)", () => {
   });
 
   it("adicionar dinheiro pelo modal existente atualiza o card", () => {
-    const uses = SRC.match(/onCashAdded: \(\) => \{[^}]*\}/g) ?? [];
+    const uses = SRC.match(/onCashAdded: async \(\) => \{[^}]*\}/g) ?? [];
     expect(uses.length).toBeGreaterThanOrEqual(3);
     for (const u of uses) {
       expect(u).toContain("scopedCash.refresh()");
