@@ -68,6 +68,16 @@ export default function ClientsPage() {
   const [archivedClients, setArchivedClients] = useState<(Client & { archived_at: string | null })[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
 
+  // URL changes (including back/forward) restore the search, not each keystroke.
+  useEffect(() => { setSearch(initialQ); }, [initialQ]);
+
+  const persistSearch = () => {
+    if (search === initialQ) return;
+    const next = new URLSearchParams(searchParams);
+    if (search) next.set("q", search); else next.delete("q");
+    setSearchParams(next, { replace: true, preventScrollReset: true });
+  };
+
   // Rascunho do cadastro de NOVO cliente (não se aplica à edição):
   // preserva os campos se o celular reconstruir a página em segundo plano.
   const newClientDraft = useFormDraft(
@@ -439,13 +449,8 @@ export default function ClientsPage() {
           className="pl-9"
           placeholder="Buscar por nome, código, telefone ou documento..."
           value={search}
-          onChange={(e) => {
-            const v = e.target.value;
-            setSearch(v);
-            const next = new URLSearchParams(searchParams);
-            if (v) next.set("q", v); else next.delete("q");
-            setSearchParams(next, { replace: true });
-          }}
+          onChange={(e) => setSearch(e.target.value)}
+          onBlur={persistSearch}
         />
       </div>
 
