@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2,
+  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2, Pencil,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -25,6 +25,7 @@ import AuditLogList from "@/components/AuditLogList";
 import AccessSection from "@/components/AccessSection";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
+import WorkerEditDialog from "@/components/WorkerEditDialog";
 import {
   AccessMaps, EMPTY_ACCESS_MAPS, companyStatusLabel, getEffectiveAccessStatus, isCompanyPaused, loadAccessMaps,
 } from "@/lib/access-control";
@@ -79,6 +80,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [workerToday, setWorkerToday] = useState<Record<string, WorkerToday>>({});
+  const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   // Acesso/mensalidade: somente leitura aqui (gerenciado na aba "Acessos").
   const [accessMaps, setAccessMaps] = useState<AccessMaps>(EMPTY_ACCESS_MAPS);
   const companyPaused = isCompanyPaused(accessMaps.controlByAdmin[adminId]);
@@ -462,6 +464,11 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                           {wt?.lastActivity && <> · Últ. ativ.: {format(new Date(wt.lastActivity), "dd/MM HH:mm")}</>}
                         </p>
                       </div>
+                      {!isArchived && (
+                        <Button size="sm" variant="outline" className="h-9 shrink-0 px-3 text-xs" onClick={(e) => { e.stopPropagation(); setEditingWorker(w); }} aria-label={`Editar ${w.nome}`}>
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                        </Button>
+                      )}
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
 
@@ -574,6 +581,8 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <WorkerEditDialog worker={editingWorker} onOpenChange={(o) => !o && setEditingWorker(null)} onSaved={() => load()} />
     </div>
   );
 }
