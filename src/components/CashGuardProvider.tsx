@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -9,11 +10,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/loan-utils";
-import { normalizeMoney } from "@/lib/money";
+import { parseAmountInput } from "@/lib/payment-amount";
 import { CashGuardRequest, registerCashGuardHandler } from "@/lib/cash-guard";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { fetchScopedActiveCash } from "@/lib/loan-cash";
+
+// Decimal brasileiro ou decimal simples com ponto (até duas casas).
+// Milhares com ponto só são aceitos com vírgula decimal explícita.
+const cashEntrySchema = z.string().trim().max(30).regex(
+  /^(?:\d+(?:,\d{1,2})?|\d+\.\d{1,2}|\d{1,3}(?:\.\d{3})+,\d{1,2})$/,
+).transform(parseAmountInput).refine(
+  (value): value is number => value !== null && value > 0 && Number.isFinite(value)
+    && Number.isSafeInteger(Math.round(value * 100)),
+);
 
 /**
  * Modal ÚNICO de saldo insuficiente, usado por todas as telas.
@@ -29,13 +39,18 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
   const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [confirmedAmount, setConfirmedAmount] = useState<number | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     registerCashGuardHandler((r) => {
       setReq(r);
       setAdding(false);
       setSubmitting(false);
-      setAmount(String(r.info.missing_amount || ""));
+      setConfirmedAmount(null);
+      setAmount(Number.isFinite(r.info.missing_amount)
+        ? r.info.missing_amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : "");
     });
     return () => registerCashGuardHandler(null);
   }, []);
@@ -53,12 +68,24 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
     (targetWorker ?? null) === (workerId ?? null) && (targetAdmin ?? null) === (adminId ?? null);
   const canAddMoney = !readOnly && ownScopeMatches;
 
-  const close = () => { setReq(null); setAdding(false); setAmount(""); };
+  const close = () => {
+    if (submittingRef.current) return;
+    setReq(null); setAdding(false); setAmount(""); setConfirmedAmount(null);
+  };
+
+  const prepareConfirmation = () => {
+    const result = cashEntrySchema.safeParse(amount);
+    if (!result.success || result.data === null) {
+      toast.error("Informe um valor válido maior que zero, como 20,50 ou 1.080,50.");
+      return;
+    }
+    setConfirmedAmount(result.data);
+  };
 
   const handleAdd = async () => {
-    if (submitting) return;
-    const value = normalizeMoney(String(amount).replace(/\./g, "").replace(",", "."));
-    if (!(value > 0)) { toast.error("Informe um valor maior que zero"); return; }
+    if (submittingRef.current || confirmedAmount === null || !canAddMoney) return;
+    const value = confirmedAmount;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const cash = await fetchScopedActiveCash({ workerId: targetWorker, adminId: targetAdmin });
@@ -72,10 +99,12 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       toast.success("Dinheiro adicionado ao caixa. Confirme novamente a operação.");
       await req.onCashAdded?.();
+      submittingRef.current = false;
       close();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao adicionar dinheiro ao caixa");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -101,12 +130,13 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          {adding && canAddMoney && (
+          {adding && canAddMoney && confirmedAmount === null && (
             <div className="space-y-2">
               <Label htmlFor="cash-guard-amount">Valor da entrada</Label>
               <Input
                 id="cash-guard-amount"
                 inputMode="decimal"
+                maxLength={30}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0,00"
@@ -118,12 +148,23 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
+          {adding && canAddMoney && confirmedAmount !== null && (
+            <p className="text-sm">
+              Confirma a entrada de <strong>{formatCurrency(confirmedAmount)}</strong> no caixa?
+            </p>
+          )}
+
           <AlertDialogFooter>
             {adding && canAddMoney ? (
               <>
                 <Button variant="outline" onClick={close} disabled={submitting}>Cancelar</Button>
-                <Button onClick={handleAdd} disabled={submitting}>
-                  {submitting ? "Registrando..." : "Confirmar entrada"}
+                {confirmedAmount !== null && (
+                  <Button variant="outline" onClick={() => setConfirmedAmount(null)} disabled={submitting}>
+                    Editar valor
+                  </Button>
+                )}
+                <Button onClick={confirmedAmount === null ? prepareConfirmation : handleAdd} disabled={submitting}>
+                  {submitting ? "Registrando..." : confirmedAmount === null ? "Revisar entrada" : "Confirmar entrada"}
                 </Button>
               </>
             ) : (
