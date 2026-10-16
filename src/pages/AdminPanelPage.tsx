@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight,
+import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, Pencil,
   TrendingUp, AlertTriangle, Target, ExternalLink, Wallet, CalendarDays, History } from "lucide-react";
 
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
@@ -34,6 +34,7 @@ import { FinancialDetails, WorkerSummaryList } from "@/components/panel/PanelSum
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import AccessHistoryDialog from "@/components/access/AccessHistoryDialog";
 import WorkerRequestsAdminSection from "@/components/access/WorkerRequestsAdminSection";
+import WorkerEditDialog from "@/components/WorkerEditDialog";
 
 import { AccessMaps, EMPTY_ACCESS_MAPS, isCompanyPaused, loadAccessMaps } from "@/lib/access-control";
 
@@ -274,44 +275,11 @@ function WorkersTab() {
   const [archiveAckTarget, setArchiveAckTarget] = useState<WorkerRow | null>(null);
 
 
-  // Edição de trabalhador
+  // Edição de trabalhador — modal único compartilhado (WorkerEditDialog)
   const [editing, setEditing] = useState<WorkerRow | null>(null);
-  const [editNome, setEditNome] = useState("");
-  const [editLogin, setEditLogin] = useState("");
-  const [editNotas, setEditNotas] = useState("");
-  const [editActive, setEditActive] = useState(true);
-  const [savingEdit, setSavingEdit] = useState(false);
 
   function openEdit(w: WorkerRow) {
     setEditing(w);
-    setEditNome(w.nome);
-    setEditLogin(w.login_codigo);
-    setEditNotas(w.notas ?? "");
-    setEditActive(w.active);
-  }
-
-  async function handleSaveEdit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editing) return;
-    const n = editNome.trim();
-    const login = editLogin.trim();
-    if (!n) return toast({ title: "Nome obrigatório", variant: "destructive" });
-    if (!/^\d{4}$/.test(login)) return toast({ title: "Login deve ter 4 dígitos", variant: "destructive" });
-    setSavingEdit(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-edit-worker", {
-        body: { worker_id: editing.id, nome: n, login_codigo: login, notas: editNotas.trim() || null, active: editActive },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Falha ao salvar");
-      toast({ title: "Trabalhador atualizado" });
-      setEditing(null);
-      load();
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setSavingEdit(false);
-    }
   }
 
   // Área "Equipe" é apenas gerencial — a visão financeira fica no Painel.
@@ -543,14 +511,14 @@ function WorkersTab() {
                       </div>
                       <div className="text-[11px] text-muted-foreground">Login <span className="font-mono">{w.login_codigo}</span></div>
                     </button>
+                    {!w.archived_at && (
+                      <Button size="sm" variant="outline" className="h-9 shrink-0 px-3 text-xs" onClick={() => openEdit(w)} aria-label={`Editar ${w.nome}`}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                      </Button>
+                    )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
                   </div>
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {!w.archived_at && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(w)}>
-                        Editar Trabalhador
-                      </Button>
-                    )}
                     {!w.archived_at && (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResetPassword(w)}>
                         <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
@@ -626,37 +594,7 @@ function WorkersTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Editar trabalhador</DialogTitle>
-            <DialogDescription>Alterar o login atualiza imediatamente a credencial de entrada. Histórico e dados são preservados.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSaveEdit} className="space-y-3">
-            <div>
-              <Label htmlFor="edit-nome">Nome</Label>
-              <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="edit-login">Login (4 dígitos)</Label>
-              <Input id="edit-login" required inputMode="numeric" pattern="\d{4}" maxLength={4} value={editLogin} onChange={(e) => setEditLogin(e.target.value.replace(/\D/g, "").slice(0, 4))} />
-            </div>
-            <div>
-              <Label htmlFor="edit-notas">Observação</Label>
-              <Textarea id="edit-notas" value={editNotas} onChange={(e) => setEditNotas(e.target.value)} rows={2} />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Pausa, vencimento e mensalidade são controlados apenas pela licença, na aba “Acessos” do SuperAdministrador.
-            </p>
-
-            <DialogFooter>
-              <Button type="submit" disabled={savingEdit} className="w-full">
-                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <WorkerEditDialog worker={editing} onOpenChange={(o) => !o && setEditing(null)} onSaved={load} />
 
       <Dialog open={!!archiveTarget} onOpenChange={(o) => !o && setArchiveTarget(null)}>
         <DialogContent className="max-w-sm">
