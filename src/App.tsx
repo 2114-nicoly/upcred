@@ -53,8 +53,11 @@ const queryClient = new QueryClient({
 
 function WrappedRoute({ element }: { element: React.ReactNode }) {
   const location = useLocation();
-  // key by full URL so each route mounts fresh and the ErrorBoundary resets
-  const k = location.pathname + location.search;
+  // Persisting the client search must not recreate its input or open dialogs.
+  // Keep the existing reset behavior for every other route/query parameter.
+  const params = new URLSearchParams(location.search);
+  if (location.pathname === "/clients") params.delete("q");
+  const k = location.pathname + params.toString();
   return <PageErrorBoundary key={k}>{element}</PageErrorBoundary>;
 }
 
