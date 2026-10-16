@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 // Tudo que o mock do backend precisa ver nasce dentro de vi.hoisted: os factories
 // de vi.mock são içados para o topo do arquivo e não podem ler variáveis de módulo.
-const { invoke, rpc, state, tableQuery, superAdminRow, adminPanelRow } = vi.hoisted(() => {
+const { invoke, rpc, state, tableQuery } = vi.hoisted(() => {
   const superAdminRow = { id: "w1", nome: "Maria Silva", login_codigo: "1234", active: true, parent_admin_id: "a1", archived_at: null };
   const adminPanelRow = { ...superAdminRow, notas: "observação existente", synthetic_email: "w1234@upcred.local", created_at: "2026-01-01", auth_user_id: null };
   const adminRow = { id: "a1", nome: "Empresa X", email_real: "e@x.com", login_codigo: "9999", active: true, created_at: "2026-01-01", notas: null };
@@ -39,11 +39,10 @@ vi.mock("@/hooks/useWorkerFilter", () => ({
   useWorkerFilter: () => ({ workers: [], admins: [], setSelectedAdminId: vi.fn(), setSelectedWorkerId: vi.fn() }),
 }));
 vi.mock("@/hooks/useConfirm", () => ({ useConfirm: () => async () => true }));
-vi.mock("@/lib/consolidated-stats", () => ({
-  getPeriodRange: () => ({ startDate: "2026-10-01", endDate: "2026-10-16" }),
-  loadWorkersStats: async () => [],
-  consolidate: () => ({}),
-}));
+vi.mock("@/lib/consolidated-stats", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/consolidated-stats")>();
+  return { ...real, loadWorkersStats: async () => [] };
+});
 vi.mock("@/lib/access-control", () => ({
   EMPTY_ACCESS_MAPS: { licenseByWorker: {}, lastPeriodByWorker: {}, periodsByWorker: {}, controlByAdmin: {} },
   loadAccessMaps: async () => ({ licenseByWorker: {}, lastPeriodByWorker: {}, periodsByWorker: {}, controlByAdmin: {} }),
