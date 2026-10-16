@@ -98,7 +98,13 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
       } as any);
       if (error) throw error;
       toast.success("Dinheiro adicionado ao caixa. Confirme novamente a operação.");
-      await req.onCashAdded?.();
+      // A gravação já foi confirmada. Uma falha de atualização da tela não
+      // pode oferecer a mesma entrada novamente e duplicar o aporte.
+      try {
+        await req.onCashAdded?.();
+      } catch {
+        toast.warning("Entrada registrada. Não repita o aporte; não foi possível atualizar o saldo na tela.");
+      }
       submittingRef.current = false;
       close();
     } catch (err: any) {

@@ -406,7 +406,7 @@ export default function NewLoanPage() {
             },
             {
               scope: activeCashScope,
-              onCashAdded: () => { scopedCash.refresh(); void refreshAvailableCash(); },
+              onCashAdded: async () => { await Promise.all([scopedCash.refresh(), refreshAvailableCash()]); },
             },
           );
           setSaving(false);
@@ -463,7 +463,7 @@ export default function NewLoanPage() {
         navigate("/");
       } catch (err: any) {
         console.error("Erro na renovação:", err);
-        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => { scopedCash.refresh(); void refreshAvailableCash(); } })) toast.error(err?.message || "Erro ao renovar o empréstimo.");
+        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: async () => { await Promise.all([scopedCash.refresh(), refreshAvailableCash()]); } })) toast.error(err?.message || "Erro ao renovar o empréstimo.");
       } finally {
         setSaving(false);
       }
@@ -666,7 +666,7 @@ export default function NewLoanPage() {
       } catch (err: any) {
         console.error("Erro ao criar movimentação/evento do empréstimo:", err);
         await rollbackLoan();
-        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: () => { scopedCash.refresh(); void refreshAvailableCash(); } })) {
+        if (!reportFinancialError(err, { scope: activeCashScope, onCashAdded: async () => { await Promise.all([scopedCash.refresh(), refreshAvailableCash()]); } })) {
           toast.error(`Erro ao registrar movimentação financeira. O empréstimo não foi salvo.${err?.message ? ` (${err.message})` : ""}`);
         }
         setSaving(false);
