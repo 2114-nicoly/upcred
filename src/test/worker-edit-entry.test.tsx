@@ -76,10 +76,19 @@ import AdminPanelPage from "@/pages/AdminPanelPage";
 
 afterEach(() => { cleanup(); invoke.mockClear(); state.notasReadFails = false; });
 
+// As abas são Radix com ativação automática: é o foco que seleciona a aba.
+async function openTab(name: string) {
+  const tab = await screen.findByRole("tab", { name });
+  fireEvent.mouseDown(tab);
+  fireEvent.focus(tab);
+  fireEvent.click(tab);
+}
+
 describe("botão Editar ao lado do nome do trabalhador", () => {
   it("abre o modal de edição direto na lista do Super Admin e não sobrescreve a observação não lida", async () => {
     state.notasReadFails = true;
     render(<MemoryRouter><AdminFullPanel adminId="a1" /></MemoryRouter>);
+    await openTab("Equipe");
     await screen.findByText("Maria Silva");
     fireEvent.click(await screen.findByRole("button", { name: "Editar Maria Silva" }));
     const nome = await screen.findByLabelText("Nome");
@@ -95,7 +104,7 @@ describe("botão Editar ao lado do nome do trabalhador", () => {
 
   it("abre o modal de edição direto na aba Equipe do Admin, com a observação existente preenchida", async () => {
     render(<MemoryRouter><AdminPanelPage /></MemoryRouter>);
-    fireEvent.click(await screen.findByRole("tab", { name: "Equipe" }));
+    await openTab("Equipe");
     await screen.findByText("Maria Silva");
     const btn = await screen.findByRole("button", { name: "Editar Maria Silva" });
     expect(btn.closest("div")?.textContent).toContain("Maria Silva");
