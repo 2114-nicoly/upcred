@@ -23,7 +23,6 @@ import {
 } from "@/lib/consolidated-stats";
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
 import AuditLogList from "@/components/AuditLogList";
-import AccessSection from "@/components/AccessSection";
 import AccessStatusBadge from "@/components/access/AccessStatusBadge";
 import WorkerAccessSummary from "@/components/access/WorkerAccessSummary";
 import WorkerEditDialog from "@/components/WorkerEditDialog";
@@ -459,7 +458,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                           <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
                         </Button>
                       )}
-<Button size="sm" variant="outline" className="h-10 shrink-0 px-3 text-xs" onClick={() => openWorker(w.id)}>Ver detalhes <ChevronRight className="h-3.5 w-3.5 ml-1" /></Button>
+                      <Button size="sm" variant="outline" className="h-10 shrink-0 px-3 text-xs" onClick={() => openWorker(w.id)}>Ver detalhes <ChevronRight className="h-3.5 w-3.5 ml-1" /></Button>
                     </div>
 
                     <WorkerAccessSummary
