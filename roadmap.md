@@ -1,8 +1,8 @@
 # Pesquisa contínua
 
 # Navegação Admin e Super Admin
-- [ ] Consolidar acesso às empresas e identificar ações de trabalhadores, acesso e Caixa, sem alterar regras.
-- [ ] Verificar caminhos, confirmações existentes e apresentação no celular nos dois perfis.
+- [x] Consolidar acesso às empresas e identificar ações de trabalhadores, acesso e Caixa, sem alterar regras.
+- [x] Verificar caminhos autenticados em desktop e celular (360px) nos dois painéis: edição, detalhes, relatórios, acesso, três destinos de Caixa; confirmações de senha e arquivamento canceladas sem alterar dados. Quatro testes de regressão passaram.
 
 # Campos monetários
 
