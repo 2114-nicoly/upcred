@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput, formatMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -326,9 +328,9 @@ export default function LoanDetailPage() {
   const handleRegisterPayment = async () => {
     if (isSubmitting || !loan) return;
     if (!loanActive) { toast.error("Empréstimo inativo não permite pagamento."); return; }
-    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
+    const multaValue = payPenaltyAmount.trim() ? parseMoneyInput(payPenaltyAmount) : 0;
 
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) {
+    if (multaValue === null || multaValue < 0) {
       toast.error("Valor de multa inválido");
       return;
     }
@@ -414,8 +416,8 @@ export default function LoanDetailPage() {
   // --- Edit payment from history ---
   const handleEditPaymentConfirm = async () => {
     if (isSubmitting || !loan || !editPayEntry) return;
-    const newAmount = parseFloat(editPayNewAmount);
-    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    const newAmount = parseMoneyInput(editPayNewAmount);
+    if (newAmount === null || newAmount <= 0) { toast.error("Valor inválido"); return; }
     setIsSubmitting(true);
     try {
       await editPayment({
@@ -457,7 +459,7 @@ export default function LoanDetailPage() {
   // --- Penalties ---
   const handleAddPenalty = async (installmentId: string, amount?: number, observation?: string) => {
     if (!loanActive) { toast.error("Empréstimo inativo não permite multa."); return; }
-    const penAmount = amount ?? parseFloat(penaltyAmount);
+    const penAmount = amount ?? parseMoneyInput(penaltyAmount);
     const penObs = observation ?? penaltyObservation;
     if (!penAmount || penAmount <= 0) { toast.error("Informe um valor válido para a multa"); return; }
     const inst = installments.find((i) => i.id === installmentId);
@@ -527,7 +529,7 @@ export default function LoanDetailPage() {
   };
 
   const handleEditPenalty = async (penaltyId: string) => {
-    const newAmount = parseFloat(editPenaltyValue);
+    const newAmount = parseMoneyInput(editPenaltyValue);
     if (!newAmount || newAmount <= 0) { toast.error("Informe um valor válido"); return; }
     const penalty = penalties.find((p) => p.id === penaltyId);
     if (!penalty) return;
@@ -607,7 +609,7 @@ export default function LoanDetailPage() {
   };
 
   const handleAddPenaltyFromDate = async () => {
-    const amount = parseFloat(overduePenaltyAmount);
+    const amount = parseMoneyInput(overduePenaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
     const target = regularInstallments.filter((i) => isInstallmentCollectibleStatus(i.status)).sort((a, b) => a.number - b.number)[0];
     if (!target) { toast.error("Nenhuma parcela disponível"); return; }
@@ -626,7 +628,7 @@ export default function LoanDetailPage() {
 
   // --- Renegotiation (new 3-step flow) ---
   const renegBase = loan ? Number(loan.remaining_balance) : 0;
-  const renegNumInterest = parseFloat(renegInterestValue) || 0;
+  const renegNumInterest = renegInterestType === "fixed" ? (parseMoneyInput(renegInterestValue) ?? 0) : (parseFloat(renegInterestValue) || 0);
   const renegNumInstallments = parseInt(renegInstallmentCount) || 0;
 
   const renegCalc = useMemo(() => {
@@ -658,6 +660,7 @@ export default function LoanDetailPage() {
   };
 
   const handleRenegotiate = async () => {
+    if (renegInterestType === "fixed" && renegInterestValue.trim() && parseMoneyInput(renegInterestValue) === null) { toast.error("Valor de juros inválido"); return; }
     if (!loan || !renegCalc) { toast.error("Preencha as novas condições"); return; }
     if (renegBase <= 0.01) { toast.error("Empréstimo sem saldo devedor — não pode ser renegociado"); return; }
     if (renegDueDates.length === 0) { toast.error("Informe a data do primeiro vencimento"); return; }
@@ -783,8 +786,8 @@ export default function LoanDetailPage() {
   // --- Edit/Delete installment ---
   const handleEditInstallment = async () => {
     if (!editInstId) return;
-    const newAmount = parseFloat(editInstAmount);
-    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    const newAmount = parseMoneyInput(editInstAmount);
+    if (newAmount === null || newAmount <= 0) { toast.error("Valor inválido"); return; }
     await supabase.from("installments").update({ amount: newAmount, due_date: editInstDueDate }).eq("id", editInstId);
     toast.success("Parcela atualizada!");
     setEditInstId(null);
@@ -1208,7 +1211,7 @@ export default function LoanDetailPage() {
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                           setEditInstId(inst.id);
-                          setEditInstAmount(String(inst.amount));
+                          setEditInstAmount(formatMoneyInput(Number(inst.amount)));
                           setEditInstDueDate(inst.due_date);
                         }}>
                           <Pencil className="h-3 w-3" />
@@ -1306,7 +1309,7 @@ export default function LoanDetailPage() {
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                         setEditPayEntry(entry);
-                        setEditPayNewAmount(String(entry.amount));
+                        setEditPayNewAmount(formatMoneyInput(Number(entry.amount)));
                         setEditPayOpen(true);
                       }} disabled={isSubmitting}>
                         <Pencil className="h-3 w-3" />
@@ -1349,7 +1352,7 @@ export default function LoanDetailPage() {
               <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                 <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(penaltyPending)}</p>
                 <Label>Valor destinado à multa (opcional)</Label>
-                <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                <MoneyInput placeholder="0,00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
               </div>
             )}
 
@@ -1381,7 +1384,7 @@ export default function LoanDetailPage() {
               <p className="text-sm font-medium">Adicionar Multa</p>
               <div>
                 <Label className="text-xs">Valor</Label>
-                <Input type="number" placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} className="h-9" />
+                <MoneyInput placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} className="h-9" />
               </div>
               <div>
                 <Label className="text-xs">Observação (opcional)</Label>
@@ -1404,7 +1407,7 @@ export default function LoanDetailPage() {
                   <div key={p.id} className="rounded-lg border p-3">
                     {editingPenalty === p.id ? (
                       <div className="space-y-2">
-                        <Input type="number" value={editPenaltyValue} onChange={(e) => setEditPenaltyValue(e.target.value)} className="h-8 w-24" placeholder="Valor" />
+                        <MoneyInput value={editPenaltyValue} onChange={(e) => setEditPenaltyValue(e.target.value)} className="h-8 w-24" placeholder="Valor" />
                         <Input value={editPenaltyObs} onChange={(e) => setEditPenaltyObs(e.target.value)} className="h-8" placeholder="Observação" />
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => handleEditPenalty(p.id)}>Salvar</Button>
@@ -1419,7 +1422,7 @@ export default function LoanDetailPage() {
                           {p.observation && <p className="mt-1 text-xs italic text-muted-foreground">"{p.observation}"</p>}
                         </div>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditingPenalty(p.id); setEditPenaltyValue(String(p.amount)); setEditPenaltyObs(p.observation || ""); }}>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setEditingPenalty(p.id); setEditPenaltyValue(formatMoneyInput(Number(p.amount))); setEditPenaltyObs(p.observation || ""); }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => handleDeletePenalty(p.id)}>
@@ -1449,7 +1452,7 @@ export default function LoanDetailPage() {
                   {isAdding ? (
                     <div className="space-y-2">
                       <p className="text-sm font-medium">{format(date, "dd/MM/yyyy")} — Adicionar Multa</p>
-                      <Input type="number" placeholder="Valor" value={overduePenaltyAmount} onChange={(e) => setOverduePenaltyAmount(e.target.value)} className="h-8" />
+                      <MoneyInput placeholder="Valor" value={overduePenaltyAmount} onChange={(e) => setOverduePenaltyAmount(e.target.value)} className="h-8" />
                       <Input placeholder="Observação..." value={overduePenaltyObs} onChange={(e) => setOverduePenaltyObs(e.target.value)} className="h-8" />
                       <div className="flex gap-2">
                         <Button size="sm" onClick={handleAddPenaltyFromDate}>Adicionar</Button>
@@ -1525,12 +1528,7 @@ export default function LoanDetailPage() {
                         <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input
-                      type="number" step="0.01" inputMode="decimal"
-                      placeholder={renegInterestType === "percentage" ? "Ex: 20" : "Ex: 100,00"}
-                      value={renegInterestValue}
-                      onChange={(e) => setRenegInterestValue(e.target.value)}
-                    />
+                    {renegInterestType === "fixed" ? <MoneyInput value={renegInterestValue} onChange={(e) => setRenegInterestValue(e.target.value)} placeholder="Ex: 100,00" /> : <Input type="number" step="0.01" inputMode="decimal" placeholder="Ex: 20" value={renegInterestValue} onChange={(e) => setRenegInterestValue(e.target.value)} />}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1644,7 +1642,7 @@ export default function LoanDetailPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Parcela</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Valor da parcela</Label><Input type="number" value={editInstAmount} onChange={(e) => setEditInstAmount(e.target.value)} /></div>
+            <div><Label>Valor da parcela</Label><MoneyInput value={editInstAmount} onChange={(e) => setEditInstAmount(e.target.value)} /></div>
             <div><Label>Data de vencimento</Label><Input type="date" value={editInstDueDate} onChange={(e) => setEditInstDueDate(e.target.value)} /></div>
             <Button onClick={handleEditInstallment} className="w-full">Salvar</Button>
           </div>
@@ -1684,7 +1682,7 @@ export default function LoanDetailPage() {
               </div>
               <div>
                 <Label>Novo valor</Label>
-                <Input type="number" value={editPayNewAmount} onChange={(e) => setEditPayNewAmount(e.target.value)} />
+                <MoneyInput value={editPayNewAmount} onChange={(e) => setEditPayNewAmount(e.target.value)} />
               </div>
               <Button onClick={handleEditPaymentConfirm} className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? "Processando..." : "Salvar Alteração"}

@@ -3,6 +3,8 @@
  * - multa = 0 → fluxo normal (registerPayment), sem escolha extra.
  * - multa > 0 → exige escolha explícita entre "Parcela + multa" e "Somente multa".
  */
+import { parseMoneyInput } from "@/lib/money-input";
+
 export type PenaltyMode = "regular_and_penalty" | "penalty_only";
 
 export type PenaltyPaymentPlan =
@@ -17,9 +19,8 @@ export const PENALTY_MODE_REQUIRED_MESSAGE =
 
 export function parsePenaltyInput(raw: string): number | null {
   if (!raw || !raw.trim()) return 0;
-  const n = Number(raw.replace(",", "."));
-  if (!Number.isFinite(n) || n < 0) return null;
-  return Math.round(n * 100) / 100;
+  const n = parseMoneyInput(raw);
+  return n === null || n < 0 ? null : n;
 }
 
 export function resolvePenaltyPaymentPlan(input: {

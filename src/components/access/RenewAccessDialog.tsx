@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput, formatMoneyInput } from "@/lib/money-input";
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -51,8 +53,8 @@ export default function RenewAccessDialog({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [monthlyPrice, setMonthlyPrice] = useState<string>(String(license?.monthly_price ?? ""));
-  const [amountPaid, setAmountPaid] = useState<string>(String(license?.monthly_price ?? ""));
+  const [monthlyPrice, setMonthlyPrice] = useState<string>(formatMoneyInput(license?.monthly_price));
+  const [amountPaid, setAmountPaid] = useState<string>(formatMoneyInput(license?.monthly_price));
   const [months, setMonths] = useState<string>("1");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
@@ -85,11 +87,11 @@ export default function RenewAccessDialog({
 
   async function submit() {
     if (saving) return; // trava clique duplo
-    const price = Number(monthlyPrice.replace(",", "."));
-    const paid = Number(amountPaid.replace(",", "."));
+    const price = parseMoneyInput(monthlyPrice);
+    const paid = parseMoneyInput(amountPaid);
     const m = monthsNum;
-    if (!Number.isFinite(price) || price < 0) return toast.error("Valor mensal inválido");
-    if (!Number.isFinite(paid) || paid < 0) return toast.error("Valor pago inválido");
+    if (price === null || price < 0) return toast.error("Valor mensal inválido");
+    if (paid === null || paid < 0) return toast.error("Valor pago inválido");
     if (!startDate) return toast.error("Informe a data inicial do novo período");
     const endOverride = custom ? customEnd : "";
     if (custom && !endOverride) return toast.error("Informe a data final do período personalizado");
@@ -162,11 +164,11 @@ export default function RenewAccessDialog({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs">Valor mensal</Label>
-                <Input inputMode="decimal" value={monthlyPrice} onChange={(e) => setMonthlyPrice(e.target.value)} />
+                <MoneyInput value={monthlyPrice} onChange={(e) => setMonthlyPrice(e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Valor pago</Label>
-                <Input inputMode="decimal" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+                <MoneyInput value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Meses</Label>
@@ -208,7 +210,7 @@ export default function RenewAccessDialog({
               <p>Início do novo período: <span className="font-medium">{formatAccessDate(previewStart)}</span></p>
               <p>Final do novo período: <span className="font-medium">{previewEnd ? formatAccessDate(previewEnd) : "—"}</span></p>
               <p>Quantidade de meses: <span className="font-medium">{!custom && Number.isFinite(monthsNum) && monthsNum > 0 ? monthsNum : "—"}</span></p>
-              <p>Valor pago: <span className="font-medium">{formatMoney(Number(amountPaid.replace(",", ".")) || 0)}</span></p>
+              <p>Valor pago: <span className="font-medium">{formatMoney(parseMoneyInput(amountPaid) || 0)}</span></p>
               {currentEnd && previewEnd && previewEnd < currentEnd && (
                 <p className="text-destructive">A renovação não pode encurtar o acesso já concedido ({formatAccessDate(currentEnd)}).</p>
               )}

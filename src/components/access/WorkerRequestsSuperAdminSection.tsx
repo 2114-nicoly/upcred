@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput } from "@/lib/money-input";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,8 +36,8 @@ export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChang
 
   // Aprovação
   const [approveTarget, setApproveTarget] = useState<WorkerCreationRequest | null>(null);
-  const [monthlyPrice, setMonthlyPrice] = useState("0");
-  const [amountPaid, setAmountPaid] = useState("0");
+  const [monthlyPrice, setMonthlyPrice] = useState("0,00");
+  const [amountPaid, setAmountPaid] = useState("0,00");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [accessStart, setAccessStart] = useState(todayLocalISO());
   const [months, setMonths] = useState("1");
@@ -47,7 +49,7 @@ export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChang
 
   function openApprove(r: WorkerCreationRequest) {
     setApproveTarget(r);
-    setMonthlyPrice("0"); setAmountPaid("0"); setPaymentMethod("");
+    setMonthlyPrice("0,00"); setAmountPaid("0,00"); setPaymentMethod("");
     setAccessStart(todayLocalISO()); setMonths("1");
     setCustomEnd(false); setAccessEnd(""); setApproveNotes("");
   }
@@ -58,11 +60,11 @@ export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChang
 
   async function confirmApprove() {
     if (!approveTarget || approving) return;
-    const mp = Number(monthlyPrice.replace(",", "."));
-    const ap = Number(amountPaid.replace(",", "."));
+    const mp = parseMoneyInput(monthlyPrice);
+    const ap = parseMoneyInput(amountPaid);
     const mo = Number(months);
-    if (!Number.isFinite(mp) || mp < 0) { toast({ title: "Valor mensal inválido", variant: "destructive" }); return; }
-    if (!Number.isFinite(ap) || ap < 0) { toast({ title: "Valor pago inválido", variant: "destructive" }); return; }
+    if (mp === null || mp < 0) { toast({ title: "Valor mensal inválido", variant: "destructive" }); return; }
+    if (ap === null || ap < 0) { toast({ title: "Valor pago inválido", variant: "destructive" }); return; }
     if (!accessStart) { toast({ title: "Informe a data inicial", variant: "destructive" }); return; }
     if (!customEnd && (!Number.isFinite(mo) || mo <= 0)) {
       toast({ title: "Quantidade de meses deve ser maior que zero", variant: "destructive" }); return;
@@ -262,11 +264,11 @@ export default function WorkerRequestsSuperAdminSection({ onChanged }: { onChang
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px]">Valor mensal</Label>
-                <Input value={monthlyPrice} onChange={(e) => setMonthlyPrice(e.target.value)} inputMode="decimal" className="h-8 text-xs" />
+                <MoneyInput value={monthlyPrice} onChange={(e) => setMonthlyPrice(e.target.value)} inputMode="decimal" className="h-8 text-xs" />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px]">Valor pago</Label>
-                <Input value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} inputMode="decimal" className="h-8 text-xs" />
+                <MoneyInput value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} inputMode="decimal" className="h-8 text-xs" />
               </div>
               <div className="space-y-1 col-span-2">
                 <Label className="text-[11px]">Forma de pagamento</Label>

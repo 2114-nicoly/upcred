@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput, formatMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { formatClosingMismatch } from "@/lib/closing-mismatch";
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -359,8 +361,8 @@ export default function CaixaPage() {
     if (!manualType || submitting) return;
     if (readOnly) { toast.error("Modo visualização: ações financeiras estão bloqueadas."); return; }
     if (manualType === "ajuste_manual" && !isAdmin && !isSuperAdmin) { setManualType(null); return; }
-    const amount = parseFloat(manualAmount);
-    if (isNaN(amount)) { toast.error("Informe um valor válido"); return; }
+    const amount = parseMoneyInput(manualAmount);
+    if (amount === null) { toast.error("Informe um valor válido"); return; }
     if (manualType !== "ajuste_manual" && amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
 
     const labelMap = { entrada_manual: "Aportar dinheiro na rota?", saida_manual: "Retirar dinheiro da rota?", ajuste_manual: "Ajustar saldo do caixa?" } as const;
@@ -412,8 +414,8 @@ export default function CaixaPage() {
   const handleExpense = async () => {
     if (submitting) return;
     if (readOnly) { toast.error("Modo visualização: ações financeiras estão bloqueadas."); return; }
-    const amount = parseFloat(expenseAmount);
-    if (!isFinite(amount) || amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
+    const amount = parseMoneyInput(expenseAmount);
+    if (amount === null || amount <= 0) { toast.error("Informe um valor maior que zero"); return; }
     if (!expenseCategory) { toast.error("Selecione uma categoria"); return; }
     const desc = expenseDescription.trim();
     if (desc.length < 3) { toast.error("Descrição obrigatória (mín. 3 caracteres)"); return; }
@@ -564,7 +566,7 @@ export default function CaixaPage() {
     setClosingIsHistoric(basis.historic);
     setCloseError(null);
     setCloseNote("");
-    setCountedAmount(Math.max(0, basis.base).toFixed(2));
+    setCountedAmount(formatMoneyInput(Math.max(0, basis.base)));
     setCloseOpen(true);
   };
 
@@ -581,8 +583,8 @@ export default function CaixaPage() {
     setClosingCurrentCash(basis.current);
     setClosingIsHistoric(basis.historic);
     const netExpected = Number(basis.base.toFixed(2));
-    const parsed = parseFloat((countedAmount || "").replace(",", "."));
-    if (isNaN(parsed)) { setCloseError("Informe o valor disponível contado no fechamento."); return; }
+    const parsed = parseMoneyInput(countedAmount);
+    if (parsed === null) { setCloseError("Informe o valor disponível contado no fechamento."); return; }
     if (parsed < 0) { setCloseError("O valor contado não pode ser negativo."); return; }
     const counted = Number(parsed.toFixed(2));
     const differs = Math.abs(counted - netExpected) > 0.005;
@@ -1762,7 +1764,7 @@ export default function CaixaPage() {
           <div className="space-y-3">
             <div>
               <Label>Valor (R$) <span className="text-destructive">*</span></Label>
-              <Input type="number" step="0.01" min="0" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" />
+              <MoneyInput value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" />
             </div>
             <div>
               <Label>Categoria <span className="text-destructive">*</span></Label>
@@ -1819,7 +1821,7 @@ export default function CaixaPage() {
           <div className="space-y-3">
             <div>
               <Label>Valor (R$)</Label>
-              <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="0.00" />
+              <MoneyInput value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="0.00" />
             </div>
             <div>
               <Label>Observação (opcional)</Label>
@@ -1941,14 +1943,13 @@ export default function CaixaPage() {
             </div>
             {(() => {
               const base = Number((closingAvailableCash ?? 0).toFixed(2));
-              const parsed = parseFloat((countedAmount || "").replace(",", "."));
-              const differs = !isNaN(parsed) && Math.abs(Number(parsed.toFixed(2)) - base) > 0.005;
+              const parsed = parseMoneyInput(countedAmount);
+              const differs = parsed !== null && Math.abs(Number(parsed.toFixed(2)) - base) > 0.005;
               return (
                 <>
                   <div>
                     <Label>Valor disponível contado no fechamento <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="number" inputMode="decimal" step="0.01" min="0"
+                    <MoneyInput
                       value={countedAmount}
                       onChange={(e) => setCountedAmount(e.target.value)}
                       placeholder="0,00"

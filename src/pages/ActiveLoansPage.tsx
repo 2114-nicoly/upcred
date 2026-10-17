@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -262,9 +264,9 @@ export default function ActiveLoansPage() {
       fullInstAmount,
       Number(loanForAmount?.remaining_balance ?? 0),
     );
-    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
+    const multaValue = payPenaltyAmount.trim() ? parseMoneyInput(payPenaltyAmount) : 0;
     if (amountError) { toast.error(amountError); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+    if (multaValue === null || multaValue < 0) { toast.error("Valor de multa inválido"); return; }
 
     setIsSubmitting(true);
     try {
@@ -716,7 +718,7 @@ export default function ActiveLoansPage() {
                   <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                     <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(lp.penaltyTotal - lp.penaltyPaid)}</p>
                     <Label>Valor destinado à multa (opcional)</Label>
-                    <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                    <MoneyInput placeholder="0,00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
                   </div>
                 )}
                 <div>

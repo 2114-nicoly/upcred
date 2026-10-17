@@ -1,5 +1,7 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { formatMoneyInput } from "@/lib/money-input";
 import { useEffect, useRef, useState } from "react";
-import { z } from "zod";
+import { moneyInputSchema } from "@/lib/money-input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -10,20 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/loan-utils";
-import { parseAmountInput } from "@/lib/payment-amount";
 import { CashGuardRequest, registerCashGuardHandler } from "@/lib/cash-guard";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffectiveScope } from "@/hooks/useEffectiveScope";
 import { fetchScopedActiveCash } from "@/lib/loan-cash";
 
-// Decimal brasileiro ou decimal simples com ponto (até duas casas).
-// Milhares com ponto só são aceitos com vírgula decimal explícita.
-const cashEntrySchema = z.string().trim().max(30).regex(
-  /^(?:\d+(?:,\d{1,2})?|\d+\.\d{1,2}|\d{1,3}(?:\.\d{3})+,\d{1,2})$/,
-).transform(parseAmountInput).refine(
-  (value): value is number => value !== null && value > 0 && Number.isFinite(value)
-    && Number.isSafeInteger(Math.round(value * 100)),
-);
+const cashEntrySchema = moneyInputSchema.refine((value) => value > 0);
 
 /**
  * Modal ÚNICO de saldo insuficiente, usado por todas as telas.
@@ -49,7 +43,7 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
       setSubmitting(false);
       setConfirmedAmount(null);
       setAmount(Number.isFinite(r.info.missing_amount)
-        ? r.info.missing_amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        ? formatMoneyInput(r.info.missing_amount)
         : "");
     });
     return () => registerCashGuardHandler(null);
@@ -139,9 +133,8 @@ export function CashGuardProvider({ children }: { children: React.ReactNode }) {
           {adding && canAddMoney && confirmedAmount === null && (
             <div className="space-y-2">
               <Label htmlFor="cash-guard-amount">Valor da entrada</Label>
-              <Input
+              <MoneyInput
                 id="cash-guard-amount"
-                inputMode="decimal"
                 maxLength={30}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
