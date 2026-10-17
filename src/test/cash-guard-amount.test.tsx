@@ -59,6 +59,10 @@ describe("entrada monetária do modal de saldo insuficiente", () => {
     ["0,50", 0.5],
     ["20.50", 20.5],
     ["2.000,00", 2000],
+    ["R$ 1.250,75", 1250.75],
+    ["1250,75", 1250.75],
+    ["0,05", 0.05],
+    ["2000", 2000],
   ])("%s registra exatamente %s reais após confirmação", async (input, expected) => {
     const field = await openEntry();
     fireEvent.change(field, { target: { value: input } });
@@ -76,7 +80,7 @@ describe("entrada monetária do modal de saldo insuficiente", () => {
     expect(await openEntry(missing)).toHaveValue(expected);
   });
 
-  it.each(["2.000", "1,080.50", "1.08,50", "20,500", "abc", "-20,50", "0", "1e3"])(
+  it.each(["2.000", "1,080.50", "1.08,50", "20,500", "20.500", "abc", "-20,50", "0", "1e3"])(
     "rejeita entrada inválida ou ambígua %s sem registrar", async (input) => {
       const field = await openEntry();
       fireEvent.change(field, { target: { value: input } });

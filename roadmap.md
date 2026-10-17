@@ -2,9 +2,10 @@
 
 # Campos monetários
 
-- [ ] Inventariar campos monetários em todos os perfis usando os arquivos atuais (ZIP não disponível nos anexos).
-- [ ] Padronizar conversão, preenchimento e edição sem alterar campos não monetários ou contratos financeiros.
-- [ ] Executar testes de conversão e edição e conferir fluxos autenticados; não criar operações financeiras reais sem autorização.
+- [x] Inventariar campos monetários em todos os perfis usando os arquivos atuais (ZIP não disponível nos anexos).
+- [x] Padronizar conversão, preenchimento e edição sem alterar campos não monetários ou contratos financeiros.
+- [x] Executar testes de conversão, edição e confirmação com RPC simulada; conferir formulário autenticado. Nenhuma operação financeira real criada.
+- [ ] Conferir confirmação e estorno com leitura no histórico/relatório em ambiente descartável: bloqueado por falta de ambiente de teste; não movimentar dinheiro real para validar.
 
 
 - [x] Revisar os campos existentes nos três perfis e identificar causas de perda de foco.

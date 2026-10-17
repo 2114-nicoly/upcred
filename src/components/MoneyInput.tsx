@@ -9,7 +9,7 @@ export const MoneyInput = forwardRef<HTMLInputElement, Props>(
   ({ value, onChange, onBlur, placeholder = "0,00", ...props }, ref) => {
     const invalid = value.trim() !== "" && parseMoneyInput(value) === null;
     return <Input {...props} ref={ref} type="text" inputMode="decimal" maxLength={40}
-      placeholder={placeholder} value={value} aria-invalid={invalid || props["aria-invalid"]}
+      placeholder={placeholder === "0.00" ? "0,00" : placeholder} value={value} aria-invalid={invalid || props["aria-invalid"]}
       title={invalid ? "Informe um valor válido, como 1.250,75, com até duas casas decimais." : props.title}
       onChange={onChange}
       onBlur={(event) => {
