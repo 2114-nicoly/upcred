@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AccessManagementTab from "@/components/access/AccessManagementTab";
@@ -34,9 +34,7 @@ function SuperMaintenanceTab() {
           </Button>
           {/* Auditoria fica apenas no menu oficial (evitar acessos duplicados) */}
 
-          <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate("/daily-cash-history")}>
-            Histórico do Caixa <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
+
         </CardContentUI>
       </CardUI>
       <EmptyCashCleanup />
@@ -83,7 +81,8 @@ type Creds = { nome: string; email: string; password: string };
 export default function SuperAdminPage() {
   const navigate = useNavigate();
   const { isSuperAdmin, loading } = useAuth();
-  const [tab, setTab] = useState("dashboard");
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get("tab") === "acessos" ? "acessos" : "dashboard");
 
   useEffect(() => {
     if (!loading && !isSuperAdmin) navigate("/");
@@ -328,7 +327,6 @@ function DMini({ label, value, cls }: { label: string; value: number; cls?: stri
 /* ============ ADMINS TAB ============ */
 function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
   const navigate = useNavigate();
-  const confirm = useConfirm();
   const [list, setList] = useState<AdminRow[]>([]);
   const [statsByAdmin, setStatsByAdmin] = useState<Record<string, AdminStat>>({});
   const [loading, setLoading] = useState(true);
@@ -362,43 +360,6 @@ function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
   // de acesso da empresa são geridas apenas na aba "Acessos".
 
 
-  async function resetAdminPassword(a: AdminRow) {
-    const ok = await confirm({
-      title: "Gerar nova senha?",
-      description: "Uma nova senha temporária de 8 dígitos será criada e a senha anterior deixará de funcionar.",
-      affected: [{ label: "Administrador", value: a.nome }, { label: "Email", value: a.email_real }],
-      confirmText: "Gerar nova senha", destructive: true,
-    });
-    if (!ok) return;
-    // Auditoria OBRIGATÓRIA — sem log, sem reset.
-    const actor = await getCurrentActorIdentity();
-    const now = new Date().toISOString();
-    try {
-      await requireAudit(
-        "reset_senha_trabalhador", "admin", a.id,
-        { name: a.nome, login: a.login_codigo, email: a.email_real, status: a.active ? "ativo" : "inativo" },
-        {
-          name: a.nome, login: a.login_codigo, email: a.email_real,
-          status: a.active ? "ativo" : "inativo",
-          target_kind: "admin", target_id: a.id,
-          performed_by: actor.id, performed_by_name: actor.name, performed_by_role: actor.role,
-          timestamp: now,
-        },
-        `Reset de senha do administrador ${a.nome}`,
-      );
-    } catch (err) {
-      if (err instanceof AuditRequiredError) return;
-      throw err;
-    }
-    const { data, error } = await supabase.functions.invoke("admin-reset-password", {
-      body: { target_kind: "admin", target_id: a.id },
-    });
-    if (error || !data?.ok) {
-      toast({ title: "Erro", description: error?.message || data?.error, variant: "destructive" });
-      return;
-    }
-    setCreds({ nome: data.nome, role: data.role, login: data.login, password: data.password, created_at: data.created_at });
-  }
 
 
   return (
@@ -444,21 +405,14 @@ function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
                   Trabalhadores: <b className="text-foreground">{s?.workers_count ?? 0}</b> · Visão financeira no Dashboard
                 </p>
 
-                <div className="grid grid-cols-3 gap-1.5">
-                  <Button size="sm" variant="default" className="h-8 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
-                    <Users className="h-3.5 w-3.5 mr-1" /> Equipe
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-1.5">
+                  <Button size="sm" variant="default" className="h-10 text-xs" onClick={() => navigate(`/super-admin/${a.id}`)}>
+                    <Users className="h-3.5 w-3.5 mr-1" /> Gerenciar empresa
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => navigate(`/reports?admin=${a.id}`)}>
-                    <BarChart3 className="h-3.5 w-3.5 mr-1" /> Relat.
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => resetAdminPassword(a)}>
-                    <KeyRound className="h-3.5 w-3.5 mr-1" /> Senha
+                  <Button size="sm" variant="outline" className="h-10 text-xs" onClick={() => navigate(`/reports?admin=${a.id}`)}>
+                    <BarChart3 className="h-3.5 w-3.5 mr-1" /> Relatórios
                   </Button>
                 </div>
-
-                <Button variant="outline" size="sm" className="w-full" onClick={() => navigate(`/super-admin/${a.id}`)}>
-                  <Eye className="h-4 w-4 mr-1" /> Ver Painel
-                </Button>
               </CardContent>
             </Card>
           );
@@ -619,8 +573,8 @@ function RankingTab() {
             <thead className="bg-muted/40">
               <tr>
                 <th className="text-left px-2 py-1 text-[10px] font-semibold">Admin</th>
-                <Th k="workers_count" label="Trab" />
-                <Th k="active_loans" label="Empr" />
+                <Th k="workers_count" label="Trabalhadores" />
+                <Th k="active_loans" label="Empréstimos" />
                 <Th k="total_received" label="Recebido" />
                 <Th k="total_lent" label="Emprestado" />
                 <th></th>
@@ -640,8 +594,8 @@ function RankingTab() {
                   <td className="text-right px-1.5 text-success">{formatCurrency(r.total_received)}</td>
                   <td className="text-right px-1.5">{formatCurrency(r.total_lent)}</td>
                   <td className="px-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/super-admin/${r.admin_id}`)}>
-                      <Eye className="h-3.5 w-3.5" />
+                    <Button variant="ghost" size="sm" className="h-10 text-xs" onClick={() => navigate(`/super-admin/${r.admin_id}`)}>
+                      <Eye className="h-3.5 w-3.5 mr-1" /> Gerenciar empresa
                     </Button>
                   </td>
                 </tr>

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 // Tudo que o mock do backend precisa ver nasce dentro de vi.hoisted: os factories
 // de vi.mock são içados para o topo do arquivo e não podem ler variáveis de módulo.
@@ -74,6 +74,10 @@ vi.mock("@/components/CashReopenRequestsPanel", () => ({
 import AdminFullPanel from "@/components/AdminFullPanel";
 import AdminPanelPage from "@/pages/AdminPanelPage";
 
+function Destination() {
+  return <output aria-label="destino">{useLocation().pathname}</output>;
+}
+
 afterEach(() => { cleanup(); invoke.mockClear(); state.notasReadFails = false; });
 
 // As abas são Radix com ativação automática: é o foco que seleciona a aba.
@@ -85,6 +89,23 @@ async function openTab(name: string) {
 }
 
 describe("botão Editar ao lado do nome do trabalhador", () => {
+  it("abre o trabalhador na rota existente do Admin sem tornar o nome clicável", async () => {
+    render(<MemoryRouter><AdminPanelPage /><Destination /></MemoryRouter>);
+    await openTab("Equipe");
+    fireEvent.click(await screen.findByText("Maria Silva"));
+    expect(screen.getByLabelText("destino")).toHaveTextContent(/^\/$/);
+    fireEvent.click(screen.getByRole("button", { name: "Ver detalhes" }));
+    expect(screen.getByLabelText("destino")).toHaveTextContent("/admin/worker/w1");
+  });
+
+  it("abre o trabalhador na rota existente do Super Admin", async () => {
+    render(<MemoryRouter><AdminFullPanel adminId="a1" /><Destination /></MemoryRouter>);
+    await openTab("Equipe");
+    fireEvent.click(await screen.findByText("Maria Silva"));
+    expect(screen.getByLabelText("destino")).toHaveTextContent(/^\/$/);
+    fireEvent.click(screen.getByRole("button", { name: "Ver detalhes" }));
+    expect(screen.getByLabelText("destino")).toHaveTextContent("/super-admin/worker/w1");
+  });
   it("abre o modal de edição direto na lista do Super Admin e não sobrescreve a observação não lida", async () => {
     state.notasReadFails = true;
     render(<MemoryRouter><AdminFullPanel adminId="a1" /></MemoryRouter>);
