@@ -216,7 +216,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </SheetContent>
         </Sheet>
-        <span className="text-base font-bold text-foreground">{getRouteLabel(location.pathname, labels)}</span>
+        <span className="min-w-0 flex-1 text-sm sm:text-base font-bold text-foreground">{getRouteLabel(location.pathname, labels)}</span>
         {isAdmin && (
           <div className="ml-auto flex items-center gap-1.5">
             <PasswordRecoveryBell />
