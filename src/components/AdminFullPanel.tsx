@@ -435,7 +435,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                   <CardContent className="p-3 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <UserCog className="h-4 w-4 text-primary shrink-0" />
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-[160px] flex-1">
                         <p className="text-sm font-medium truncate flex items-center gap-1 flex-wrap">
                           {w.nome}
                           <AccessStatusBadge status={getEffectiveAccessStatus(accessMaps.licenseByWorker[w.id], companyPaused)} />

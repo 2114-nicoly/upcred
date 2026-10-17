@@ -327,7 +327,6 @@ function DMini({ label, value, cls }: { label: string; value: number; cls?: stri
 /* ============ ADMINS TAB ============ */
 function AdminsTab({ onGoAccess }: { onGoAccess: () => void }) {
   const navigate = useNavigate();
-  const confirm = useConfirm();
   const [list, setList] = useState<AdminRow[]>([]);
   const [statsByAdmin, setStatsByAdmin] = useState<Record<string, AdminStat>>({});
   const [loading, setLoading] = useState(true);
@@ -574,8 +573,8 @@ function RankingTab() {
             <thead className="bg-muted/40">
               <tr>
                 <th className="text-left px-2 py-1 text-[10px] font-semibold">Admin</th>
-                <Th k="workers_count" label="Trab" />
-                <Th k="active_loans" label="Empr" />
+                <Th k="workers_count" label="Trabalhadores" />
+                <Th k="active_loans" label="Empréstimos" />
                 <Th k="total_received" label="Recebido" />
                 <Th k="total_lent" label="Emprestado" />
                 <th></th>
@@ -595,8 +594,8 @@ function RankingTab() {
                   <td className="text-right px-1.5 text-success">{formatCurrency(r.total_received)}</td>
                   <td className="text-right px-1.5">{formatCurrency(r.total_lent)}</td>
                   <td className="px-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/super-admin/${r.admin_id}`)}>
-                      <Eye className="h-3.5 w-3.5" />
+                    <Button variant="ghost" size="sm" className="h-10 text-xs" onClick={() => navigate(`/super-admin/${r.admin_id}`)}>
+                      <Eye className="h-3.5 w-3.5 mr-1" /> Gerenciar empresa
                     </Button>
                   </td>
                 </tr>
