@@ -1,7 +1,6 @@
 import { MoneyInput } from "@/components/MoneyInput";
-import { formatMoneyInput } from "@/lib/money-input";
+import { formatMoneyInput, moneyInputSchema } from "@/lib/money-input";
 import { useEffect, useRef, useState } from "react";
-import { moneyInputSchema } from "@/lib/money-input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -9,7 +8,6 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/loan-utils";
 import { CashGuardRequest, registerCashGuardHandler } from "@/lib/cash-guard";

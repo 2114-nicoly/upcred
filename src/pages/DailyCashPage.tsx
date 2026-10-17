@@ -1,5 +1,4 @@
 import { MoneyInput } from "@/components/MoneyInput";
-import { formatMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
