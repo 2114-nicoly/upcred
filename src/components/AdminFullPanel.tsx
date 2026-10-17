@@ -1,3 +1,4 @@
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2, Eye, MapPin, Wallet, Users, Landmark, BarChart3,
-  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2, Pencil,
+  ClipboardList, History, UserCog, ChevronRight, Archive, ArchiveRestore, Trash2, Pencil, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -336,13 +337,14 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
       {/* Main tabs */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-6 w-full h-auto">
+        <TabsList className="grid grid-cols-3 sm:grid-cols-7 w-full h-auto">
           <TabsTrigger value="resumo" className="text-[11px] py-1.5">Resumo</TabsTrigger>
           <TabsTrigger value="trabalhadores" className="text-[11px] py-1.5">Equipe</TabsTrigger>
-          <TabsTrigger value="clientes" className="text-[11px] py-1.5">Client.</TabsTrigger>
-          <TabsTrigger value="emprestimos" className="text-[11px] py-1.5">Empr.</TabsTrigger>
-          <TabsTrigger value="historico" className="text-[11px] py-1.5">Hist.</TabsTrigger>
-          <TabsTrigger value="auditoria" className="text-[11px] py-1.5">Audit.</TabsTrigger>
+          <TabsTrigger value="clientes" className="text-[11px] py-1.5">Clientes</TabsTrigger>
+          <TabsTrigger value="emprestimos" className="text-[11px] py-1.5">Empréstimos</TabsTrigger>
+          <TabsTrigger value="historico" className="text-[11px] py-1.5">Histórico</TabsTrigger>
+          <TabsTrigger value="auditoria" className="text-[11px] py-1.5 px-1">Auditoria</TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="acesso" className="text-[11px] py-1.5">Acesso</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="resumo" className="space-y-3 mt-3">
@@ -392,28 +394,16 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
 
 
 
-          {isSuperAdmin && (
-            <>
-              <AccessSection
-                targetKind="admin"
-                targetId={admin.id}
-                loginCodigo={admin.login_codigo}
-                nome={admin.nome}
-                active={admin.active}
-              />
-              <AdminPendingPasswordRequests adminId={admin.id} />
-            </>
-          )}
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">Atalhos (escopo deste admin)</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 p-3">
               <Shortcut icon={MapPin} label="Rota" onGo={() => viewAsAdmin("/")} />
-              <Shortcut icon={Wallet} label="Caixa/Geral" onGo={() => viewAsAdmin("/caixa")} />
+              <Shortcut icon={Wallet} label="Movimentar caixa" onGo={() => viewAsAdmin("/caixa")} />
               <Shortcut icon={Users} label="Clientes" onGo={() => viewAsAdmin("/clients")} />
               <Shortcut icon={Landmark} label="Empréstimos" onGo={() => viewAsAdmin("/active-loans")} />
               <Shortcut icon={BarChart3} label="Relatórios" onGo={() => viewAsAdmin("/reports")} />
-              <Shortcut icon={History} label="Histórico" onGo={() => viewAsAdmin("/daily-cash-history")} />
+              <Shortcut icon={History} label="Aberturas e fechamentos" onGo={() => viewAsAdmin("/daily-cash-history")} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -444,7 +434,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
               return (
                 <Card key={w.id} className={isArchived ? "opacity-70" : ""}>
                   <CardContent className="p-3 space-y-2">
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => openWorker(w.id)}>
+                    <div className="flex items-center gap-2 flex-wrap">
                       <UserCog className="h-4 w-4 text-primary shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate flex items-center gap-1 flex-wrap">
@@ -469,7 +459,7 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                           <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
                         </Button>
                       )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+<Button size="sm" variant="outline" className="h-10 shrink-0 px-3 text-xs" onClick={() => openWorker(w.id)}>Ver detalhes <ChevronRight className="h-3.5 w-3.5 ml-1" /></Button>
                     </div>
 
                     <WorkerAccessSummary
@@ -478,23 +468,15 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
                       companyPaused={companyPaused}
                     />
 
-                    <div className="flex flex-wrap gap-1">
-                      {!isArchived && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleArchive(w, e)}>
-                          <Archive className="h-3.5 w-3.5 mr-1" /> Arquivar
-                        </Button>
-                      )}
-                      {isArchived && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => handleUnarchive(w, e)}>
-                          <ArchiveRestore className="h-3.5 w-3.5 mr-1" /> Desarquivar
-                        </Button>
-                      )}
-                      {isArchived && isSuperAdmin && (
-                        <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={(e) => handleDeleteForever(w, e)} title="Manutenção avançada — Super Admin">
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Excluir definitivo
-                        </Button>
-                      )}
-
+                    <div className="flex justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" className="h-10 text-xs" aria-label={`Mais ações de ${w.nome}`}><MoreHorizontal className="h-4 w-4 mr-1" /> Mais ações</Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {!isArchived && <DropdownMenuItem onClick={(e) => handleArchive(w, e)}>Arquivar trabalhador</DropdownMenuItem>}
+                          {isArchived && <DropdownMenuItem onClick={(e) => handleUnarchive(w, e)}>Desarquivar trabalhador</DropdownMenuItem>}
+                          {isArchived && isSuperAdmin && <DropdownMenuItem className="text-destructive" onClick={(e) => handleDeleteForever(w, e)}>Excluir definitivamente</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
                   </CardContent>
@@ -503,6 +485,11 @@ export default function AdminFullPanel({ adminId }: { adminId: string }) {
             })
           )}
         </TabsContent>
+
+        {isSuperAdmin && <TabsContent value="acesso" className="mt-3 space-y-3">
+          <Button variant="outline" className="w-full" onClick={() => navigate("/super-admin?tab=acessos")}><KeyRound className="h-4 w-4 mr-1" /> Controle de acessos e senhas</Button>
+          <AdminPendingPasswordRequests adminId={admin.id} />
+        </TabsContent>}
 
         <TabsContent value="clientes" className="mt-3">
           {clients.length === 0 ? (
@@ -598,10 +585,10 @@ function Stat({ label, value, cls }: { label: string; value: string; cls?: strin
 
 function Shortcut({ icon: Icon, label, onGo }: { icon: any; label: string; onGo: () => void }) {
   return (
-    <button onClick={onGo} className="flex items-center gap-2 border rounded-md p-2 text-sm hover:bg-muted/40 text-left">
+    <Button variant="outline" onClick={onGo} className="h-auto min-h-10 whitespace-normal justify-start gap-2 p-2 text-sm text-left">
       <Icon className="h-4 w-4 text-primary" />
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }
 

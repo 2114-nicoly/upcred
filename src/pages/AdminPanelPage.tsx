@@ -1,3 +1,4 @@
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchAvailableCashByWorker } from "@/lib/finance-totals";
@@ -14,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/useConfirm";
 import { EmptyState } from "@/components/LoadingSkeleton";
-import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, Pencil,
+import { Loader2, Plus, Copy, KeyRound, RefreshCw, Inbox, ChevronRight, Pencil, MoreHorizontal,
   TrendingUp, AlertTriangle, Target, ExternalLink, Wallet, CalendarDays, History } from "lucide-react";
 
 import { generateLoginCodigo, generateTempPassword, syntheticEmailFor } from "@/lib/worker-utils";
@@ -106,16 +107,16 @@ export default function AdminPanelPage() {
 /* ============= CAIXA TAB ============= */
 function CaixaTab() {
   const navigate = useNavigate();
-  const items: { label: string; path: string; icon: any }[] = [
-    { label: "Caixa do dia", path: "/caixa", icon: Wallet },
-    { label: "Histórico do Caixa (aberturas, fechamentos, diferenças)", path: "/daily-cash-history", icon: CalendarDays },
-    { label: "Histórico de movimentações", path: "/cash-history", icon: History },
+  const items: { label: string; description: string; path: string; icon: any }[] = [
+    { label: "Movimentar caixa", description: "Registrar entradas, saídas e conferir o saldo.", path: "/caixa", icon: Wallet },
+    { label: "Aberturas e fechamentos", description: "Consultar dias, abertura, fechamento e diferenças.", path: "/daily-cash-history", icon: CalendarDays },
+    { label: "Histórico de entradas e saídas", description: "Consultar os lançamentos de dinheiro do caixa.", path: "/cash-history", icon: History },
   ];
   return (
     <div className="space-y-2">
       {items.map((it) => (
-        <Button key={it.path} variant="outline" size="sm" className="w-full justify-between" onClick={() => navigate(it.path)}>
-          <span className="flex items-center gap-2"><it.icon className="h-4 w-4" /> {it.label}</span>
+        <Button key={it.path} variant="outline" size="sm" className="w-full h-auto min-h-11 justify-between whitespace-normal py-2" onClick={() => navigate(it.path)}>
+          <span className="flex items-center gap-2 text-left"><it.icon className="h-4 w-4 shrink-0" /><span><span className="block">{it.label}</span><span className="block text-[10px] font-normal text-muted-foreground">{it.description}</span></span></span>
           <ExternalLink className="h-3.5 w-3.5" />
         </Button>
       ))}
@@ -501,8 +502,8 @@ function WorkersTab() {
             return (
               <Card key={w.id}>
                 <CardContent className="p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <button onClick={() => navigate(`/admin/worker/${w.id}`)} className="flex-1 text-left min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <div className="flex-1 text-left min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm truncate">{w.nome}</span>
                         {w.archived_at && (
@@ -510,32 +511,28 @@ function WorkersTab() {
                         )}
                       </div>
                       <div className="text-[11px] text-muted-foreground">Login <span className="font-mono">{w.login_codigo}</span></div>
-                    </button>
+                    </div>
                     {!w.archived_at && (
                       <Button size="sm" variant="outline" className="h-9 shrink-0 px-3 text-xs" onClick={() => openEdit(w)} aria-label={`Editar ${w.nome}`}>
                         <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
                       </Button>
                     )}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" onClick={() => navigate(`/admin/worker/${w.id}`)} />
+                    <Button size="sm" variant="outline" className="h-10 shrink-0 px-3 text-xs" onClick={() => navigate(`/admin/worker/${w.id}`)}>
+                      Ver detalhes <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                    </Button>
                   </div>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {!w.archived_at && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResetPassword(w)}>
-                        <KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar Nova Senha
-                      </Button>
-                    )}
-                    {!w.archived_at && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openArchiveDialog(w)}>
-                        Arquivar Trabalhador
-                      </Button>
-                    )}
-
-                    {isSuperAdmin && w.archived_at && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleUnarchive(w)}>
-                        Desarquivar Trabalhador
-                      </Button>
-                    )}
+                  <div className="flex justify-end mb-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" className="h-10 text-xs" aria-label={`Mais ações de ${w.nome}`}><MoreHorizontal className="h-4 w-4 mr-1" /> Mais ações</Button></DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {!w.archived_at && <DropdownMenuItem onClick={() => openArchiveDialog(w)}>Arquivar trabalhador</DropdownMenuItem>}
+                        {isSuperAdmin && w.archived_at && <DropdownMenuItem onClick={() => handleUnarchive(w)}>Desarquivar trabalhador</DropdownMenuItem>}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
+                  <section className="border-t pt-2 space-y-2" aria-label={`Acesso de ${w.nome}`}>
+                    <h3 className="text-xs font-semibold">Acesso</h3>
+                    {!w.archived_at && <Button size="sm" variant="outline" className="h-10 text-xs" onClick={() => handleResetPassword(w)}><KeyRound className="h-3.5 w-3.5 mr-1" /> Gerar nova senha</Button>}
                   <WorkerAccessSummary
                     license={accessMaps.licenseByWorker[w.id]}
                     lastPeriod={accessMaps.lastPeriodByWorker[w.id]}
@@ -545,9 +542,11 @@ function WorkersTab() {
                   <div className="flex justify-end">
                     <AccessHistoryDialog
                       workerName={w.nome}
+                      label="Histórico de acesso"
                       periods={accessMaps.periodsByWorker[w.id] ?? []}
                     />
                   </div>
+                  </section>
 
                 </CardContent>
               </Card>

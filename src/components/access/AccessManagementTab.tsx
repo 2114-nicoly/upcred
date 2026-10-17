@@ -1,3 +1,4 @@
+import AccessSection from "@/components/AccessSection";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,7 +39,7 @@ import {
 } from "@/lib/access-control";
 
 
-type AdminRow = { id: string; nome: string };
+type AdminRow = { id: string; nome: string; login_codigo: string | null; active: boolean };
 type WorkerRow = { id: string; nome: string; parent_admin_id: string | null };
 
 /** Aba "Acessos" — visão global, somente leitura nesta etapa. */
@@ -68,7 +69,7 @@ export default function AccessManagementTab() {
       ]);
       setEnforcement(enf.enabled);
       setEnforcementError(enf.error);
-      setAdmins(((adminsRes.data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome })));
+      setAdmins(((adminsRes.data as any[]) ?? []).map((a) => ({ id: a.id, nome: a.nome, login_codigo: a.login_codigo ?? null, active: a.active })));
       setWorkers(((workersRes.data as any[]) ?? []).map((w) => ({ id: w.id, nome: w.nome, parent_admin_id: w.parent_admin_id ?? null })));
       setMaps(m);
       setPauserNames(await fetchGrantorNames(Object.values(m.controlByAdmin).map((c) => c.paused_by)));
@@ -340,6 +341,8 @@ export default function AccessManagementTab() {
                       />
                     </div>
                   </div>
+
+                  <AccessSection targetKind="admin" targetId={a.id} loginCodigo={a.login_codigo} nome={a.nome} active={a.active} />
 
                   {list.length === 0 ? (
                     <p className="text-[11px] text-muted-foreground">Nenhum trabalhador para os filtros atuais.</p>
