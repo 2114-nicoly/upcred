@@ -1,5 +1,9 @@
 # Pesquisa contínua
 
+# Navegação Admin e Super Admin
+- [ ] Consolidar acesso às empresas e identificar ações de trabalhadores, acesso e Caixa, sem alterar regras.
+- [ ] Verificar caminhos, confirmações existentes e apresentação no celular nos dois perfis.
+
 # Campos monetários
 
 - [x] Inventariar campos monetários em todos os perfis usando os arquivos atuais (ZIP não disponível nos anexos).
