@@ -1,3 +1,4 @@
+import { MoneyInput } from "@/components/MoneyInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,8 +113,7 @@ export default function PaymentAmountSelector({
       ) : (
         <div className="space-y-2">
           <Label>Valor recebido</Label>
-          <Input
-            inputMode="decimal"
+          <MoneyInput
             placeholder="Ex.: 125,50"
             value={state.manualValue}
             disabled={disabled}

@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput } from "@/lib/money-input";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -231,9 +233,10 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const qc = clientSearch.trim().toLowerCase();
-    const min = minValue ? Number(minValue) : null;
-    const max = maxValue ? Number(maxValue) : null;
+    const min = minValue ? parseMoneyInput(minValue) : null;
+    const max = maxValue ? parseMoneyInput(maxValue) : null;
     return logs.filter((l) => {
+      if ((minValue.trim() && min === null) || (maxValue.trim() && max === null)) return false;
       if (onlyCritical && !CRITICAL_AUDIT_ACTIONS.has(l.action_type as any)) return false;
       if (q) {
         const label = (ACTION_LABELS[l.action_type] || l.action_type).toLowerCase();
@@ -441,11 +444,11 @@ export default function AuditLogList({ workerId, limit = 200 }: Props) {
         </div>
         <div>
           <Label className="text-[10px]">Valor mín.</Label>
-          <Input type="number" inputMode="decimal" value={minValue} onChange={(e) => setMinValue(e.target.value)} className="h-8 text-xs" />
+          <MoneyInput value={minValue} onChange={(e) => setMinValue(e.target.value)} className="h-8 text-xs" />
         </div>
         <div>
           <Label className="text-[10px]">Valor máx.</Label>
-          <Input type="number" inputMode="decimal" value={maxValue} onChange={(e) => setMaxValue(e.target.value)} className="h-8 text-xs" />
+          <MoneyInput value={maxValue} onChange={(e) => setMaxValue(e.target.value)} className="h-8 text-xs" />
         </div>
         <div className="col-span-2 md:col-span-4">
           <Label className="text-[10px]">Buscar texto</Label>

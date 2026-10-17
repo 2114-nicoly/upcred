@@ -1,4 +1,5 @@
 import { formatCurrency } from "@/lib/loan-utils";
+import { parseMoneyInput } from "@/lib/money-input";
 
 /**
  * Seletor de pagamento: por QUANTIDADE de parcelas (quantidade × valor CHEIO
@@ -36,14 +37,7 @@ export function createPaymentAmountState(): PaymentAmountState {
 
 /** Aceita "125", "125,50" e "125.50". Retorna null quando inválido. */
 export function parseAmountInput(input: string): number | null {
-  const raw = (input ?? "").trim();
-  if (!raw) return null;
-  const normalized = raw.replace(/\s/g, "").replace(/\./g, (m, i, s) =>
-    s.includes(",") ? "" : m,
-  ).replace(",", ".");
-  const value = Number(normalized);
-  if (!isFinite(value) || isNaN(value)) return null;
-  return value;
+  return parseMoneyInput(input);
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

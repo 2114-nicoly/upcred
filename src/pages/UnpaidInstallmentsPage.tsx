@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput, formatMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -132,8 +134,9 @@ export default function UnpaidInstallmentsPage() {
       Number(inst.amount),
       Number(loan?.remaining_balance ?? 0),
     );
-    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
+    const multaValue = payPenaltyAmount.trim() ? parseMoneyInput(payPenaltyAmount) : 0;
     if (amountError) { toast.error(amountError); return; }
+    if (multaValue === null || multaValue < 0) { toast.error("Valor de multa inválido"); return; }
 
     try {
       if (multaValue > 0 && loan) {
@@ -187,8 +190,8 @@ export default function UnpaidInstallmentsPage() {
 
   const handleEditInstallment = async () => {
     if (!editInstId) return;
-    const newAmount = parseFloat(editInstAmount);
-    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    const newAmount = parseMoneyInput(editInstAmount);
+    if (newAmount === null || newAmount <= 0) { toast.error("Valor inválido"); return; }
     await supabase.from("installments").update({ amount: newAmount, due_date: editInstDueDate }).eq("id", editInstId);
     toast.success("Parcela atualizada!");
     setEditInstId(null);
@@ -253,7 +256,7 @@ export default function UnpaidInstallmentsPage() {
                       <Badge className={getStatusColor(displayStatus)}>{getStatusLabel(displayStatus)}</Badge>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
                         setEditInstId(inst.id);
-                        setEditInstAmount(String(inst.amount));
+                        setEditInstAmount(formatMoneyInput(Number(inst.amount)));
                         setEditInstDueDate(inst.due_date);
                       }}>
                         <Pencil className="h-3 w-3" />
@@ -284,7 +287,7 @@ export default function UnpaidInstallmentsPage() {
 
                           <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                             <Label>Valor destinado à multa (opcional)</Label>
-                            <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                            <MoneyInput placeholder="0,00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
                           </div>
                           <div>
                             <Label>Data do pagamento (caixa do trabalhador)</Label>
@@ -321,7 +324,7 @@ export default function UnpaidInstallmentsPage() {
           <div className="space-y-3">
             <div>
               <Label>Valor da parcela</Label>
-              <Input type="number" value={editInstAmount} onChange={(e) => setEditInstAmount(e.target.value)} />
+              <MoneyInput value={editInstAmount} onChange={(e) => setEditInstAmount(e.target.value)} />
             </div>
             <div>
               <Label>Data de vencimento</Label>

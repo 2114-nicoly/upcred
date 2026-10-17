@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -232,9 +234,9 @@ export default function OverdueLoansPage() {
       Number(inst.amount),
       Number((inst as any).loans?.remaining_balance ?? 0),
     );
-    const multaValue = payPenaltyAmount ? parseFloat(payPenaltyAmount) : 0;
+    const multaValue = payPenaltyAmount.trim() ? parseMoneyInput(payPenaltyAmount) : 0;
     if (amountError) { toast.error(amountError); return; }
-    if (payPenaltyAmount && (isNaN(multaValue) || multaValue < 0)) { toast.error("Valor de multa inválido"); return; }
+    if (multaValue === null || multaValue < 0) { toast.error("Valor de multa inválido"); return; }
 
     try {
       if (multaValue > 0) {
@@ -285,7 +287,7 @@ export default function OverdueLoansPage() {
   };
 
   const handleAddPenalty = async (inst: InstallmentWithLoan) => {
-    const amount = parseFloat(penaltyAmount);
+    const amount = parseMoneyInput(penaltyAmount);
     if (!amount || amount <= 0) { toast.error("Valor inválido"); return; }
 
     // Sem caixa aberto do trabalhador dono, nada é gravado.
@@ -494,7 +496,7 @@ export default function OverdueLoansPage() {
                                   <div className="rounded-lg border border-warning/50 p-3 space-y-2">
                                     <p className="text-xs font-medium text-warning">Multa pendente: {formatCurrency(penaltyPending)}</p>
                                     <Label>Valor destinado à multa (opcional)</Label>
-                                    <Input type="number" placeholder="0.00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
+                                    <MoneyInput placeholder="0,00" value={payPenaltyAmount} onChange={(e) => setPayPenaltyAmount(e.target.value)} />
                                   </div>
                                 )}
                                 <div>
@@ -527,7 +529,7 @@ export default function OverdueLoansPage() {
                                 <p className="text-sm text-muted-foreground">{group.clientName} — Parcela {inst.number}</p>
                                 <div>
                                   <Label>Valor da multa</Label>
-                                  <Input type="number" placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} />
+                                  <MoneyInput placeholder="Valor" value={penaltyAmount} onChange={(e) => setPenaltyAmount(e.target.value)} />
                                 </div>
                                 <div>
                                   <Label>Observação (opcional)</Label>

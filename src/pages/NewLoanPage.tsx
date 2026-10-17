@@ -1,3 +1,5 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput, formatMoneyInput } from "@/lib/money-input";
 import { reportFinancialError, showCashGuardModal } from "@/lib/cash-guard";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -161,9 +163,9 @@ export default function NewLoanPage() {
         .eq("id", renewFromLoanId)
         .single();
       if (data) {
-        setAmount(String(data.amount));
+        setAmount(formatMoneyInput(Number(data.amount)));
         setInterestType(data.interest_type as "percentage" | "fixed");
-        setInterestValue(String(data.interest_value));
+        setInterestValue(data.interest_type === "fixed" ? formatMoneyInput(Number(data.interest_value)) : String(data.interest_value));
         setPaymentType(data.payment_type as typeof paymentType);
         setInstallmentCount(String(data.installment_count));
         setRenewOldRemaining(Number(data.remaining_balance) || 0);
@@ -175,8 +177,8 @@ export default function NewLoanPage() {
     fetchRenewalLoan();
   }, [renewFromLoanId]);
 
-  const numAmount = parseFloat(amount) || 0;
-  const numInterest = parseFloat(interestValue) || 0;
+  const numAmount = parseMoneyInput(amount) || 0;
+  const numInterest = interestType === "fixed" ? (parseMoneyInput(interestValue) ?? 0) : (parseFloat(interestValue) || 0);
   const numInstallments = parseInt(installmentCount) || 0;
 
   const calc = useMemo(() => {
@@ -186,7 +188,7 @@ export default function NewLoanPage() {
 
   // Ongoing (importado) helpers — declared early so dueDates can size by pendingCount
   const isOngoing = registrationType === "ongoing" && !renewFromLoanId;
-  const numAlreadyPaid = parseFloat(amountAlreadyPaid) || 0;
+  const numAlreadyPaid = parseMoneyInput(amountAlreadyPaid) || 0;
   const ongoingRemaining = calc ? Math.max(0, calc.totalAmount - numAlreadyPaid) : 0;
 
   // Sequência correta das parcelas para importado:
@@ -331,6 +333,7 @@ export default function NewLoanPage() {
 
 
   const handleSave = async () => {
+    if (parseMoneyInput(amount) === null || (interestType === "fixed" && interestValue.trim() && parseMoneyInput(interestValue) === null) || (isOngoing && amountAlreadyPaid.trim() && parseMoneyInput(amountAlreadyPaid) === null) || (renewFromLoanId && renewPayState.mode === "manual" && parseMoneyInput(renewPayState.manualValue) === null)) { toast.error("Informe valores monetários válidos com até duas casas decimais."); return; }
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error(isOngoing ? "Informe a data da próxima cobrança" : "Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
@@ -629,7 +632,7 @@ export default function NewLoanPage() {
           first_due_date: firstDueStr,
           last_due_date: dueDates.length ? lastDueIso(dueDates) : firstDueStr,
           interest_type: interestType,
-          interest_value: Number(interestValue) || 0,
+          interest_value: numInterest,
           payment_type: paymentType,
           loan_date: loanDate,
           released_amount: cashOut,
@@ -716,7 +719,7 @@ export default function NewLoanPage() {
         first_due_date: nextDueStr,
         last_due_date: dueDates.length ? lastDueIso(dueDates) : nextDueStr,
         interest_type: interestType,
-        interest_value: Number(interestValue) || 0,
+        interest_value: numInterest,
         payment_type: paymentType,
         released_amount: 0,
         original_loan_date: loanDate,
@@ -950,7 +953,7 @@ export default function NewLoanPage() {
 
         <div>
           <Label>Valor Emprestado (R$)</Label>
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
+          <MoneyInput value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -966,7 +969,7 @@ export default function NewLoanPage() {
           </div>
           <div>
             <Label>{interestType === "percentage" ? "Juros (%)" : "Juros (R$)"}</Label>
-            <Input type="number" value={interestValue} onChange={(e) => setInterestValue(e.target.value)} placeholder="0" />
+            {interestType === "fixed" ? <MoneyInput value={interestValue} onChange={(e) => setInterestValue(e.target.value)} /> : <Input type="number" value={interestValue} onChange={(e) => setInterestValue(e.target.value)} placeholder="0" />}
           </div>
         </div>
 
@@ -1095,8 +1098,7 @@ export default function NewLoanPage() {
             <CardContent className="space-y-2 text-sm">
               <div>
                 <Label>Valor já pago antes do cadastro (R$)</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   value={amountAlreadyPaid}
                   onChange={(e) => setAmountAlreadyPaid(e.target.value)}
                   placeholder="0,00"

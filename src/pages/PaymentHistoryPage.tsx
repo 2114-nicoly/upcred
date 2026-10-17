@@ -1,10 +1,11 @@
+import { MoneyInput } from "@/components/MoneyInput";
+import { parseMoneyInput, formatMoneyInput } from "@/lib/money-input";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/loan-utils";
@@ -174,8 +175,8 @@ export default function PaymentHistoryPage() {
       return;
     }
 
-    const newAmount = parseFloat(editPaidAmount);
-    if (isNaN(newAmount) || newAmount <= 0) { toast.error("Valor inválido"); return; }
+    const newAmount = parseMoneyInput(editPaidAmount);
+    if (newAmount === null || newAmount <= 0) { toast.error("Valor inválido"); return; }
 
     setIsSubmitting(true);
     try {
@@ -270,7 +271,7 @@ export default function PaymentHistoryPage() {
                               className="h-7 w-7 p-0"
                               onClick={() => {
                                 setEditPaymentEntry(payment);
-                                setEditPaidAmount(String(payment.amount));
+                                setEditPaidAmount(formatMoneyInput(Number(payment.amount)));
                               }}
                               disabled={isSubmitting}
                             >
@@ -311,7 +312,7 @@ export default function PaymentHistoryPage() {
               </p>
               <div>
                 <Label>Valor pago</Label>
-                <Input type="number" value={editPaidAmount} onChange={(e) => setEditPaidAmount(e.target.value)} />
+                <MoneyInput value={editPaidAmount} onChange={(e) => setEditPaidAmount(e.target.value)} />
               </div>
               <Button onClick={handleEditPayment} className="w-full" disabled={isSubmitting}>Salvar</Button>
             </div>

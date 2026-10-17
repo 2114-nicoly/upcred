@@ -1,3 +1,4 @@
+import { MoneyInput } from "@/components/MoneyInput";
 import { reportFinancialError } from "@/lib/cash-guard";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -1536,7 +1537,7 @@ export default function DailyCashPage() {
                       </div>
                       <div className="rounded-md border border-warning/50 bg-warning/10 p-2">
                         <Label>Multa cobrada neste pagamento</Label>
-                        <Input type="number" inputMode="decimal" placeholder="0,00" value={payPenaltyAmount}
+                        <MoneyInput placeholder="0,00" value={payPenaltyAmount}
                           data-testid="route-penalty-amount"
                           onChange={(e) => {
                             const v = e.target.value;
