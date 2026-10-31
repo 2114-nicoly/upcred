@@ -4,13 +4,14 @@ import { compareNamesPtBr } from "@/lib/name-sort";
 describe("compareNamesPtBr", () => {
   it("ordena alfabeticamente ignorando acentos e maiúsculas", () => {
     const sorted = ["Carlos", "érica", "Bruno", "Ana", "Ágata"].sort(compareNamesPtBr);
-    expect(sorted).toEqual(["Ágata", "Ana", "Bruno", "Carlos", "Érica"]);
+    expect(sorted).toEqual(["Ágata", "Ana", "Bruno", "Carlos", "érica"]);
   });
 
   it("trata acento como igualdade na ordenação principal e usa desempate estável", () => {
-    expect(compareNamesPtBr("Ana", "Ágata")).toBeLessThan(0);
+    expect(compareNamesPtBr("Ágata", "Ana")).toBeLessThan(0);
+    expect(compareNamesPtBr("Érica", "Bruno")).toBeLessThan(0);
     expect(compareNamesPtBr("éRICA", "Erica")).toBe(compareNamesPtBr("éRICA", "Erica"));
-    expect([ "Erica", "éRICA" ].sort(compareNamesPtBr)).toEqual(["éRICA", "Erica"]);
+    expect(["Erica", "éRICA"].sort(compareNamesPtBr)).toEqual(["éRICA", "Erica"]);
   });
 
   it("aceita valores ausentes sem quebrar", () => {
