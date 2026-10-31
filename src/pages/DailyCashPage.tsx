@@ -484,6 +484,10 @@ export default function DailyCashPage() {
       if (getOverdueDays(inst) > 0) overdue.push(inst);
       else todayList.push(inst);
     }
+    const byClient = (a: InstallmentWithLoan, b: InstallmentWithLoan) =>
+      compareNamesPtBr(getInstClientName(a), getInstClientName(b));
+    todayList.sort(byClient);
+    overdue.sort(byClient);
     return { overdueItems: overdue, todayItems: todayList };
   }, [pendingInstallments, getOverdueDays]);
 

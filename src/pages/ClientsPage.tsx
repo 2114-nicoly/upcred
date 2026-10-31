@@ -60,7 +60,7 @@ export default function ClientsPage() {
   const [newClientForm, setNewClientForm] = useState<ClientFormValues>(emptyClientForm);
   const [editClientForm, setEditClientForm] = useState<ClientFormValues>(emptyClientForm);
   const [newClientWorkerId, setNewClientWorkerId] = useState<string>("");
-  const [sortAlpha, setSortAlpha] = useState(false);
+  const [sortAlpha, setSortAlpha] = useState(true);
   const [filterActive, setFilterActive] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [retryQueue, setRetryQueue] = useState<{ clientId: string; items: PendingAttachment[] } | null>(null);
@@ -361,7 +361,7 @@ export default function ClientsPage() {
   }
 
   if (sortAlpha) {
-    filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+    filtered = [...filtered].sort((a, b) => compareNamesPtBr(a.name, b.name));
   }
 
   const workerName = (id: string | null) => {
