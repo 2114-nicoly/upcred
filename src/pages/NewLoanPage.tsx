@@ -32,6 +32,38 @@ type CashPreview =
   | { state: "unavailable" }
   | { state: "ok"; available: number };
 
+/** Mesma apropriação juros-primeiro do caixa; nunca inclui penalties. */
+export function renewalPendingInterest(loan: {
+  amount: unknown; total_amount: unknown; remaining_balance: unknown;
+  is_imported_ongoing?: boolean; initial_remaining_balance?: unknown; amount_already_paid?: unknown;
+}): number | null {
+  const money = (value: unknown): number | null => {
+    if (typeof value !== "number" && typeof value !== "string") return null;
+    if (typeof value === "string" && !value.trim()) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+  const principal = money(loan.amount);
+  const total = money(loan.total_amount);
+  const remaining = money(loan.remaining_balance);
+  if (principal === null || total === null || remaining === null || total < principal || remaining > total) return null;
+  const interest = total - principal;
+  const paid = Math.max(0, Math.min(total, total - remaining));
+  const pending = Math.max(0, interest - paid);
+  // Importados: se a base usada pela renovação divergir da apropriação do
+  // caixa, não oferecer um valor que possa ser classificado como principal.
+  if (loan.is_imported_ongoing) {
+    const alreadyPaid = money(loan.amount_already_paid);
+    const base = loan.initial_remaining_balance == null
+      ? (alreadyPaid === null ? null : Math.max(0, total - alreadyPaid))
+      : money(loan.initial_remaining_balance);
+    if (base === null || base > total || remaining > base) return null;
+    const renewalPending = Math.min(remaining, Math.max(0, interest - Math.max(0, base - remaining)));
+    if (Math.abs(renewalPending - pending) > 0.005) return null;
+  }
+  return Math.round(pending * 100) / 100;
+}
+
 export default function NewLoanPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
@@ -64,6 +96,9 @@ export default function NewLoanPage() {
   const [renewOldRemaining, setRenewOldRemaining] = useState<number>(0);
   const [renewOldInstAmount, setRenewOldInstAmount] = useState<number>(0);
   const [renewPayState, setRenewPayState] = useState<PaymentAmountState>(createPaymentAmountState());
+  const [renewInterest, setRenewInterest] = useState<{ loanId: string; amount: number | null } | null>(null);
+  const [renewPaymentChoice, setRenewPaymentChoice] = useState<"interest" | "custom">("interest");
+  const pendingRenewInterest = renewInterest?.loanId === renewFromLoanId ? renewInterest.amount : null;
 
   const confirm = useConfirm();
   const draftKey = renewFromLoanId ? `renew:${renewFromLoanId}` : `new-loan:${clientId ?? "x"}`;
@@ -87,6 +122,7 @@ export default function NewLoanPage() {
     setRegistrationType("new");
     setAmountAlreadyPaid("");
     setRenewPayState(createPaymentAmountState());
+    setRenewPaymentChoice("interest");
   };
   useEffect(() => {
     if (restoredRef.current) return;
@@ -156,12 +192,23 @@ export default function NewLoanPage() {
   // Pre-fill from renewal loan + fetch remaining_balance for "Falta para quitar"
   useEffect(() => {
     if (!renewFromLoanId) return;
+    let cancelled = false;
+    setRenewInterest(null);
+    setRenewPaymentChoice("interest");
     const fetchRenewalLoan = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("loans")
-        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance, total_amount")
+        .select("amount, interest_type, interest_value, payment_type, installment_count, remaining_balance, total_amount, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
         .eq("id", renewFromLoanId)
         .single();
+      if (cancelled) return;
+      const pendingInterest = !error && data ? renewalPendingInterest(data) : null;
+      setRenewInterest({ loanId: renewFromLoanId, amount: pendingInterest });
+      if (pendingInterest === null) {
+        setRenewPaymentChoice("custom");
+      } else {
+        setRenewPayState((previous) => ({ ...previous, mode: "manual", manualValue: formatMoneyInput(pendingInterest) }));
+      }
       if (data) {
         setAmount(formatMoneyInput(Number(data.amount)));
         setInterestType(data.interest_type as "percentage" | "fixed");
@@ -175,6 +222,7 @@ export default function NewLoanPage() {
       }
     };
     fetchRenewalLoan();
+    return () => { cancelled = true; };
   }, [renewFromLoanId]);
 
   const numAmount = parseMoneyInput(amount) || 0;
@@ -242,7 +290,7 @@ export default function NewLoanPage() {
   }, [datesNeeded, paymentType]);
 
   // Renewal computed values
-  const renewPaid = renewFromLoanId ? Math.min(computePaymentAmount(renewPayState, renewOldInstAmount), renewOldRemaining) : 0;
+  const renewPaid = renewFromLoanId ? Math.min(renewPaymentChoice === "interest" ? (pendingRenewInterest ?? 0) : computePaymentAmount(renewPayState, renewOldInstAmount), renewOldRemaining) : 0;
   const faltaQuitar = renewOldRemaining;
   const absorvidoDoNovo = renewFromLoanId ? Math.max(0, faltaQuitar - renewPaid) : 0;
   const valorLiberado = renewFromLoanId ? Math.max(0, numAmount - absorvidoDoNovo) : numAmount;
@@ -333,7 +381,8 @@ export default function NewLoanPage() {
 
 
   const handleSave = async () => {
-    if (parseMoneyInput(amount) === null || (interestType === "fixed" && interestValue.trim() && parseMoneyInput(interestValue) === null) || (isOngoing && amountAlreadyPaid.trim() && parseMoneyInput(amountAlreadyPaid) === null) || (renewFromLoanId && renewPayState.mode === "manual" && parseMoneyInput(renewPayState.manualValue) === null)) { toast.error("Informe valores monetários válidos com até duas casas decimais."); return; }
+    if (renewFromLoanId && renewPaymentChoice === "interest" && pendingRenewInterest === null) { toast.error("Juros pendentes indisponíveis. Selecione parcela ou valor manual."); return; }
+    if (parseMoneyInput(amount) === null || (interestType === "fixed" && interestValue.trim() && parseMoneyInput(interestValue) === null) || (isOngoing && amountAlreadyPaid.trim() && parseMoneyInput(amountAlreadyPaid) === null) || (renewFromLoanId && renewPaymentChoice === "custom" && renewPayState.mode === "manual" && parseMoneyInput(renewPayState.manualValue) === null)) { toast.error("Informe valores monetários válidos com até duas casas decimais."); return; }
     if (!calc || numInstallments <= 0) { toast.error("Preencha todos os campos"); return; }
     if (paymentType !== "fixed_dates" && !firstDueDate) { toast.error(isOngoing ? "Informe a data da próxima cobrança" : "Informe a data do primeiro vencimento"); return; }
     if (paymentType === "fixed_dates" && fixedDates.some((d) => !d)) { toast.error("Preencha todas as datas de vencimento"); return; }
@@ -352,6 +401,29 @@ export default function NewLoanPage() {
       return;
     }
 
+    // Releitura antes da confirmação: uma seleção antiga não deve cobrar
+    // principal como se ainda fosse juro após outro pagamento.
+    if (renewFromLoanId && renewPaymentChoice === "interest") {
+      const { data, error } = await supabase.from("loans")
+        .select("amount, total_amount, remaining_balance, installment_count, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
+        .eq("id", renewFromLoanId).single();
+      const latestInterest = !error && data ? renewalPendingInterest(data) : null;
+      if (latestInterest === null) {
+        setRenewInterest({ loanId: renewFromLoanId, amount: null });
+        setRenewPaymentChoice("custom");
+        toast.error("Juros pendentes indisponíveis. Selecione parcela ou valor manual.");
+        return;
+      }
+      if (latestInterest !== pendingRenewInterest || Number(data?.remaining_balance) !== renewOldRemaining) {
+        setRenewInterest({ loanId: renewFromLoanId, amount: latestInterest });
+        setRenewOldRemaining(Number(data?.remaining_balance));
+        setRenewOldInstAmount(Number(data?.total_amount) / Math.max(1, Number(data?.installment_count) || 1));
+        setRenewPayState((previous) => ({ ...previous, mode: "manual", manualValue: formatMoneyInput(latestInterest) }));
+        toast.info("O saldo do contrato mudou. Confira os valores atualizados e confirme novamente.");
+        return;
+      }
+    }
+
     // Confirmação para ações sensíveis: renovação ou liberação alta
     const cashOutPreview = renewFromLoanId ? valorLiberado : numAmount;
     const ok = await confirm({
@@ -365,6 +437,7 @@ export default function NewLoanPage() {
         { label: "Cliente", value: clientName },
         { label: "Valor", value: formatCurrency(numAmount) },
         { label: "Parcelas", value: `${numInstallments}x ${formatCurrency(calc.installmentAmount)}` },
+        ...(renewFromLoanId ? [{ label: "Pagamento nesta renovação", value: formatCurrency(renewPaid) }] : []),
         isOngoing
           ? { label: "Saldo restante", value: formatCurrency(ongoingRemaining) }
           : { label: "Liberado em caixa", value: formatCurrency(cashOutPreview) },
@@ -1048,19 +1121,52 @@ export default function NewLoanPage() {
                 <span className="font-bold">{formatCurrency(faltaQuitar)}</span>
               </div>
               <div>
+                <div className="space-y-2 mb-3">
+                  <Button
+                    type="button"
+                    variant={renewPaymentChoice === "interest" ? "default" : "outline"}
+                    className="w-full h-auto min-h-10 whitespace-normal text-left justify-start"
+                    disabled={pendingRenewInterest === null || saving}
+                    aria-pressed={renewPaymentChoice === "interest"}
+                    onClick={() => {
+                      if (pendingRenewInterest === null) return;
+                      setRenewPaymentChoice("interest");
+                      setRenewPayState((previous) => ({ ...previous, mode: "manual", manualValue: formatMoneyInput(pendingRenewInterest) }));
+                    }}
+                  >
+                    Pagar somente os juros pendentes — {pendingRenewInterest === null ? (renewInterest?.loanId === renewFromLoanId ? "Indisponível" : "Consultando…") : formatCurrency(pendingRenewInterest)}
+                  </Button>
+                  {renewInterest?.loanId === renewFromLoanId && pendingRenewInterest === null && (
+                    <p className="text-xs text-muted-foreground">Não foi possível determinar os juros pendentes com segurança.</p>
+                  )}
+                  <Button type="button" variant={renewPaymentChoice === "custom" ? "default" : "outline"} className="w-full" disabled={saving} aria-pressed={renewPaymentChoice === "custom"} onClick={() => {
+                    if (renewPaymentChoice !== "custom") setRenewPayState((previous) => ({ ...previous, mode: "quantity" }));
+                    setRenewPaymentChoice("custom");
+                  }}>
+                    Pagar parcela ou informar valor manual
+                  </Button>
+                </div>
+                {renewPaymentChoice === "custom" ? (
                 <PaymentAmountSelector
                   installmentAmount={renewOldInstAmount}
                   remainingBalance={renewOldRemaining}
                   state={renewPayState}
                   onChange={setRenewPayState}
                 />
+                ) : (
+                  <div className="space-y-1">
+                    {pendingRenewInterest === 0 && <p className="text-xs text-muted-foreground">Não há juros pendentes. Nenhum pagamento será registrado nesta renovação.</p>}
+                    <Label>Observação do pagamento (opcional)</Label>
+                    <Textarea rows={2} value={renewPayState.observation} disabled={saving} onChange={(e) => setRenewPayState((previous) => ({ ...previous, observation: e.target.value, observationTouched: true }))} />
+                  </div>
+                )}
                 <p className="text-[11px] text-muted-foreground mt-1">
                   Quanto o cliente está pagando agora para abater o empréstimo atual.
                 </p>
               </div>
 
               <div className="border-t pt-2 space-y-1">
-                <div className="flex justify-between"><span>Pago agora:</span><span>{formatCurrency(renewPaid)}</span></div>
+                <div className="flex justify-between"><span>A pagar na confirmação:</span><span>{formatCurrency(renewPaid)}</span></div>
                 <div className="flex justify-between"><span>Novo empréstimo:</span><span>{formatCurrency(numAmount)}</span></div>
                 <div className="flex justify-between"><span>Absorvido p/ quitar antigo:</span><span>{formatCurrency(absorvidoDoNovo)}</span></div>
                 <div className="flex justify-between font-bold">

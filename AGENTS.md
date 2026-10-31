@@ -2,6 +2,8 @@
 
 ## Regras
 
+- Renewal interest-only previews stay local to NewLoanPage and use the existing interest-first allocation from loan totals and remaining balance; imported loans with conflicting accounting bases show unavailable rather than guessing, while renew_loan_tx remains the only writer.
+
 - Administrative navigation reuses existing detail routes and access components; global cash links and scoped shortcuts remain distinct because scoped navigation must retain its confirmation and worker/company filters.
 
 - Editable money uses `MoneyInput` and the `money-input` parser/formatter; keep raw text while focused and format on blur to preserve the caret, never parse ledger metadata through the text-input parser.
