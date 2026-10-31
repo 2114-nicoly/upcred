@@ -401,6 +401,29 @@ export default function NewLoanPage() {
       return;
     }
 
+    // Releitura antes da confirmação: uma seleção antiga não deve cobrar
+    // principal como se ainda fosse juro após outro pagamento.
+    if (renewFromLoanId && renewPaymentChoice === "interest") {
+      const { data, error } = await supabase.from("loans")
+        .select("amount, total_amount, remaining_balance, installment_count, is_imported_ongoing, initial_remaining_balance, amount_already_paid")
+        .eq("id", renewFromLoanId).single();
+      const latestInterest = !error && data ? renewalPendingInterest(data) : null;
+      if (latestInterest === null) {
+        setRenewInterest({ loanId: renewFromLoanId, amount: null });
+        setRenewPaymentChoice("custom");
+        toast.error("Juros pendentes indisponíveis. Selecione parcela ou valor manual.");
+        return;
+      }
+      if (latestInterest !== pendingRenewInterest || Number(data?.remaining_balance) !== renewOldRemaining) {
+        setRenewInterest({ loanId: renewFromLoanId, amount: latestInterest });
+        setRenewOldRemaining(Number(data?.remaining_balance));
+        setRenewOldInstAmount(Number(data?.total_amount) / Math.max(1, Number(data?.installment_count) || 1));
+        setRenewPayState((previous) => ({ ...previous, mode: "manual", manualValue: formatMoneyInput(latestInterest) }));
+        toast.info("O saldo do contrato mudou. Confira os valores atualizados e confirme novamente.");
+        return;
+      }
+    }
+
     // Confirmação para ações sensíveis: renovação ou liberação alta
     const cashOutPreview = renewFromLoanId ? valorLiberado : numAmount;
     const ok = await confirm({
