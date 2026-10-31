@@ -70,6 +70,7 @@ import {
   normalizeSearchText,
   type RouteSearchResult,
 } from "@/lib/daily-route-search";
+import { compareNamesPtBr } from "@/lib/name-sort";
 
 type InstallmentWithLoan = {
   id: string;

@@ -24,6 +24,7 @@ import PendingClientAttachments, { type PendingAttachment } from "@/components/P
 import { uploadPendingAttachments } from "@/lib/attachment-upload";
 
 import { logAction, requireAudit, AuditRequiredError } from "@/lib/audit-utils";
+import { compareNamesPtBr } from "@/lib/name-sort";
 import { useFormDraft } from "@/hooks/useFormDraft";
 
 type Client = {

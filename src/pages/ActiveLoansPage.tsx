@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Landmark, Filter, Flame, Plus, DollarSign, XCircle, Undo2, Search, Trash2, MoreVertical, Eye, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { CardSkeleton, EmptyState } from "@/components/LoadingSkeleton";
 import { updateCashBalance, createCashMovement } from "@/lib/cash-utils";
+import { compareNamesPtBr } from "@/lib/name-sort";
 import { createDailyEvent } from "@/lib/daily-events";
 import { registerPayment, registerPenaltyPayment, settleLoan, cancelLoan } from "@/lib/payment-utils";
 import { INSTALLMENT_COLLECTIBLE_STATUSES, isInstallmentCollectibleStatus, isLoanActive } from "@/lib/status-constants";
