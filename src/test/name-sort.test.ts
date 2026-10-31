@@ -9,7 +9,7 @@ describe("compareNamesPtBr", () => {
 
   it("trata acento como igualdade na ordenação principal e usa desempate estável", () => {
     expect(compareNamesPtBr("Ágata", "Ana")).toBeLessThan(0);
-    expect(compareNamesPtBr("Érica", "Bruno")).toBeLessThan(0);
+    expect(compareNamesPtBr("Bruno", "Érica")).toBeLessThan(0);
     expect(compareNamesPtBr("éRICA", "Erica")).toBe(compareNamesPtBr("éRICA", "Erica"));
     expect(["Erica", "éRICA"].sort(compareNamesPtBr)).toEqual(["éRICA", "Erica"]);
   });
