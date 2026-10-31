@@ -10,8 +10,10 @@ describe("compareNamesPtBr", () => {
   it("trata acento como igualdade na ordenação principal e usa desempate estável", () => {
     expect(compareNamesPtBr("Ágata", "Ana")).toBeLessThan(0);
     expect(compareNamesPtBr("Bruno", "Érica")).toBeLessThan(0);
-    expect(compareNamesPtBr("éRICA", "Erica")).toBe(compareNamesPtBr("éRICA", "Erica"));
-    expect(["Erica", "éRICA"].sort(compareNamesPtBr)).toEqual(["éRICA", "Erica"]);
+    expect(compareNamesPtBr("éRICA", "Erica")).toBe(-compareNamesPtBr("Erica", "éRICA"));
+    // desempate é determinístico: qualquer ordem de entrada produz o mesmo resultado
+    expect(["Erica", "éRICA"].sort(compareNamesPtBr)).toEqual(["Erica", "éRICA"]);
+    expect(["éRICA", "Erica"].sort(compareNamesPtBr)).toEqual(["Erica", "éRICA"]);
   });
 
   it("aceita valores ausentes sem quebrar", () => {
