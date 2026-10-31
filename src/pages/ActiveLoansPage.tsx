@@ -391,15 +391,12 @@ export default function ActiveLoansPage() {
     else otherLoans.push(loan);
   }
 
-  // Sort each group by next due date
-  const sortByNdd = (a: LoanWithClient, b: LoanWithClient) => {
-    const nddA = progressMap[a.id]?.nextDueDate || "9999";
-    const nddB = progressMap[b.id]?.nextDueDate || "9999";
-    return nddA.localeCompare(nddB);
-  };
-  dueTodayLoans.sort(sortByNdd);
-  overdueLoans.sort(sortByNdd);
-  otherLoans.sort(sortByNdd);
+  // Sort each group alphabetically by client name (pt-BR, case/accent insensitive)
+  const sortByName = (a: LoanWithClient, b: LoanWithClient) =>
+    compareNamesPtBr(a.clients?.name, b.clients?.name);
+  dueTodayLoans.sort(sortByName);
+  overdueLoans.sort(sortByName);
+  otherLoans.sort(sortByName);
 
   // Compute overdue days for a loan
   const getLoanOverdueDays = (loan: LoanWithClient) => {
