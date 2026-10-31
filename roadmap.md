@@ -1,8 +1,8 @@
 # Pesquisa contínua
 
 # Pagamento na Renovação
-- [ ] Adicionar opção padrão de juros pendentes conforme a regra contábil atual, preservando parcela/manual e a transação existente.
-- [ ] Testar juros pendentes, parcialmente recebidos, quitados e dados indisponíveis; verificar seleção e confirmação sem movimentar dinheiro real.
+- [x] Adicionar opção padrão de juros pendentes conforme a regra contábil atual, preservando parcela/manual e a transação existente; reler saldo antes da confirmação.
+- [x] 19 testes passaram; seleção autenticada conferida com dados simulados para juros integralmente pendentes, parcialmente recebidos, quitados e indisponíveis, preservando parcela/manual e sem registrar operação real.
 
 # Navegação Admin e Super Admin
 - [x] Consolidar acesso às empresas e identificar ações de trabalhadores, acesso e Caixa, sem alterar regras.
