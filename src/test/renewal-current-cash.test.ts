@@ -72,8 +72,8 @@ describe("renovação usa caixa corrente — PostgreSQL isolado", () => {
   it("Brandon: saldo atual 2630 permite liberação apesar de abertura histórica negativa", async () => {
     const db = await setup();
     try {
-      await renew(db, 200, 4000); // absorve 1000, libera 3000, recebe 200
-      expect(await balance(db)).toBe(2630 + 200 - 3000 + 400); // insufficient scenario corrected below
+      await renew(db, 200, 3800); // absorve 1000, libera 2800, recebe 200
+      expect(await balance(db)).toBe(30);
     } finally { await db.close(); }
   }, 20000);
 
