@@ -302,8 +302,12 @@ export default function NewLoanPage() {
   // adicional (valorLiberado), empréstimo novo usa numAmount, importado não
   // movimenta caixa.
   const releasedAmount = isOngoing ? 0 : (renewFromLoanId ? valorLiberado : numAmount);
+  const renewalCashReceived = renewFromLoanId ? renewPaid : 0;
 
   const [cashPreview, setCashPreview] = useState<CashPreview>({ state: "loading" });
+  const cashAfterRelease = cashPreview.state === "ok"
+    ? Math.round((cashPreview.available + renewalCashReceived - releasedAmount) * 100) / 100
+    : null;
   const cashSeqRef = useRef(0);
 
   /**
@@ -342,7 +346,7 @@ export default function NewLoanPage() {
     if (!clientScope) return;
     const t = setTimeout(() => { void refreshAvailableCash(); }, 250);
     return () => clearTimeout(t);
-  }, [clientScope, releasedAmount, refreshAvailableCash]);
+  }, [clientScope, releasedAmount, renewalCashReceived, refreshAvailableCash]);
 
 
   // Função única para montar parcelas de empréstimo importado.
@@ -466,19 +470,19 @@ export default function NewLoanPage() {
 
     // Pré-checagem de saldo: SEMPRE abrir o modal existente quando o dinheiro
     // efetivamente liberado supera o Caixa Disponível do trabalhador responsável.
-    // Renovação compara SOMENTE o adicional liberado (valorLiberado), nunca o
-    // valor total do novo contrato. Importado (em andamento) não movimenta
-    // caixa e nunca é bloqueado aqui.
+    // Renovação soma somente o pagamento recebido e desconta a liberação real;
+    // absorção não é dinheiro. Importado não movimenta caixa.
     if (!isOngoing && cashOutPreview > 0.005) {
       try {
         const bal = await getCashBalance(activeCashScope);
-        const available = Number(bal?.available_cash ?? 0);
-        if (Number.isFinite(available) && cashOutPreview > available + 0.005) {
+        const available = bal ? Number(bal.available_cash) : NaN;
+        const availableWithReceipt = available + renewalCashReceived;
+        if (Number.isFinite(available) && cashOutPreview > availableWithReceipt + 0.005) {
           showCashGuardModal(
             {
               available_cash: available,
-              operation_amount: cashOutPreview,
-              missing_amount: cashOutPreview - available,
+              operation_amount: Math.max(0, cashOutPreview - renewalCashReceived),
+              missing_amount: Math.round((cashOutPreview - availableWithReceipt) * 100) / 100,
             },
             {
               scope: activeCashScope,
@@ -1001,11 +1005,11 @@ export default function NewLoanPage() {
                     <span className="text-xs text-muted-foreground">Sem efeito no caixa</span>
                     <span className="text-xs text-muted-foreground">—</span>
                   </>
-                ) : releasedAmount <= cashPreview.available + 0.005 ? (
+                ) : cashAfterRelease !== null && cashAfterRelease >= -0.005 ? (
                   <>
                     <span className="text-xs text-muted-foreground">Saldo previsto após liberação</span>
                     <span className="font-semibold tabular-nums text-success">
-                      {formatCurrency(cashPreview.available - releasedAmount)}
+                      {formatCurrency(Math.max(0, cashAfterRelease))}
                     </span>
                   </>
                 ) : (
@@ -1015,7 +1019,7 @@ export default function NewLoanPage() {
                       Falta no caixa
                     </span>
                     <span className="font-bold tabular-nums text-destructive">
-                      {formatCurrency(releasedAmount - cashPreview.available)}
+                      {formatCurrency(Math.abs(cashAfterRelease ?? 0))}
                     </span>
                   </>
                 )}

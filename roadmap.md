@@ -1,5 +1,10 @@
 # Pesquisa contínua
 
+# Validação financeira da renovação
+- [x] Usar caixa corrente bloqueado + pagamento recebido − liberação; preservar consistência, escopo e caixa aberto.
+- [x] Conferir Brandon (R$ 2.630,00 coerentes com o ledger) e modal real com falta de R$ 70,00; 37 testes passaram, incluindo transação PostgreSQL descartável, atualização única, rollback, divergência, caixa fechado e tentativas duplicadas enfileiradas.
+- [ ] Verificar concorrência entre sessões independentes e renovação confirmada com histórico pela interface: indisponível sem ambiente descartável multiusuário; nenhum dinheiro real movimentado.
+
 # Pagamento na Renovação
 - [x] Adicionar opção padrão de juros pendentes conforme a regra contábil atual, preservando parcela/manual e a transação existente; reler saldo antes da confirmação.
 - [x] 19 testes passaram; seleção autenticada conferida com dados simulados para juros integralmente pendentes, parcialmente recebidos, quitados e indisponíveis, preservando parcela/manual e sem registrar operação real.
