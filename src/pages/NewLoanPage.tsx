@@ -302,6 +302,8 @@ export default function NewLoanPage() {
   // adicional (valorLiberado), empréstimo novo usa numAmount, importado não
   // movimenta caixa.
   const releasedAmount = isOngoing ? 0 : (renewFromLoanId ? valorLiberado : numAmount);
+  const renewalCashReceived = renewFromLoanId ? renewPaid : 0;
+  const cashAfterRelease = cashPreviewValueAfterRelease;
 
   const [cashPreview, setCashPreview] = useState<CashPreview>({ state: "loading" });
   const cashSeqRef = useRef(0);

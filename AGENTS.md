@@ -2,6 +2,8 @@
 
 ## Regras
 
+- Renewal affordability uses the locked current cash balance plus actual renewal receipts minus released cash; defer movement synchronization until the transaction is complete and skip redundant balance writes so historical daily balances never decide affordability.
+
 - Renewal interest-only previews stay local to NewLoanPage and use the existing interest-first allocation from loan totals and remaining balance; imported loans with conflicting accounting bases show unavailable rather than guessing, while renew_loan_tx remains the only writer.
 
 - Administrative navigation reuses existing detail routes and access components; global cash links and scoped shortcuts remain distinct because scoped navigation must retain its confirmation and worker/company filters.

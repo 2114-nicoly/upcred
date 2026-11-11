@@ -1,5 +1,9 @@
 # Pesquisa contínua
 
+# Validação financeira da renovação
+- [ ] Usar caixa corrente bloqueado + pagamento recebido − liberação; preservar consistência, escopo e caixa aberto.
+- [ ] Conferir Brandon e testar insuficiência exata, divergência real, duplicidade e concorrência sem movimentar dados reais.
+
 # Pagamento na Renovação
 - [x] Adicionar opção padrão de juros pendentes conforme a regra contábil atual, preservando parcela/manual e a transação existente; reler saldo antes da confirmação.
 - [x] 19 testes passaram; seleção autenticada conferida com dados simulados para juros integralmente pendentes, parcialmente recebidos, quitados e indisponíveis, preservando parcela/manual e sem registrar operação real.
