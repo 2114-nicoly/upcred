@@ -125,4 +125,19 @@ describe("renovação usa caixa corrente — PostgreSQL isolado", () => {
       expect(await balance(db)).toBe(2630);
     } finally { await db.close(); }
   }, 20000);
+
+  it("tentativas simultâneas do mesmo contrato não duplicam saldo nem movimentos", async () => {
+    const db = await setup(100);
+    try {
+      const results = await Promise.allSettled([renew(db, 200, 1250), renew(db, 200, 1250)]);
+      expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+      expect(await balance(db)).toBe(50);
+      expect((await db.query("SELECT * FROM cash_movements")).rows).toHaveLength(2);
+      // PGlite queues its single connection; production keeps both row and
+      // advisory locks for multi-session serialization.
+      expect(functions).toContain("pg_advisory_xact_lock");
+      expect(functions).toContain("worker_id = v_old.worker_id FOR UPDATE");
+    } finally { await db.close(); }
+  }, 20000);
 });
