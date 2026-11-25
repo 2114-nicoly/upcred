@@ -1891,7 +1891,7 @@ export default function CaixaPage() {
 
       {/* Close cash dialog */}
       <Dialog open={closeOpen} onOpenChange={(o) => { if (!o) setCloseOpen(false); }}>
-        <DialogContent>
+        <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Fechar caixa do dia</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
